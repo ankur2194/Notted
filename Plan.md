@@ -48,9 +48,9 @@ Initialize Next.js with the App Router, TypeScript, Tailwind CSS 4, and the `src
 
 ### Part 5 — Scaffold the NestJS API application
 
-Create the NestJS entry point and root module, enable strict TypeScript, configure graceful shutdown, request validation, CORS, security headers, compression, request IDs, structured logging, and a consistent error envelope. Add `/health/live`, `/health/ready`, and versioned `/api/v1` routing. Read configuration through typed validation so startup fails with a helpful message when required variables are missing.
+Create the NestJS entry point and root module, enable strict TypeScript, configure graceful shutdown, request validation, CORS, security headers, compression, request IDs, structured logging, and a consistent error envelope. Add `/health/live`, `/health/ready`, and versioned `/api/v1` routing. Install a shared rate-limiting guard (token-bucket or sliding-window) configurable via environment variables, with separate unauthenticated (strict) and authenticated (liberal) tiers as a foundation for later per-endpoint tuning. Read configuration through typed validation so startup fails with a helpful message when required variables are missing.
 
-**Verify:** the API starts, liveness responds without dependencies, readiness describes dependency status, and malformed requests receive consistent errors.
+**Verify:** the API starts, liveness responds without dependencies, readiness describes dependency status, malformed requests receive consistent errors, and the rate-limiting guard rejects excessive unauthenticated requests while allowing authenticated traffic through.
 
 ### Part 6 — Create shared types and validators
 
@@ -174,9 +174,9 @@ Create guards/policies for owner, admin, editor, and viewer behavior from the pe
 
 ### Part 25 — Build the dashboard shell
 
-Implement the responsive sidebar, top bar, workspace switcher, breadcrumbs, mobile navigation, user menu, command/search trigger, notification region, and nested note tree placeholders. Add keyboard focus management, skip links, responsive breakpoints, skeletons, and an application-level error state. Persist harmless UI preferences locally while tenant data remains server-derived.
+Implement the responsive sidebar, top bar, workspace switcher, breadcrumbs, mobile navigation, user menu, command/search trigger, notification center (bell icon, unread badge, flyout list with read/unread state and mark-all-read), and nested note tree placeholders. Add keyboard focus management, skip links, responsive breakpoints, skeletons, and an application-level error state. Persist harmless UI preferences locally while tenant data remains server-derived.
 
-**Verify:** the shell works on phone, tablet, and desktop widths and can be navigated with keyboard and screen-reader landmarks.
+**Verify:** the shell works on phone, tablet, and desktop widths and can be navigated with keyboard and screen-reader landmarks; notification read state persists across page navigation.
 
 ## Phase 5 — Core Workspace, Project, and Note Management
 
@@ -218,9 +218,9 @@ Build transactional note create/read/list/update/soft-delete/restore/permanent-d
 
 ### Part 32 — Build note browsing and hierarchy UI
 
-Create note cards, list view, recent/pinned/template/trash pages, and expandable `NoteTree`. Implement optimistic creation/renaming and drag-to-reorder/reparent with rollback on failure. Clearly separate project notes and standalone notes while preserving breadcrumbs and deep links.
+Create note cards, list view, recent/pinned/template/trash pages, and expandable `NoteTree`. Implement optimistic creation/renaming and drag-to-reorder/reparent with rollback on failure. Clearly separate project notes and standalone notes while preserving breadcrumbs and deep links. Build the note sharing dialog (`ShareModal`) with shareable link generation, permission selection (view/edit), and management of existing shares.
 
-**Verify:** tree operations remain correct after refresh; keyboard alternatives exist for drag operations; trash restore and permanent deletion require appropriate confirmation.
+**Verify:** tree operations remain correct after refresh; keyboard alternatives exist for drag operations; shared notes enforce the selected permission for non-owner users; share revocation takes effect immediately; trash restore and permanent deletion require appropriate confirmation.
 
 ## Phase 6 — Rich Editor and Paper Experience
 
@@ -232,9 +232,9 @@ Define the allowed TipTap schema, JSON validation/versioning, migration strategy
 
 ### Part 34 — Build the basic editor and toolbar
 
-Implement `TiptapEditor.tsx` and `EditorToolbar.tsx` with headings, paragraph, bold, italic, underline, strike, code, font sizes, alignment, colors, highlight, sub/superscript, links, lists, quotes, horizontal rules, code blocks, undo, and redo. Reflect active formatting, provide tooltips/ARIA labels, and make toolbar controls usable by keyboard on narrow screens.
+Implement `TiptapEditor.tsx` and `EditorToolbar.tsx` with headings, paragraph, bold, italic, underline, strike, code, font sizes, alignment, colors, highlight, sub/superscript, links, lists, quotes, horizontal rules, code blocks, undo, and redo. Reflect active formatting, provide tooltips/ARIA labels, and make toolbar controls usable by keyboard on narrow screens. Add a keyboard shortcuts help dialog (`Cmd+/` or `?` trigger) listing all available bindings.
 
-**Verify:** editor component tests exercise commands and keyboard shortcuts; content is restored after remount.
+**Verify:** editor component tests exercise commands and keyboard shortcuts; the help dialog displays all bindings and each listed shortcut works; content is restored after remount.
 
 ### Part 35 — Add tables, checklists, markdown shortcuts, and block behavior
 
@@ -396,9 +396,9 @@ Display current viewers, colored selections/cursors with names, typing state whe
 
 ### Part 60 — Implement inline comments and mentions
 
-Store text-selection anchors robustly enough to remap through collaborative edits, support threads/replies, resolve/unresolve, and orphaned-anchor display. Broadcast comment events in real time and enqueue deduplicated mention notifications. Apply viewer-comment permissions and prevent users from forging mention recipients outside the workspace.
+Store text-selection anchors robustly enough to remap through collaborative edits, support threads/replies, resolve/unresolve, and orphaned-anchor display. Broadcast comment events in real time and enqueue deduplicated mention notifications. Persist notifications with read/unread state, type, actor, target reference, and timestamp; expose a list endpoint for the notification center. Apply viewer-comment permissions and prevent users from forging mention recipients outside the workspace.
 
-**Verify:** anchors survive nearby edits, replies sync across clients, resolution is audited, and each mention generates at most one notification.
+**Verify:** anchors survive nearby edits, replies sync across clients, resolution is audited, each mention generates at most one notification, and the notification center displays accurate read/unread state and history.
 
 ## Phase 11 — Export, Email, API Keys, and Webhooks
 
@@ -428,9 +428,9 @@ Create explicit conversions for all supported TipTap nodes, with documented fall
 
 ### Part 65 — Implement public REST API and API key management
 
-Expose versioned CRUD endpoints using the same services/policies as tRPC. Add pagination/filter/sort contracts, OpenAPI documentation, hashed scoped API keys whose full value is shown once, revocation/expiry/last-used tracking, and separate user/API-key rate limits from the brief.
+Expose versioned CRUD endpoints using the same services/policies as tRPC. Add pagination/filter/sort contracts, OpenAPI documentation, hashed scoped API keys whose full value is shown once, revocation/expiry/last-used tracking, and rate limits from the brief with three tiers: unauthenticated (strict, per-IP), authenticated user (generous, for abuse prevention — 1000/min default, configurable per deployment), and API key (moderate, per-key — 100/min default). Apply the shared guard from Part 5 and tune per-endpoint where needed.
 
-**Verify:** contract tests compare REST behavior to application-service behavior; read keys cannot write, revoked keys stop immediately, and raw keys never appear in logs/database.
+**Verify:** contract tests compare REST behavior to application-service behavior; read keys cannot write, revoked keys stop immediately, raw keys never appear in logs/database, and each rate-limit tier independently blocks at its configured threshold without affecting other tiers.
 
 ### Part 66 — Implement webhooks and delivery logs
 
@@ -486,7 +486,7 @@ Add domain ownership verification, normalized uniqueness, pending/verified/error
 
 ### Part 74 — Harden security and abuse controls
 
-Review CSRF, XSS, SSRF, SQL injection, path traversal, upload bombs, websocket abuse, brute force, session fixation, open redirects, CSP, CORS, and secret handling. Add endpoint-specific rate limits, account lockout/backoff, dependency/container scanning, signed URLs, secure headers, and log redaction. Produce a threat model and remediation checklist.
+Review CSRF, XSS, SSRF, SQL injection, path traversal, upload bombs, websocket abuse, brute force, session fixation, open redirects, CSP, CORS, and secret handling. Add tighter rate limits on authentication endpoints (login, register, password reset, magic link) beyond standard tiers, account lockout/backoff, dependency/container scanning, signed URLs, secure headers, and log redaction. Produce a threat model and remediation checklist.
 
 **Verify:** automated security tests and a manual OWASP-oriented review find no unresolved critical/high issue; exceptions have owners and deadlines.
 
