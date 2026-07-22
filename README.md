@@ -73,6 +73,10 @@ Notted/
 ├── .codex/
 │   ├── config.toml             # Project-scoped Codex agent settings
 │   └── agents/                 # Codex custom agent definitions
+├── .opencode/
+│   ├── agent/                  # opencode custom agent definitions
+│   └── command/                # opencode slash commands
+├── opencode.json               # Project-scoped opencode config
 ├── AGENTS.md                   # Governing agent instructions
 ├── Notted.md                   # Primary product and structure specification
 └── Plan.md                     # Sequential implementation plan
@@ -114,6 +118,28 @@ These project skills load from `.agents/skills/`. `AGENTS.md` routes relevant wo
 Delegated agent work is synchronous at every nesting level. The governing protocol in `AGENTS.md` requires a finite supported blocking wait, terminal completion payloads, one parent review/merge pass, and explicit handling of failed, blocked, or timed-out subagents.
 
 After cloning or changing Codex configuration, trust the project when Codex prompts you and start a new Codex chat so project agents and skills are reloaded.
+
+### Using opencode
+
+The same workflow runs on opencode. Skills are discovered natively from `.agents/skills/` (an opencode-supported path), agents live in `.opencode/agent/`, and the `$skill` invocations become slash commands in `.opencode/command/`:
+
+```text
+/notted-part-delivery Part 1 implement
+/notted-quality-operations Review Part 1
+/notted-quality-operations Verify Part 1 full
+/notted-part-delivery Part 1 handoff
+```
+
+- `/notted-part-delivery Part <number> plan` plans without editing.
+- `/notted-part-delivery Part <number> implement` implements the selected part.
+- `/notted-part-delivery Part <number> resume` resumes unfinished work.
+- `/notted-quality-operations Review Part <number>` performs an independent read-only review.
+- `/notted-quality-operations Verify Part <number> full` runs the applicable completion gate.
+- `/notted-part-delivery Part <number> handoff` writes the durable completion record.
+
+After changing `opencode.json`, `.opencode/agent/`, or `.opencode/command/`, restart opencode so the configuration is reloaded.
+
+### Codex commands
 
 - `$notted-part-delivery Part <number> plan` plans without editing.
 - `$notted-part-delivery Part <number> implement` implements the selected part.

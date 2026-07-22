@@ -44,6 +44,18 @@ Follow the current user request, then `Notted.md`, the selected numbered part in
 
 Codex custom agents are configured in `.codex/agents/*.toml`, with concurrency settings in `.codex/config.toml`. Apply `.agents/checklists/part-completion.md` before handoff.
 
+## opencode Support
+
+This repository also runs on opencode. Project config is `opencode.json`, which loads this file as instructions.
+
+- Skills: opencode natively discovers `.agents/skills/<name>/SKILL.md`, so the four Notted skills above load with no duplication. Do not also place them under `.opencode/skills/`; skill names must be unique across discovery locations.
+- Agents: opencode agents live in `.opencode/agent/*.md` and mirror the Codex roles: `lead-part-engineer` (primary, coordinator), `backend-platform-engineer` and `frontend-editor-engineer` (subagents, workspace-write), and `quality-reviewer` (subagent, read-only via `permission.edit: deny`).
+- Commands: opencode has no `$skill` invocation, so `.opencode/command/` provides slash commands that route to the matching agent and load the corresponding skill:
+  - `/notted-part-delivery Part <number> <plan|implement|resume|handoff>`
+  - `/notted-quality-operations Review Part <number>`
+  - `/notted-quality-operations Verify Part <number> <focused|full>`
+- Concurrency: `.codex/config.toml` caps (`max_threads`, `max_depth`) have no opencode config equivalent. The Synchronous Delegation Protocol below is encoded in every opencode agent prompt and still applies; only the numeric scheduler caps cannot be expressed.
+
 ## Synchronous Delegation Protocol
 
 These rules govern every delegation, including delegation performed by a subagent:
@@ -74,3 +86,5 @@ Route work automatically as follows:
 - Cross-layer parts use `lead_part_engineer` to coordinate both specialists and integrate the final result.
 
 Determine scope from the selected numbered implementation part and actual affected files, not from the user's familiarity with the codebase. If specialist agents are available, delegate bounded independent work or review; otherwise assume the same roles sequentially. The lead remains responsible for integration, verification, and handoff.
+
+On opencode the same roles and skills apply. Invoke the slash commands in `.opencode/command/` (`/notted-part-delivery`, `/notted-quality-operations`) instead of the `$skill` syntax, and map the Codex agent names to their opencode equivalents in `.opencode/agent/` (`lead_part_engineer` → `lead-part-engineer`, `backend_platform_engineer` → `backend-platform-engineer`, `frontend_editor_engineer` → `frontend-editor-engineer`, `quality_reviewer` → `quality-reviewer`).
