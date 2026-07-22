@@ -33,6 +33,6 @@ Add one row after creating each record. Keep rows ordered by part number.
 
 | Part | Status | Completed | Summary |
 |---:|---|---|---|
-| — | — | — | No parts have been completed yet. |
+| 1 | Complete | 2026-07-22 | Architecture boundaries, safe schema defaults, and a strictly resolved compatibility baseline. |
 
 When adding the first real record, remove the placeholder row.
