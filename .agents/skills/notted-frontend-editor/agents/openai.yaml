@@ -1,0 +1,4 @@
+interface:
+  display_name: "Notted Frontend and Editor"
+  short_description: "Build consistent web and editor features"
+  default_prompt: "Use $notted-frontend-editor to implement a Notted frontend or TipTap editor change and apply the recursive synchronous delegation protocol in AGENTS.md."

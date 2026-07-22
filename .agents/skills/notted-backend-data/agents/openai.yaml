@@ -1,0 +1,4 @@
+interface:
+  display_name: "Notted Backend and Data"
+  short_description: "Build secure backend and data features"
+  default_prompt: "Use $notted-backend-data to implement a Notted API, database, queue, storage, or realtime change and apply the recursive synchronous delegation protocol in AGENTS.md."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Notted Part Delivery"
+  short_description: "Execute one planned Notted part"
+  default_prompt: "Use $notted-part-delivery to implement and document one numbered Notted part, applying the recursive synchronous delegation and completion-payload protocol in AGENTS.md."

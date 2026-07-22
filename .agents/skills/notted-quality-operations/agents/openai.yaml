@@ -1,0 +1,4 @@
+interface:
+  display_name: "Notted Quality and Operations"
+  short_description: "Review quality, security, and operations"
+  default_prompt: "Use $notted-quality-operations to verify security, testing, deployment, and operational readiness and apply the recursive synchronous delegation protocol in AGENTS.md."
