@@ -1,6 +1,14 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": ["tsconfig.base.json", "pnpm-workspace.yaml", ".npmrc", "turbo.json"],
+  "globalDependencies": [
+    "tsconfig.base.json",
+    "pnpm-workspace.yaml",
+    ".npmrc",
+    "turbo.json",
+    "eslint.config.mjs",
+    ".prettierrc.json",
+    ".prettierignore"
+  ],
   "globalEnv": ["NODE_ENV", "CI"],
   "tasks": {
     "build": {
@@ -17,9 +25,17 @@
       "inputs": ["src/**/*", "test/**/*", "tsconfig*.json", "vitest.config.ts", "package.json"]
     },
     "lint": {
+      "inputs": ["src/**/*", "tsconfig*.json", "package.json"]
+    },
+    "lint:fix": {
+      "cache": false
+    },
+    "format": {
+      "cache": false
+    },
+    "format:check": {
       "inputs": ["src/**/*", "package.json"]
     },
-    "format": {},
     "dev": {
       "cache": false,
       "persistent": true

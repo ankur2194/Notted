@@ -7,8 +7,10 @@
     "build": "echo \"@notted/api: NestJS production build is implemented in Part 5.\"",
     "type-check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
-    "lint": "echo \"@notted/api: ESLint enforcement is introduced in Part 3.\"",
-    "format": "echo \"@notted/api: Prettier enforcement is introduced in Part 3.\""
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@notted/shared-types": "workspace:*"

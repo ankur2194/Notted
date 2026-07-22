@@ -12,18 +12,30 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "type-check": "turbo run type-check",
-    "lint": "turbo run lint",
-    "format": "turbo run format",
+    "lint": "turbo run lint && eslint eslint.config.mjs --max-warnings 0",
+    "lint:fix": "turbo run lint:fix && eslint eslint.config.mjs --fix",
+    "format": "turbo run format && prettier --write package.json turbo.json tsconfig.base.json opencode.json .lintstagedrc.json .prettierrc.json eslint.config.mjs pnpm-workspace.yaml",
+    "format:check": "turbo run format:check && prettier --check package.json turbo.json tsconfig.base.json opencode.json .lintstagedrc.json .prettierrc.json eslint.config.mjs pnpm-workspace.yaml",
     "test": "turbo run test",
     "db:migrate": "echo \"Database migrations are wired in Part 12 (apps/api, Drizzle).\"",
     "db:generate": "echo \"Migration generation is wired in Part 12 (apps/api, Drizzle).\"",
     "db:studio": "echo \"Drizzle Studio is wired in Part 12 (apps/api).\"",
     "db:seed": "echo \"Database seeding is wired in Part 20 (apps/api).\"",
     "clean": "rimraf --glob \"**/dist\" \"**/.turbo\" \"**/coverage\" .turbo coverage",
-    "clean:deps": "rimraf --glob \"**/node_modules\" node_modules"
+    "clean:deps": "rimraf --glob \"**/node_modules\" node_modules",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "eslint": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-import-x": "4.17.1",
+    "eslint-plugin-jsx-a11y": "6.10.2",
+    "husky": "9.1.7",
+    "lint-staged": "17.1.1",
+    "prettier": "3.9.6",
     "rimraf": "6.1.3",
-    "turbo": "2.10.6"
+    "turbo": "2.10.6",
+    "typescript-eslint": "8.65.0"
   }
 }

@@ -19,8 +19,10 @@
     "build": "tsc -p tsconfig.build.json",
     "type-check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
-    "lint": "echo \"@notted/shared-validators: ESLint enforcement is introduced in Part 3.\"",
-    "format": "echo \"@notted/shared-validators: Prettier enforcement is introduced in Part 3.\""
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "typescript": "5.9.3",

@@ -1,0 +1,17 @@
+# Build/tooling artifacts
+dist/
+.next/
+.turbo/
+node_modules/
+coverage/
+
+# Lockfile is generated; do not reformat
+pnpm-lock.yaml
+
+# Keep formatting of prose out of scope; .editorconfig already sets md rules
+*.md
+
+# Generated agent scaffolding
+.agents/
+.codex/
+.opencode/

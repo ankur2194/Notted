@@ -35,5 +35,6 @@ Add one row after creating each record. Keep rows ordered by part number.
 |---:|---|---|---|
 | 1 | Complete | 2026-07-22 | Architecture boundaries, safe schema defaults, and a strictly resolved compatibility baseline. |
 | 2 | Complete | 2026-07-22 | pnpm + Turborepo monorepo scaffolding, four canonical workspaces, root task scripts, and strict runtime/package pins. |
+| 3 | Complete | 2026-07-22 | ESLint 9 flat config + Prettier repo-wide, fail-on-warning scripts, husky/lint-staged pre-commit, and a reconciled CLAUDE.md. |
 
 When adding the first real record, remove the placeholder row.
