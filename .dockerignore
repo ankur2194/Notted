@@ -1,0 +1,53 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Dependencies
+**/node_modules
+.pnpm-store
+
+# Build outputs and caches
+**/dist
+**/build
+.next
+out
+**/.turbo
+.turbo
+*.tsbuildinfo
+
+# Test coverage
+**/coverage
+coverage
+
+# Environment files and secrets — provided at runtime, never baked into images.
+# This intentionally also excludes *.env.example templates; they live in the repo.
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor / OS
+.DS_Store
+.idea
+.vscode
+*.swp
+Thumbs.db
+
+# Documentation and agent scaffolding not needed in images
+docs
+README.md
+CLAUDE.md
+AGENTS.md
+Notted.md
+Plan.md
+.agents
+.codex
+.opencode

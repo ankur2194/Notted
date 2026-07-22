@@ -34,5 +34,6 @@ Add one row after creating each record. Keep rows ordered by part number.
 | Part | Status | Completed | Summary |
 |---:|---|---|---|
 | 1 | Complete | 2026-07-22 | Architecture boundaries, safe schema defaults, and a strictly resolved compatibility baseline. |
+| 2 | Complete | 2026-07-22 | pnpm + Turborepo monorepo scaffolding, four canonical workspaces, root task scripts, and strict runtime/package pins. |
 
 When adding the first real record, remove the placeholder row.

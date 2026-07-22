@@ -1,0 +1,20 @@
+{
+  "name": "@notted/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Notted Next.js web application (scaffold — implemented in Part 4).",
+  "scripts": {
+    "build": "echo \"@notted/web: Next.js production build is implemented in Part 4.\"",
+    "type-check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "lint": "echo \"@notted/web: ESLint enforcement is introduced in Part 3.\"",
+    "format": "echo \"@notted/web: Prettier enforcement is introduced in Part 3.\""
+  },
+  "dependencies": {
+    "@notted/shared-types": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

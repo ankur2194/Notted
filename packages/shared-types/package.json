@@ -1,0 +1,29 @@
+{
+  "name": "@notted/shared-types",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared framework-neutral TypeScript domain contracts for Notted.",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "type-check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "lint": "echo \"@notted/shared-types: ESLint enforcement is introduced in Part 3.\"",
+    "format": "echo \"@notted/shared-types: Prettier enforcement is introduced in Part 3.\""
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "notted",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Notted — corporate notes platform. pnpm + Turborepo monorepo root.",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=22.12.0 <23",
+    "pnpm": ">=10.34.5"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "type-check": "turbo run type-check",
+    "lint": "turbo run lint",
+    "format": "turbo run format",
+    "test": "turbo run test",
+    "db:migrate": "echo \"Database migrations are wired in Part 12 (apps/api, Drizzle).\"",
+    "db:generate": "echo \"Migration generation is wired in Part 12 (apps/api, Drizzle).\"",
+    "db:studio": "echo \"Drizzle Studio is wired in Part 12 (apps/api).\"",
+    "db:seed": "echo \"Database seeding is wired in Part 20 (apps/api).\"",
+    "clean": "rimraf --glob \"**/dist\" \"**/.turbo\" \"**/coverage\" .turbo coverage",
+    "clean:deps": "rimraf --glob \"**/node_modules\" node_modules"
+  },
+  "devDependencies": {
+    "rimraf": "6.1.3",
+    "turbo": "2.10.6"
+  }
+}
