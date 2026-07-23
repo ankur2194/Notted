@@ -1,0 +1,159 @@
+# Notted — DEVELOPMENT infrastructure stack.
+# Applications (apps/web, apps/api) run on the host for fast reloads.
+# Usage:
+#   cp docker/.env.example docker/.env
+#   docker compose --env-file docker/.env -f docker/docker-compose.dev.yml up -d
+# Teardown (keeps data):
+#   docker compose -f docker/docker-compose.dev.yml down
+# Full reset (DELETES dev data — dev only, never run against production):
+#   docker compose -f docker/docker-compose.dev.yml down -v
+
+name: notted-dev
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: notted-dev-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-notted}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-notted_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-notted_dev}
+    volumes:
+      - notted_postgres_dev_data:/var/lib/postgresql/data
+      - ./init-scripts/init-postgres.sql:/docker-entrypoint-initdb.d/init-postgres.sql:ro
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-notted} -d ${POSTGRES_DB:-notted_dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - notted-dev-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: notted-dev-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - notted_redis_dev_data:/data
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - notted-dev-network
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    container_name: notted-dev-meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: ${MEILI_ENV:-development}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?MEILI_MASTER_KEY is required and must be >= 16 bytes}
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - notted_meilisearch_dev_data:/meili_data
+    ports:
+      - "127.0.0.1:${MEILISEARCH_PORT:-7700}:7700"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:7700/health || wget -q -O- http://localhost:7700/health || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - notted-dev-network
+
+  minio:
+    image: minio/minio:latest # dev only; production (Part 80) must pin a dated RELEASE tag
+    container_name: notted-dev-minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-nottedminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:${MINIO_CONSOLE_PORT:-9001}
+    volumes:
+      - notted_minio_dev_data:/data
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - notted-dev-network
+
+  minio-init:
+    # One-shot sidecar: creates the two PRIVATE buckets idempotently.
+    # Per ADR 0005, buckets are NEVER made public/anonymous.
+    image: minio/mc:latest # dev only; production must pin
+    container_name: notted-dev-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+        mc mb "local/$${MINIO_BUCKET_ATTACHMENTS:-notted-attachments}" --ignore-existing
+        mc mb "local/$${MINIO_BUCKET_EXPORTS:-notted-exports}"         --ignore-existing
+        echo "MinIO buckets ready (private): $${MINIO_BUCKET_ATTACHMENTS:-notted-attachments}, $${MINIO_BUCKET_EXPORTS:-notted-exports}"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-nottedminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+      MINIO_BUCKET_ATTACHMENTS: ${MINIO_BUCKET_ATTACHMENTS:-notted-attachments}
+      MINIO_BUCKET_EXPORTS: ${MINIO_BUCKET_EXPORTS:-notted-exports}
+    restart: "no"
+    networks:
+      - notted-dev-network
+
+  mailpit:
+    image: axllent/mailpit:latest # dev only; production (Part 80) must pin a dated tag
+    container_name: notted-dev-mailpit
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_WEB_PORT:-8025}:8025"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O- http://localhost:8025/api/v1/info || curl -fsS http://localhost:8025/api/v1/info || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - notted-dev-network
+
+volumes:
+  notted_postgres_dev_data:
+  notted_redis_dev_data:
+  notted_meilisearch_dev_data:
+  notted_minio_dev_data:
+
+networks:
+  notted-dev-network:
+    driver: bridge
