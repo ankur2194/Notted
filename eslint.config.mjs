@@ -26,7 +26,17 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/.next/**", "**/.turbo/**", "**/node_modules/**", "**/coverage/**"],
+    ignores: [
+      "**/dist/**",
+      "**/.next/**",
+      "**/.turbo/**",
+      "**/node_modules/**",
+      "**/coverage/**",
+      "**/next.config.*",
+      "**/postcss.config.*",
+      "**/vitest.config.*",
+      "**/vitest.setup.*",
+    ],
   },
 
   js.configs.recommended,

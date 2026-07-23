@@ -36,6 +36,7 @@ Add one row after creating each record. Keep rows ordered by part number.
 | 1 | Complete | 2026-07-22 | Architecture boundaries, safe schema defaults, and a strictly resolved compatibility baseline. |
 | 2 | Complete | 2026-07-22 | pnpm + Turborepo monorepo scaffolding, four canonical workspaces, root task scripts, and strict runtime/package pins. |
 | 3 | Complete | 2026-07-23 | App-scoped Next.js/NestJS + repo-wide TypeScript/a11y/import ESLint, Prettier, fail-on-warning scripts, and optional commit gates. |
+| 4 | In progress | — | Next.js 16 App Router scaffold remediated for strict React 19 peers, default Turbopack, minimal client islands, safe logging, and expanded accessibility tests; high-severity transitive audit findings and manual browser checks remain. |
 | 9 | Complete | 2026-07-23 | Dev Compose stack with pgvector, Redis, Meilisearch, private MinIO buckets, and Mailpit. |
 
 When adding the first real record, remove the placeholder row.

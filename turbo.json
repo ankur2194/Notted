@@ -13,8 +13,14 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**/*", "tsconfig*.json", "package.json"],
-      "outputs": ["dist/**"]
+      "inputs": [
+        "src/**/*",
+        "tsconfig*.json",
+        "package.json",
+        "next.config.{js,ts,mjs,cjs}",
+        "public/**/*"
+      ],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "type-check": {
       "dependsOn": ["^build"],

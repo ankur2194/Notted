@@ -4,18 +4,42 @@
   "private": true,
   "description": "Notted Next.js web application (scaffold — implemented in Part 4).",
   "scripts": {
-    "build": "echo \"@notted/web: Next.js production build is implemented in Part 4.\"",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "type-check": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@notted/shared-types": "workspace:*"
+    "@notted/shared-types": "workspace:*",
+    "@radix-ui/react-dialog": "1.1.21",
+    "@radix-ui/react-slot": "1.3.1",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "lucide-react": "0.453.0",
+    "next": "16.2.11",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "sonner": "1.7.0",
+    "tailwind-merge": "2.5.5"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "6.6.3",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.5.2",
+    "@types/node": "22.20.1",
+    "@types/react": "19.0.1",
+    "@types/react-dom": "19.0.1",
+    "@tailwindcss/postcss": "4.3.3",
+    "@vitejs/plugin-react": "5.2.0",
+    "jsdom": "25.0.1",
+    "postcss": "8.5.22",
+    "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   }
