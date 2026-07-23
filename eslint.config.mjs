@@ -10,15 +10,15 @@
  * `@eslint/js`, `typescript-eslint` (non-type-checked recommended set, so lint
  * stays fast and does not require the TS program/project service on scaffold
  * apps), `eslint-plugin-import-x` for import ordering, and
- * `eslint-plugin-jsx-a11y` for accessibility on JSX/TSX files. The
- * Next.js-specific (`eslint-config-next` / `@next/eslint-plugin`) and
- * NestJS-specific (`eslint-plugin-nestjs`) rule sets require those frameworks
- * to be installed and to satisfy strict peer resolution (ADR 0008); they are
- * therefore layered in by Part 4 (apps/web) and Part 5 (apps/api) respectively
- * rather than pulled in here. `eslint-config-prettier` is applied last so
- * formatting stays the responsibility of Prettier, not ESLint.
+ * `eslint-plugin-jsx-a11y` for accessibility on JSX/TSX files, plus the
+ * Next.js core-web-vitals rules scoped to apps/web. NestJS-aware rules are
+ * scoped to apps/api without scaffolding the application assigned to Part 5.
+ * `eslint-config-prettier` is applied last so formatting stays the
+ * responsibility of Prettier, not ESLint.
  */
+import nestjs from "@darraghor/eslint-plugin-nestjs-typed";
 import js from "@eslint/js";
+import nextPlugin from "@next/eslint-plugin-next";
 import prettierConfig from "eslint-config-prettier";
 import importX from "eslint-plugin-import-x";
 import jsxA11y from "eslint-plugin-jsx-a11y";
@@ -31,6 +31,28 @@ export default tseslint.config(
 
   js.configs.recommended,
   ...tseslint.configs.recommended,
+
+  // The plugin's flat configs do not include file globs. Restrict each layer to
+  // the API boundary so its parser and NestJS rules cannot leak into apps/web
+  // or shared packages.
+  ...nestjs.configs.flatRecommended.map((config) => ({
+    ...config,
+    files: ["apps/api/**/*.ts"],
+  })),
+  {
+    files: ["apps/api/**/*.ts"],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      // This rule scans the entire Nest module graph and hangs when no API
+      // source tree exists. Part 5 can enable it after real modules are present.
+      "@darraghor/nestjs-typed/injectable-should-be-provided": "off",
+    },
+  },
 
   // Import ordering and duplicate-import hygiene. These rules are syntactic and
   // do not require an import resolver, so no resolver dependency is introduced.
@@ -56,6 +78,20 @@ export default tseslint.config(
   {
     files: ["**/*.{jsx,tsx}"],
     ...jsxA11y.flatConfigs.recommended,
+  },
+
+  // The standalone official plugin avoids installing the Next.js framework
+  // before Part 4 while still enforcing its recommended Core Web Vitals rules.
+  // Scope it so Next.js rules never leak into the API or shared packages.
+  {
+    ...nextPlugin.configs["core-web-vitals"],
+    files: ["apps/web/**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
+    rules: {
+      ...nextPlugin.configs["core-web-vitals"].rules,
+      // Notted uses the App Router; probing for a legacy pages directory emits
+      // a false diagnostic before the Part 4 scaffold exists.
+      "@next/next/no-html-link-for-pages": "off",
+    },
   },
 
   // Disable stylistic rules that conflict with Prettier. Must come last.

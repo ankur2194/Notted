@@ -111,3 +111,4 @@ All commands run from the repository root with Node `v22.23.1` and pnpm `10.34.5
 | Date | Author | Change |
 |---|---|---|
 | 2026-07-22 | `lead-part-engineer` | Initial record after full Verify gate and independent `quality-reviewer` pass returned no critical/high technical findings. |
+| 2026-07-23 | `lead-part-engineer` | Historical clarification: Part 3 subsequently replaced the placeholder `lint`/`format` scripts described in this record with real ESLint/Prettier enforcement, including app-scoped Next.js and NestJS rules. The Part 2 verification table remains an accurate record of the state when Part 2 completed. |
