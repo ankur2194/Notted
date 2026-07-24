@@ -30,6 +30,11 @@
       "dependsOn": ["^build"],
       "inputs": ["src/**/*", "test/**/*", "tsconfig*.json", "vitest.config.ts", "package.json"]
     },
+    "test:ci": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**/*", "test/**/*", "tsconfig*.json", "vitest.config.ts", "package.json"],
+      "outputs": ["coverage/**", "test-results/**"]
+    },
     "lint": {
       "inputs": ["src/**/*", "tsconfig*.json", "package.json"]
     },

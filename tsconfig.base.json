@@ -20,6 +20,7 @@
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "useDefineForClassFields": true,
-    "noEmit": true
+    "noEmit": true,
+    "composite": true
   }
 }

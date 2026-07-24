@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "references": [
+    { "path": "./apps/api" },
+    { "path": "./apps/web" },
+    { "path": "./packages/shared-types" },
+    { "path": "./packages/shared-validators" }
+  ],
+  "files": [],
+  "include": [],
+  "compilerOptions": {}
+}

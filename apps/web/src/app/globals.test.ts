@@ -27,7 +27,7 @@ describe("semantic color tokens", () => {
     ["warning", "warning-foreground"],
     ["muted", "muted-foreground"],
   ])("%s pair meets WCAG AA normal-text contrast", (backgroundName, foregroundName) => {
-    const css = readFileSync(resolve("src/app/globals.css"), "utf8");
+    const css = readFileSync(resolve("src/styles/globals.css"), "utf8");
     const background = css.match(new RegExp(`--color-${backgroundName}: (#[0-9a-f]{6})`))?.[1];
     const foreground = css.match(new RegExp(`--color-${foregroundName}: (#[0-9a-f]{6})`))?.[1];
 

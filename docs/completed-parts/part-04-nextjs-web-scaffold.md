@@ -3,7 +3,7 @@
 ## Status
 
 - **State:** In progress
-- **Last revised:** 2026-07-23 (React 19, Turbopack, accessibility, and test remediation)
+- **Last revised:** 2026-07-24 (canonical stylesheet path and terminal integrated test evidence)
 - **Implemented by:** `lead-part-engineer` with `frontend-editor-engineer`
 - **Plan reference:** `Plan.md`, Part 4
 - **Related records:** `part-03-formatting-linting-commit-gates.md`; `part-02-monorepo-initialization.md`; `part-01-architecture-decisions.md`; `docs/decisions/0008-runtime-and-package-compatibility.md`
@@ -15,6 +15,7 @@ Replace the `apps/web` placeholder with the bounded Part 4 Next.js 16 App Router
 ## Implemented Work
 
 - Next.js `16.2.11`, React/React DOM `19.2.8`, App Router, `src/` layout, metadata, global Tailwind CSS, skip link, and route-group layouts.
+- Global Tailwind styles now live at the canonical `apps/web/src/styles/globals.css` path required by `Notted.md`; the root layout, Shadcn configuration, and deterministic token test all reference that location.
 - `/` remains the intentionally public dashboard placeholder. Its only interactive island is a small Radix Dialog/Sonner notification preview; it has no note input, delay, loading state, or persistence claim.
 - `/login` is wholly server-rendered scaffolding. Credential and OAuth controls are labeled, disabled, and associated with an explicit notice that Part 22 owns authentication. It has no client state, timer, submission handler, or simulated error.
 - Root route children and the Sonner-only toaster boundary render as siblings. Remaining production internal navigation uses `next/link`; the deliberately unknown-route CTA was removed.
@@ -23,7 +24,7 @@ Replace the `apps/web` placeholder with the bounded Part 4 Next.js 16 App Router
 - Success, warning, and muted semantic token pairs meet WCAG AA normal-text contrast. The muted foreground was corrected from `#64748b` to `#475569`, raising the actual `#f1f5f9` muted pair from 4.3439:1 to approximately 6.917:1; a deterministic contrast regression test covers all three pairs.
 - Dialog tests cover accessible name/description, initial focus, Tab and Shift+Tab containment, Escape and explicit dismissal, focus restoration, preview-action dismissal, and the exact toast call.
 - Sonner is no longer globally mocked. The dialog suite uses a local toast spy and a real toaster integration test asserts notification text and its polite live region.
-- Error, login, route, layout, loading, not-found, skip-link, Server Component boundary, and semantic-contrast coverage was added or corrected. The suite now contains 13 files and 49 tests; the prior integrated run passed 48/48, and the subsequently expanded semantic-token file passed its focused 3/3 run.
+- Error, login, route, layout, loading, not-found, skip-link, Server Component boundary, and semantic-contrast coverage was added or corrected. The suite contains 13 files and 49 tests; the 2026-07-24 terminal integrated run passed all 49 tests.
 
 ## Dependency and Build Decisions
 
@@ -43,7 +44,7 @@ Replace the `apps/web` placeholder with the bounded Part 4 Next.js 16 App Router
 - Public routes remain `/` and `/login`; unknown paths use the existing not-found UI.
 - No APIs, shared contracts, schemas, environment variables, middleware, authentication, database changes, migrations, tenant identifiers, React Query, Zustand, editor behavior, or deployment contracts were introduced.
 - Server Components remain the default. Client boundaries are limited to the Dialog preview, Sonner toaster, and the required Next error boundary.
-- Tailwind remains CSS-first through `src/app/globals.css`; no legacy Tailwind config was introduced.
+- Tailwind remains CSS-first through `src/styles/globals.css`; no legacy Tailwind config was introduced.
 
 ## Security and Accessibility Notes
 
@@ -77,6 +78,35 @@ All commands were run from the repository root on 2026-07-23.
 
 The first attempted root format/lint/type-check calls failed only because the read-only sandbox prevented Turborepo log writes. Each command was rerun with the required filesystem permission and passed; the table records the conclusive runs.
 
+### 2026-07-24 canonical stylesheet remediation
+
+| Check | Result | Notes |
+|---|---|---|
+| Byte comparison against `HEAD:apps/web/src/app/globals.css` | Pass | The relocated `apps/web/src/styles/globals.css` content is unchanged. |
+| `pnpm --filter @notted/web exec vitest run src/app/globals.test.ts --pool=forks --maxWorkers=1` | Pass | One file, three semantic-token contrast tests. |
+| `pnpm --filter @notted/web test` | Pass | Terminal integrated run: 13 files, 49 tests. |
+| `pnpm --filter @notted/web format:check` | Pass | All matched web files use Prettier formatting. |
+| `pnpm --filter @notted/web type-check` | Pass | Strict TypeScript check completed successfully. |
+| `pnpm --filter @notted/web lint` | **Interrupted** | Started, then stopped on the Phase 1 coordinator's instruction to centralize remaining verification. No conclusive result is claimed. |
+| `pnpm --filter @notted/web build` | **Interrupted** | Reached static-page generation, then stopped on the coordinator's central-verification instruction. No conclusive result is claimed. |
+| Independent quality review | Pass | Static review found no critical, high, or medium issues and no security or accessibility regression. |
+
+The dependency audit, production HTTP smoke, and manual browser accessibility checklist were not rerun for this path-only remediation. The unresolved audit and manual-browser blockers below remain unchanged.
+
+### 2026-07-24 Phase 1 integration verification
+
+| Check | Result | Notes |
+|---|---|---|
+| `pnpm install --frozen-lockfile --strict-peer-dependencies` | Pass | The integrated Parts 4–7 lockfile is reproducible with strict peers. |
+| `pnpm --filter @notted/web test` | Pass | 14 files and 50 tests passed after shared-contract integration. |
+| Web CI coverage suite | Partial / environment-limited | Assertions and thresholds passed for the files that ran, but jsdom workers intermittently timed out starting from the mounted Windows filesystem. Runner experiments were reverted; hosted native-Linux proof remains with Part 7. |
+| Web lint | Pass | The final repository lint attempt completed the web workspace with zero warnings before the unchanged root self-check stalled. |
+| `pnpm type-check` | Pass | All 6 integrated tasks passed, including web. |
+| `pnpm build` | Pass | All 4 production builds passed; Next statically generated `/`, `/_not-found`, and `/login`. |
+| `pnpm format:check` | Pass | All workspaces and root files passed after final integration. |
+| `pnpm audit --audit-level high` | **Fail** | The two existing Next 16 transitive high advisories remain among the broader repository findings. No unvalidated override or framework deviation was added. |
+| Manual browser accessibility checklist | **Not run** | The existing manual browser blocker remains. |
+
 ## Unresolved Completion Blockers
 
 1. Resolve or formally re-evaluate the two high-severity transitive advisories while retaining a validated Next/React compatibility baseline; rerun `pnpm audit --audit-level high`.
@@ -100,3 +130,5 @@ The Part 5 API build remains its existing placeholder and is outside Part 4.
 | 2026-07-23 | `frontend-editor-engineer` | Earlier Server Component and behavioral-test remediation. |
 | 2026-07-23 | `lead-part-engineer` with `frontend-editor-engineer` | React 19 dependency, default Turbopack, client-boundary, accessibility, safe-logging, and test remediation. Status corrected to `In progress` because the audit fails at high severity and required manual browser checks were not run. |
 | 2026-07-23 | `lead-part-engineer` with `frontend-editor-engineer` | Corrected the muted semantic pair to 6.917:1, added direct deterministic coverage, and reran focused formatting, lint, type-check, token tests, and the default production build. Audit and manual-browser blockers remain unchanged. |
+| 2026-07-24 | `lead-part-engineer` with `frontend-editor-engineer` and `quality-reviewer` | Moved global styles to the canonical `src/styles` path, updated all direct references, obtained a terminal 49-test integrated run, and recorded centrally deferred lint/build gates without changing the non-complete status. |
+| 2026-07-24 | `/root` | Reconciled shared-contract integration, passed the final 50-test web suite and production build, and retained the audit/manual-browser blockers. |

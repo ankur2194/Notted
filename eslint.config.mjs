@@ -24,6 +24,12 @@ import importX from "eslint-plugin-import-x";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import tseslint from "typescript-eslint";
 
+// Config/tooling files that are not part of the TS program (not in any
+// tsconfig include). Excluded from the type-aware NestJS block so the project
+// service and type-aware rules do not try to process them — they are handled
+// by the dedicated vitest-config block below instead.
+const apiConfigIgnores = ["apps/api/vitest.config.*", "apps/api/vitest.setup.*"];
+
 export default tseslint.config(
   {
     ignores: [
@@ -34,13 +40,32 @@ export default tseslint.config(
       "**/coverage/**",
       "**/next.config.*",
       "**/postcss.config.*",
-      "**/vitest.config.*",
-      "**/vitest.setup.*",
     ],
   },
 
   js.configs.recommended,
   ...tseslint.configs.recommended,
+
+  // Node.js globals for scripts and config files
+  {
+    files: ["scripts/**/*.mjs", "scripts/**/*.js", "*.config.mjs", "*.config.js"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+        process: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly",
+        module: "readonly",
+        require: "readonly",
+        global: "readonly",
+        Buffer: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+      },
+    },
+  },
 
   // The plugin's flat configs do not include file globs. Restrict each layer to
   // the API boundary so its parser and NestJS rules cannot leak into apps/web
@@ -48,9 +73,11 @@ export default tseslint.config(
   ...nestjs.configs.flatRecommended.map((config) => ({
     ...config,
     files: ["apps/api/**/*.ts"],
+    ignores: apiConfigIgnores,
   })),
   {
     files: ["apps/api/**/*.ts"],
+    ignores: apiConfigIgnores,
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -58,9 +85,43 @@ export default tseslint.config(
       },
     },
     rules: {
-      // This rule scans the entire Nest module graph and hangs when no API
-      // source tree exists. Part 5 can enable it after real modules are present.
-      "@darraghor/nestjs-typed/injectable-should-be-provided": "off",
+      // OpenAPI is introduced with the public REST surface in Part 65. Phase 1
+      // health/scaffold routes must not pull Swagger into the runtime early.
+      "@darraghor/nestjs-typed/controllers-should-supply-api-tags": "off",
+      "@darraghor/nestjs-typed/api-method-should-specify-api-response": "off",
+      // The rule's default src glob ("src/**/*.ts") resolves relative to the
+      // monorepo root, not apps/api. Point it at the API source tree so module
+      // references are discovered correctly.
+      "@darraghor/nestjs-typed/injectable-should-be-provided": [
+        "error",
+        {
+          src: ["apps/api/src/**/*.ts"],
+          filterFromPaths: ["dist", "node_modules", ".test.", ".spec."],
+        },
+      ],
+    },
+  },
+
+  // Vitest config files need vitest globals (describe, it, expect, vi, etc.)
+  // and must opt out of the type-aware project service since they are not in tsconfig.
+  {
+    files: ["**/vitest.config.*", "**/vitest.setup.*"],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+      },
+      globals: {
+        describe: "readonly",
+        it: "readonly",
+        test: "readonly",
+        expect: "readonly",
+        vi: "readonly",
+        beforeEach: "readonly",
+        afterEach: "readonly",
+        beforeAll: "readonly",
+        afterAll: "readonly",
+        jest: "readonly",
+      },
     },
   },
 

@@ -38,6 +38,9 @@ describe("Dashboard page (Server Component)", () => {
     const { container } = render(ui);
     const skeletons = container.querySelectorAll(".animate-pulse");
     expect(skeletons.length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("heading", { name: /loading states/i }).closest("section"),
+    ).toHaveAttribute("data-default-page-size", "25");
   });
 
   it("links to the login page from the getting-started section", async () => {

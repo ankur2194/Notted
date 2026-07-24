@@ -2,7 +2,7 @@
   "name": "@notted/shared-validators",
   "version": "0.0.0",
   "private": true,
-  "description": "Shared Zod validation schemas and inferred input types for Notted (Zod introduced in Part 6).",
+  "description": "Shared Zod validation schemas and inferred input types for Notted.",
   "type": "commonjs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -15,14 +15,18 @@
   "files": [
     "dist"
   ],
+  "dependencies": {
+    "zod": "4.4.3"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "type-check": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
+    "test:ci": "vitest run --coverage --reporter=default --reporter=junit --outputFile.junit=test-results/junit.xml",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format": "prettier --write . --ignore-path ../../.prettierignore",
+    "format:check": "prettier --check . --ignore-path ../../.prettierignore"
   },
   "devDependencies": {
     "typescript": "5.9.3",

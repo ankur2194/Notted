@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { CreateNoteDialog } from "@/components/demo/create-note-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DEFAULT_COLLECTION_PAGINATION } from "@/lib/shared-contracts";
 
 /**
  * Public dashboard placeholder at `/`.
@@ -59,7 +60,11 @@ export default function DashboardPage() {
         <CreateNoteDialog />
       </section>
 
-      <section aria-labelledby="loading-heading" className="space-y-4">
+      <section
+        aria-labelledby="loading-heading"
+        className="space-y-4"
+        data-default-page-size={DEFAULT_COLLECTION_PAGINATION.limit}
+      >
         <h2 id="loading-heading" className="text-2xl font-semibold text-foreground">
           Loading States
         </h2>

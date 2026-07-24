@@ -17,6 +17,7 @@ out/
 
 # Test coverage
 coverage/
+test-results/
 
 # Environment and secrets (example files are kept)
 .env

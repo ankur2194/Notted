@@ -2,7 +2,7 @@ import { APP_NAME } from "@notted/shared-types";
 
 import type { Metadata, Viewport } from "next";
 
-import "./globals.css";
+import "@/styles/globals.css";
 import { ToasterProvider } from "@/components/ui/toaster-provider";
 
 export const metadata: Metadata = {
