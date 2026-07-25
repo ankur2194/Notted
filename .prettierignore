@@ -8,6 +8,9 @@ coverage/
 # Lockfile is generated; do not reformat
 pnpm-lock.yaml
 
+# Generated Drizzle migration artifacts (drizzle-kit owns their formatting)
+apps/api/src/database/migrations/
+
 # Keep formatting of prose out of scope; .editorconfig already sets md rules
 *.md
 

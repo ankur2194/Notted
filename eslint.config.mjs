@@ -16,6 +16,8 @@
  * `eslint-config-prettier` is applied last so formatting stays the
  * responsibility of Prettier, not ESLint.
  */
+import { fileURLToPath } from "node:url";
+
 import nestjs from "@darraghor/eslint-plugin-nestjs-typed";
 import js from "@eslint/js";
 import nextPlugin from "@next/eslint-plugin-next";
@@ -24,11 +26,24 @@ import importX from "eslint-plugin-import-x";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import tseslint from "typescript-eslint";
 
+// This plugin resolves its project scan glob from process.cwd(), while Notted
+// invokes ESLint from both the monorepo root (lint-staged) and apps/api
+// (package/Turbo lint). Anchor the glob to this shared config so both discover
+// the same Nest module graph. Forward slashes keep the glob portable on Windows.
+const apiSourceGlob = `${fileURLToPath(new URL("./apps/api/src/", import.meta.url)).replaceAll(
+  "\\",
+  "/",
+)}**/*.ts`;
+
 // Config/tooling files that are not part of the TS program (not in any
 // tsconfig include). Excluded from the type-aware NestJS block so the project
 // service and type-aware rules do not try to process them — they are handled
 // by the dedicated vitest-config block below instead.
-const apiConfigIgnores = ["apps/api/vitest.config.*", "apps/api/vitest.setup.*"];
+const apiConfigIgnores = [
+  "apps/api/vitest.config.*",
+  "apps/api/vitest.setup.*",
+  "apps/api/drizzle.config.*",
+];
 
 export default tseslint.config(
   {
@@ -89,13 +104,10 @@ export default tseslint.config(
       // health/scaffold routes must not pull Swagger into the runtime early.
       "@darraghor/nestjs-typed/controllers-should-supply-api-tags": "off",
       "@darraghor/nestjs-typed/api-method-should-specify-api-response": "off",
-      // The rule's default src glob ("src/**/*.ts") resolves relative to the
-      // monorepo root, not apps/api. Point it at the API source tree so module
-      // references are discovered correctly.
       "@darraghor/nestjs-typed/injectable-should-be-provided": [
         "error",
         {
-          src: ["apps/api/src/**/*.ts"],
+          src: [apiSourceGlob],
           filterFromPaths: ["dist", "node_modules", ".test.", ".spec."],
         },
       ],

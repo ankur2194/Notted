@@ -10,6 +10,7 @@ const ENVIRONMENT_KEYS = [
   "API_HOST",
   "API_PORT",
   "APP_URL",
+  "DATABASE_URL",
   "LOG_LEVEL",
   "TRUST_PROXY_HOPS",
   "REQUEST_BODY_LIMIT_BYTES",
@@ -45,6 +46,10 @@ describe.sequential("API scaffold", () => {
     Object.assign(process.env, {
       NODE_ENV: "test",
       APP_URL: "https://notted.example",
+      // Point the database at a closed local port so the readiness indicator
+      // fails fast and deterministically instead of depending on a live
+      // PostgreSQL in the CI runner.
+      DATABASE_URL: "postgres://notted:notted_dev_password@127.0.0.1:54321/notted_dev",
       LOG_LEVEL: "silent",
       REQUEST_BODY_LIMIT_BYTES: "1024",
       RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE: "100",
@@ -68,13 +73,14 @@ describe.sequential("API scaffold", () => {
     );
   });
 
-  it("reports the initial process readiness indicator", async () => {
-    const response = await request(app.getHttpServer()).get("/health/ready").expect(200);
+  it("reports process and database readiness indicators", async () => {
+    const response = await request(app.getHttpServer()).get("/health/ready").expect(503);
 
-    expect(response.body).toEqual({
-      status: "ready",
-      checks: [{ name: "api", status: "up" }],
-    });
+    expect(response.body.status).toBe("not_ready");
+    expect(response.body.checks).toEqual([
+      { name: "api", status: "up" },
+      { name: "database", status: "down", message: "database query failed" },
+    ]);
   });
 
   it("serves the versioned API root with security and rate-limit headers", async () => {
