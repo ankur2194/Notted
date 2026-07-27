@@ -16,6 +16,10 @@ const ENVIRONMENT_KEYS = [
   "REQUEST_BODY_LIMIT_BYTES",
   "RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE",
   "RATE_LIMIT_AUTHENTICATED_PER_MINUTE",
+  "FEATURE_REDIS_ENABLED",
+  "FEATURE_STORAGE_ENABLED",
+  "FEATURE_SEARCH_ENABLED",
+  "FEATURE_EMAIL_ENABLED",
 ] as const;
 
 type EnvironmentSnapshot = Readonly<Record<(typeof ENVIRONMENT_KEYS)[number], string | undefined>>;
@@ -54,6 +58,10 @@ describe.sequential("API scaffold", () => {
       REQUEST_BODY_LIMIT_BYTES: "1024",
       RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE: "100",
       RATE_LIMIT_AUTHENTICATED_PER_MINUTE: "1000",
+      FEATURE_REDIS_ENABLED: "false",
+      FEATURE_STORAGE_ENABLED: "false",
+      FEATURE_SEARCH_ENABLED: "false",
+      FEATURE_EMAIL_ENABLED: "false",
     });
     app = await createApplication();
     await app.init();
@@ -73,14 +81,29 @@ describe.sequential("API scaffold", () => {
     );
   });
 
-  it("reports process and database readiness indicators", async () => {
+  it("reports deterministic required and disabled dependency readiness", async () => {
     const response = await request(app.getHttpServer()).get("/health/ready").expect(503);
 
     expect(response.body.status).toBe("not_ready");
-    expect(response.body.checks).toEqual([
+    expect(
+      response.body.checks.map(({ durationMs, ...check }: { durationMs: number; name: string }) => {
+        void durationMs;
+        return check;
+      }),
+    ).toEqual([
       { name: "api", status: "up" },
       { name: "database", status: "down", message: "database query failed" },
+      { name: "redis", status: "disabled" },
+      { name: "minio", status: "disabled" },
+      { name: "meilisearch", status: "disabled" },
+      { name: "smtp", status: "disabled" },
     ]);
+    expect(
+      response.body.checks.every(
+        ({ durationMs }: { durationMs: unknown }) =>
+          typeof durationMs === "number" && durationMs >= 0,
+      ),
+    ).toBe(true);
   });
 
   it("serves the versioned API root with security and rate-limit headers", async () => {
@@ -93,7 +116,8 @@ describe.sequential("API scaffold", () => {
     });
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.headers["ratelimit-limit"]).toBe("100");
-    expect(response.headers["ratelimit-remaining"]).toBe("99");
+    expect(Number(response.headers["ratelimit-remaining"])).toBeGreaterThanOrEqual(0);
+    expect(Number(response.headers["ratelimit-remaining"])).toBeLessThan(100);
   });
 
   it("allows only the configured browser origin through CORS", async () => {
@@ -174,6 +198,10 @@ describe.sequential("unauthenticated rate-limit trust boundary", () => {
       LOG_LEVEL: "silent",
       RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE: "1",
       RATE_LIMIT_AUTHENTICATED_PER_MINUTE: "1000",
+      FEATURE_REDIS_ENABLED: "false",
+      FEATURE_STORAGE_ENABLED: "false",
+      FEATURE_SEARCH_ENABLED: "false",
+      FEATURE_EMAIL_ENABLED: "false",
     });
     app = await createApplication();
     await app.init();

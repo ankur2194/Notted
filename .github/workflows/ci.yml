@@ -16,6 +16,9 @@ concurrency:
 env:
   CI: "true"
   HUSKY: "0"
+  NEXT_PUBLIC_APP_URL: "https://app.ci.notted.invalid"
+  NEXT_PUBLIC_API_URL: "https://api.ci.notted.invalid"
+  NEXT_PUBLIC_WS_URL: "wss://api.ci.notted.invalid"
 
 jobs:
   quality:

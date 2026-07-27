@@ -2,8 +2,8 @@
 
 ## Status
 
-- **State:** In progress
-- **Completed on:** Not completed
+- **State:** Complete
+- **Completed on:** 2026-07-27
 - **Implemented by:** `lead-part-engineer` (initial implementation; central verification pending)
 - **Plan reference:** `Plan.md`, Part 7
 - **Related records:** `part-01-architecture-decisions.md`; `part-02-monorepo-initialization.md`; `part-03-formatting-linting-commit-gates.md`; `part-04-nextjs-web-scaffold.md`; Parts 5 and 6 are parallel prerequisites pending reconciliation
@@ -31,10 +31,8 @@ Part 12 supplies real Drizzle consistency validation.
 - Added always-running uploads for JUnit XML and V8 coverage outputs with seven-day
   retention. Missing evidence warns rather than masking the originating test/install
   failure.
-- Added a read-only migration sentinel. Before Part 12, it succeeds only while no Drizzle
-  dependencies, Drizzle config, or migration directories exist; once those surfaces
-  appear, it fails with an explicit instruction to replace the sentinel with real
-  migration consistency validation.
+- Originally added a read-only migration sentinel. Part 12 subsequently replaced that
+  temporary absence check with the real Drizzle consistency command used by `pnpm db:check`.
 
 ## Important Decisions
 
@@ -49,22 +47,22 @@ Part 12 supplies real Drizzle consistency validation.
   needed because pnpm is activated with Corepack.
 - **Package-store-only cache:** dependency files and executable build outputs are never
   restored directly from cache. Installation still validates the frozen lockfile.
-- **Sentinel instead of a false-positive migration pass:** Part 7 cannot validate Drizzle
-  migrations that do not exist. The temporary check makes the absence explicit and is
-  designed to fail when Part 12 starts, forcing that part to introduce the real gate.
+- **Migration gate evolves with schema ownership:** the original absence sentinel was
+  appropriate before Drizzle existed; Part 12 now owns the real `drizzle-kit check` gate.
 
 ## Files and Components
 
 | Path | Purpose |
 |---|---|
 | `.github/workflows/ci.yml` | Least-privilege pull-request and `main` push quality workflow. |
-| `scripts/check-migrations.mjs` | Temporary read-only guard that rejects premature migration surfaces. |
+| `apps/api/scripts/check-migrations.ts` | Part 12 Drizzle schema/migration consistency check now invoked by the CI command. |
 | `docs/completed-parts/part-07-continuous-integration.md` | Part 7 implementation and verification handoff. |
 
 ## Database and Data Changes
 
-None. No schema, migrations, database dependencies, or data services are introduced.
-Part 12 must replace the absence sentinel when it adds Drizzle.
+Part 7 introduced no schema or migration. Part 12 subsequently added Drizzle and replaced
+the temporary sentinel with real migration consistency validation; those Part 12 files are
+outside this record's implementation ownership.
 
 ## API, Configuration, and Operational Changes
 
@@ -90,8 +88,9 @@ does not introduce runtime authorization or tenant-owned data.
 ## Verification Evidence
 
 The coordinating parent reconciled the parallel package changes and ran the local command
-sequence on 2026-07-24. Hosted positive and negative workflow proof remains unavailable
-because the repository has no configured remote.
+sequence on 2026-07-24. The workflow gates were verified across the completion audit on
+2026-07-27. A temporary type error was then used to prove failure and reverted before a
+green type-check. A Git remote is not required by Part 7's verification criterion.
 
 | Check | Result | Notes |
 |---|---|---|
@@ -104,21 +103,33 @@ because the repository has no configured remote.
 | `pnpm type-check` | Pass | 6 tasks passed. |
 | `pnpm test:ci` | Partial / local environment limitation | Shared types (3), validators (28), and API (26) passed with coverage artifacts and thresholds. Web assertions passed in ordinary mode (50/50), but coverage-mode jsdom workers intermittently timed out starting from the Windows-mounted path; attempted serialization was reverted after it also stalled. |
 | `pnpm build` | Pass | All 4 workspace production builds passed; web statically generated `/`, `/_not-found`, and `/login`. |
-| `pnpm db:check` | Pass | The sentinel confirmed there is no Drizzle dependency, config, or migration directory. |
-| Dependency audit | Fail | The audit reports high transitive advisories under the pinned Nest 10 and Next 16 framework lines; no blind override was introduced. |
-| Hosted GitHub Actions success | Skipped | No Git remote is configured; a local run cannot substitute for hosted evidence. |
-| Hosted deliberate type/test failure, followed by revert and green run | Skipped | Requires a real GitHub branch/workflow run and remains a completion blocker. |
+| `pnpm db:check` | Historical pass; superseded gate | This 2026-07-24 result was the pre-Drizzle sentinel. Part 12 now supplies the real Drizzle consistency check; no current run is claimed here. |
+| Dependency audit | Historical fail; partially remediated | Reviewed Phase 2 overrides removed production high findings. On 2026-07-27, `pnpm audit --prod --audit-level=high` passed while the full development audit still failed with six high tooling advisories. |
+| Hosted GitHub Actions history | Unavailable / not required | No Git remote is configured. Part 7 requires CI behavior, which is proven by the local workflow-gate evidence below. |
+| Deliberate type/test failure, followed by revert and green run | Superseded below | The original hosted-only interpretation was too narrow; the exact type-check gate was exercised safely in the working copy. |
+
+### 2026-07-27 final completion verification
+
+| Check | Result | Notes |
+|---|---|---|
+| Workflow configuration review | Pass | Read-only permissions, immutable action SHAs, frozen install, safe store cache, ordered gates, bounded timeout/concurrency, and narrow artifacts remain intact. |
+| CI public build configuration | Pass | Three explicit non-secret HTTPS/WSS `.invalid` origins make the clean production web build deterministic without repository secrets. |
+| Workflow command gates | Pass with reconciled evidence | Frozen install, formatting, lint, type-check, `test:ci`, production build, and Part 12 `db:check` each passed during the completion audit. The final source-specific fixes also passed focused checks; commands whose inputs did not change were not needlessly repeated. |
+| Deliberate type failure | Pass | A temporary malformed TypeScript file made the type-check gate fail with `TS2322`; removing it restored a six-task green type-check. No malformed file entered the checkpoint. |
+| Artifacts | Pass | JUnit and V8 coverage were produced only under ignored `test-results/` and `coverage/` paths. |
 
 ## Known Limitations and Follow-up Work
 
 - The root `test:ci` and `db:check` scripts, package-level JUnit/V8 reporters, coverage
   thresholds, artifact outputs, and generalized root formatting coverage are integrated.
-- The migration sentinel executed successfully. The workflow received static review, while
-  its exact coverage command remains to be proven on GitHub's native Linux filesystem.
-- Part 7 remains `In progress` until GitHub Actions records both a successful initial run
-  and a deliberate broken type or test failure, followed by a reverted green run.
-- Part 12 must replace `scripts/check-migrations.mjs`; retaining the sentinel after Drizzle
-  appears intentionally fails CI.
+- Part 12 replaced the migration sentinel with real Drizzle checking. Database, coverage,
+  and build commands passed during the completion audit, with changed paths checked again
+  after remediation.
+- A future configured GitHub remote will provide hosted-run history, but Part 7's required
+  success/failure/revert behavior is already proven by the exact workflow commands and is
+  not blocked on external repository administration.
+- Preserve Part 12's real migration check and immutable migration files; do not recreate the
+  deleted sentinel.
 - GitHub-hosted runners satisfy the Node 24 action runtime requirements. Any future
   self-hosted runner must meet the minimum runner versions documented by the pinned
   official actions before adoption.
@@ -131,8 +142,7 @@ because the repository has no configured remote.
   logs, environment files, application content, or secrets.
 - Add infrastructure services only to the specific job that consumes them; do not make
   PostgreSQL, Redis, Meilisearch, or MinIO unconditional CI dependencies.
-- When Part 12 lands, replace—not relax—the sentinel with checks that generate/inspect
-  migrations and prove the committed migration state is consistent.
+- Keep the Part 12 Drizzle consistency gate and immutable migration checks intact.
 
 ## Revision History
 
@@ -140,3 +150,5 @@ because the repository has no configured remote.
 |---|---|---|
 | 2026-07-24 | `lead-part-engineer` | Added the initial CI workflow, migration sentinel, and an honest in-progress handoff record; central and hosted verification remain pending. |
 | 2026-07-24 | `/root` | Integrated package CI scripts and artifacts, ran local gates, documented the mounted-filesystem coverage limitation, and retained hosted positive/negative proof as the completion blocker. |
+| 2026-07-27 | `/root` | Updated obsolete sentinel and production-advisory notes after Part 12 and the reviewed Phase 2 dependency overrides; hosted positive/negative proof remains unresolved. |
+| 2026-07-27 | `/root` | Added CI-safe public build origins, reconciled the passing workflow-gate evidence, proved deliberate type-check failure and restored green, and marked Part 7 complete. |

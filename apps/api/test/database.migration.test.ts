@@ -52,16 +52,38 @@ describe.skipIf(!HAS_DATABASE_URL)("database migration (live)", () => {
     }
   });
 
-  it("applies migrations and runs a trivial query", async ({ skip }) => {
+  it("applies migrations without losing pre-existing seeded data and runs a trivial query", async ({
+    skip,
+  }) => {
     if (!reachable || db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
 
-    await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+    await db.execute(sql`
+      create table if not exists "__notted_migration_seed_probe" (
+        "id" integer primary key,
+        "value" text not null
+      )
+    `);
+    await db.execute(sql`
+      insert into "__notted_migration_seed_probe" ("id", "value")
+      values (1, 'preserved')
+      on conflict ("id") do update set "value" = excluded."value"
+    `);
 
-    const result = await db.execute(sql`select 1`);
-    expect(result.rows).toHaveLength(1);
+    try {
+      await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+
+      const health = await db.execute(sql`select 1`);
+      const seeded = await db.execute(
+        sql`select "value" from "__notted_migration_seed_probe" where "id" = 1`,
+      );
+      expect(health.rows).toHaveLength(1);
+      expect(seeded.rows).toEqual([{ value: "preserved" }]);
+    } finally {
+      await db.execute(sql`drop table if exists "__notted_migration_seed_probe"`);
+    }
   });
 
   it("has enabled the uuid-ossp and vector extensions", async ({ skip }) => {

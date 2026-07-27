@@ -9,20 +9,30 @@
     "pnpm": ">=10.34.5"
   },
   "scripts": {
-    "dev": "turbo run dev",
+    "env:init": "node scripts/dev-tooling.mjs env:init",
+    "env:check": "node scripts/dev-tooling.mjs env:check",
+    "infra:up": "node scripts/dev-tooling.mjs infra:up",
+    "infra:project": "node scripts/dev-tooling.mjs infra:project",
+    "infra:down": "node scripts/dev-tooling.mjs infra:down",
+    "infra:status": "node scripts/dev-tooling.mjs infra:status",
+    "infra:logs": "node scripts/dev-tooling.mjs infra:logs",
+    "infra:reset:dev": "node scripts/dev-tooling.mjs infra:reset:dev",
+    "dev": "turbo run dev --parallel",
+    "dev:api": "pnpm --filter @notted/api dev",
+    "dev:web": "pnpm --filter @notted/web dev",
     "build": "turbo run build",
     "type-check": "turbo run type-check",
     "lint": "turbo run lint && eslint eslint.config.mjs --max-warnings 0",
     "lint:fix": "turbo run lint:fix && eslint eslint.config.mjs --fix",
     "format": "turbo run format && prettier --write . --ignore-unknown",
     "format:check": "turbo run format:check && prettier --check . --ignore-unknown",
-    "test": "turbo run test",
-    "test:ci": "turbo run test:ci",
-    "db:check": "pnpm --filter @notted/api exec drizzle-kit check",
-    "db:migrate": "pnpm --filter @notted/api exec drizzle-kit migrate",
-    "db:generate": "pnpm --filter @notted/api exec drizzle-kit generate",
-    "db:studio": "pnpm --filter @notted/api exec drizzle-kit studio",
-    "db:seed": "echo \"Database seeding is wired in Part 20 (apps/api).\"",
+    "test": "turbo run test && node --test scripts/*.test.mjs",
+    "test:ci": "turbo run test:ci && node --test scripts/*.test.mjs",
+    "db:check": "pnpm --filter @notted/api db:check",
+    "db:migrate": "pnpm --filter @notted/api db:migrate",
+    "db:generate": "pnpm --filter @notted/api db:generate",
+    "db:studio": "pnpm --filter @notted/api db:studio",
+    "db:seed": "node scripts/dev-tooling.mjs db:seed",
     "clean": "rimraf --glob \"**/dist\" \"**/.turbo\" \"**/coverage\" .turbo coverage",
     "clean:deps": "rimraf --glob \"**/node_modules\" node_modules",
     "prepare": "husky"
@@ -44,5 +54,12 @@
     "rimraf": "6.1.3",
     "turbo": "2.10.6",
     "typescript-eslint": "8.65.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@nestjs/platform-express@10.4.22>multer": "2.2.0",
+      "next@16.2.11>postcss": "8.5.18",
+      "next@16.2.11>sharp": "0.35.0"
+    }
   }
 }

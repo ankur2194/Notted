@@ -14,6 +14,9 @@ describe("parseDatabaseConfig", () => {
     expect(config.url.pathname).toBe("/notted_dev");
     expect(config.poolMaxConnections).toBe(10);
     expect(config.poolIdleTimeoutMs).toBe(30_000);
+    expect(config.poolConnectionTimeoutMs).toBe(5_000);
+    expect(config.queryTimeoutMs).toBe(15_000);
+    expect(config.readinessTimeoutMs).toBe(2_500);
   });
 
   it("accepts an explicit postgres:// connection string", () => {
@@ -21,6 +24,9 @@ describe("parseDatabaseConfig", () => {
       DATABASE_URL: "postgres://user:secret@db.example:5433/app_db",
       DATABASE_POOL_MAX_CONNECTIONS: "25",
       DATABASE_POOL_IDLE_TIMEOUT_MS: "45000",
+      DATABASE_POOL_CONNECTION_TIMEOUT_MS: "4000",
+      DATABASE_QUERY_TIMEOUT_MS: "12000",
+      DATABASE_READINESS_TIMEOUT_MS: "1500",
     });
 
     expect(config.connectionString).toBe("postgres://user:secret@db.example:5433/app_db");
@@ -28,6 +34,9 @@ describe("parseDatabaseConfig", () => {
     expect(config.url.pathname).toBe("/app_db");
     expect(config.poolMaxConnections).toBe(25);
     expect(config.poolIdleTimeoutMs).toBe(45_000);
+    expect(config.poolConnectionTimeoutMs).toBe(4_000);
+    expect(config.queryTimeoutMs).toBe(12_000);
+    expect(config.readinessTimeoutMs).toBe(1_500);
   });
 
   it("normalizes the postgresql: scheme to postgres: in the connection string", () => {
@@ -58,6 +67,9 @@ describe("parseDatabaseConfig", () => {
     [{ DATABASE_POOL_MAX_CONNECTIONS: "abc" }, "must be an integer between 1 and 100"],
     [{ DATABASE_POOL_IDLE_TIMEOUT_MS: "999" }, "must be an integer between 1000 and 600000"],
     [{ DATABASE_POOL_IDLE_TIMEOUT_MS: "600001" }, "must be an integer between 1000 and 600000"],
+    [{ DATABASE_POOL_CONNECTION_TIMEOUT_MS: "99" }, "must be an integer between 100 and 60000"],
+    [{ DATABASE_QUERY_TIMEOUT_MS: "300001" }, "must be an integer between 100 and 300000"],
+    [{ DATABASE_READINESS_TIMEOUT_MS: "99" }, "must be an integer between 100 and 30000"],
   ])("rejects out-of-range integer settings %#", (environment, expectedMessage) => {
     expect(() => parseDatabaseConfig(environment)).toThrowError(expectedMessage);
   });

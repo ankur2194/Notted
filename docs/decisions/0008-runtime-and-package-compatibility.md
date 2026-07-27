@@ -26,6 +26,53 @@ Use this foundation matrix, with exact patch versions resolved and locked during
 | Better Auth | `1.6.24` | Current stable release. Its package and `@better-auth/drizzle-adapter@1.6.24` both require Drizzle ORM `^0.45.2`; Better Auth 1.7 prereleases remain excluded. |
 | Socket.io / Yjs | `4.8.3` / `13.6.31` | Transport and CRDT packages remain separate authorities as defined by ADR 0004. |
 | BullMQ | `5.80.10` | Redis-backed delivery only; durable intent remains in PostgreSQL as defined by ADR 0006. |
+| Redis client | `ioredis 5.11.1` | MIT; lazy connections, bounded commands, no offline replay, and capped jittered reconnect are configured by the Part 11 adapter. |
+| Object client | `minio 8.0.7` | Apache-2.0 SDK; raw client and credentials remain private behind the storage adapter. |
+| Search client | `meilisearch 0.60.0` | MIT and ESM-only; Nest's CommonJS output loads it through one typed native dynamic-import boundary. |
+| SMTP client | `nodemailer 9.0.3` / `@types/nodemailer 8.0.1` | MIT; bounded pooled transport with provider logging disabled. |
+
+### Targeted advisory overrides
+
+The selected framework majors had patched transitive releases that their exact package
+manifests did not yet select. Phase 2 therefore applies only these reviewed overrides:
+
+| Parent | Transitive override | Reason |
+|---|---|---|
+| `@nestjs/platform-express@10.4.22` | `multer@2.2.0` | Removes the inherited high-severity upload-parser advisories without changing Nest's major. |
+| `next@16.2.11` | `postcss@8.5.18` | Keeps Next 16 while selecting the patched CSS parser used by its internal path. |
+| `next@16.2.11` | `sharp@0.35.0` | Keeps Next 16 while selecting the patched optional image runtime. |
+
+They are compatibility exceptions, not permission for broad/global dependency
+replacement. Strict installation, API/web tests, type checks, production builds, runtime
+smoke tests, and `pnpm audit --prod --audit-level=high` must remain green. A failure
+blocks the affected part rather than authorizing a Nest or Next major upgrade.
+
+### Development container baseline
+
+Phase 2 pins deployable tags and multi-architecture manifest digests:
+
+- `pgvector/pgvector:0.8.5-pg16` —
+  `sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb`
+- `redis:7.2.14-alpine` —
+  `sha256:dfa18828cbc07b3ae6a95ec7343f6c214fdee2d836197b4be8e9904420762cd8`
+- `getmeili/meilisearch:v1.45.1` —
+  `sha256:ac40212f9e5a7526d8007586e3e46fb0441d29dd36c7b02fa2341d2c9a1f6493`
+- `axllent/mailpit:v1.30.0` —
+  `sha256:0059ef81e492a7192af3816281eed6859eb078bd7bdc58b76757c13e10e53a7d`
+
+Redis remains on the 7.2 BSD-licensed line required by `Notted.md`. MinIO Community
+Edition is built reproducibly from server commit
+`7aac2a2c5b7c882e68c1ce017d8256be2feea27f` and client commit
+`77f82e18b5401a65958f1619df6ebb994634bd88`. Its build base is
+`golang:1.24.5-alpine3.22@sha256:daae04ebad0c21149979cd8e9db38f565ecefd8547cf4a591240dc1972cf1399`;
+its runtime base is
+`alpine:3.22.1@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1`.
+The source archives are independently checksum-pinned to
+`sha256:71794c2df26aad0cc99e8421c58b7aa2dd55969f979b0e7d1e931042e9fabcd6`
+(server) and
+`sha256:167415edd21bc29f5360943dac64272aa5cda0a39f3070b15cfeca671c43d975`
+(client). Source commits, archive checksums, bases, and build targets move together after
+the same runtime gate.
 
 This is a deliberate compatibility baseline, not permission to float ranges in a lockfile. Registry metadata and official integration documentation were reviewed on 2026-07-22. Before each first installation, inspect the then-published engine and peer metadata, resolve this exact set with pnpm's strict peer checks enabled, and run install, type-check, tests, and production builds. Any inability to resolve without peer overrides blocks that later part and requires an ADR update; `--force`, ignored peers, and unreviewed package patches are not validation.
 

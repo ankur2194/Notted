@@ -16,7 +16,7 @@
  * `eslint-config-prettier` is applied last so formatting stays the
  * responsibility of Prettier, not ESLint.
  */
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 
 import nestjs from "@darraghor/eslint-plugin-nestjs-typed";
 import js from "@eslint/js";
@@ -40,6 +40,7 @@ const apiSourceGlob = `${fileURLToPath(new URL("./apps/api/src/", import.meta.ur
 // service and type-aware rules do not try to process them — they are handled
 // by the dedicated vitest-config block below instead.
 const apiConfigIgnores = [
+  "apps/api/scripts/**/*.ts",
   "apps/api/vitest.config.*",
   "apps/api/vitest.setup.*",
   "apps/api/drizzle.config.*",
@@ -74,6 +75,7 @@ export default tseslint.config(
         require: "readonly",
         global: "readonly",
         Buffer: "readonly",
+        URL: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
         setInterval: "readonly",
@@ -133,6 +135,14 @@ export default tseslint.config(
         beforeAll: "readonly",
         afterAll: "readonly",
         jest: "readonly",
+      },
+    },
+  },
+  {
+    files: ["apps/api/scripts/**/*.ts"],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
       },
     },
   },

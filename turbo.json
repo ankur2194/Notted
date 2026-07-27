@@ -13,8 +13,14 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_API_URL", "NEXT_PUBLIC_WS_URL"],
       "inputs": [
+        "$TURBO_DEFAULT$",
         "src/**/*",
+        "scripts/**/*",
+        ".env.example",
+        ".env.local",
+        ".env.production",
         "tsconfig*.json",
         "package.json",
         "next.config.{js,ts,mjs,cjs}",
@@ -24,19 +30,33 @@
     },
     "type-check": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**/*", "tsconfig*.json", "package.json"]
+      "inputs": ["$TURBO_DEFAULT$", "src/**/*", "scripts/**/*", "tsconfig*.json", "package.json"]
     },
     "test": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**/*", "test/**/*", "tsconfig*.json", "vitest.config.ts", "package.json"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**/*",
+        "test/**/*",
+        "tsconfig*.json",
+        "vitest.config.ts",
+        "package.json"
+      ]
     },
     "test:ci": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**/*", "test/**/*", "tsconfig*.json", "vitest.config.ts", "package.json"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**/*",
+        "test/**/*",
+        "tsconfig*.json",
+        "vitest.config.ts",
+        "package.json"
+      ],
       "outputs": ["coverage/**", "test-results/**"]
     },
     "lint": {
-      "inputs": ["src/**/*", "tsconfig*.json", "package.json"]
+      "inputs": ["$TURBO_DEFAULT$", "src/**/*", "scripts/**/*", "tsconfig*.json", "package.json"]
     },
     "lint:fix": {
       "cache": false
@@ -45,7 +65,7 @@
       "cache": false
     },
     "format:check": {
-      "inputs": ["src/**/*", "package.json"]
+      "inputs": ["$TURBO_DEFAULT$", "src/**/*", "scripts/**/*", "package.json"]
     },
     "dev": {
       "cache": false,

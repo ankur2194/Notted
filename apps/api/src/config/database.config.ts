@@ -1,5 +1,12 @@
 import { Injectable, type Provider } from "@nestjs/common";
 
+import {
+  type Environment,
+  readInteger,
+  readOptionalString,
+  wrapConfigError,
+} from "./environment-readers";
+
 export const DATABASE_CONFIG = Symbol("DATABASE_CONFIG");
 
 export interface DatabaseConfig {
@@ -18,41 +25,16 @@ export interface DatabaseConfig {
   readonly connectionString: string;
   readonly poolMaxConnections: number;
   readonly poolIdleTimeoutMs: number;
+  readonly poolConnectionTimeoutMs: number;
+  readonly queryTimeoutMs: number;
+  readonly readinessTimeoutMs: number;
 }
-
-type Environment = Readonly<Record<string, string | undefined>>;
-
-const INTEGER_PATTERN = /^\d+$/u;
 
 const SUPPORTED_SCHEMES = new Set(["postgres:", "postgresql:"]);
 
-function readInteger(
-  environment: Environment,
-  key: string,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-): number {
-  const rawValue = environment[key];
-  if (rawValue === undefined) {
-    return fallback;
-  }
-
-  if (!INTEGER_PATTERN.test(rawValue)) {
-    throw new Error(`${key} must be an integer between ${minimum} and ${maximum}`);
-  }
-
-  const value = Number(rawValue);
-  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
-    throw new Error(`${key} must be an integer between ${minimum} and ${maximum}`);
-  }
-
-  return value;
-}
-
 function readConnectionString(environment: Environment): { url: URL; connectionString: string } {
-  const rawValue = environment.DATABASE_URL;
-  if (rawValue === undefined || rawValue.trim() === "") {
+  const rawValue = readOptionalString(environment, "DATABASE_URL");
+  if (rawValue === undefined) {
     if (environment.NODE_ENV === "production") {
       throw new Error("DATABASE_URL is required when NODE_ENV=production");
     }
@@ -83,6 +65,16 @@ function readConnectionString(environment: Environment): { url: URL; connectionS
   if (databaseName === "") {
     throw new Error("DATABASE_URL must include a database name in the path");
   }
+  if (
+    environment.NODE_ENV === "production" &&
+    (parsed.username === "" ||
+      parsed.password.length < 16 ||
+      /(?:change|example|password|notted)/iu.test(parsed.password))
+  ) {
+    throw new Error(
+      "DATABASE_URL must include a non-placeholder user and strong password in production",
+    );
+  }
 
   // `pg` accepts both schemes; normalize to `postgres:` for consistency so
   // downstream tooling and logs do not mix schemes.
@@ -109,10 +101,24 @@ export function parseDatabaseConfig(environment: Environment): DatabaseConfig {
         1_000,
         600_000,
       ),
+      poolConnectionTimeoutMs: readInteger(
+        environment,
+        "DATABASE_POOL_CONNECTION_TIMEOUT_MS",
+        5_000,
+        100,
+        60_000,
+      ),
+      queryTimeoutMs: readInteger(environment, "DATABASE_QUERY_TIMEOUT_MS", 15_000, 100, 300_000),
+      readinessTimeoutMs: readInteger(
+        environment,
+        "DATABASE_READINESS_TIMEOUT_MS",
+        2_500,
+        100,
+        30_000,
+      ),
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "unknown validation error";
-    throw new Error(`Invalid database configuration: ${message}`);
+    wrapConfigError("Invalid database configuration", error);
   }
 }
 

@@ -1,6 +1,13 @@
-import { isIP } from "node:net";
-
 import { Injectable, type Provider } from "@nestjs/common";
+
+import {
+  type Environment,
+  readEnum,
+  readHost,
+  readInteger,
+  readUrl,
+  wrapConfigError,
+} from "./environment-readers";
 
 export const APP_CONFIG = Symbol("APP_CONFIG");
 
@@ -15,119 +22,59 @@ export interface AppConfig {
   readonly apiHost: string;
   readonly apiPort: number;
   readonly appUrl: URL;
+  readonly apiUrl: URL;
+  readonly websocketUrl: URL;
   readonly logLevel: LogLevel;
   readonly trustProxyHops: number;
   readonly requestBodyLimitBytes: number;
   readonly unauthenticatedRateLimitPerMinute: number;
   readonly authenticatedRateLimitPerMinute: number;
-}
-
-type Environment = Readonly<Record<string, string | undefined>>;
-
-const INTEGER_PATTERN = /^\d+$/;
-
-function readEnum<const T extends readonly string[]>(
-  environment: Environment,
-  key: string,
-  allowed: T,
-  fallback: T[number],
-): T[number] {
-  const value = environment[key] ?? fallback;
-  if (!allowed.includes(value)) {
-    throw new Error(`${key} must be one of: ${allowed.join(", ")}`);
-  }
-
-  return value as T[number];
-}
-
-function readInteger(
-  environment: Environment,
-  key: string,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-): number {
-  const rawValue = environment[key];
-  if (rawValue === undefined) {
-    return fallback;
-  }
-
-  if (!INTEGER_PATTERN.test(rawValue)) {
-    throw new Error(`${key} must be an integer between ${minimum} and ${maximum}`);
-  }
-
-  const value = Number(rawValue);
-  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
-    throw new Error(`${key} must be an integer between ${minimum} and ${maximum}`);
-  }
-
-  return value;
-}
-
-function readAppUrl(environment: Environment, nodeEnv: NodeEnvironment): URL {
-  const rawValue = environment.APP_URL;
-  if (rawValue === undefined) {
-    if (nodeEnv === "production") {
-      throw new Error("APP_URL is required when NODE_ENV=production");
-    }
-
-    return new URL("http://localhost:3000");
-  }
-
-  let appUrl: URL;
-  try {
-    appUrl = new URL(rawValue);
-  } catch {
-    throw new Error("APP_URL must be an absolute HTTP or HTTPS URL");
-  }
-
-  if (appUrl.protocol !== "http:" && appUrl.protocol !== "https:") {
-    throw new Error("APP_URL must use the http or https protocol");
-  }
-
-  if (appUrl.username !== "" || appUrl.password !== "") {
-    throw new Error("APP_URL must not contain credentials");
-  }
-
-  if (appUrl.pathname !== "/" || appUrl.search !== "" || appUrl.hash !== "") {
-    throw new Error("APP_URL must be an origin without a path, query, or fragment");
-  }
-
-  return appUrl;
-}
-
-function readApiHost(environment: Environment, nodeEnv: NodeEnvironment): string {
-  const rawValue = environment.API_HOST;
-  if (rawValue === undefined) {
-    if (nodeEnv === "production") {
-      throw new Error("API_HOST is required when NODE_ENV=production");
-    }
-
-    return "127.0.0.1";
-  }
-
-  const value = rawValue.trim();
-  if (
-    value === "" ||
-    value.length > 253 ||
-    (isIP(value) === 0 &&
-      !/^(?:[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?\.)*[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?$/iu.test(value))
-  ) {
-    throw new Error("API_HOST must be a valid IP address or hostname");
-  }
-
-  return value;
+  readonly sensitiveRateLimitPerMinute: number;
 }
 
 export function parseAppConfig(environment: Environment): AppConfig {
   try {
     const nodeEnv = readEnum(environment, "NODE_ENV", NODE_ENVIRONMENTS, "development");
+    const apiHost = readHost(
+      environment,
+      "API_HOST",
+      nodeEnv === "production" ? undefined : "127.0.0.1",
+    );
+
+    const appUrl = readUrl(environment, "APP_URL", {
+      allowedProtocols: ["http:", "https:"],
+      fallback: nodeEnv === "production" ? undefined : "http://localhost:3000",
+      originOnly: true,
+      required: nodeEnv === "production",
+    });
+    const apiUrl = readUrl(environment, "API_URL", {
+      allowedProtocols: ["http:", "https:"],
+      fallback: nodeEnv === "production" ? undefined : "http://localhost:3001",
+      originOnly: true,
+      required: nodeEnv === "production",
+    });
+    const websocketUrl = readUrl(environment, "WS_URL", {
+      allowedProtocols: ["ws:", "wss:"],
+      fallback: nodeEnv === "production" ? undefined : "ws://localhost:3001",
+      originOnly: true,
+      required: nodeEnv === "production",
+    });
+    if (
+      nodeEnv === "production" &&
+      (appUrl.protocol !== "https:" ||
+        apiUrl.protocol !== "https:" ||
+        websocketUrl.protocol !== "wss:")
+    ) {
+      throw new Error("APP_URL, API_URL, and WS_URL must use HTTPS/WSS in production");
+    }
 
     return Object.freeze({
       nodeEnv,
-      apiHost: readApiHost(environment, nodeEnv),
+      apiHost,
       apiPort: readInteger(environment, "API_PORT", 3001, 1, 65_535),
-      appUrl: readAppUrl(environment, nodeEnv),
+      appUrl,
+      apiUrl,
+      websocketUrl,
       logLevel: readEnum(environment, "LOG_LEVEL", LOG_LEVELS, "info"),
       trustProxyHops: readInteger(environment, "TRUST_PROXY_HOPS", 0, 0, 16),
       requestBodyLimitBytes: readInteger(
@@ -151,10 +98,16 @@ export function parseAppConfig(environment: Environment): AppConfig {
         1,
         1_000_000,
       ),
+      sensitiveRateLimitPerMinute: readInteger(
+        environment,
+        "RATE_LIMIT_SENSITIVE_PER_MINUTE",
+        10,
+        1,
+        10_000,
+      ),
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "unknown validation error";
-    throw new Error(`Invalid API environment configuration: ${message}`);
+    wrapConfigError("Invalid API environment configuration", error);
   }
 }
 

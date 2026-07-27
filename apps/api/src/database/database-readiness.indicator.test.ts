@@ -3,10 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 import { DatabaseReadinessIndicator } from "./database-readiness.indicator";
 
 import type { DatabaseService } from "./database.service";
+import type { StructuredLogger } from "../common/logging/structured-logger.service";
+import type { DatabaseConfig } from "../config/database.config";
 
 function createIndicator(execute: ReturnType<typeof vi.fn>): DatabaseReadinessIndicator {
   const database = { db: { execute } } as unknown as DatabaseService;
-  return new DatabaseReadinessIndicator(database);
+  const config = { readinessTimeoutMs: 100 } as DatabaseConfig;
+  const logger = {
+    info: vi.fn(),
+    failure: vi.fn(),
+  } as unknown as StructuredLogger;
+  return new DatabaseReadinessIndicator(database, config, logger);
 }
 
 describe("DatabaseReadinessIndicator", () => {

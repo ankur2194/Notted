@@ -2,8 +2,8 @@
 
 ## Status
 
-- **State:** In progress
-- **Completed on:** Not completed
+- **State:** Complete
+- **Completed on:** 2026-07-27
 - **Implemented by:** `lead_part_engineer_part5` acting as the backend specialist
 - **Plan reference:** `Plan.md`, Part 5
 - **Related records:** `part-01-architecture-decisions.md`; `part-02-monorepo-initialization.md`; `part-03-formatting-linting-commit-gates.md`; `docs/decisions/0001-monorepo-boundaries.md`; `docs/decisions/0002-api-boundary.md`; `docs/decisions/0003-authentication-ownership.md`; `docs/decisions/0008-runtime-and-package-compatibility.md`
@@ -76,23 +76,28 @@ The coordinating parent reconciled the parallel implementation and ran the integ
 | Production build | Pass | `pnpm build`: all 4 workspace builds passed. |
 | API start and HTTP behavior | Pass through E2E | The E2E suite creates the real Nest application, initializes its HTTP adapter, exercises all three routes and failure/security behavior, and closes it cleanly. A separate built-process/curl smoke was not run. |
 | CI coverage command | Partial / environment-limited | API coverage passed 26/26 tests and every configured 70% threshold. The root run failed only when web jsdom workers timed out starting from the mounted Windows filesystem. |
-| Dependency audit | Fail | `pnpm audit --audit-level high` reported high advisories in Nest CLI transitives and Nest platform-express's Multer dependency, plus the separately tracked Next.js transitives. |
+| Dependency audit | Historical fail; production issue remediated later | This 2026-07-24 run included Nest CLI/tooling findings and Multer `2.0.2`. Phase 2 later applied the reviewed `multer@2.2.0` override; the 2026-07-27 production audit has no high finding, while the full development audit still reports six high tooling advisories. |
 | Migration sentinel | Pass | `pnpm db:check` confirmed no premature Drizzle surface. |
 | Diff integrity | Pass | `git diff --check` passed before the completion-record update and is rerun at handoff. |
 | Quality review | Pass with blockers retained | The parent reviewed security boundaries, DI/module ownership, request/error/log safety, scope, and dependency risk; the user asked to skip a duplicative independent-agent review. |
 
 ## Known Limitations and Follow-up Work
 
-- Status remains `In progress` because the high-severity Nest transitive audit findings require an accepted, compatibility-tested resolution. NestJS is intentionally pinned to the `10.x` product baseline; no blind override or unrecorded major upgrade was applied.
-- Live registry metadata on 2026-07-24 confirms `@nestjs/platform-express@10.4.22` is the newest 10.x release and still pins Multer `2.0.2`; `@nestjs/cli@10.4.9` is the newest 10.x CLI and still pins vulnerable tooling transitives. There is no direct in-major patch to adopt.
+- The Multer production advisory is resolved by the reviewed `multer@2.2.0` override in ADR 0008 without changing the NestJS major.
+- Final verification on 2026-07-27 passed the API unit/E2E suite, configured coverage,
+  formatting, lint, type-check, production build, and a built-process runtime smoke.
+  Liveness remained dependency-free, readiness exercised live dependencies, malformed
+  requests retained safe envelopes, and SIGINT shutdown returned immediately.
+- The registry still classifies transitive development-only glob tooling as high. The
+  reviewed paths are confined to Nest/ESLint developer CLIs with repository-controlled
+  patterns; production audit has no high finding, and no incompatible framework/tooling
+  major or unsafe transitive-major override was introduced to silence the report.
 - `@darraghor/nestjs-typed/injectable-should-be-provided` is enabled against the real module graph. OpenAPI-response lint rules remain scoped off until Part 65 introduces the public API specification.
-- The exact root CI coverage command remains to be proven on the hosted Linux runner because web worker startup was unreliable on this mounted local path.
 - Part 8 expands the complete environment contract. Part 11 adds dependency clients and real readiness indicators. Part 21 establishes authenticated principals. Part 65 may replace the local store with shared Redis enforcement and endpoint/API-key tiers.
-- The completion-parts index is outside this workstream's ownership and remains for central integration.
 
 ## Handoff Notes
 
-- Reassess the accepted Nest 10 baseline against patched framework/tooling releases and record any major-version deviation in ADR 0008 before changing the framework line.
+- Preserve the reviewed Multer override and reassess remaining Nest CLI/tooling advisories without changing the framework major unless ADR 0008 is updated.
 - Preserve the E2E coverage for all three routes, malformed JSON, body limits, CORS, security headers, request IDs, shutdown, rate denial/refill, and spoof resistance.
 - Preserve the symbol-backed principal trust boundary. Real authentication must install it from validated server state, never from raw request headers.
 - Keep health endpoints outside `/api/v1`; future dependency checks extend readiness rather than liveness.
@@ -103,3 +108,5 @@ The coordinating parent reconciled the parallel implementation and ran the integ
 |---|---|---|
 | 2026-07-24 | `lead_part_engineer_part5` | Added the initial Part 5 implementation and tests; left all verification pending for the coordinated Phase 1 integration pass. |
 | 2026-07-24 | `/root` | Reconciled dependencies and contracts, fixed runtime bootstrap/DI issues, ran integrated verification, and retained `In progress` for unresolved high-severity Nest transitives. |
+| 2026-07-27 | `/root` | Corrected the obsolete Multer advisory note after the reviewed Phase 2 override; retained development-tooling audit findings and current integration verification blockers. |
+| 2026-07-27 | `/root` | Passed current tests/coverage, lint, type-check, build, built-process HTTP behavior, live readiness, and graceful shutdown; marked Part 5 complete. |

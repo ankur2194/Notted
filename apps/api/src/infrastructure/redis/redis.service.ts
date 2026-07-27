@@ -1,0 +1,122 @@
+import { Inject, Injectable, type OnApplicationShutdown, type OnModuleInit } from "@nestjs/common";
+
+import { StructuredLogger } from "../../common/logging/structured-logger.service";
+import { REDIS_CONFIG, type RedisConfig } from "../../config/redis.config";
+import { DependencyState, retryBounded, withTimeout } from "../dependency-lifecycle";
+
+import { REDIS_CLIENT } from "./redis.tokens";
+
+import type { ReadinessCheckResult, ReadinessIndicator } from "../../health/readiness-indicator";
+import type Redis from "ioredis";
+
+@Injectable()
+export class RedisService implements ReadinessIndicator, OnModuleInit, OnApplicationShutdown {
+  readonly name = "redis";
+  private readonly state: DependencyState;
+  private shuttingDown = false;
+
+  constructor(
+    @Inject(REDIS_CONFIG) private readonly config: RedisConfig,
+    @Inject(REDIS_CLIENT) private readonly client: Redis | null,
+    logger: StructuredLogger,
+  ) {
+    this.state = new DependencyState(this.name, config.enabled, logger);
+    this.client?.on("ready", () => this.state.transition("up"));
+    this.client?.on("error", () => this.state.transition("down"));
+    this.client?.on("close", () => {
+      if (!this.shuttingDown) {
+        this.state.transition("down");
+      }
+    });
+    this.client?.on("end", () => {
+      if (!this.shuttingDown) {
+        this.state.transition("down");
+      }
+    });
+  }
+
+  async onModuleInit(): Promise<void> {
+    if (this.client === null) {
+      return;
+    }
+    try {
+      await retryBounded(
+        () => this.ping(),
+        this.config.startupRetryAttempts,
+        this.config.retryDelayMs,
+      );
+      this.state.transition("up");
+    } catch {
+      this.state.transition("down");
+    }
+  }
+
+  async get(key: string): Promise<string | null> {
+    return this.requireClient().get(key);
+  }
+
+  async set(key: string, value: string, ttlMs?: number): Promise<void> {
+    const client = this.requireClient();
+    if (ttlMs === undefined) {
+      await client.set(key, value);
+    } else {
+      await client.set(key, value, "PX", ttlMs);
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.requireClient().del(key);
+  }
+
+  async publish(channel: string, payload: string): Promise<number> {
+    return this.requireClient().publish(channel, payload);
+  }
+
+  async check(): Promise<ReadinessCheckResult> {
+    if (this.client === null) {
+      return this.state.result();
+    }
+    try {
+      await this.ping();
+      this.state.transition("up");
+      return this.state.result();
+    } catch {
+      this.state.transition("down");
+      return this.state.result("Redis probe failed");
+    }
+  }
+
+  async onApplicationShutdown(): Promise<void> {
+    this.shuttingDown = true;
+    this.state.transition("down");
+    if (this.client === null) {
+      return;
+    }
+    try {
+      await withTimeout(
+        () => this.client!.quit().then(() => undefined),
+        this.config.commandTimeoutMs,
+      );
+    } catch {
+      this.client.disconnect(false);
+    }
+  }
+
+  private async ping(): Promise<void> {
+    const client = this.requireClient();
+    if (client.status === "wait" || client.status === "end") {
+      await withTimeout(() => client.connect(), this.config.connectTimeoutMs);
+    }
+    const response = await withTimeout(() => client.ping(), this.config.readinessTimeoutMs);
+    if (response !== "PONG") {
+      throw new Error("unexpected Redis ping response");
+    }
+  }
+
+  private requireClient(): Redis {
+    if (this.client === null) {
+      throw new Error("Redis is disabled");
+    }
+    return this.client;
+  }
+}

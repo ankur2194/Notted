@@ -4,9 +4,10 @@
   "private": true,
   "description": "Notted Next.js web application (scaffold — implemented in Part 4).",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "pnpm env:validate && next dev",
+    "build": "pnpm env:validate --production && next build",
     "start": "next start",
+    "env:validate": "tsx scripts/validate-env.ts",
     "type-check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:ci": "vitest run --coverage --reporter=default --reporter=junit --outputFile.junit=test-results/junit.xml",
@@ -31,6 +32,7 @@
     "tailwind-merge": "2.5.5"
   },
   "devDependencies": {
+    "@next/env": "16.2.11",
     "@testing-library/jest-dom": "6.6.3",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.5.2",
@@ -42,6 +44,7 @@
     "jsdom": "25.0.1",
     "postcss": "8.5.22",
     "tailwindcss": "4.3.3",
+    "tsx": "4.23.1",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   }

@@ -175,18 +175,35 @@ A part is not complete merely because code exists. Its stated criteria and requi
 | [`docs/standards/`](docs/standards/) | Architecture, frontend, backend, database, API, security, testing, observability, and operations standards |
 | [`docs/decisions/`](docs/decisions/) | Architecture decision records |
 | [`docs/completed-parts/`](docs/completed-parts/) | Cross-session implementation and verification history |
+| [`docs/database-migrations.md`](docs/database-migrations.md) | Drizzle migration generation, immutability, testing, and rollback policy |
 
 ## Local Development
 
-The runnable monorepo and development environment will be created during the foundation parts of [`Plan.md`](Plan.md). Once those parts are complete, the expected workflow will be based on pnpm and Docker Compose:
+The host-run applications and checkout-isolated development infrastructure are available:
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile --strict-peer-dependencies
+pnpm env:init
+pnpm env:check
 pnpm infra:up
+pnpm db:migrate
 pnpm dev
 ```
 
-Do not rely on these commands until the corresponding package scripts and infrastructure files have been implemented and documented by their completion records.
+Common commands include `pnpm dev:api`, `pnpm dev:web`, `pnpm infra:status`,
+`pnpm infra:project`, `pnpm infra:logs`, `pnpm infra:down`, `pnpm build`, `pnpm lint`,
+`pnpm type-check`, `pnpm test`, `pnpm db:check`, `pnpm db:generate`,
+`pnpm db:migrate`, and `pnpm db:studio`. `pnpm db:seed` intentionally exits
+non-zero until Part 20; there are no seed or first-login credentials yet. Volume deletion
+is available only through the guarded `pnpm infra:reset:dev` command.
+
+See [`docs/README.md`](docs/README.md) for exact onboarding, ports, migration flow,
+Docker Desktop/WSL troubleshooting, and shutdown/reset safety. Environment ownership and
+production requirements are documented in
+[`docs/environment.md`](docs/environment.md).
+Legacy fixed-project development volumes are covered by the non-destructive
+[`docs/legacy-development-volumes.md`](docs/legacy-development-volumes.md) recovery
+runbook.
 
 ## Security and Privacy
 

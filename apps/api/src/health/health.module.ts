@@ -2,23 +2,49 @@ import { Module } from "@nestjs/common";
 
 import { DatabaseReadinessIndicator } from "../database/database-readiness.indicator";
 import { DatabaseModule } from "../database/database.module";
+import { MeilisearchModule } from "../infrastructure/meilisearch/meilisearch.module";
+import { MeilisearchService } from "../infrastructure/meilisearch/meilisearch.service";
+import { MinioModule } from "../infrastructure/minio/minio.module";
+import { MinioService } from "../infrastructure/minio/minio.service";
+import { RedisModule } from "../infrastructure/redis/redis.module";
+import { RedisService } from "../infrastructure/redis/redis.service";
+import { SmtpModule } from "../infrastructure/smtp/smtp.module";
+import { SmtpService } from "../infrastructure/smtp/smtp.service";
 
 import { HealthController } from "./health.controller";
 import { ProcessReadinessIndicator } from "./process-readiness.indicator";
 import { READINESS_INDICATORS } from "./readiness-indicator";
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, RedisModule, MinioModule, MeilisearchModule, SmtpModule],
   controllers: [HealthController],
   providers: [
     ProcessReadinessIndicator,
     {
       provide: READINESS_INDICATORS,
-      inject: [ProcessReadinessIndicator, DatabaseReadinessIndicator],
+      inject: [
+        ProcessReadinessIndicator,
+        DatabaseReadinessIndicator,
+        RedisService,
+        MinioService,
+        MeilisearchService,
+        SmtpService,
+      ],
       useFactory: (
         processIndicator: ProcessReadinessIndicator,
         databaseIndicator: DatabaseReadinessIndicator,
-      ) => [processIndicator, databaseIndicator],
+        redisIndicator: RedisService,
+        minioIndicator: MinioService,
+        meilisearchIndicator: MeilisearchService,
+        smtpIndicator: SmtpService,
+      ) => [
+        processIndicator,
+        databaseIndicator,
+        redisIndicator,
+        minioIndicator,
+        meilisearchIndicator,
+        smtpIndicator,
+      ],
     },
   ],
   exports: [READINESS_INDICATORS],
