@@ -48,6 +48,26 @@ a deterministic pre-existing probe row, applies the migration, verifies that row
 `select 1`, and checks both required extensions. Later parts replace that minimal probe
 with representative domain fixtures appropriate to their schema.
 
+### Migration 0007 note-version preflight
+
+Migration `0007_early_bloodaxe.sql` makes `(note_id, version)` unique. It first
+checks for duplicate groups and aborts with SQLSTATE `23505` before dropping the
+old index or changing data. Operators must run the same grouping query during
+deployment preflight:
+
+```sql
+select note_id, version, count(*)
+from note_versions
+group by note_id, version
+having count(*) > 1;
+```
+
+An automated migration must not guess which snapshot is authoritative. If the
+query returns rows, back up the affected records, compare title/content/author/
+timestamps, remove only proven retry duplicates, or assign a new monotonic
+version to distinct snapshots through an approved corrective script. Re-run the
+preflight and migration only after the query returns no rows.
+
 ## Rollback
 
 Prefer a compatible corrective migration over destructive down-migrations. If application

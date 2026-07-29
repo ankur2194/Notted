@@ -31,19 +31,25 @@ This directory is the durable implementation history for the numbered parts in t
 
 Add one row after creating each record. Keep rows ordered by part number.
 
-| Part | Status | Completed | Summary |
-|---:|---|---|---|
-| 1 | Complete | 2026-07-22 | Architecture boundaries, safe schema defaults, and a strictly resolved compatibility baseline. |
-| 2 | Complete | 2026-07-22 | pnpm + Turborepo monorepo scaffolding, four canonical workspaces, root task scripts, and strict runtime/package pins. |
-| 3 | Complete | 2026-07-23 | App-scoped Next.js/NestJS + repo-wide TypeScript/a11y/import ESLint, Prettier, fail-on-warning scripts, and optional commit gates. |
-| 4 | Complete | 2026-07-27 | Next.js 16 App Router scaffold with canonical styles, minimal client islands, accessibility coverage, production build, and rendered HTTP smoke. |
-| 5 | Complete | 2026-07-27 | NestJS API scaffold with typed configuration, safe HTTP bootstrap, health endpoints, structured logging, error envelopes, bounded rate limiting, and graceful shutdown. |
-| 6 | Complete | 2026-07-24 | Verified framework-neutral shared types and strict Zod validators consumed through API and web package boundaries. |
-| 7 | Complete | 2026-07-27 | Least-privilege SHA-pinned CI, safe coverage artifacts, deterministic builds, real Drizzle consistency, and verified green/failure/reverted-green behavior. |
-| 8 | Complete | 2026-07-27 | Typed API/web/infrastructure environment contracts, safe examples, strict production preflight, dotenv-aware cross-file checks, and contract tests. |
-| 9 | Complete | 2026-07-27 | Digest/source-pinned healthy development services, internal networking with host loopback access, non-root MinIO, private buckets, volumes, and runtime recovery proof. |
-| 10 | Complete | 2026-07-27 | Canonical developer commands, local-daemon guarded reset, legacy-volume recovery guidance, and stepwise onboarding verification. |
-| 11 | Complete | 2026-07-27 | Narrow PostgreSQL, Redis, MinIO, Meilisearch, and SMTP clients with bounded lifecycle, coalesced readiness, and live loss/recovery proof. |
-| 12 | Complete | 2026-07-27 | Drizzle/PostgreSQL providers, transaction helper, immutable extension migration, schema conventions, policy, and empty/pre-existing-data verification. |
-
-When adding the first real record, remove the placeholder row.
+| Part | Status   | Completed  | Summary                                                                                                                                                                 |
+| ---: | -------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|    1 | Complete | 2026-07-22 | Architecture boundaries, safe schema defaults, and a strictly resolved compatibility baseline.                                                                          |
+|    2 | Complete | 2026-07-22 | pnpm + Turborepo monorepo scaffolding, four canonical workspaces, root task scripts, and strict runtime/package pins.                                                   |
+|    3 | Complete | 2026-07-23 | App-scoped Next.js/NestJS + repo-wide TypeScript/a11y/import ESLint, Prettier, fail-on-warning scripts, and optional commit gates.                                      |
+|    4 | Complete | 2026-07-27 | Next.js 16 App Router scaffold with canonical styles, minimal client islands, accessibility coverage, production build, and rendered HTTP smoke.                        |
+|    5 | Complete | 2026-07-27 | NestJS API scaffold with typed configuration, safe HTTP bootstrap, health endpoints, structured logging, error envelopes, bounded rate limiting, and graceful shutdown. |
+|    6 | Complete | 2026-07-24 | Verified framework-neutral shared types and strict Zod validators consumed through API and web package boundaries.                                                      |
+|    7 | Complete | 2026-07-27 | Least-privilege SHA-pinned CI, safe coverage artifacts, deterministic builds, real Drizzle consistency, and verified green/failure/reverted-green behavior.             |
+|    8 | Complete | 2026-07-27 | Typed API/web/infrastructure environment contracts, safe examples, strict production preflight, dotenv-aware cross-file checks, and contract tests.                     |
+|    9 | Complete | 2026-07-27 | Digest/source-pinned healthy development services, internal networking with host loopback access, non-root MinIO, private buckets, volumes, and runtime recovery proof. |
+|   10 | Complete | 2026-07-27 | Canonical developer commands, local-daemon guarded reset, legacy-volume recovery guidance, and stepwise onboarding verification.                                        |
+|   11 | Complete | 2026-07-27 | Narrow PostgreSQL, Redis, MinIO, Meilisearch, and SMTP clients with bounded lifecycle, coalesced readiness, and live loss/recovery proof.                               |
+|   12 | Complete | 2026-07-27 | Drizzle/PostgreSQL providers, transaction helper, immutable extension migration, schema conventions, policy, and empty/pre-existing-data verification.                  |
+|   13 | Complete | 2026-07-29 | Better Auth 1.6.24 identity schema with existing users model, database-generated UUID contract, boolean verification plus preserved timestamp, and auth-owned tables.   |
+|   14 | Complete | 2026-07-29 | Workspace roots, memberships, invitations, roles, plans, quotas, uniqueness, and tenant-lifecycle foreign keys.                                                         |
+|   15 | Complete | 2026-07-29 | Projects, folders, hierarchical notes, ordering, sharing/access grants, and composite cross-workspace foreign keys.                                                     |
+|   16 | Complete | 2026-07-29 | Tags, attachment metadata, threaded comments, and uniquely keyed note-version snapshots.                                                                                |
+|   17 | Complete | 2026-07-29 | Standalone tasks, custom statuses, nesting, recurrence, assignees, ordering, and task-tag links.                                                                        |
+|   18 | Complete | 2026-07-29 | Operations/integration schema including durable job outbox intent and independent worker idempotency.                                                                   |
+|   19 | Complete | 2026-07-29 | Repository-layer tenant context, strict pre-SQL guards, all-operation isolation matrices, and retention policy.                                                         |
+|   20 | Complete | 2026-07-29 | Deterministic multi-tenant seed fixtures with idempotent writes and production/target-name safety refusal.                                                              |

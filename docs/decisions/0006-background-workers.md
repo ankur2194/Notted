@@ -10,7 +10,9 @@ Email, indexing, embeddings, exports, AI work, webhooks, and cleanup must run ou
 
 ## Decision
 
-PostgreSQL owns durable business state and durable side-effect intent. A service records an outbox/job-intent row in the same transaction as the state change. After commit, a dispatcher publishes it to BullMQ and records the enqueue outcome. Publishing and workers are idempotent, so retrying either stage is safe. Redis/BullMQ is execution infrastructure, not the authoritative record of business completion.
+PostgreSQL owns durable business state and durable side-effect intent. A service records a `job_outbox` row in the same transaction as the state change. After commit, a dispatcher publishes it to BullMQ and records the enqueue outcome. Publishing and workers are idempotent, so retrying either stage is safe. Redis/BullMQ is execution infrastructure, not the authoritative record of business completion.
+
+The outbox and worker idempotency records are deliberately separate. `job_outbox` is non-expiring durable intent with dispatch lifecycle (`pending`, `dispatching`, `dispatched`, `completed`, `failed`, `cancelled`) and a unique producer idempotency key. `job_idempotency` is independently expiring worker replay protection after publication. Expiring a worker dedup row must never erase an undispatched business intent.
 
 Queues are separated by operational behavior: high-priority/default, export, AI, and maintenance. Export concurrency defaults to two; AI queues apply provider-aware limits. Each typed, versioned payload is minimal and contains a job/intent ID, idempotency key, workspace ID, resource IDs, action, schema version, correlation ID, and only the actor/system-authority reference needed by the service. Payloads never contain document bodies, credentials, signed URLs, provider secrets, or reusable user sessions.
 
@@ -30,7 +32,7 @@ Bull Board is mounted behind backend authentication and an explicit platform-ope
 
 ## Consequences
 
-- Part 18 must add outbox/job-intent and idempotency records with retention and useful uniqueness constraints.
+- Part 18 adds `job_outbox` intent and independent `job_idempotency` replay records with useful uniqueness constraints; only worker replay records require expiry.
 - Queue delays do not roll back committed user state; status fields expose pending, running, succeeded, and failed work where users need feedback.
 - Dispatchers, workers, and provider adapters require failure metrics, backlog alerts, replay tooling, and correlation.
 - Tests must cover commit-before-dispatch, dispatcher restart, duplicates, stale/revoked access, cross-workspace payload tampering, retry exhaustion, dead letters, and graceful restart.

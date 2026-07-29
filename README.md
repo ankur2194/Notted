@@ -30,24 +30,24 @@ The complete product specification is maintained in [`Notted.md`](Notted.md).
 
 ## Planned Technology Stack
 
-| Area | Technology |
-|---|---|
-| Web application | Next.js, React, TypeScript, Tailwind CSS, Shadcn UI |
-| Editor | TipTap and ProseMirror extensions |
-| Backend | NestJS and TypeScript |
-| First-party API | tRPC |
-| Public API | Versioned REST endpoints |
-| Database | PostgreSQL with Drizzle ORM |
-| Semantic search | pgvector |
-| Full-text search | Meilisearch |
-| Authentication | Better Auth |
-| Cache and messaging | Redis |
-| Background processing | BullMQ and Bull Board |
-| File storage | MinIO and Sharp |
-| Realtime collaboration | Socket.io and Yjs |
-| Email | Nodemailer and React Email |
-| Export | Puppeteer and document conversion libraries |
-| Deployment | Docker, Docker Compose, and a TLS reverse proxy |
+| Area                   | Technology                                          |
+| ---------------------- | --------------------------------------------------- |
+| Web application        | Next.js, React, TypeScript, Tailwind CSS, Shadcn UI |
+| Editor                 | TipTap and ProseMirror extensions                   |
+| Backend                | NestJS and TypeScript                               |
+| First-party API        | tRPC                                                |
+| Public API             | Versioned REST endpoints                            |
+| Database               | PostgreSQL with Drizzle ORM                         |
+| Semantic search        | pgvector                                            |
+| Full-text search       | Meilisearch                                         |
+| Authentication         | Better Auth                                         |
+| Cache and messaging    | Redis                                               |
+| Background processing  | BullMQ and Bull Board                               |
+| File storage           | MinIO and Sharp                                     |
+| Realtime collaboration | Socket.io and Yjs                                   |
+| Email                  | Nodemailer and React Email                          |
+| Export                 | Puppeteer and document conversion libraries         |
+| Deployment             | Docker, Docker Compose, and a TLS reverse proxy     |
 
 Exact versions must be compatibility-tested and pinned during the relevant foundation parts rather than inferred from this overview.
 
@@ -166,16 +166,16 @@ A part is not complete merely because code exists. Its stated criteria and requi
 
 ## Current Documentation
 
-| Document | Purpose |
-|---|---|
-| [`Notted.md`](Notted.md) | Full product, architecture, feature, schema, infrastructure, and deployment specification |
-| [`Plan.md`](Plan.md) | Detailed sequential development plan and completion criteria |
-| [`AGENTS.md`](AGENTS.md) | Mandatory instructions for development agents |
-| [`CLAUDE.md`](CLAUDE.md) | Concise coding conventions for compatible coding assistants |
-| [`docs/standards/`](docs/standards/) | Architecture, frontend, backend, database, API, security, testing, observability, and operations standards |
-| [`docs/decisions/`](docs/decisions/) | Architecture decision records |
-| [`docs/completed-parts/`](docs/completed-parts/) | Cross-session implementation and verification history |
-| [`docs/database-migrations.md`](docs/database-migrations.md) | Drizzle migration generation, immutability, testing, and rollback policy |
+| Document                                                     | Purpose                                                                                                    |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| [`Notted.md`](Notted.md)                                     | Full product, architecture, feature, schema, infrastructure, and deployment specification                  |
+| [`Plan.md`](Plan.md)                                         | Detailed sequential development plan and completion criteria                                               |
+| [`AGENTS.md`](AGENTS.md)                                     | Mandatory instructions for development agents                                                              |
+| [`CLAUDE.md`](CLAUDE.md)                                     | Concise coding conventions for compatible coding assistants                                                |
+| [`docs/standards/`](docs/standards/)                         | Architecture, frontend, backend, database, API, security, testing, observability, and operations standards |
+| [`docs/decisions/`](docs/decisions/)                         | Architecture decision records                                                                              |
+| [`docs/completed-parts/`](docs/completed-parts/)             | Cross-session implementation and verification history                                                      |
+| [`docs/database-migrations.md`](docs/database-migrations.md) | Drizzle migration generation, immutability, testing, and rollback policy                                   |
 
 ## Local Development
 
@@ -187,15 +187,20 @@ pnpm env:init
 pnpm env:check
 pnpm infra:up
 pnpm db:migrate
+pnpm db:seed
 pnpm dev
 ```
 
 Common commands include `pnpm dev:api`, `pnpm dev:web`, `pnpm infra:status`,
 `pnpm infra:project`, `pnpm infra:logs`, `pnpm infra:down`, `pnpm build`, `pnpm lint`,
 `pnpm type-check`, `pnpm test`, `pnpm db:check`, `pnpm db:generate`,
-`pnpm db:migrate`, and `pnpm db:studio`. `pnpm db:seed` intentionally exits
-non-zero until Part 20; there are no seed or first-login credentials yet. Volume deletion
-is available only through the guarded `pnpm infra:reset:dev` command.
+`pnpm db:migrate`, `pnpm db:seed`, and `pnpm db:studio`. The deterministic seed is
+idempotent, but its identities are relational fixtures rather than login credentials. It
+refuses `NODE_ENV=production` and, by default, targets only `notted_dev` or project-prefixed
+names such as `notted_test` and `notted_phase3_review`. Exceptional non-production use requires
+`ALLOW_UNSAFE_DATABASE_SEED=true`; the command never logs the database URL or
+credentials. Part 21 will add the supported authentication flow. Volume deletion is available only
+through the guarded `pnpm infra:reset:dev` command.
 
 See [`docs/README.md`](docs/README.md) for exact onboarding, ports, migration flow,
 Docker Desktop/WSL troubleshooting, and shutdown/reset safety. Environment ownership and

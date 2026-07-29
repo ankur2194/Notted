@@ -10,6 +10,7 @@
     "db:check": "drizzle-kit check",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file=.env ./node_modules/drizzle-kit/bin.cjs migrate",
+    "db:seed": "node --env-file=.env --import tsx src/database/seed.ts",
     "db:studio": "node --env-file=.env ./node_modules/drizzle-kit/bin.cjs studio",
     "start": "node dist/main.js",
     "type-check": "tsc --noEmit -p tsconfig.json",
@@ -21,11 +22,13 @@
     "format:check": "prettier --check . --ignore-path ../../.prettierignore"
   },
   "dependencies": {
+    "@better-auth/drizzle-adapter": "1.6.24",
     "@nestjs/common": "10.4.22",
     "@nestjs/core": "10.4.22",
     "@nestjs/platform-express": "10.4.22",
     "@notted/shared-types": "workspace:*",
     "@notted/shared-validators": "workspace:*",
+    "better-auth": "1.6.24",
     "class-transformer": "0.5.1",
     "class-validator": "0.14.3",
     "compression": "1.8.1",

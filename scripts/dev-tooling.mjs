@@ -318,9 +318,10 @@ export async function main() {
       await resetDevelopmentData();
       break;
     case "db:seed":
-      throw new Error(
-        "Database seeding is not implemented yet. Part 20 will add seed data and credentials; no first-login credentials exist today.",
-      );
+      await ensureEnvironment();
+      await checkEnvironment();
+      await run("pnpm", ["--filter", "@notted/api", "db:seed"]);
+      break;
     default:
       throw new Error("Unknown developer command.");
   }

@@ -12,6 +12,11 @@ import {
 } from "./meilisearch.config";
 import { MINIO_CONFIG, MinioConfigProvider, minioConfigProvider } from "./minio.config";
 import { REDIS_CONFIG, RedisConfigProvider, redisConfigProvider } from "./redis.config";
+import {
+  RETENTION_CONFIG,
+  RetentionConfigProvider,
+  retentionConfigProvider,
+} from "./retention.config";
 import { SECURITY_CONFIG, SecurityConfigProvider, securityConfigProvider } from "./security.config";
 import { SMTP_CONFIG, SmtpConfigProvider, smtpConfigProvider } from "./smtp.config";
 
@@ -34,6 +39,8 @@ import { SMTP_CONFIG, SmtpConfigProvider, smtpConfigProvider } from "./smtp.conf
     minioConfigProvider,
     RedisConfigProvider,
     redisConfigProvider,
+    RetentionConfigProvider,
+    retentionConfigProvider,
     SecurityConfigProvider,
     securityConfigProvider,
     SmtpConfigProvider,
@@ -48,6 +55,7 @@ import { SMTP_CONFIG, SmtpConfigProvider, smtpConfigProvider } from "./smtp.conf
     MEILISEARCH_CONFIG,
     MINIO_CONFIG,
     REDIS_CONFIG,
+    RETENTION_CONFIG,
     SECURITY_CONFIG,
     SMTP_CONFIG,
   ],
