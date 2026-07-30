@@ -1,5 +1,6 @@
 import { parseAiConfig } from "./ai.config";
 import { parseAppConfig } from "./app.config";
+import { parseAuthEmailQueueConfig } from "./auth-email-queue.config";
 import { parseAuthConfig } from "./auth.config";
 import { parseDatabaseConfig } from "./database.config";
 import { parseFeaturesConfig } from "./features.config";
@@ -30,6 +31,7 @@ export function validateApiEnvironment(environment: Environment): void {
   parseMeilisearchConfig(environment);
   parseSmtpConfig(environment);
   parseAuthConfig(environment);
+  parseAuthEmailQueueConfig(environment);
   parseSecurityConfig(environment);
   parseAiConfig(environment);
 }

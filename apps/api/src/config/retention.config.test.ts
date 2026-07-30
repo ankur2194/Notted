@@ -29,7 +29,7 @@ describe("parseRetentionConfig", () => {
       RETENTION_NOTE_VERSION_DAYS_ENTERPRISE: "730",
       RETENTION_AUDIT_LOG_DAYS: "90",
       RETENTION_EXPORT_OBJECT_DAYS: "3",
-      SESSION_SHORT_LIVED_HOURS: "12",
+      SESSION_SHORT_LIVED_HOURS: "24",
       SESSION_REMEMBER_ME_DAYS: "14",
       RETENTION_ORPHANED_OBJECT_DAYS: "5",
     });
@@ -42,7 +42,7 @@ describe("parseRetentionConfig", () => {
     expect(config.noteVersionRetentionDaysEnterprise).toBe(730);
     expect(config.auditLogRetentionDays).toBe(90);
     expect(config.exportObjectRetentionDays).toBe(3);
-    expect(config.sessionShortLivedHours).toBe(12);
+    expect(config.sessionShortLivedHours).toBe(24);
     expect(config.sessionRememberMeDays).toBe(14);
     expect(config.orphanedObjectCleanupDays).toBe(5);
   });
@@ -73,7 +73,7 @@ describe("parseRetentionConfig", () => {
     [{ RETENTION_DELETED_NOTE_DAYS_FREE: "0" }, "must be an integer between 1 and"],
     [{ RETENTION_DELETED_NOTE_DAYS_FREE: "abc" }, "must be an integer between 1 and"],
     [{ RETENTION_AUDIT_LOG_DAYS: "-1" }, "must be an integer between 1 and"],
-    [{ SESSION_SHORT_LIVED_HOURS: "0" }, "must be an integer between 1 and"],
+    [{ SESSION_SHORT_LIVED_HOURS: "12" }, "must be an integer between 24 and 24"],
     [{ SESSION_REMEMBER_ME_DAYS: "0" }, "must be an integer between 1 and"],
     [{ RETENTION_EXPORT_OBJECT_DAYS: "0" }, "must be an integer between 1 and"],
     [{ RETENTION_DELETED_NOTE_DAYS_PRO: "0" }, "must be an integer between 1 and"],

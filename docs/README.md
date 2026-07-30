@@ -65,9 +65,67 @@ URLs, or signed URLs are created.
 
 Seed identities use reserved `.test` addresses, but they are **not login credentials**.
 No passwords, password hashes, sessions, verification tokens, TOTP secrets, passkeys, or
-login claims are seeded. Part 21 will provide the supported development login flow after
-Better Auth is integrated; until then the relationships are browsable through database
-integration tests rather than an authenticated UI/API session.
+login claims are seeded. Register a separate development account at
+`http://localhost:3000/register`; the verification message is captured by Mailpit at
+`http://localhost:8025`. Seed users remain relational fixtures and must not be given
+fabricated account rows or passwords.
+
+### Local authentication and Mailpit
+
+Better Auth is mounted outside the versioned API at `/api/auth`. Email/password
+registration and sign-in use `/sign-up/email` and `/sign-in/email`; verification resend is
+`/send-verification-email`; magic-link request is `/sign-in/magic-link`. Notted's
+hash-at-rest reset endpoints are `/notted/request-password-reset` and
+`/notted/reset-password`. The web routes are `/login`, `/register`, `/forgot-password`,
+`/reset-password`, `/verify-email`, and `/magic-link`. Browser requests use the official
+Better Auth client with credentialed opaque cookies; Server Components forward only the
+incoming cookie header to `GET /api/v1/auth/session`. Direct local API requests must include
+`Origin: http://localhost:3000` and use cookies rather than bearer tokens.
+
+Part 23 adds `/two-factor` for login challenges and the protected canonical user security
+page `/settings/security`. Better Auth remains the only credential/session authority: TOTP
+secrets and encrypted recovery codes remain server-side, WebAuthn uses
+`@better-auth/passkey@1.6.24`, and active-session responses omit raw tokens, IP addresses,
+credential IDs, and public keys. High-risk actions prompt for recent authentication and clear
+password fields immediately. Passkey controls explain unsupported browser/insecure-context
+states; local WebAuthn works only on `http://localhost`, while production requires HTTPS and
+the exact RP ID/origin contract in [`environment.md`](environment.md).
+
+OAuth is optional. With no provider tuples configured, password, magic-link, and passkey
+controls remain available and no empty OAuth controls render. To enable a provider, configure
+its complete server-only tuple in `apps/api/.env`, register the corresponding Better Auth
+callback URL, run `pnpm env:check`, and restart the API. Never copy provider credentials into
+the web environment or test mocks.
+
+Authentication email is committed to PostgreSQL before identifier-only BullMQ dispatch.
+Mailpit may therefore receive it shortly after the request returns. Delivery rows contain
+status and recipient only; tokenized URLs are AES-256-GCM encrypted until the worker
+decrypts/renders them in memory. Redis is required for Better Auth session lookup and the
+queue. Redis loss fails closed and can require sign-in again even though PostgreSQL retains
+the durable session row; see ADR 0010.
+
+### Dashboard shell and notifications
+
+The protected application shell loads `GET /api/v1/shell/bootstrap` in a Server Component.
+It returns only the current user summary, live workspace memberships and roles, a
+server-validated current workspace, safe presentation hints derived from the Part 24 policy,
+and the current workspace's unread notification count. The workspace selector posts to the
+minimal same-origin `/api/shell/workspace` adapter; that adapter asks NestJS to validate the
+selection against current membership before storing an HTTP-only selector cookie. A workspace
+UUID is never authority.
+
+Notification history and read state are PostgreSQL-backed at
+`/api/v1/workspaces/:workspaceId/notifications`. The center supports bounded pages, mark one
+read/unread, and atomic mark-all-read. Browser storage is not used for memberships,
+notification payloads, read state, sessions, or permissions. Only the validated
+expanded/collapsed sidebar preference is stored in `localStorage`.
+
+For the Part 25 Playwright journeys, provision a dedicated non-seed login fixture with two
+workspace memberships and safe notification rows, then set `PLAYWRIGHT_SHELL_EMAIL` and
+`PLAYWRIGHT_SHELL_PASSWORD`. Never commit those values. The suite skips fixture-dependent
+journeys when they are absent; it does not install browser binaries. Search remains an
+accessible placeholder until Parts 50–52, note-tree content until Parts 31–32, workspace
+lifecycle until Part 26, and notification production/mention behavior until Part 60.
 
 ## Services and ports
 
@@ -142,9 +200,16 @@ pnpm lint
 pnpm type-check
 pnpm test
 pnpm test:ci
+pnpm test:e2e
 pnpm build
 pnpm audit --prod --audit-level=high
 ```
+
+`pnpm test:e2e` uses exact `@playwright/test@1.62.0` and expects the development
+infrastructure, migrated Part 21 schema, API, web app, and Mailpit. Install browser binaries
+separately when needed with `pnpm --filter @notted/web exec playwright install`; browser
+binaries are not installed by dependency installation and are not committed. The suite
+creates fresh `.test` accounts and never relies on seed credentials.
 
 The root `Makefile` is an optional thin alias layer (`make infra-up`, `make test`,
 `make db-migrate`, and so on); pnpm scripts are canonical and cross-platform.

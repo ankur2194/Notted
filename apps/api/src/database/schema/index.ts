@@ -14,8 +14,8 @@
 // Part 16 — tags, attachments, comments, and note versions.
 // Part 18 — operations and integration tables (embeddings, audit logs, API
 // keys, webhooks + deliveries, exports, AI provider config + usage, email
-// deliveries, durable job outbox, and worker idempotency). This is the FINAL schema part; it closes
-// the Phase 3 data model. Sensitive values are stored only as hashes
+// deliveries, durable job outbox, and worker idempotency). Part 21 adds only
+// the approved encrypted authentication-email context bridge. Sensitive values are stored only as hashes
 // (api_keys.key_hash, webhook payload hashes, job payload hashes) or as
 // application-encrypted blobs with an explicit key-version column
 // (webhooks.encrypted_secret, ai_provider_config.encrypted_credentials);
@@ -48,6 +48,12 @@ import {
   usersRelations,
   verification,
 } from "./auth";
+import {
+  authEmailIntents,
+  authEmailIntentsRelations,
+  authEmailIntentStatusEnum,
+  authEmailPurposeEnum,
+} from "./auth-email-intents";
 import { comments, commentsRelations } from "./comments";
 import { emailDeliveries, emailDeliveriesRelations, emailStatusEnum } from "./email-deliveries";
 import { exportFormatEnum, exportJobs, exportJobsRelations, exportStatusEnum } from "./exports";
@@ -64,6 +70,12 @@ import {
   notes,
   notesRelations,
 } from "./notes";
+import {
+  notificationKindEnum,
+  notifications,
+  notificationsRelations,
+  notificationTargetTypeEnum,
+} from "./notifications";
 import {
   projectAccess,
   projectAccessRelations,
@@ -177,6 +189,13 @@ export {
 } from "./ai";
 export { apiKeys, apiKeysRelations } from "./api-keys";
 export { auditLogs, auditLogsRelations } from "./audit-logs";
+export {
+  authEmailIntents,
+  authEmailIntentsRelations,
+  authEmailIntentStatusEnum,
+  authEmailPurposeEnum,
+  type AuthEmailPurpose,
+} from "./auth-email-intents";
 export { emailDeliveries, emailDeliveriesRelations, emailStatusEnum } from "./email-deliveries";
 export { exportFormatEnum, exportJobs, exportJobsRelations, exportStatusEnum } from "./exports";
 export { jobStatusEnum, jobIdempotency } from "./job-idempotency";
@@ -187,6 +206,12 @@ export {
   type JobOutboxPayload,
 } from "./job-outbox";
 export { noteEmbeddings, noteEmbeddingsRelations } from "./note-embeddings";
+export {
+  notificationKindEnum,
+  notifications,
+  notificationsRelations,
+  notificationTargetTypeEnum,
+} from "./notifications";
 export {
   webhookDeliveryStatusEnum,
   webhookDeliveries,
@@ -269,7 +294,7 @@ export const schema = {
   taskStatusEnum,
   taskPriorityEnum,
   taskRecurrenceEnum,
-  // Part 18 — operations and integration tables (the FINAL schema part).
+  // Part 18 — operations and integration tables.
   // note_embeddings: one 1536-dim pgvector row per note (HNSW cosine index);
   // multi-embedding/chunked design is deferred to Part 53.
   noteEmbeddings,
@@ -313,6 +338,16 @@ export const schema = {
   emailDeliveries,
   emailDeliveriesRelations,
   emailStatusEnum,
+  // Part 21 — encrypted, expiring, one-time context for authentication emails.
+  authEmailIntents,
+  authEmailIntentsRelations,
+  authEmailPurposeEnum,
+  authEmailIntentStatusEnum,
+  // Part 25 — current-user, workspace-scoped notification center storage.
+  notifications,
+  notificationsRelations,
+  notificationKindEnum,
+  notificationTargetTypeEnum,
   // job_idempotency: independently expiring cross-restart worker replay
   // protection (ADR 0006). Stores only a payload hash + small safe result; cleanup
   // maintenance worker (Part 50) reaps past-expiry rows.

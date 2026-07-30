@@ -23,12 +23,14 @@
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.6.24",
+    "@better-auth/passkey": "1.6.24",
     "@nestjs/common": "10.4.22",
     "@nestjs/core": "10.4.22",
     "@nestjs/platform-express": "10.4.22",
     "@notted/shared-types": "workspace:*",
     "@notted/shared-validators": "workspace:*",
     "better-auth": "1.6.24",
+    "bullmq": "5.80.10",
     "class-transformer": "0.5.1",
     "class-validator": "0.14.3",
     "compression": "1.8.1",
@@ -42,7 +44,8 @@
     "pg": "8.22.0",
     "pino": "10.3.1",
     "reflect-metadata": "0.2.2",
-    "rxjs": "7.8.2"
+    "rxjs": "7.8.2",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@nestjs/cli": "10.4.9",

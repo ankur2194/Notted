@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseAiConfig } from "./ai.config";
+import { parseAuthEmailQueueConfig } from "./auth-email-queue.config";
 import { parseAuthConfig } from "./auth.config";
 import { parseFeaturesConfig } from "./features.config";
 import { parseMeilisearchConfig } from "./meilisearch.config";
@@ -19,6 +20,7 @@ describe("server environment contract", () => {
       parseMeilisearchConfig({}),
       parseSmtpConfig({}),
       parseAuthConfig({}),
+      parseAuthEmailQueueConfig({}),
       parseSecurityConfig({}),
       parseAiConfig({}),
     ];
@@ -84,6 +86,7 @@ describe("server environment contract", () => {
       EMAIL_FROM: "noreply@example.com",
       BETTER_AUTH_SECRET: "a-strong-auth-secret-that-is-long-enough",
       BETTER_AUTH_URL: "https://api.example.com",
+      APP_URL: "https://app.example.com",
       BETTER_AUTH_TRUSTED_ORIGINS: "https://app.example.com",
       DATA_ENCRYPTION_KEYS: "7:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
       AI_OPENAI_API_KEY: "sk-example-key-longer-than-twenty-bytes",

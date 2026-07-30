@@ -35,6 +35,9 @@ export class RequestContextMiddleware implements NestMiddleware {
     const startedAt = performance.now();
 
     setRequestId(request, requestId);
+    // Downstream raw integrations (including Better Auth before body parsing)
+    // receive the same validated/generated correlation ID.
+    request.headers["x-request-id"] = requestId;
     response.setHeader("X-Request-Id", requestId);
 
     response.once("finish", () => {

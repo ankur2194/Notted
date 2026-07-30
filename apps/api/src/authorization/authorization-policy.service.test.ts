@@ -1,0 +1,453 @@
+import { describe, expect, it } from "vitest";
+
+import { AuthorizationPolicyService } from "./authorization-policy.service";
+import {
+  AUTHORIZATION_ACTIONS,
+  type AuthorizationAction,
+  type AuthorizationEvaluation,
+  type AuthorizationResourceFacts,
+  type AuthorizationResourceKind,
+  type UserAuthorizationActor,
+  type WorkspaceRole,
+} from "./authorization.contracts";
+
+const NOW = Date.parse("2026-07-29T12:00:00.000Z");
+const WORKSPACE_ID = "10000000-0000-4000-8000-000000000001";
+const USER_ID = "10000000-0000-4000-8000-000000000002";
+const OTHER_USER_ID = "10000000-0000-4000-8000-000000000003";
+
+const actor: UserAuthorizationActor = Object.freeze({
+  kind: "user",
+  userId: USER_ID,
+  sessionId: "session-1",
+  assurance: "single-factor",
+  authenticatedAt: new Date(NOW - 1_000).toISOString(),
+  expiresAt: new Date(NOW + 60_000).toISOString(),
+  isFresh: true,
+  source: "session",
+});
+
+function kindForAction(action: AuthorizationAction): AuthorizationResourceKind {
+  if (
+    [
+      "member.list",
+      "member.invite",
+      "project.create",
+      "apiKey.list",
+      "apiKey.create",
+      "webhook.list",
+      "webhook.create",
+      "folder.create",
+    ].includes(action)
+  )
+    return "workspace";
+  if (action === "comment.create" || action === "file.upload" || action === "export.create")
+    return "note";
+  if (action === "task.create") return "project";
+  if (action.startsWith("workspace."))
+    return action === "workspace.delete" ? "workspaceDeletion" : "workspace";
+  if (action.startsWith("settings.")) return "settings";
+  if (action.startsWith("billing.")) return "billing";
+  if (action.startsWith("member.")) return "member";
+  if (action.startsWith("project.")) return "project";
+  if (action.startsWith("note.")) return "note";
+  if (action.startsWith("comment.")) return "comment";
+  if (action.startsWith("export.")) return "export";
+  if (action.startsWith("apiKey.")) return "apiKey";
+  if (action.startsWith("webhook.")) return "webhook";
+  if (action.startsWith("file.")) return "file";
+  if (action.startsWith("folder.")) return "folder";
+  if (action.startsWith("task.")) return "task";
+  return "session";
+}
+
+function noteFacts(
+  overrides: Partial<AuthorizationResourceFacts> = {},
+): AuthorizationResourceFacts {
+  return Object.freeze({
+    kind: "note",
+    id: "note-1",
+    workspaceId: WORKSPACE_ID,
+    loadedAt: new Date(NOW).toISOString(),
+    relationsValid: true,
+    creatorId: USER_ID,
+    project: null,
+    sharePermission: null,
+    ...overrides,
+  });
+}
+
+function resourceFor(action: AuthorizationAction): AuthorizationResourceFacts {
+  const kind = kindForAction(action);
+  const common = {
+    kind,
+    id: `${kind}-1`,
+    workspaceId: kind === "session" ? null : WORKSPACE_ID,
+    loadedAt: new Date(NOW).toISOString(),
+    relationsValid: true,
+    creatorId: USER_ID,
+  } as const;
+  if (kind === "session") return Object.freeze({ ...common, targetUserId: USER_ID });
+  if (kind === "project") {
+    return Object.freeze({
+      ...common,
+      project: { restricted: false, actorAccess: null },
+      ...(action === "project.share"
+        ? {
+            delegation: {
+              requestedPermission: "viewer" as const,
+              targetMemberActive: true,
+              targetProjectAccess: null,
+            },
+          }
+        : {}),
+    });
+  }
+  if (kind === "note") {
+    return noteFacts(
+      action === "note.share"
+        ? {
+            delegation: {
+              requestedPermission: "edit",
+              targetMemberActive: true,
+              targetProjectAccess: null,
+            },
+          }
+        : {},
+    );
+  }
+  if (kind === "comment" || kind === "file") return Object.freeze({ ...common, note: noteFacts() });
+  if (kind === "task") {
+    return Object.freeze({ ...common, project: { restricted: false, actorAccess: null } });
+  }
+  if (kind === "member")
+    return Object.freeze({ ...common, targetUserId: OTHER_USER_ID, targetRole: "editor" });
+  if (kind === "export") {
+    return Object.freeze({
+      ...common,
+      requestedById: USER_ID,
+      sourceReadable: true,
+      source: noteFacts(),
+      status: action === "export.cancel" ? "queued" : "ready",
+    });
+  }
+  return Object.freeze(common);
+}
+
+function evaluation(
+  role: WorkspaceRole,
+  action: AuthorizationAction | string,
+  resource: AuthorizationResourceFacts | null = typeof action === "string" &&
+  AUTHORIZATION_ACTIONS.includes(action as AuthorizationAction)
+    ? resourceFor(action as AuthorizationAction)
+    : null,
+  actorOverride: UserAuthorizationActor | null = actor,
+): AuthorizationEvaluation {
+  return {
+    actor: actorOverride,
+    action,
+    resource,
+    tenant: {
+      workspaceId: resource?.kind === "session" ? null : WORKSPACE_ID,
+      membershipRole: resource?.kind === "session" ? null : role,
+      membershipLoadedAt: resource?.kind === "session" ? null : new Date(NOW).toISOString(),
+    },
+  };
+}
+
+const ADMIN_DENIED = new Set<AuthorizationAction>([
+  "billing.read",
+  "billing.update",
+  "workspace.delete",
+]);
+const EDITOR_ALLOWED = new Set<AuthorizationAction>([
+  "workspace.read",
+  "settings.read",
+  "member.list",
+  "project.read",
+  "note.read",
+  "note.create",
+  "note.update",
+  "note.share",
+  "note.tag",
+  "comment.read",
+  "comment.create",
+  "comment.update",
+  "comment.delete",
+  "comment.resolve",
+  "export.create",
+  "export.read",
+  "export.download",
+  "export.cancel",
+  "file.read",
+  "file.upload",
+  "file.delete",
+  "folder.read",
+  "folder.create",
+  "folder.update",
+  "task.read",
+  "task.create",
+  "task.update",
+  "task.tag",
+  "session.list",
+  "session.revoke",
+]);
+const VIEWER_ALLOWED = new Set<AuthorizationAction>([
+  "workspace.read",
+  "settings.read",
+  "member.list",
+  "project.read",
+  "note.read",
+  "comment.read",
+  "comment.create",
+  "comment.update",
+  "comment.delete",
+  "export.create",
+  "export.read",
+  "export.download",
+  "export.cancel",
+  "file.read",
+  "folder.read",
+  "task.read",
+  "session.list",
+  "session.revoke",
+]);
+
+describe("AuthorizationPolicyService", () => {
+  const policy = new AuthorizationPolicyService();
+
+  const roleCases: readonly [WorkspaceRole, ReadonlySet<AuthorizationAction>][] = [
+    ["owner", new Set(AUTHORIZATION_ACTIONS)],
+    ["admin", new Set(AUTHORIZATION_ACTIONS.filter((action) => !ADMIN_DENIED.has(action)))],
+    ["editor", EDITOR_ALLOWED],
+    ["viewer", VIEWER_ALLOWED],
+  ];
+
+  for (const [role, allowedActions] of roleCases) {
+    it.each(AUTHORIZATION_ACTIONS)(
+      `${role} evaluates %s against its canonical resource`,
+      (action) => {
+        expect(policy.decide(evaluation(role, action), NOW).allowed).toBe(
+          allowedActions.has(action),
+        );
+      },
+    );
+  }
+
+  it.each([
+    ["unrestricted", { restricted: false, actorAccess: null }, true, true],
+    ["restricted-no-grant", { restricted: true, actorAccess: null }, false, false],
+    ["restricted-viewer", { restricted: true, actorAccess: "viewer" as const }, true, false],
+    ["restricted-editor", { restricted: true, actorAccess: "editor" as const }, true, true],
+  ])("applies project inheritance/restriction: %s", (_name, project, canRead, canEdit) => {
+    const resource = noteFacts({ project, sharePermission: "edit", creatorId: OTHER_USER_ID });
+    expect(policy.decide(evaluation("editor", "note.read", resource), NOW).allowed).toBe(canRead);
+    expect(policy.decide(evaluation("editor", "note.update", resource), NOW).allowed).toBe(canEdit);
+  });
+
+  it("lets editors mutate projects only through an explicit delegated project role", () => {
+    const inherited = resourceFor("project.update");
+    const delegated = Object.freeze({
+      ...inherited,
+      project: { restricted: true, actorAccess: "editor" as const },
+    });
+    expect(policy.decide(evaluation("editor", "project.update", inherited), NOW).allowed).toBe(
+      false,
+    );
+    expect(policy.decide(evaluation("editor", "project.update", delegated), NOW).allowed).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    [USER_ID, null, true],
+    [OTHER_USER_ID, "edit" as const, true],
+    [OTHER_USER_ID, "comment" as const, false],
+    [OTHER_USER_ID, "view" as const, false],
+    [OTHER_USER_ID, null, false],
+  ])("applies note creator/share edit rules", (creatorId, sharePermission, expected) => {
+    const resource = noteFacts({ creatorId, sharePermission });
+    expect(policy.decide(evaluation("editor", "note.update", resource), NOW).allowed).toBe(
+      expected,
+    );
+  });
+
+  it("does not let a note share broaden a restricted project", () => {
+    const resource = noteFacts({
+      creatorId: OTHER_USER_ID,
+      sharePermission: "edit",
+      project: { restricted: true, actorAccess: null },
+    });
+    expect(policy.decide(evaluation("editor", "note.read", resource), NOW)).toMatchObject({
+      allowed: false,
+    });
+  });
+
+  it.each([
+    ["comment.create", OTHER_USER_ID, true],
+    ["comment.update", USER_ID, true],
+    ["comment.delete", USER_ID, true],
+    ["comment.update", OTHER_USER_ID, false],
+    ["comment.resolve", OTHER_USER_ID, true],
+  ] as const)("enforces comment/thread action %s", (action, creatorId, expected) => {
+    const resource = Object.freeze({
+      ...resourceFor(action),
+      creatorId,
+      note: noteFacts({ creatorId: USER_ID }),
+    });
+    expect(policy.decide(evaluation("editor", action, resource), NOW).allowed).toBe(expected);
+  });
+
+  it("caps editor delegation and requires a current target membership", () => {
+    const base = noteFacts({ creatorId: USER_ID });
+    const permitted = Object.freeze({
+      ...base,
+      delegation: {
+        requestedPermission: "edit" as const,
+        targetMemberActive: true,
+        targetProjectAccess: null,
+      },
+    });
+    const revokedTarget = Object.freeze({
+      ...permitted,
+      delegation: { ...permitted.delegation, targetMemberActive: false },
+    });
+    expect(policy.decide(evaluation("editor", "note.share", permitted), NOW).allowed).toBe(true);
+    expect(policy.decide(evaluation("editor", "note.share", revokedTarget), NOW).allowed).toBe(
+      false,
+    );
+    expect(policy.decide(evaluation("owner", "note.share", revokedTarget), NOW).allowed).toBe(
+      false,
+    );
+  });
+
+  it.each(["billing.read", "billing.update", "workspace.delete"] as const)(
+    "keeps %s owner-only",
+    (action) => {
+      expect(policy.decide(evaluation("owner", action), NOW).allowed).toBe(true);
+      expect(policy.decide(evaluation("admin", action), NOW).allowed).toBe(false);
+    },
+  );
+
+  it.each(["apiKey.create", "apiKey.revoke", "webhook.create", "webhook.delete"] as const)(
+    "requires admin privilege and freshness for %s",
+    (action) => {
+      expect(policy.decide(evaluation("admin", action), NOW).allowed).toBe(true);
+      expect(policy.decide(evaluation("editor", action), NOW).allowed).toBe(false);
+      expect(
+        policy.decide(
+          evaluation("admin", action, resourceFor(action), { ...actor, isFresh: false }),
+          NOW,
+        ),
+      ).toMatchObject({ allowed: false, code: "authorization.recent_authentication_required" });
+    },
+  );
+
+  it("ties exports to requester/admin and a currently readable source", () => {
+    const sourceLost = Object.freeze({ ...resourceFor("export.download"), sourceReadable: false });
+    const otherRequester = Object.freeze({
+      ...resourceFor("export.download"),
+      requestedById: OTHER_USER_ID,
+    });
+    expect(policy.decide(evaluation("editor", "export.download", sourceLost), NOW).allowed).toBe(
+      false,
+    );
+    expect(
+      policy.decide(evaluation("editor", "export.download", otherRequester), NOW).allowed,
+    ).toBe(false);
+    expect(policy.decide(evaluation("admin", "export.download", otherRequester), NOW).allowed).toBe(
+      true,
+    );
+  });
+
+  it("authorizes files only through their note and uploader/edit rules", () => {
+    const readable = resourceFor("file.read");
+    const restricted = Object.freeze({
+      ...readable,
+      note: noteFacts({ project: { restricted: true, actorAccess: null } }),
+    });
+    expect(policy.decide(evaluation("viewer", "file.read", readable), NOW).allowed).toBe(true);
+    expect(policy.decide(evaluation("viewer", "file.read", restricted), NOW).allowed).toBe(false);
+    expect(policy.decide(evaluation("editor", "file.delete", readable), NOW).allowed).toBe(true);
+  });
+
+  it("allows only the exact narrow system/job capability", () => {
+    const resource = noteFacts();
+    const system = {
+      kind: "system" as const,
+      authorityId: "export-worker-v1",
+      workspaceId: WORKSPACE_ID,
+      purpose: "render requested export",
+      allowedActions: ["note.read"] as const,
+      allowedResourceKinds: ["note"] as const,
+    };
+    const base = evaluation("viewer", "note.read", resource);
+    expect(policy.decide({ ...base, actor: system }, NOW).allowed).toBe(true);
+    expect(policy.decide({ ...base, actor: system, action: "note.update" }, NOW).allowed).toBe(
+      false,
+    );
+  });
+
+  it("enforces API-key scopes without treating authentication as user authorization", () => {
+    const base = evaluation("viewer", "note.read", noteFacts());
+    const readKey = {
+      kind: "api-key" as const,
+      apiKeyId: "key-1",
+      workspaceId: WORKSPACE_ID,
+      scopes: ["read"] as const,
+    };
+    expect(policy.decide({ ...base, actor: readKey }, NOW).allowed).toBe(true);
+    expect(policy.decide({ ...base, actor: readKey, action: "note.update" }, NOW).allowed).toBe(
+      false,
+    );
+  });
+
+  it("rechecks user-requested jobs without granting freshness", () => {
+    const jobActor: UserAuthorizationActor = {
+      ...actor,
+      sessionId: null,
+      source: "user-job",
+      isFresh: false,
+    };
+    expect(
+      policy.decide(evaluation("editor", "note.read", noteFacts(), jobActor), NOW).allowed,
+    ).toBe(true);
+    expect(
+      policy.decide(
+        evaluation("owner", "workspace.delete", resourceFor("workspace.delete"), jobActor),
+        NOW,
+      ),
+    ).toMatchObject({
+      allowed: false,
+      code: "authorization.recent_authentication_required",
+    });
+  });
+
+  it("denies missing, unknown, mismatched, invalid-parent, and stale facts by default", () => {
+    expect(policy.decide(evaluation("owner", "unknown.action", null), NOW).allowed).toBe(false);
+    expect(policy.decide(evaluation("owner", "note.read", null), NOW).allowed).toBe(false);
+    expect(policy.decide(evaluation("owner", "note.read", noteFacts(), null), NOW)).toMatchObject({
+      allowed: false,
+      httpStatus: 401,
+    });
+    expect(
+      policy.decide(
+        evaluation("owner", "note.read", noteFacts({ workspaceId: "other-workspace" })),
+        NOW,
+      ),
+    ).toMatchObject({ allowed: false, httpStatus: 404 });
+    expect(
+      policy.decide(evaluation("owner", "note.read", noteFacts({ relationsValid: false })), NOW),
+    ).toMatchObject({ allowed: false, httpStatus: 404 });
+    expect(
+      policy.decide(
+        evaluation(
+          "owner",
+          "note.read",
+          noteFacts({ loadedAt: new Date(NOW - 31_000).toISOString() }),
+        ),
+        NOW,
+      ),
+    ).toMatchObject({ allowed: false, code: "authorization.stale_facts" });
+  });
+});

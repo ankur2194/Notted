@@ -1,0 +1,11 @@
+export { AuthorizationModule } from "./authorization.module";
+export { AuthorizationPolicyService } from "./authorization-policy.service";
+export { AuthorizationPolicyModule } from "./authorization-policy.module";
+export { AuthorizationRepository, type AuthorizationFactsReader } from "./authorization.repository";
+export { AuthorizationEntryService } from "./authorization-entry.service";
+export { AuthorizationAdaptersService } from "./authorization-adapters.service";
+export { RequireAuthorization, type HttpAuthorizationSpec } from "./authorization-http.decorator";
+export { AuthorizationHttpGuard } from "./authorization-http.guard";
+export { AuthorizationHttpInterceptor } from "./authorization-http.interceptor";
+export { AuthorizationDeniedError } from "./authorization.errors";
+export * from "./authorization.contracts";

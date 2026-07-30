@@ -129,6 +129,13 @@ function readOptionalRetentionDays(
 
 export function parseRetentionConfig(environment: Environment): RetentionConfig {
   try {
+    const sessionShortLivedHours = readInteger(
+      environment,
+      "SESSION_SHORT_LIVED_HOURS",
+      24,
+      24,
+      24,
+    );
     return Object.freeze({
       deletedNoteRetentionDaysFree: readRetentionDays(
         environment,
@@ -166,13 +173,9 @@ export function parseRetentionConfig(environment: Environment): RetentionConfig 
         "RETENTION_EXPORT_OBJECT_DAYS",
         7, // ADR 0007.
       ),
-      sessionShortLivedHours: readInteger(
-        environment,
-        "SESSION_SHORT_LIVED_HOURS",
-        24, // ADR 0007.
-        1,
-        24 * 365, // up to a year for unusual deployments.
-      ),
+      // Better Auth 1.6.24 hard-codes non-remembered sessions to 24 hours.
+      // Reject arbitrary values instead of claiming unsupported behavior.
+      sessionShortLivedHours,
       sessionRememberMeDays: readInteger(
         environment,
         "SESSION_REMEMBER_ME_DAYS",

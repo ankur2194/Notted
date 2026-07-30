@@ -32,6 +32,6 @@ import { REDIS_CLIENT } from "./redis.tokens";
     },
     RedisService,
   ],
-  exports: [RedisService],
+  exports: [REDIS_CLIENT, RedisService],
 })
 export class RedisModule {}

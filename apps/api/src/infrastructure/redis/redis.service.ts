@@ -68,6 +68,24 @@ export class RedisService implements ReadinessIndicator, OnModuleInit, OnApplica
     await this.requireClient().del(key);
   }
 
+  async getAndDelete(key: string): Promise<string | null> {
+    return this.requireClient().getdel(key);
+  }
+
+  /** Atomic fixed-window increment; ttlMs is applied only when the key is created. */
+  async incrementWithTtl(key: string, ttlMs: number): Promise<number> {
+    const result = await this.requireClient().eval(
+      "local value = redis.call('INCR', KEYS[1]); if value == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]); end; return value",
+      1,
+      key,
+      String(ttlMs),
+    );
+    if (typeof result !== "number") {
+      throw new Error("Redis increment returned an invalid result");
+    }
+    return result;
+  }
+
   async publish(channel: string, payload: string): Promise<number> {
     return this.requireClient().publish(channel, payload);
   }

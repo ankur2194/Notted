@@ -217,7 +217,7 @@ automated purge".
 | `noteVersionRetentionDaysEnterprise` | `RETENTION_NOTE_VERSION_DAYS_ENTERPRISE` | `null` (unlimited) | Enterprise `note_versions`                                               | Part 55 (skip when `null`) |
 | `auditLogRetentionDays`              | `RETENTION_AUDIT_LOG_DAYS`               | `365`              | `audit_logs` rows                                                        | Part 71                    |
 | `exportObjectRetentionDays`          | `RETENTION_EXPORT_OBJECT_DAYS`           | `7`                | MinIO objects for `exports` rows (ADR 0007)                              | Parts 45/62                |
-| `sessionShortLivedHours`             | `SESSION_SHORT_LIVED_HOURS`              | `24` (hours)       | Non-remember-me session TTL (ADR 0007)                                   | Part 21 (Better Auth)      |
+| `sessionShortLivedHours`             | `SESSION_SHORT_LIVED_HOURS`              | `24` (hours only)  | Better Auth 1.6.24 fixed non-remember-me TTL (ADRs 0007, 0010)            | Part 21 (Better Auth)      |
 | `sessionRememberMeDays`              | `SESSION_REMEMBER_ME_DAYS`               | `30`               | Remember-me session duration (ADR 0007)                                  | Part 21 (Better Auth)      |
 | `orphanedObjectCleanupDays`          | `RETENTION_ORPHANED_OBJECT_DAYS`         | `7`                | Orphaned MinIO objects whose DB record is gone (ADR 0005 reconciliation) | Part 45                    |
 

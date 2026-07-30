@@ -1,0 +1,4 @@
+interface:
+  display_name: "Notted Playwright Integration"
+  short_description: "Build and diagnose live browser journeys"
+  default_prompt: "Use $notted-playwright-integration to author or diagnose Notted Playwright integration tests against the real application boundaries, following AGENTS.md."

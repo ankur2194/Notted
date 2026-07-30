@@ -1,101 +1,63 @@
-import Link from "next/link";
+import { FileText, FolderKanban, Sparkles } from "lucide-react";
 
-import { CreateNoteDialog } from "@/components/demo/create-note-dialog";
-import { Skeleton } from "@/components/ui/skeleton";
-import { DEFAULT_COLLECTION_PAGINATION } from "@/lib/shared-contracts";
-
-/**
- * Public dashboard placeholder at `/`.
- *
- * This is a Server Component: the welcome heading, feature cards, skeleton
- * section, and getting-started links are all rendered on the server. The only
- * client island is `<CreateNoteDialog />`, which owns the Dialog + toast preview.
- */
 export default function DashboardPage() {
   return (
-    <div className="max-w-4xl mx-auto space-y-12">
-      <section aria-labelledby="welcome-heading" className="text-center space-y-4">
-        <h1 id="welcome-heading" className="text-4xl font-bold tracking-tight text-foreground">
-          Welcome to Notted
+    <div className="mx-auto max-w-6xl space-y-8">
+      <section
+        aria-labelledby="dashboard-heading"
+        className="rounded-2xl border bg-card p-6 shadow-sm sm:p-8"
+      >
+        <p className="text-sm font-medium text-info">Workspace overview</p>
+        <h1 id="dashboard-heading" className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+          Welcome back
         </h1>
-        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          Your corporate notes management platform. Organize projects, collaborate with your team,
-          and keep everything in sync with a clean, paper-like writing experience.
+        <p className="mt-3 max-w-2xl text-muted-foreground">
+          Your authenticated workspace shell is ready. Project and note content will appear here as
+          their owning parts are implemented.
         </p>
       </section>
 
-      <section aria-labelledby="features-heading" className="space-y-6">
-        <h2 id="features-heading" className="text-2xl font-semibold text-foreground">
-          Key Features
-        </h2>
-        <div className="grid gap-4 md:grid-cols-3">
-          <article className="rounded-lg border border-border bg-card p-6 shadow-sm">
-            <h3 className="text-lg font-medium text-foreground mb-2">Rich Text Editing</h3>
-            <p className="text-muted-foreground text-sm">
-              Full-featured editor with formatting, tables, checklists, and markdown shortcuts.
+      <section aria-labelledby="workspace-content-heading">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <h2 id="workspace-content-heading" className="text-xl font-semibold">
+              Workspace content
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Feature areas are shown without fabricated records.
             </p>
-          </article>
-          <article className="rounded-lg border border-border bg-card p-6 shadow-sm">
-            <h3 className="text-lg font-medium text-foreground mb-2">Project Organization</h3>
-            <p className="text-muted-foreground text-sm">
-              Group notes into projects, create hierarchies, and manage tasks with due dates.
-            </p>
-          </article>
-          <article className="rounded-lg border border-border bg-card p-6 shadow-sm">
-            <h3 className="text-lg font-medium text-foreground mb-2">Team Collaboration</h3>
-            <p className="text-muted-foreground text-sm">
-              Real-time editing, comments, mentions, and version history for seamless teamwork.
-            </p>
-          </article>
+          </div>
         </div>
-      </section>
-
-      <section aria-labelledby="demo-heading" className="space-y-4">
-        <h2 id="demo-heading" className="text-2xl font-semibold text-foreground">
-          Interactive Demo
-        </h2>
-        <p className="text-muted-foreground">
-          Preview the dialog and toast notification primitives:
-        </p>
-        <CreateNoteDialog />
-      </section>
-
-      <section
-        aria-labelledby="loading-heading"
-        className="space-y-4"
-        data-default-page-size={DEFAULT_COLLECTION_PAGINATION.limit}
-      >
-        <h2 id="loading-heading" className="text-2xl font-semibold text-foreground">
-          Loading States
-        </h2>
-        <p className="text-muted-foreground">
-          Skeleton placeholders for content loading (decorative, hidden from screen readers):
-        </p>
-        <div className="space-y-4" aria-hidden="true">
-          <Skeleton className="h-8 w-3/4" />
-          <Skeleton className="h-4 w-1/2" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-2/3" />
-          <Skeleton className="h-32 w-full rounded-lg" />
-        </div>
-      </section>
-
-      <section
-        aria-labelledby="getting-started-heading"
-        className="space-y-4 pt-8 border-t border-border"
-      >
-        <h2 id="getting-started-heading" className="text-2xl font-semibold text-foreground">
-          Getting Started
-        </h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          <article className="rounded-lg border border-border bg-card p-6 shadow-sm">
-            <h3 className="text-lg font-medium text-foreground mb-2">Sign In</h3>
-            <p className="text-muted-foreground text-sm mb-4">
-              Visit the login page to see the authentication scaffold.
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <article className="rounded-xl border bg-card p-5">
+            <FolderKanban className="size-5 text-info" aria-hidden="true" />
+            <h3 className="mt-4 font-semibold">Projects</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Project screens and data arrive in Parts 29–30.
             </p>
-            <Link href="/login" className="text-sm font-medium text-primary hover:underline">
-              Go to Login &rarr;
-            </Link>
+            <span className="mt-4 inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium">
+              Unavailable
+            </span>
+          </article>
+          <article className="rounded-xl border bg-card p-5">
+            <FileText className="size-5 text-info" aria-hidden="true" />
+            <h3 className="mt-4 font-semibold">Notes</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              The note tree and note APIs arrive in Parts 31–32.
+            </p>
+            <span className="mt-4 inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium">
+              Unavailable
+            </span>
+          </article>
+          <article className="rounded-xl border bg-card p-5">
+            <Sparkles className="size-5 text-info" aria-hidden="true" />
+            <h3 className="mt-4 font-semibold">Search</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Full-text and semantic search arrive in Parts 50–52.
+            </p>
+            <span className="mt-4 inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium">
+              Unavailable
+            </span>
           </article>
         </div>
       </section>

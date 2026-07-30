@@ -14,10 +14,14 @@ interface ImportedMeilisearchModule {
 }
 
 // meilisearch 0.60 is ESM-only while Nest 10 currently emits CommonJS.
-// Indirect native import keeps the package's reviewed ESM entry point intact.
-const importEsm = new Function("specifier", "return import(specifier)") as (
-  specifier: string,
-) => Promise<ImportedMeilisearchModule>;
+// Native dynamic import keeps the package's reviewed ESM entry point intact
+// and resolves under both Node runtime and the Vitest runner.
+async function importMeilisearch(): Promise<ImportedMeilisearchModule> {
+  // TypeScript's legacy Node10 resolver cannot follow this ESM-only package's
+  // export map, although Node 22 and Vitest resolve the literal import.
+  // @ts-expect-error -- ESM export-map limitation under moduleResolution Node10
+  return (await import("meilisearch")) as ImportedMeilisearchModule;
+}
 
 @Module({
   providers: [
@@ -28,7 +32,7 @@ const importEsm = new Function("specifier", "return import(specifier)") as (
         if (!config.enabled) {
           return null;
         }
-        const { Meilisearch } = await importEsm("meilisearch");
+        const { Meilisearch } = await importMeilisearch();
         return new Meilisearch({
           host: config.host,
           apiKey: config.apiKey,

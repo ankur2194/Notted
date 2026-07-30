@@ -5,12 +5,32 @@
  */
 
 export {
+  authPasswordSchema,
   createUserProfileSchema,
+  oauthProviderIdSchema,
+  passkeyNameSchema,
+  reauthenticateSchema,
+  recoveryCodeSchema,
+  registerWithPasswordSchema,
+  requestEmailVerificationSchema,
+  requestMagicLinkSchema,
+  requestPasswordResetSchema,
+  resetPasswordSchema,
+  signInWithPasswordSchema,
+  totpCodeSchema,
   updateUserProfileSchema,
   userProfileFilterSchema,
 } from "./auth.schema";
 export type {
   CreateUserProfileInput,
+  OAuthProviderIdInput,
+  ReauthenticateInput,
+  RegisterWithPasswordInput,
+  RequestEmailVerificationInput,
+  RequestMagicLinkInput,
+  RequestPasswordResetInput,
+  ResetPasswordInput,
+  SignInWithPasswordInput,
   UpdateUserProfileInput,
   UserProfileFilterInput,
 } from "./auth.schema";
@@ -68,6 +88,26 @@ export {
 export type { CreateProjectInput, ProjectFilterInput, UpdateProjectInput } from "./project.schema";
 export { searchModeSchema, searchQuerySchema, searchSortSchema } from "./search.schema";
 export type { SearchQueryInput } from "./search.schema";
+export {
+  notificationKindSchema,
+  notificationListQuerySchema,
+  notificationPageSchema,
+  notificationReadResultSchema,
+  notificationReadStateSchema,
+  notificationsMarkAllResultSchema,
+  notificationSummarySchema,
+  notificationTargetTypeSchema,
+  shellBootstrapSchema,
+  shellBootstrapQuerySchema,
+  shellWorkspaceMembershipSchema,
+  workspaceSelectorSchema,
+} from "./shell.schema";
+export type {
+  NotificationListQueryInput,
+  NotificationReadStateInput,
+  ShellBootstrapQueryInput,
+  WorkspaceSelectorInput,
+} from "./shell.schema";
 export {
   createTaskSchema,
   taskFilterSchema,

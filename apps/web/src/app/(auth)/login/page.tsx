@@ -1,32 +1,42 @@
+import { AdvancedSignInMethods } from "@/components/auth/advanced-sign-in-methods";
+import { AuthCard } from "@/components/auth/auth-card";
 import { LoginForm } from "@/components/auth/login-form";
+import { MagicLinkForm } from "@/components/auth/magic-link-form";
+import { redirectAuthenticatedFromAuthPage } from "@/lib/auth/auth-page-guard";
+import { readRedirectParam } from "@/lib/auth/redirects";
+import { getAuthCapabilities } from "@/lib/auth/server-capabilities";
 
-/**
- * Non-functional authentication scaffold at `/login`.
- *
- * The heading, availability notice, and disabled controls render on the server.
- *
- * Real authentication with Better Auth is wired in Part 22. There is no
- * "Sign up" link yet because the `/register` route does not exist.
- */
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  readonly searchParams?: Promise<Readonly<Record<string, string | string[] | undefined>>>;
+}) {
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const redirectTo = readRedirectParam(resolvedSearchParams);
+  const oauthFailed = resolvedSearchParams.oauth === "error";
+  await redirectAuthenticatedFromAuthPage(redirectTo);
+  const capabilities = await getAuthCapabilities();
+
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] flex-1 items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center space-y-4">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Sign in</h1>
-          <p className="text-muted-foreground">Authentication controls are shown as a preview.</p>
-        </div>
-
-        <LoginForm />
-
-        <div
-          id="login-availability"
-          className="rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground"
-        >
-          <strong className="text-foreground">Unavailable:</strong> Credential and OAuth sign-in
-          will be implemented with authentication in Part 22.
-        </div>
-      </div>
-    </div>
+    <AuthCard title="Sign in" description="Use your password or request a one-time email link.">
+      {oauthFailed ? (
+        <p className="text-sm text-destructive" role="alert">
+          Social sign-in could not be completed. Try again or use another sign-in method.
+        </p>
+      ) : null}
+      <LoginForm
+        redirectTo={redirectTo}
+        rememberedDays={
+          capabilities.status === "available"
+            ? Math.round(capabilities.value.rememberedSessionSeconds / 86_400)
+            : 30
+        }
+      />
+      <AdvancedSignInMethods
+        capabilities={capabilities.status === "available" ? capabilities.value : null}
+        redirectTo={redirectTo}
+      />
+      <MagicLinkForm redirectTo={redirectTo} />
+    </AuthCard>
   );
 }

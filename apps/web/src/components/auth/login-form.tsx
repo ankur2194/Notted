@@ -1,103 +1,121 @@
-import { Github } from "lucide-react";
+"use client";
 
-/**
- * Server-rendered preview of the controls that Part 22 will make functional.
- */
-export function LoginForm() {
-  const inputClass =
-    "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50";
-  const buttonClass =
-    "inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium disabled:pointer-events-none disabled:opacity-50";
+import { signInWithPasswordSchema } from "@notted/shared-validators";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import { ErrorSummary, FormField, FormStatus } from "@/components/ui/form-controls";
+import { fieldErrorsFromZod, firstFieldError, type FieldErrors } from "@/lib/auth/form-errors";
+import { safeRedirectPath } from "@/lib/auth/redirects";
+import { signInWithPassword } from "@/lib/auth/requests";
+
+export function LoginForm({
+  redirectTo = "/",
+  rememberedDays = 30,
+}: {
+  readonly redirectTo?: string;
+  readonly rememberedDays?: number;
+}) {
+  const router = useRouter();
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [formError, setFormError] = useState<string>();
+  const [submitting, setSubmitting] = useState(false);
+
+  function focusSummary(): void {
+    requestAnimationFrame(() => summaryRef.current?.focus());
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setErrors({});
+    setFormError(undefined);
+    const data = new FormData(event.currentTarget);
+    const parsed = signInWithPasswordSchema.safeParse({
+      email: data.get("email"),
+      password: data.get("password"),
+      rememberMe: data.get("rememberMe") === "on",
+    });
+    if (!parsed.success) {
+      setErrors(fieldErrorsFromZod(parsed.error));
+      setFormError(firstFieldError(fieldErrorsFromZod(parsed.error)));
+      focusSummary();
+      return;
+    }
+
+    setSubmitting(true);
+    const result = await signInWithPassword(parsed.data);
+    setSubmitting(false);
+    if (!result.ok) {
+      setFormError(
+        result.kind === "network"
+          ? "Authentication is temporarily unreachable. Check your connection and try again."
+          : "Unable to sign in. Check your email and password and try again.",
+      );
+      focusSummary();
+      return;
+    }
+
+    if (result.next === "two-factor") {
+      const methods = (result.methods ?? []).filter((method) => method === "totp").join(",");
+      router.replace(
+        `/two-factor?redirect=${encodeURIComponent(safeRedirectPath(redirectTo))}&methods=${encodeURIComponent(methods)}`,
+      );
+      return;
+    }
+
+    router.replace(safeRedirectPath(redirectTo));
+    router.refresh();
+  }
 
   return (
-    <>
-      <form className="space-y-6" aria-describedby="login-availability">
-        <div className="space-y-2">
-          <label htmlFor="email" className="text-sm font-medium text-foreground">
-            Email
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            disabled
-            className={inputClass}
-            aria-describedby="login-availability"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label htmlFor="password" className="text-sm font-medium text-foreground">
-            Password
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            disabled
-            className={inputClass}
-            aria-describedby="login-availability"
-          />
-        </div>
-
-        <button
-          type="submit"
-          className={`${buttonClass} w-full bg-primary text-primary-foreground`}
-          disabled
-          aria-describedby="login-availability"
-        >
-          Sign in
-        </button>
-      </form>
-
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center" aria-hidden="true">
-          <span className="w-full border-t" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
-        </div>
+    <form className="space-y-5" onSubmit={(event) => void submit(event)} noValidate>
+      {formError === undefined ? null : <ErrorSummary ref={summaryRef} message={formError} />}
+      <FormField
+        id="login-email"
+        name="email"
+        label="Email"
+        type="email"
+        autoComplete="email"
+        inputMode="email"
+        error={errors.email}
+        disabled={submitting}
+        required
+      />
+      <FormField
+        id="login-password"
+        name="password"
+        label="Password"
+        type="password"
+        autoComplete="current-password"
+        error={errors.password}
+        disabled={submitting}
+        required
+      />
+      <div className="flex items-center justify-between gap-4 text-sm">
+        <label className="flex items-center gap-2">
+          <input name="rememberMe" type="checkbox" disabled={submitting} />
+          Remember this browser for {rememberedDays} days
+        </label>
+        <Link href="/forgot-password" className="font-medium text-primary hover:underline">
+          Forgot password?
+        </Link>
       </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <button
-          type="button"
-          className={`${buttonClass} border border-input bg-background`}
-          disabled
-          aria-describedby="login-availability"
+      {submitting ? <FormStatus>Signing in…</FormStatus> : null}
+      <Button className="w-full" type="submit" disabled={submitting} aria-busy={submitting}>
+        {submitting ? "Signing in…" : "Sign in"}
+      </Button>
+      <p className="text-center text-sm text-muted-foreground">
+        New to Notted?{" "}
+        <Link
+          href={`/register?redirect=${encodeURIComponent(safeRedirectPath(redirectTo))}`}
+          className="font-medium text-primary hover:underline"
         >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              fill="currentColor"
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-            />
-            <path
-              fill="currentColor"
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-            />
-            <path
-              fill="currentColor"
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-            />
-            <path
-              fill="currentColor"
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-            />
-          </svg>
-          Google
-        </button>
-        <button
-          type="button"
-          className={`${buttonClass} border border-input bg-background`}
-          disabled
-          aria-describedby="login-availability"
-        >
-          <Github className="h-4 w-4" aria-hidden="true" />
-          GitHub
-        </button>
-      </div>
-    </>
+          Create an account
+        </Link>
+      </p>
+    </form>
   );
 }

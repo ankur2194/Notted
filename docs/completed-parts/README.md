@@ -53,3 +53,8 @@ Add one row after creating each record. Keep rows ordered by part number.
 |   18 | Complete | 2026-07-29 | Operations/integration schema including durable job outbox intent and independent worker idempotency.                                                                   |
 |   19 | Complete | 2026-07-29 | Repository-layer tenant context, strict pre-SQL guards, all-operation isolation matrices, and retention policy.                                                         |
 |   20 | Complete | 2026-07-29 | Deterministic multi-tenant seed fixtures with idempotent writes and production/target-name safety refusal.                                                              |
+|   21 | Complete with follow-up | 2026-07-31 | Better Auth backend, opaque sessions, Redis acceleration, and encrypted durable auth-email delivery verified with live infrastructure. |
+|   22 | Complete with follow-up | 2026-07-31 | Accessible auth screens, safe redirects, server route protection, logout, and critical Chromium journeys verified. |
+|   23 | Complete with follow-up | 2026-07-31 | Optional OAuth, TOTP/recovery, passkeys, remember-me, recent authentication, and safe session controls verified. |
+|   24 | Complete with follow-up | 2026-07-31 | Central authorization policy, tenant-scoped facts, shared adapters, and cross-tenant denial verified. |
+|   25 | Complete with follow-up | 2026-07-31 | Responsive shell, server-validated workspace selection, persistent notifications, migration, accessibility, and browser journeys verified. |

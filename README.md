@@ -193,14 +193,27 @@ pnpm dev
 
 Common commands include `pnpm dev:api`, `pnpm dev:web`, `pnpm infra:status`,
 `pnpm infra:project`, `pnpm infra:logs`, `pnpm infra:down`, `pnpm build`, `pnpm lint`,
-`pnpm type-check`, `pnpm test`, `pnpm db:check`, `pnpm db:generate`,
+`pnpm type-check`, `pnpm test`, `pnpm test:e2e`, `pnpm db:check`, `pnpm db:generate`,
 `pnpm db:migrate`, `pnpm db:seed`, and `pnpm db:studio`. The deterministic seed is
 idempotent, but its identities are relational fixtures rather than login credentials. It
 refuses `NODE_ENV=production` and, by default, targets only `notted_dev` or project-prefixed
 names such as `notted_test` and `notted_phase3_review`. Exceptional non-production use requires
 `ALLOW_UNSAFE_DATABASE_SEED=true`; the command never logs the database URL or
-credentials. Part 21 will add the supported authentication flow. Volume deletion is available only
+credentials. Create a development account at `http://localhost:3000/register`; verification,
+magic-link, and password-reset messages appear in Mailpit at `http://localhost:8025`.
+The auth handler is mounted at `http://localhost:3001/api/auth`, while the safe principal
+projection is `GET /api/v1/auth/session`. Volume deletion is available only
 through the guarded `pnpm infra:reset:dev` command.
+
+Advanced authentication is configured entirely by the API. OAuth buttons appear only for
+providers whose complete server-side credential tuple passes startup validation; no provider
+secret is exposed to Next.js. Passkey login is available in secure contexts (`https://`, or
+`http://localhost` for development), and user security controls live at
+`http://localhost:3000/settings/security`. That protected page enrolls TOTP, presents
+recovery codes once, registers/removes passkeys, and lists/revokes safe session summaries.
+High-risk changes require recent Better Auth authentication; password input is never retained.
+See [`docs/environment.md`](docs/environment.md) before registering OAuth callback URLs or
+deploying WebAuthn behind a reverse proxy.
 
 See [`docs/README.md`](docs/README.md) for exact onboarding, ports, migration flow,
 Docker Desktop/WSL troubleshooting, and shutdown/reset safety. Environment ownership and

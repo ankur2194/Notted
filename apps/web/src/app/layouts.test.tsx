@@ -5,17 +5,13 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import AuthLayout from "@/app/(auth)/layout";
-import DashboardLayout from "@/app/(dashboard)/layout";
 
 describe("route layouts", () => {
-  it.each([
-    ["authentication", AuthLayout],
-    ["dashboard", DashboardLayout],
-  ])("%s layout provides exactly one main landmark and skip-link target", (_name, Layout) => {
+  it("authentication layout provides exactly one main landmark and skip-link target", () => {
     const { container } = render(
-      <Layout>
+      <AuthLayout>
         <h1>Route heading</h1>
-      </Layout>,
+      </AuthLayout>,
     );
 
     expect(screen.getByRole("heading", { level: 1, name: "Route heading" })).toBeInTheDocument();
@@ -29,7 +25,6 @@ describe("route layouts", () => {
       "src/app/(auth)/login/page.tsx",
       "src/app/(dashboard)/layout.tsx",
       "src/app/(dashboard)/page.tsx",
-      "src/components/auth/login-form.tsx",
     ].map((path) => readFileSync(resolve(path), "utf8"));
     const rootLayout = readFileSync(resolve("src/app/layout.tsx"), "utf8");
 

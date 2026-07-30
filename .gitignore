@@ -18,6 +18,7 @@ out/
 # Test coverage
 coverage/
 test-results/
+playwright-report/
 
 # Environment and secrets (example files are kept)
 .env

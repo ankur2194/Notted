@@ -4,6 +4,8 @@ dist/
 .turbo/
 node_modules/
 coverage/
+test-results/
+playwright-report/
 
 # Lockfile is generated; do not reformat
 pnpm-lock.yaml

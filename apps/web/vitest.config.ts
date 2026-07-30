@@ -11,6 +11,10 @@ export default defineConfig({
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
     globals: true,
     css: true,
+    // WSL/CI environments can time out while over-provisioning fork workers.
+    // Four workers preserve file-level parallelism without exhausting process
+    // startup resources.
+    maxWorkers: 4,
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
@@ -28,6 +32,11 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Next.js replaces these bare specifiers at build time to enforce its
+      // server/client boundary; Vitest does not, so resolve them to an empty
+      // stub here. This alias is test-only and never reaches the Next.js build.
+      "server-only": path.resolve(__dirname, "./src/test/stubs/empty.ts"),
+      "client-only": path.resolve(__dirname, "./src/test/stubs/empty.ts"),
     },
   },
 });

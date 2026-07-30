@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common";
 
+import { AuthEmailQueueService } from "../auth/auth-email-queue.service";
+import { AuthModule } from "../auth/auth.module";
 import { DatabaseReadinessIndicator } from "../database/database-readiness.indicator";
 import { DatabaseModule } from "../database/database.module";
 import { MeilisearchModule } from "../infrastructure/meilisearch/meilisearch.module";
@@ -16,7 +18,7 @@ import { ProcessReadinessIndicator } from "./process-readiness.indicator";
 import { READINESS_INDICATORS } from "./readiness-indicator";
 
 @Module({
-  imports: [DatabaseModule, RedisModule, MinioModule, MeilisearchModule, SmtpModule],
+  imports: [AuthModule, DatabaseModule, RedisModule, MinioModule, MeilisearchModule, SmtpModule],
   controllers: [HealthController],
   providers: [
     ProcessReadinessIndicator,
@@ -29,6 +31,7 @@ import { READINESS_INDICATORS } from "./readiness-indicator";
         MinioService,
         MeilisearchService,
         SmtpService,
+        AuthEmailQueueService,
       ],
       useFactory: (
         processIndicator: ProcessReadinessIndicator,
@@ -37,6 +40,7 @@ import { READINESS_INDICATORS } from "./readiness-indicator";
         minioIndicator: MinioService,
         meilisearchIndicator: MeilisearchService,
         smtpIndicator: SmtpService,
+        authEmailQueueIndicator: AuthEmailQueueService,
       ) => [
         processIndicator,
         databaseIndicator,
@@ -44,6 +48,7 @@ import { READINESS_INDICATORS } from "./readiness-indicator";
         minioIndicator,
         meilisearchIndicator,
         smtpIndicator,
+        authEmailQueueIndicator,
       ],
     },
   ],

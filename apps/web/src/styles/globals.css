@@ -60,6 +60,7 @@
 
   body {
     @apply bg-background text-foreground;
+    min-width: 320px;
   }
 
   :focus-visible {
@@ -84,6 +85,6 @@
   }
 
   .skip-link {
-    @apply sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-background focus:text-foreground;
+    @apply sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-md focus:bg-background focus:p-4 focus:text-foreground focus:shadow-lg;
   }
 }

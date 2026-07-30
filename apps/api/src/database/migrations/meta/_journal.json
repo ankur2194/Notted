@@ -57,6 +57,20 @@
       "when": 1785301938585,
       "tag": "0007_early_bloodaxe",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785327963249,
+      "tag": "0008_sour_queen_noir",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785350660584,
+      "tag": "0009_bizarre_red_hulk",
+      "breakpoints": true
     }
   ]
 }

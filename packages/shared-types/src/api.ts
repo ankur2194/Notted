@@ -12,7 +12,10 @@ export type ApiErrorCode =
   | "UNPROCESSABLE_ENTITY"
   | "VALIDATION_ERROR"
   | "INTERNAL_SERVER_ERROR"
-  | "SERVICE_UNAVAILABLE";
+  | "SERVICE_UNAVAILABLE"
+  | "CSRF_ORIGIN_INVALID"
+  | "RECENT_AUTHENTICATION_REQUIRED"
+  | "CURRENT_SESSION_NOT_REMOTE";
 
 export interface ApiError {
   readonly code: ApiErrorCode;

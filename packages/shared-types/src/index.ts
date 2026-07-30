@@ -18,7 +18,21 @@ export type {
   ValidationErrorDetails,
   ValidationIssue,
 } from "./api";
-export type { UserDetail, UserSummary } from "./auth";
+export type {
+  AuthCapabilities,
+  AuthEmailAccepted,
+  AuthPasskeySummary,
+  AuthSecurityOverview,
+  AuthSessionSummary,
+  AuthenticatedPrincipal,
+  AuthenticationAssurance,
+  AuthenticationMethod,
+  OAuthProviderId,
+  OAuthProviderSummary,
+  UserDetail,
+  UserSummary,
+} from "./auth";
+export { AUTH_API_PATHS } from "./auth";
 export type { AttachmentDetail, AttachmentStatus, AttachmentSummary } from "./attachment";
 export type {
   AttachmentId,
@@ -40,6 +54,19 @@ export type {
 } from "./common";
 export type { NoteDetail, NoteSummary, NoteType, PageSize } from "./note";
 export type { ProjectDetail, ProjectStatus, ProjectSummary } from "./project";
+export { SHELL_API_PATHS } from "./shell";
+export type {
+  NotificationKind,
+  NotificationPage,
+  NotificationReadResult,
+  NotificationsMarkAllResult,
+  NotificationSummary,
+  NotificationTargetType,
+  ShellBootstrap,
+  ShellPresentationPermissions,
+  ShellUserSummary,
+  ShellWorkspaceMembership,
+} from "./shell";
 export type {
   SearchHighlight,
   SearchMode,

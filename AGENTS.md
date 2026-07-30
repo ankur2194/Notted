@@ -41,6 +41,7 @@ Follow the current user request, then `Notted.md`, the selected numbered part in
 - `$notted-frontend-editor`: Next.js, UI, TipTap, print, or browser work.
 - `$notted-backend-data`: NestJS, API, database, queues, storage, search, or realtime work.
 - `$notted-quality-operations`: review, security, testing, CI/CD, Docker, observability, and release work.
+- `$notted-playwright-integration`: Playwright authoring, live browser integration, fixture setup, failure diagnosis, and browser verification.
 
 Codex custom agents are configured in `.codex/agents/*.toml`, with concurrency settings in `.codex/config.toml`. Apply `.agents/checklists/part-completion.md` before handoff.
 
@@ -48,12 +49,13 @@ Codex custom agents are configured in `.codex/agents/*.toml`, with concurrency s
 
 This repository also runs on opencode. Project config is `opencode.json`, which loads this file as instructions.
 
-- Skills: opencode natively discovers `.agents/skills/<name>/SKILL.md`, so the four Notted skills above load with no duplication. Do not also place them under `.opencode/skills/`; skill names must be unique across discovery locations.
+- Skills: opencode natively discovers `.agents/skills/<name>/SKILL.md`, so the five Notted skills above load with no duplication. Do not also place them under `.opencode/skills/`; skill names must be unique across discovery locations.
 - Agents: opencode agents live in `.opencode/agent/*.md` and mirror the Codex roles: `lead-part-engineer` (primary, coordinator), `backend-platform-engineer` and `frontend-editor-engineer` (subagents, workspace-write), and `quality-reviewer` (subagent, read-only via `permission.edit: deny`).
 - Commands: opencode has no `$skill` invocation, so `.opencode/command/` provides slash commands that route to the matching agent and load the corresponding skill:
   - `/notted-part-delivery Part <number> <plan|implement|resume|handoff>`
   - `/notted-quality-operations Review Part <number>`
   - `/notted-quality-operations Verify Part <number> <focused|full>`
+  - `/notted-playwright-integration <author|diagnose|verify> [test or Plan part]`
 - Concurrency: `.codex/config.toml` caps (`max_threads`, `max_depth`) have no opencode config equivalent. The Synchronous Delegation Protocol below is encoded in every opencode agent prompt and still applies; only the numeric scheduler caps cannot be expressed.
 
 ## Synchronous Delegation Protocol
@@ -83,6 +85,7 @@ Route work automatically as follows:
 - Frontend, UI, editor, browser, print, accessibility, or `apps/web` scope adds `frontend_editor_engineer` with `$notted-frontend-editor`.
 - API, NestJS, database, auth, queue, storage, search, email, AI, realtime, Docker, deployment, or `apps/api` scope adds `backend_platform_engineer` with `$notted-backend-data`.
 - Every review and verification, and every high-risk completion gate, adds `quality_reviewer` with `$notted-quality-operations`.
+- Playwright integration authoring or diagnosis adds `frontend_editor_engineer` with `$notted-playwright-integration`; add `backend_platform_engineer` when the journey uses API, database, Redis, queues, SMTP, auth, or tenant fixtures.
 - Cross-layer parts use `lead_part_engineer` to coordinate both specialists and integrate the final result.
 
 Determine scope from the selected numbered implementation part and actual affected files, not from the user's familiarity with the codebase. If specialist agents are available, delegate bounded independent work or review; otherwise assume the same roles sequentially. The lead remains responsible for integration, verification, and handoff.
