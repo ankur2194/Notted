@@ -2,7 +2,7 @@
 
 ## Status
 
-- **State:** Complete with follow-up
+- **State:** Complete
 - **Completed on:** 2026-07-31
 - **Implemented by:** Phase 4 Part 22 sequential implementation agent
 - **Plan reference:** `Plan.md`, Part 22
@@ -156,11 +156,11 @@ Do not include cookie/token values in failure artifacts or logs.
 - Chromium Playwright passed valid/invalid registration, direct protected access, safe redirects,
   refresh, logout, expired/replayed links, password reset, magic-link, and Mailpit-backed flows.
 - Firefox and WebKit remain configured but were not required by Part 22's completion criterion;
-  broad browser validation remains Part 76. Track the reviewed transitive advisories in Part 21.
+   broad browser validation remains Part 76. Transitive dependency advisories resolved per Part 21.
 
 ## Revision History
 
 | Date | Author | Change |
 |---|---|---|
 | 2026-07-29 | Phase 4 Part 22 sequential implementation agent | Authored implementation, tests, dependencies, and docs; state remains In progress with verification pending by instruction. |
-| 2026-07-31 | Lead part engineer | Completed review remediation and live Chromium/repository verification; marked Complete with follow-up. |
+| 2026-07-31 | Lead part engineer | Completed review remediation and live Chromium/repository verification; marked Complete. |

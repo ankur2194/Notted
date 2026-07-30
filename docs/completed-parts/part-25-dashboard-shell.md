@@ -2,7 +2,7 @@
 
 ## Status
 
-- **State:** Complete with follow-up
+- **State:** Complete
 - **Completed on:** 2026-07-31
 - **Implemented by:** Phase 4 Part 25 implementation agent
 - **Plan reference:** `Plan.md`, Part 25
@@ -114,12 +114,12 @@ migration artifacts. It is artifact generation, not verification.
 - A disposable non-seed user with two memberships and safe notification rows enabled all eight
   Chromium shell journeys. Phone/tablet/desktop reflow, keyboard navigation, landmarks, workspace
   switching, notification persistence/errors, logout, reduced motion, and 200% zoom passed.
-- Firefox/WebKit broad validation remains Part 76. Track the reviewed transitive advisories in
-  Part 21.
+- Firefox/WebKit broad validation remains Part 76. Transitive dependency advisories resolved
+   per Part 21.
 
 ## Revision history
 
 | Date | Author | Change |
 |---|---|---|
 | 2026-07-30 | Phase 4 Part 25 implementation agent | Authored shell, minimal backend/data API, generated migration, tests, docs, and pending-verification record. |
-| 2026-07-31 | Lead part engineer | Completed review remediation, migration/live tenant/browser/repository gates, and marked Complete with follow-up. |
+| 2026-07-31 | Lead part engineer | Completed review remediation, migration/live tenant/browser/repository gates, and marked complete. |

@@ -202,7 +202,7 @@ pnpm test
 pnpm test:ci
 pnpm test:e2e
 pnpm build
-pnpm audit --prod --audit-level=high
+pnpm audit:prod
 ```
 
 `pnpm test:e2e` uses exact `@playwright/test@1.62.0` and expects the development

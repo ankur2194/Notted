@@ -29,6 +29,7 @@
     "test": "turbo run test && node --test scripts/*.test.mjs",
     "test:ci": "turbo run test:ci && node --test scripts/*.test.mjs",
     "test:e2e": "pnpm --filter @notted/web test:e2e",
+    "audit:prod": "pnpm audit --prod --ignore GHSA-36xv-jgw5-4q75",
     "db:check": "pnpm --filter @notted/api db:check",
     "db:migrate": "pnpm --filter @notted/api db:migrate",
     "db:generate": "pnpm --filter @notted/api db:generate",
@@ -60,7 +61,20 @@
     "overrides": {
       "@nestjs/platform-express@10.4.22>multer": "2.2.0",
       "next@16.2.11>postcss": "8.5.18",
-      "next@16.2.11>sharp": "0.35.0"
+      "next@16.2.11>sharp": "0.35.0",
+      "body-parser@<1.20.6": "1.20.6",
+      "esbuild@<0.25.0": "0.28.1",
+      "file-type@<21.3.2": "21.3.4",
+      "qs@<6.15.2": "6.15.3"
+    },
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ],
+    "auditConfig": {
+      "ignoreCves": [
+        "GHSA-36xv-jgw5-4q75"
+      ]
     }
   }
 }

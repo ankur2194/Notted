@@ -2,7 +2,7 @@
 
 ## Status
 
-- **State:** Complete with follow-up
+- **State:** Complete
 - **Completed on:** 2026-07-31
 - **Implemented by:** Phase 4 Part 23 sequential implementation agent
 - **Plan reference:** `Plan.md`, Part 23
@@ -194,8 +194,8 @@ migration rather than editing prior artifacts.
 - Chromium Playwright passed provider-disabled and configured-Google states, callback failure,
   TOTP/recovery, virtual WebAuthn registration/login/removal, remembered/non-remembered cookies,
   recent authentication, and remote session revocation.
-- Firefox/WebKit unsupported-state validation remains Part 76. Track the reviewed transitive
-  advisories in Part 21.
+- Firefox/WebKit unsupported-state validation remains Part 76. Transitive dependency advisories
+   resolved per Part 21.
 
 ## Revision History
 
@@ -203,4 +203,4 @@ migration rather than editing prior artifacts.
 |---|---|---|
 | 2026-07-29 | Phase 4 Part 23 sequential implementation agent | Authored advanced auth implementation, tests, dependencies, docs, and pending-verification record. |
 | 2026-07-29 | Phase 4 Part 23 resumed implementation agent | Preserved prior artifacts; tightened provider rejection/callback failure handling, account/passkey/TOTP freshness, non-remembered TOTP rotations, sequential revocation, redaction, and unsupported/insecure passkey states. Verification remains pending by instruction. |
-| 2026-07-31 | Lead part engineer | Completed review remediation and live advanced-auth/browser/repository verification; marked Complete with follow-up. |
+| 2026-07-31 | Lead part engineer | Completed review remediation and live advanced-auth/browser/repository verification; marked complete. |

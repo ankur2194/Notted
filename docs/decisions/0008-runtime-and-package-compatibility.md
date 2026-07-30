@@ -41,6 +41,14 @@ manifests did not yet select. Phase 2 therefore applies only these reviewed over
 | `@nestjs/platform-express@10.4.22` | `multer@2.2.0` | Removes the inherited high-severity upload-parser advisories without changing Nest's major. |
 | `next@16.2.11` | `postcss@8.5.18` | Keeps Next 16 while selecting the patched CSS parser used by its internal path. |
 | `next@16.2.11` | `sharp@0.35.0` | Keeps Next 16 while selecting the patched optional image runtime. |
+| Various (Phase 4) | `body-parser@1.20.6` | Resolves GHSA-v422 (DoS via invalid limit value) without changing Express major. |
+| Various (Phase 4) | `esbuild@0.28.1` | Resolves GHSA‑67mh (dev-server request leakage) without changing tooling majors. |
+| Various (Phase 4) | `file-type@21.3.4` | Resolves GHSA‑5v7r (infinite loop) and GHSA‑j47w (ZIP bomb) without changing NestJS v10. |
+| Various (Phase 4) | `qs@6.15.3` | Resolves GHSA‑q8mj (DoS in qs.stringify comma arrays) without changing Express. |
+
+The single remaining `@nestjs/core` advisory (GHSA‑36xv) is a semver false positive:
+the vulnerable `SseStream` class does not exist in `@nestjs/core@10.4.22`. Suppressed
+via `pnpm audit --ignore` and the `audit:prod` root script.
 
 They are compatibility exceptions, not permission for broad/global dependency
 replacement. Strict installation, API/web tests, type checks, production builds, runtime

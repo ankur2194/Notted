@@ -2,7 +2,7 @@
 
 ## Status
 
-- **State:** Complete with follow-up
+- **State:** Complete
 - **Completed on:** 2026-07-31
 - **Implemented by:** Phase 4 Part 24 implementation agent
 - **Plan reference:** `Plan.md`, Part 24
@@ -124,11 +124,11 @@ decorator; future tRPC, Socket.io, workers, and file services call the exported 
 - The 242-case policy matrix, adapter tests, and live Alpha/Beta PostgreSQL integration passed,
   including membership revocation, guessed IDs, parent scope, and cross-tenant denial.
 - Repository formatting, lint, strict type-check, Drizzle consistency, full tests, and production
-  build passed. Track the reviewed transitive advisories in Part 21.
+   build passed. Transitive dependency advisories resolved per Part 21.
 
 ## Revision history
 
 | Date | Author | Change |
 |---|---|---|
 | 2026-07-30 | Phase 4 Part 24 implementation agent | Authored centralized policy, scoped loaders, adapters, Nest integration, tests, and docs; verification remains pending by instruction. |
-| 2026-07-31 | Lead part engineer | Completed review remediation, live tenant-isolation verification, and broad gates; marked Complete with follow-up. |
+| 2026-07-31 | Lead part engineer | Completed review remediation, live tenant-isolation verification, and broad gates; marked complete. |
