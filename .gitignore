@@ -39,3 +39,6 @@ pnpm-debug.log*
 !.vscode/extensions.json
 *.swp
 Thumbs.db
+
+# Local sync script
+folder-sync.sh

@@ -4,7 +4,8 @@
     "declaration": true,
     "noEmit": false,
     "rootDir": "src",
-    "sourceMap": true
+    "sourceMap": true,
+    "tsBuildInfoFile": "dist/tsconfig.build.tsbuildinfo"
   },
   "exclude": ["node_modules", "dist", "src/**/*.test.ts", "test/**/*.ts"]
 }
