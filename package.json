@@ -21,6 +21,7 @@
     "dev:api": "pnpm --filter @notted/api dev",
     "dev:web": "pnpm --filter @notted/web dev",
     "build": "turbo run build",
+    "build:packages": "pnpm --filter @notted/shared-types --filter @notted/shared-validators build",
     "type-check": "turbo run type-check",
     "lint": "turbo run lint && eslint eslint.config.mjs --max-warnings 0",
     "lint:fix": "turbo run lint:fix && eslint eslint.config.mjs --fix",

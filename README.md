@@ -188,8 +188,17 @@ pnpm env:check
 pnpm infra:up
 pnpm db:migrate
 pnpm db:seed
+pnpm build:packages   # build shared workspace packages required by apps
 pnpm dev
 ```
+
+The `pnpm build:packages` step compiles `@notted/shared-types` and
+`@notted/shared-validators` into their `dist/` directories. It is required once
+before `pnpm dev` (and again whenever the shared packages change) because the
+`dev` task runs apps in parallel without first building their upstream workspace
+dependencies. Full `pnpm build` is intended for production-style builds and
+requires `https`/`wss` public URLs, so prefer `pnpm build:packages` followed by
+`pnpm dev` for local development.
 
 Common commands include `pnpm dev:api`, `pnpm dev:web`, `pnpm infra:status`,
 `pnpm infra:project`, `pnpm infra:logs`, `pnpm infra:down`, `pnpm build`, `pnpm lint`,
