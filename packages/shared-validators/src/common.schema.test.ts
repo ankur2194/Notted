@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   dateRangeQuerySchema,
   explicitBooleanQuerySchema,
+  idempotencyKeySchema,
   isoTimestampSchema,
   jsonValueSchema,
   paginationQuerySchema,
@@ -21,6 +22,15 @@ describe("common schemas", () => {
     expect(uuidSchema.safeParse("workspace-1").success).toBe(false);
     expect(isoTimestampSchema.safeParse("2026-07-24").success).toBe(false);
     expect(isoTimestampSchema.safeParse("2026-07-24T12:30:00").success).toBe(false);
+  });
+
+  it("accepts bounded opaque idempotency keys and rejects unsafe values", () => {
+    expect(idempotencyKeySchema.parse("workspace-create-00000001")).toBe(
+      "workspace-create-00000001",
+    );
+    expect(idempotencyKeySchema.safeParse("short").success).toBe(false);
+    expect(idempotencyKeySchema.safeParse("key with spaces 00000001").success).toBe(false);
+    expect(idempotencyKeySchema.safeParse("x".repeat(129)).success).toBe(false);
   });
 
   it("applies bounded pagination defaults and documented query coercion", () => {

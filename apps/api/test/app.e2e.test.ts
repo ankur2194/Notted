@@ -98,6 +98,7 @@ describe.sequential("API scaffold", () => {
       { name: "meilisearch", status: "disabled" },
       { name: "smtp", status: "disabled" },
       { name: "auth-email-queue", status: "disabled" },
+      { name: "invitation-email-queue", status: "disabled" },
     ]);
     expect(
       response.body.checks.every(

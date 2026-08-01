@@ -11,7 +11,10 @@ interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
   readonly hint?: ReactNode;
 }
 
-export function FormField({ id, label, error, hint, className, ...props }: FieldProps) {
+export const FormField = forwardRef<HTMLInputElement, FieldProps>(function FormField(
+  { id, label, error, hint, className, ...props },
+  ref,
+) {
   if (id === undefined) throw new Error("FormField requires an id");
   const errorId = `${id}-error`;
   const hintId = `${id}-hint`;
@@ -33,6 +36,7 @@ export function FormField({ id, label, error, hint, className, ...props }: Field
         </p>
       )}
       <input
+        ref={ref}
         id={id}
         className={cn(inputClasses, className)}
         aria-invalid={error === undefined ? undefined : true}
@@ -46,7 +50,7 @@ export function FormField({ id, label, error, hint, className, ...props }: Field
       )}
     </div>
   );
-}
+});
 
 export const ErrorSummary = forwardRef<HTMLDivElement, { readonly message: string }>(
   function ErrorSummary({ message }, ref) {

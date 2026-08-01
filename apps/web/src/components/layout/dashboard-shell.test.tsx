@@ -61,7 +61,11 @@ describe("DashboardShell", () => {
     expect(screen.getByRole("main")).toHaveTextContent("Dashboard content");
     expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
     expect(screen.getByText(/note tree unavailable until Parts 31–32/i)).toBeInTheDocument();
-    expect(screen.queryByText("Workspace settings")).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("link", { name: "Workspaces" })).toHaveAttribute("href", "/workspaces");
+    expect(screen.getByRole("link", { name: "Workspace settings" })).toHaveAttribute(
+      "href",
+      `/workspaces/${workspaceId}/settings`,
+    );
     const open = screen.getByRole("button", { name: "Open navigation" });
     await user.click(open);
     expect(screen.getByRole("dialog")).toBeInTheDocument();

@@ -4,6 +4,7 @@ const mailpitUrl = process.env.PLAYWRIGHT_MAILPIT_URL ?? "http://localhost:8025"
 
 interface MailpitMessageSummary {
   readonly ID: string;
+  readonly Subject?: string;
   readonly To?: readonly { readonly Address?: string }[];
 }
 
@@ -41,6 +42,7 @@ export async function clearMailpit(request: APIRequestContext): Promise<void> {
 export async function latestActionLink(
   request: APIRequestContext,
   recipient: string,
+  subjectIncludes?: string,
 ): Promise<string> {
   let messageId: string | undefined;
 
@@ -50,8 +52,11 @@ export async function latestActionLink(
         const response = await request.get(`${mailpitUrl}/api/v1/messages`);
         if (!response.ok()) return false;
         const list = parseList(await response.json());
-        const message = list.messages?.find((candidate) =>
-          candidate.To?.some((to) => to.Address?.toLowerCase() === recipient.toLowerCase()),
+        const message = list.messages?.find(
+          (candidate) =>
+            candidate.To?.some((to) => to.Address?.toLowerCase() === recipient.toLowerCase()) &&
+            (subjectIncludes === undefined ||
+              candidate.Subject?.includes(subjectIncludes) === true),
         );
         messageId = message?.ID;
         return messageId !== undefined;

@@ -53,7 +53,19 @@ export type {
   WorkspaceId,
 } from "./common";
 export type { NoteDetail, NoteSummary, NoteType, PageSize } from "./note";
-export type { ProjectDetail, ProjectStatus, ProjectSummary } from "./project";
+export { PROJECT_API_PATHS } from "./project";
+export type {
+  ProjectCreateResult,
+  ProjectDeleteResult,
+  ProjectDetail,
+  ProjectListQuery,
+  ProjectPage,
+  ProjectSortField,
+  ProjectStatus,
+  ProjectStatusResult,
+  ProjectSummary,
+  ProjectUpdateResult,
+} from "./project";
 export { SHELL_API_PATHS } from "./shell";
 export type {
   NotificationKind,
@@ -74,4 +86,29 @@ export type {
   SearchResultSummary,
 } from "./search";
 export type { TaskDetail, TaskPriority, TaskRecurrence, TaskStatus, TaskSummary } from "./task";
-export type { WorkspaceDetail, WorkspacePlan, WorkspaceRole, WorkspaceSummary } from "./workspace";
+export { MEMBERSHIP_API_PATHS, WORKSPACE_API_PATHS } from "./workspace";
+export type {
+  MembershipListQuery,
+  WorkspaceInvitationAcceptResult,
+  WorkspaceInvitationPage,
+  WorkspaceInvitationResendResult,
+  WorkspaceInvitationRevokeResult,
+  WorkspaceInvitationStatus,
+  WorkspaceInvitationSummary,
+  WorkspaceInviteResult,
+  WorkspaceCreateResult,
+  WorkspaceDeleteResult,
+  WorkspaceDetail,
+  WorkspaceListQuery,
+  WorkspaceMemberLeaveResult,
+  WorkspaceMemberPage,
+  WorkspaceMemberRemoveResult,
+  WorkspaceMemberRoleChangeResult,
+  WorkspaceMemberSummary,
+  WorkspacePage,
+  WorkspacePlan,
+  WorkspaceRole,
+  WorkspaceSettings,
+  WorkspaceSummary,
+  WorkspaceUpdateResult,
+} from "./workspace";

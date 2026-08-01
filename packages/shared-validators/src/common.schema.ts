@@ -13,6 +13,13 @@ const integerQueryValue = z.union([
 export const uuidSchema = z.string().uuid();
 export type UuidInput = z.input<typeof uuidSchema>;
 
+export const idempotencyKeySchema = z
+  .string()
+  .trim()
+  .min(16)
+  .max(128)
+  .regex(/^[A-Za-z0-9._:-]+$/, "Use letters, numbers, dots, underscores, colons, or hyphens");
+
 export const isoTimestampSchema = z.string().datetime({ offset: true });
 export type IsoTimestampInput = z.input<typeof isoTimestampSchema>;
 

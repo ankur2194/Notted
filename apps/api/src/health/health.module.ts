@@ -12,13 +12,23 @@ import { RedisModule } from "../infrastructure/redis/redis.module";
 import { RedisService } from "../infrastructure/redis/redis.service";
 import { SmtpModule } from "../infrastructure/smtp/smtp.module";
 import { SmtpService } from "../infrastructure/smtp/smtp.service";
+import { InvitationEmailQueueService } from "../memberships/invitation-email-queue.service";
+import { MembershipsModule } from "../memberships/memberships.module";
 
 import { HealthController } from "./health.controller";
 import { ProcessReadinessIndicator } from "./process-readiness.indicator";
 import { READINESS_INDICATORS } from "./readiness-indicator";
 
 @Module({
-  imports: [AuthModule, DatabaseModule, RedisModule, MinioModule, MeilisearchModule, SmtpModule],
+  imports: [
+    AuthModule,
+    DatabaseModule,
+    RedisModule,
+    MinioModule,
+    MeilisearchModule,
+    SmtpModule,
+    MembershipsModule,
+  ],
   controllers: [HealthController],
   providers: [
     ProcessReadinessIndicator,
@@ -32,6 +42,7 @@ import { READINESS_INDICATORS } from "./readiness-indicator";
         MeilisearchService,
         SmtpService,
         AuthEmailQueueService,
+        InvitationEmailQueueService,
       ],
       useFactory: (
         processIndicator: ProcessReadinessIndicator,
@@ -41,6 +52,7 @@ import { READINESS_INDICATORS } from "./readiness-indicator";
         meilisearchIndicator: MeilisearchService,
         smtpIndicator: SmtpService,
         authEmailQueueIndicator: AuthEmailQueueService,
+        invitationEmailQueueIndicator: InvitationEmailQueueService,
       ) => [
         processIndicator,
         databaseIndicator,
@@ -49,6 +61,7 @@ import { READINESS_INDICATORS } from "./readiness-indicator";
         meilisearchIndicator,
         smtpIndicator,
         authEmailQueueIndicator,
+        invitationEmailQueueIndicator,
       ],
     },
   ],

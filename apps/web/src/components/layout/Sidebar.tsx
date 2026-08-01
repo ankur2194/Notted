@@ -1,4 +1,12 @@
-import { ChevronLeft, ChevronRight, FileText, Home, LockKeyhole, Settings } from "lucide-react";
+import {
+  Building2,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  Home,
+  LockKeyhole,
+  Settings,
+} from "lucide-react";
 import Link from "next/link";
 
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -58,6 +66,14 @@ export function Sidebar({
           <Home aria-hidden="true" className="size-5 shrink-0" />
           {!hideLabels && "Dashboard"}
         </Link>
+        <Link
+          href="/workspaces"
+          className="flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium hover:bg-accent"
+          aria-label={hideLabels ? "Workspaces" : undefined}
+        >
+          <Building2 aria-hidden="true" className="size-5 shrink-0" />
+          {!hideLabels && "Workspaces"}
+        </Link>
         {shell.permissions.canViewSettings && (
           <Link
             href="/settings/security"
@@ -68,14 +84,25 @@ export function Sidebar({
             {!hideLabels && "Security"}
           </Link>
         )}
-        <span
-          className="flex min-h-11 cursor-not-allowed items-center gap-3 rounded-md px-3 text-sm text-muted-foreground"
-          aria-disabled="true"
-          title="Workspace settings arrive in Part 27"
-        >
-          <Settings aria-hidden="true" className="size-5 shrink-0" />
-          {!hideLabels && "Workspace settings"}
-        </span>
+        {shell.currentWorkspace === null ? (
+          <span
+            className="flex min-h-11 cursor-not-allowed items-center gap-3 rounded-md px-3 text-sm text-muted-foreground"
+            aria-disabled="true"
+            title="Choose or create a workspace to view its settings"
+          >
+            <Settings aria-hidden="true" className="size-5 shrink-0" />
+            {!hideLabels && "Workspace settings"}
+          </span>
+        ) : (
+          <Link
+            href={`/workspaces/${shell.currentWorkspace.workspaceId}/settings`}
+            className="flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium hover:bg-accent"
+            aria-label={hideLabels ? "Workspace settings" : undefined}
+          >
+            <Settings aria-hidden="true" className="size-5 shrink-0" />
+            {!hideLabels && "Workspace settings"}
+          </Link>
+        )}
       </nav>
 
       <section

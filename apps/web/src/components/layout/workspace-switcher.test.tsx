@@ -29,6 +29,10 @@ describe("WorkspaceSwitcher", () => {
     render(<WorkspaceSwitcher workspaces={[]} currentWorkspace={null} />);
     expect(screen.getByRole("status")).toHaveTextContent("No workspace access");
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View workspaces" })).toHaveAttribute(
+      "href",
+      "/workspaces",
+    );
   });
 
   it("disables a one-workspace selector", () => {

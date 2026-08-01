@@ -16,6 +16,18 @@ import { readSidebarPreference, writeSidebarPreference } from "@/lib/shell/sideb
 function breadcrumbsFor(pathname: string): readonly BreadcrumbItem[] {
   if (pathname === "/") return [{ label: "Dashboard" }];
   if (pathname === "/settings/security") return [{ label: "Settings" }, { label: "Security" }];
+  if (pathname === "/workspaces") return [{ label: "Workspaces" }];
+  const workspaceMatch = /^\/workspaces\/([^/]+)(\/settings)?$/.exec(pathname);
+  if (workspaceMatch) {
+    const items: BreadcrumbItem[] = [{ label: "Workspaces", href: "/workspaces" }];
+    if (workspaceMatch[2] === "/settings") {
+      items.push({ label: "Overview", href: `/workspaces/${workspaceMatch[1]}` });
+      items.push({ label: "Settings" });
+    } else {
+      items.push({ label: "Overview" });
+    }
+    return items;
+  }
   return pathname
     .split("/")
     .filter(Boolean)

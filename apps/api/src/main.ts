@@ -2,6 +2,7 @@ import "reflect-metadata";
 
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import compression from "compression";
 import { json, urlencoded, type Express } from "express";
 import helmet from "helmet";
@@ -11,11 +12,14 @@ import { AuthRateLimitMiddleware } from "./auth/auth-rate-limit.middleware";
 import { AuthService } from "./auth/auth.service";
 import { BETTER_AUTH_NODE_HANDLER } from "./auth/auth.tokens";
 import { ApiExceptionFilter } from "./common/errors/api-exception.filter";
+import { ApiHttpException } from "./common/errors/api-http.exception";
 import { validationExceptionFactory } from "./common/errors/validation-exception.factory";
 import { StructuredLogger } from "./common/logging/structured-logger.service";
+import { RateLimitService } from "./common/rate-limit/rate-limit.service";
 import { RequestContextMiddleware } from "./common/request/request-context.middleware";
 import { APP_CONFIG, type AppConfig } from "./config/app.config";
 import { AUTH_CONFIG, type AuthConfig } from "./config/auth.config";
+import { WORKSPACE_TRPC_PATH, WorkspacesTrpcRouter } from "./workspaces/workspaces.trpc";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -33,6 +37,8 @@ export async function createApplication(): Promise<NestExpressApplication> {
   const requestContext = app.get(RequestContextMiddleware);
   const authRateLimit = app.get(AuthRateLimitMiddleware);
   const authService = app.get(AuthService);
+  const rateLimit = app.get(RateLimitService);
+  const workspacesTrpc = app.get(WorkspacesTrpcRouter);
   const authHandler = app.get<
     ((request: IncomingMessage, response: ServerResponse) => Promise<void>) | null
   >(BETTER_AUTH_NODE_HANDLER);
@@ -119,6 +125,29 @@ export async function createApplication(): Promise<NestExpressApplication> {
         });
       });
   });
+  express.use(
+    WORKSPACE_TRPC_PATH,
+    (request, response, next) => {
+      try {
+        rateLimit.enforce(request, response);
+        next();
+      } catch (error: unknown) {
+        if (error instanceof ApiHttpException) {
+          response.status(error.getStatus()).json({
+            success: false,
+            error: error.safeResponse,
+            requestId: response.getHeader("X-Request-Id") ?? "unknown",
+          });
+          return;
+        }
+        next(error);
+      }
+    },
+    createExpressMiddleware({
+      router: workspacesTrpc.router,
+      createContext: ({ req }) => workspacesTrpc.createContext(req),
+    }),
+  );
   app.setGlobalPrefix("api/v1", {
     exclude: ["health/live", "health/ready"],
   });

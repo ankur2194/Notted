@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { parseAppConfig } from "../../config/app.config";
 
 import { RateLimitGuard } from "./rate-limit.guard";
+import { RateLimitService } from "./rate-limit.service";
 import { setTrustedPrincipal } from "./trusted-principal";
 
 import type { RateLimitDecision, RateLimitStore, TokenBucketPolicy } from "./rate-limit.types";
@@ -22,6 +23,17 @@ class CapturingStore implements RateLimitStore {
       remaining: policy.capacity - 1,
       retryAfterMilliseconds: 0,
       resetAfterMilliseconds: 1_000,
+    };
+  }
+}
+
+class DenyingStore implements RateLimitStore {
+  consume(): RateLimitDecision {
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfterMilliseconds: 2_000,
+      resetAfterMilliseconds: 2_000,
     };
   }
 }
@@ -51,7 +63,7 @@ describe("RateLimitGuard", () => {
       RATE_LIMIT_AUTHENTICATED_PER_MINUTE: "200",
     });
     const store = new CapturingStore();
-    const guard = new RateLimitGuard(new Reflector(), config, store);
+    const guard = new RateLimitGuard(new Reflector(), new RateLimitService(config, store));
     const request = {
       headers: {
         authorization: "Bearer untrusted",
@@ -72,7 +84,7 @@ describe("RateLimitGuard", () => {
       RATE_LIMIT_AUTHENTICATED_PER_MINUTE: "200",
     });
     const store = new CapturingStore();
-    const guard = new RateLimitGuard(new Reflector(), config, store);
+    const guard = new RateLimitGuard(new Reflector(), new RateLimitService(config, store));
     const request = {
       headers: {},
       ip: "192.0.2.10",
@@ -84,5 +96,15 @@ describe("RateLimitGuard", () => {
     expect(guard.canActivate(createContext(request, createResponse()))).toBe(true);
     expect(store.lastKey).toBe("actor:user:user-safe-id");
     expect(store.lastPolicy?.capacity).toBe(200);
+  });
+
+  it("exposes safe 429 headers through the transport-neutral service", () => {
+    const config = parseAppConfig({ RATE_LIMIT_AUTHENTICATED_PER_MINUTE: "200" });
+    const service = new RateLimitService(config, new DenyingStore());
+    const request = { ip: "192.0.2.10", socket: {} } as unknown as Request;
+    const response = createResponse();
+
+    expect(() => service.enforce(request, response)).toThrow("Too many requests");
+    expect(response.setHeader).toHaveBeenCalledWith("Retry-After", 2);
   });
 });

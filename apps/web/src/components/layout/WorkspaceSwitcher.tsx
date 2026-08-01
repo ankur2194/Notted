@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -38,9 +39,17 @@ export function WorkspaceSwitcher({
         <p className="font-medium">No workspace access</p>
         {!compact && (
           <p className="mt-1 text-muted-foreground">
-            Ask an administrator for access. Workspace creation arrives in Part 26.
+            Create a workspace or ask an administrator for access.
           </p>
         )}
+        {!compact ? (
+          <Link
+            href="/workspaces"
+            className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-primary hover:underline"
+          >
+            View workspaces
+          </Link>
+        ) : null}
       </div>
     );
   }

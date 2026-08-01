@@ -58,3 +58,7 @@ Add one row after creating each record. Keep rows ordered by part number.
 |   23 | Complete | 2026-07-31 | Optional OAuth, TOTP/recovery, passkeys, remember-me, recent authentication, and safe session controls verified. |
 |   24 | Complete | 2026-07-31 | Central authorization policy, tenant-scoped facts, shared adapters, and cross-tenant denial verified. |
 |   25 | Complete | 2026-07-31 | Responsive shell, server-validated workspace selection, persistent notifications, migration, accessibility, and browser journeys verified. |
+|   26 | Complete | 2026-08-01 | Verified REST/tRPC workspace lifecycle with replay-safe creation, atomic owner membership, tenant authorization, durable deletion audit, and cleanup intent. |
+|   27 | Complete | 2026-08-01 | Accessible workspace list/create, overview, settings, switching, permission states, and real-stack Chromium lifecycle/isolation journeys. |
+|   28 | Complete | 2026-08-01 | Verified membership and single-use invitation lifecycle with role/last-owner safety, durable queued email delivery, acceptance UI, and audit evidence. |
+|   29 | Complete | 2026-08-01 | Tenant-scoped project CRUD, filtering, lifecycle transitions, cover authorization, replay safety, durable domain events, and note/task preservation. |

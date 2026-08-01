@@ -71,6 +71,20 @@
       "when": 1785350660584,
       "tag": "0009_bizarre_red_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785532642711,
+      "tag": "0010_swift_korg",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785564140514,
+      "tag": "0011_hot_natasha_romanoff",
+      "breakpoints": true
     }
   ]
 }

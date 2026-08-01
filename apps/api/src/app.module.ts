@@ -7,9 +7,12 @@ import { CommonModule } from "./common/common.module";
 import { ConfigModule } from "./config/config.module";
 import { DatabaseModule } from "./database/database.module";
 import { HealthModule } from "./health/health.module";
+import { MembershipsModule } from "./memberships/memberships.module";
 import { NotificationModule } from "./notifications/notification.module";
+import { ProjectsModule } from "./projects/projects.module";
 import { ShellModule } from "./shell/shell.module";
 import { TenantContextModule } from "./tenant/tenant-context.module";
+import { WorkspacesModule } from "./workspaces/workspaces.module";
 
 @Module({
   imports: [
@@ -19,9 +22,12 @@ import { TenantContextModule } from "./tenant/tenant-context.module";
     AuthModule,
     AuthorizationModule,
     HealthModule,
+    MembershipsModule,
     ShellModule,
     NotificationModule,
+    ProjectsModule,
     TenantContextModule,
+    WorkspacesModule,
   ],
   controllers: [ApiController],
 })

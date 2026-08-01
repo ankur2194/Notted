@@ -28,6 +28,7 @@ import {
   aiUsage,
   aiUsageRelations,
 } from "./ai";
+import { apiIdempotencyRecords } from "./api-idempotency";
 import { apiKeys, apiKeysRelations } from "./api-keys";
 import {
   attachmentMediaTypeEnum,
@@ -105,6 +106,7 @@ import {
   webhooks,
   webhooksRelations,
 } from "./webhooks";
+import { workspaceDeletionAudits } from "./workspace-deletion-audits";
 import {
   invitations,
   invitationsRelations,
@@ -142,6 +144,7 @@ export {
   workspaces,
   workspacesRelations,
 } from "./workspaces";
+export { workspaceDeletionAudits } from "./workspace-deletion-audits";
 export { folders, foldersRelations } from "./folders";
 export {
   noteShares,
@@ -188,6 +191,7 @@ export {
   aiUsageRelations,
 } from "./ai";
 export { apiKeys, apiKeysRelations } from "./api-keys";
+export { apiIdempotencyRecords } from "./api-idempotency";
 export { auditLogs, auditLogsRelations } from "./audit-logs";
 export {
   authEmailIntents,
@@ -243,6 +247,9 @@ export const schema = {
   invitationsRelations,
   memberRoleEnum,
   workspacePlanEnum,
+  // Part 26 — deletion tombstones have no workspace/user FK and survive the
+  // tenant cascade. Part 71 owns their read and retention policy.
+  workspaceDeletionAudits,
   // Part 15 — projects, project access, folders, notes, note sharing, and
   // their enums and relations. Notes carry composite FKs to projects and
   // folders for DB-level cross-tenant integrity; ordering, depth, cycle, and
@@ -308,6 +315,7 @@ export const schema = {
   // never persisted. Authenticated by the API-key service (Part 61).
   apiKeys,
   apiKeysRelations,
+  apiIdempotencyRecords,
   // webhooks + webhook_deliveries: workspace-owned endpoints (encrypted
   // signing secret + key version; disabled until verified) and immutable
   // delivery attempts. HMAC/SSRF/retries are the dispatcher (Part 66).
