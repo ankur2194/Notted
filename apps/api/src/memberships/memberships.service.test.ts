@@ -1,8 +1,15 @@
+import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
-import { emailDeliveries, invitations, jobOutbox } from "../database/schema";
+import {
+  emailDeliveries,
+  invitations,
+  jobOutbox,
+  noteShares,
+  projectAccess,
+} from "../database/schema";
 import { createTenantContext, TenantContextService } from "../tenant";
 
 import { InvitationTokenService } from "./invitation-token.service";
@@ -216,5 +223,43 @@ describe("MembershipsService (unit)", () => {
     const invitationId = "20000000-0000-4000-8300-000000000001";
     await internal.lockInvitation({} as DatabaseTransaction, invitationId);
     expect(lockMutation).toHaveBeenCalledWith(expect.anything(), `invitation-id:${invitationId}`);
+  });
+
+  it("clears note and project grants through workspace-scoped parent subqueries before remove/leave can permit a rejoin", async () => {
+    const deletedTables: unknown[] = [];
+    const parentScopes: unknown[] = [];
+    const tx = {
+      select: () => ({
+        from: () => ({
+          where: (condition: unknown) => {
+            parentScopes.push(condition);
+            return { getSQL: () => sql`select 1` };
+          },
+        }),
+      }),
+      delete: (table: unknown) => {
+        deletedTables.push(table);
+        return { where: vi.fn().mockResolvedValue([]) };
+      },
+    } as unknown as DatabaseTransaction;
+    const tenant = new TenantContextService();
+    const service = new MembershipsService(
+      {} as DatabaseService,
+      {} as AuthorizationEntryService,
+      tenant,
+      tokenService(),
+    );
+    const internal = service as unknown as {
+      clearWorkspaceGrants(scope: DatabaseTransaction, departingUserId: string): Promise<void>;
+    };
+
+    await tenant.run(createTenantContext({ workspaceId, userId }), () =>
+      internal.clearWorkspaceGrants(tx, userId),
+    );
+
+    expect(deletedTables).toEqual([noteShares, projectAccess]);
+    expect(parentScopes).toHaveLength(2);
+    // Membership acceptance inserts no grants, so a later rejoin cannot
+    // reactivate either deleted relation.
   });
 });

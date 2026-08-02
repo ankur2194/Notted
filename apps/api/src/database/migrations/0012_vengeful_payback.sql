@@ -1,0 +1,4 @@
+CREATE INDEX "notes_workspace_project_parent_order_idx" ON "notes" USING btree ("workspace_id","project_id","parent_id","sort_order");--> statement-breakpoint
+CREATE INDEX "notes_workspace_folder_parent_order_idx" ON "notes" USING btree ("workspace_id","folder_id","parent_id","sort_order");--> statement-breakpoint
+CREATE INDEX "notes_workspace_trash_deleted_idx" ON "notes" USING btree ("workspace_id","is_deleted","deleted_at");--> statement-breakpoint
+CREATE INDEX "notes_workspace_pinned_archive_updated_idx" ON "notes" USING btree ("workspace_id","is_pinned","is_archived","updated_at") WHERE notes.is_deleted = false;

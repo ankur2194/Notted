@@ -1,6 +1,16 @@
 import { FileText, FolderKanban, Sparkles } from "lucide-react";
+import Link from "next/link";
 
-export default function DashboardPage() {
+import { NoteBrowser } from "@/components/notes/NoteBrowser";
+import { getServerFolders, getServerNoteList } from "@/lib/notes/server-notes";
+import { getServerShell } from "@/lib/shell/server-shell";
+
+export default async function DashboardPage() {
+  const shell = await getServerShell();
+  const current = shell.status === "ready" ? shell.data.currentWorkspace : null;
+  const recent =
+    current === null ? null : await getServerNoteList(current.workspaceId, {}, { view: "recent" });
+  const folders = current === null ? null : await getServerFolders(current.workspaceId);
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <section
@@ -12,8 +22,8 @@ export default function DashboardPage() {
           Welcome back
         </h1>
         <p className="mt-3 max-w-2xl text-muted-foreground">
-          Your authenticated workspace shell is ready. Project and note content will appear here as
-          their owning parts are implemented.
+          Your authenticated workspace shell is ready. Recent notes from the selected workspace
+          appear below.
         </p>
       </section>
 
@@ -33,21 +43,39 @@ export default function DashboardPage() {
             <FolderKanban className="size-5 text-info" aria-hidden="true" />
             <h3 className="mt-4 font-semibold">Projects</h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              Project screens and data arrive in Parts 29–30.
+              Browse authorized projects and their note collections.
             </p>
-            <span className="mt-4 inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium">
-              Unavailable
-            </span>
+            {current === null ? (
+              <span className="mt-4 inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium">
+                Choose a workspace
+              </span>
+            ) : (
+              <Link
+                href={`/workspaces/${current.workspaceId}/projects`}
+                className="mt-4 inline-flex min-h-11 items-center text-sm font-medium underline"
+              >
+                Open projects
+              </Link>
+            )}
           </article>
           <article className="rounded-xl border bg-card p-5">
             <FileText className="size-5 text-info" aria-hidden="true" />
             <h3 className="mt-4 font-semibold">Notes</h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              The note tree and note APIs arrive in Parts 31–32.
+              Browse standalone notes, folders, pinned notes, templates, and trash.
             </p>
-            <span className="mt-4 inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium">
-              Unavailable
-            </span>
+            {current === null ? (
+              <span className="mt-4 inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium">
+                Choose a workspace
+              </span>
+            ) : (
+              <Link
+                href={`/workspaces/${current.workspaceId}/notes`}
+                className="mt-4 inline-flex min-h-11 items-center text-sm font-medium underline"
+              >
+                Open notes
+              </Link>
+            )}
           </article>
           <article className="rounded-xl border bg-card p-5">
             <Sparkles className="size-5 text-info" aria-hidden="true" />
@@ -61,6 +89,30 @@ export default function DashboardPage() {
           </article>
         </div>
       </section>
+      {current !== null ? (
+        <section aria-label="Selected workspace recent notes">
+          {recent?.status === "ready" && folders?.status === "ready" ? (
+            <NoteBrowser
+              workspaceId={current.workspaceId}
+              initialPage={recent.data.page}
+              initialFolders={folders.data}
+              query={recent.data.query}
+              canCreate={shell.status === "ready" && shell.data.permissions.canCreateContent}
+              canDelete={current.role === "owner" || current.role === "admin"}
+              title="Recent notes"
+              description={`Recently updated standalone notes in ${current.name}.`}
+              embedded
+            />
+          ) : (
+            <div role="alert" className="rounded-xl border p-5">
+              <h2 className="text-xl font-semibold">Recent notes unavailable</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                The dashboard remains available, but recent note data could not be loaded safely.
+              </p>
+            </div>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }

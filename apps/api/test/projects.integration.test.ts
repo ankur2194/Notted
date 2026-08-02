@@ -172,6 +172,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 29 project CRUD (live)", () => {
           color: "#abcdef",
           status: "completed",
           isArchived: false,
+          isRestricted: false,
           dueAt: "2026-08-10T06:30:00.000Z",
         });
         const replayed = await service.create({
@@ -254,9 +255,13 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 29 project CRUD (live)", () => {
           sortedPage.items[0]?.name.localeCompare(sortedPage.items[1]?.name ?? ""),
         ).toBeLessThanOrEqual(0);
 
-        // Any grant marks the project restricted. Owner/admin bypass; editor
-        // needs this explicit grant; viewer has none and must see neither the
+        // Restriction is explicit and durable. Owner/admin bypass; editor
+        // needs an explicit grant; viewer has none and must see neither the
         // ID nor an inflated hasMore/count signal in authorized pagination.
+        await tx
+          .update(projects)
+          .set({ isRestricted: true })
+          .where(eq(projects.id, created.project.id));
         await tx.insert(projectAccess).values({
           id: randomUUID(),
           projectId: created.project.id,
@@ -334,6 +339,31 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 29 project CRUD (live)", () => {
             projectId: created.project.id,
           }),
         ).rejects.toMatchObject({ decision: { allowed: false, httpStatus: 403 } });
+
+        await tx.delete(projectAccess).where(eq(projectAccess.projectId, created.project.id));
+        expect(
+          await tx
+            .select({ isRestricted: projects.isRestricted })
+            .from(projects)
+            .where(eq(projects.id, created.project.id)),
+        ).toEqual([{ isRestricted: true }]);
+        await expect(
+          service.read({
+            principal: viewer,
+            workspaceId: SEED_IDS.workspaces.alpha,
+            projectId: created.project.id,
+          }),
+        ).rejects.toMatchObject({ decision: { allowed: false } });
+        const zeroGranteePage = await service.list({
+          principal: editor,
+          workspaceId: SEED_IDS.workspaces.alpha,
+          page: 1,
+          limit: 10,
+          name: "Delegated edit",
+          sortBy: "updatedAt",
+          sortDirection: "desc",
+        });
+        expect(zeroGranteePage.items).toEqual([]);
 
         // Cross-workspace and guessed IDs are concealed for read and mutation.
         await expect(

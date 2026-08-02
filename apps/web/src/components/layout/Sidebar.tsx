@@ -2,17 +2,24 @@ import {
   Building2,
   ChevronLeft,
   ChevronRight,
+  FolderKanban,
   FileText,
   Home,
   LockKeyhole,
   Settings,
+  Clock3,
+  Pin,
+  LayoutTemplate,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
+import type { NoteNavigationState } from "@/components/notes/NoteTree";
 import type { ShellBootstrap } from "@notted/shared-types";
 
+import { NoteTree } from "@/components/notes/NoteTree";
 import { Button } from "@/components/ui/button";
 
 export function Sidebar({
@@ -20,11 +27,13 @@ export function Sidebar({
   collapsed,
   onToggle,
   mobile = false,
+  noteNavigation,
 }: {
   readonly shell: ShellBootstrap;
   readonly collapsed: boolean;
   readonly onToggle?: () => void;
   readonly mobile?: boolean;
+  readonly noteNavigation: NoteNavigationState;
 }) {
   const hideLabels = collapsed && !mobile;
   return (
@@ -88,6 +97,64 @@ export function Sidebar({
           <span
             className="flex min-h-11 cursor-not-allowed items-center gap-3 rounded-md px-3 text-sm text-muted-foreground"
             aria-disabled="true"
+            title="Choose or create a workspace to view projects"
+          >
+            <FolderKanban aria-hidden="true" className="size-5 shrink-0" />
+            {!hideLabels && "Projects"}
+          </span>
+        ) : (
+          <Link
+            href={`/workspaces/${shell.currentWorkspace.workspaceId}/projects`}
+            className="flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium hover:bg-accent"
+            aria-label={hideLabels ? "Projects" : undefined}
+          >
+            <FolderKanban aria-hidden="true" className="size-5 shrink-0" />
+            {!hideLabels && "Projects"}
+          </Link>
+        )}
+        {shell.currentWorkspace !== null && !hideLabels ? (
+          <div className="grid grid-cols-2 gap-1 pt-1 text-xs">
+            <Link
+              className="col-span-2 flex min-h-9 items-center gap-1 rounded px-2 hover:bg-accent"
+              href={`/workspaces/${shell.currentWorkspace.workspaceId}/notes`}
+            >
+              <FileText aria-hidden="true" className="size-3.5" />
+              All notes
+            </Link>
+            <Link
+              className="flex min-h-9 items-center gap-1 rounded px-2 hover:bg-accent"
+              href={`/workspaces/${shell.currentWorkspace.workspaceId}/notes/recent`}
+            >
+              <Clock3 aria-hidden="true" className="size-3.5" />
+              Recent
+            </Link>
+            <Link
+              className="flex min-h-9 items-center gap-1 rounded px-2 hover:bg-accent"
+              href={`/workspaces/${shell.currentWorkspace.workspaceId}/notes/pinned`}
+            >
+              <Pin aria-hidden="true" className="size-3.5" />
+              Pinned
+            </Link>
+            <Link
+              className="flex min-h-9 items-center gap-1 rounded px-2 hover:bg-accent"
+              href={`/workspaces/${shell.currentWorkspace.workspaceId}/notes/templates`}
+            >
+              <LayoutTemplate aria-hidden="true" className="size-3.5" />
+              Templates
+            </Link>
+            <Link
+              className="flex min-h-9 items-center gap-1 rounded px-2 hover:bg-accent"
+              href={`/workspaces/${shell.currentWorkspace.workspaceId}/notes/trash`}
+            >
+              <Trash2 aria-hidden="true" className="size-3.5" />
+              Trash
+            </Link>
+          </div>
+        ) : null}
+        {shell.currentWorkspace === null ? (
+          <span
+            className="flex min-h-11 cursor-not-allowed items-center gap-3 rounded-md px-3 text-sm text-muted-foreground"
+            aria-disabled="true"
             title="Choose or create a workspace to view its settings"
           >
             <Settings aria-hidden="true" className="size-5 shrink-0" />
@@ -117,28 +184,20 @@ export function Sidebar({
             Notes
           </h2>
         )}
-        <div
-          className="flex min-h-11 items-center gap-3 rounded-md border border-dashed px-3 text-sm text-muted-foreground"
-          aria-label={hideLabels ? "Note tree unavailable" : undefined}
-        >
-          <FileText aria-hidden="true" className="size-5 shrink-0" />
-          {!hideLabels && <span>Note tree unavailable until Parts 31–32</span>}
-        </div>
-        {!hideLabels && (
-          <ul
-            className="mt-2 space-y-1 text-xs text-muted-foreground"
-            aria-label="Unavailable nested note tree preview"
+        {hideLabels ? (
+          <span
+            className="flex min-h-11 items-center justify-center text-xs text-muted-foreground"
+            aria-label="Expand sidebar to browse notes"
           >
-            <li className="rounded px-3 py-1.5">
-              <span aria-hidden="true">▱ </span>Note level placeholder (unavailable)
-            </li>
-            <li className="rounded py-1.5 pl-7 pr-3">
-              <span aria-hidden="true">▱ </span>Nested note placeholder (unavailable)
-            </li>
-            <li className="rounded py-1.5 pl-11 pr-3">
-              <span aria-hidden="true">▱ </span>Third-level placeholder (unavailable)
-            </li>
-          </ul>
+            Notes
+          </span>
+        ) : (
+          <div className="h-full overflow-y-auto">
+            <NoteTree
+              workspaceId={shell.currentWorkspace?.workspaceId ?? null}
+              state={noteNavigation}
+            />
+          </div>
         )}
       </section>
 

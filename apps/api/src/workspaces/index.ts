@@ -4,7 +4,8 @@ export { WorkspacesController } from "./workspaces.controller";
 export {
   WORKSPACE_TRPC_PATH,
   WorkspacesTrpcRouter,
-  type WorkspacesTrpcAppRouter,
+  type WorkspacesCompatRouter,
+  type WorkspaceTrpcSubrouter,
   type WorkspaceTrpcContext,
 } from "./workspaces.trpc";
 export {

@@ -16,6 +16,10 @@ import {
   emailDeliveries,
   invitations,
   jobOutbox,
+  noteShares,
+  notes,
+  projectAccess,
+  projects,
   schema,
   users,
   workspaces,
@@ -557,6 +561,186 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 28 memberships and invitations (live)",
       await db
         .delete(users)
         .where(inArray(users.id, fixtureUserIds))
+        .catch(() => undefined);
+    }
+  });
+
+  it("remove and leave clear only the departing user's workspace grants so rejoin cannot reactivate them", async ({
+    skip,
+  }) => {
+    if (!databaseReachable || db === undefined) {
+      skip("skipped: no reachable PostgreSQL — run dev compose");
+      return;
+    }
+    const ownerA = randomUUID();
+    const ownerB = randomUUID();
+    const departing = randomUUID();
+    const workspaceA = randomUUID();
+    const workspaceB = randomUUID();
+    const projectA = randomUUID();
+    const projectB = randomUUID();
+    const noteA = randomUUID();
+    const noteB = randomUUID();
+    const memberA = randomUUID();
+    const suffix = randomUUID().slice(0, 8);
+    try {
+      await db.insert(users).values([
+        { id: ownerA, email: `grant-owner-a-${suffix}@example.test`, name: "Grant owner A" },
+        { id: ownerB, email: `grant-owner-b-${suffix}@example.test`, name: "Grant owner B" },
+        { id: departing, email: `grant-member-${suffix}@example.test`, name: "Grant member" },
+      ]);
+      await db.insert(workspaces).values([
+        { id: workspaceA, name: "Grant A", slug: `grant-a-${suffix}`, createdById: ownerA },
+        { id: workspaceB, name: "Grant B", slug: `grant-b-${suffix}`, createdById: ownerB },
+      ]);
+      await db.insert(workspaceMembers).values([
+        { workspaceId: workspaceA, userId: ownerA, role: "owner" },
+        { id: memberA, workspaceId: workspaceA, userId: departing, role: "editor" },
+        { workspaceId: workspaceB, userId: ownerB, role: "owner" },
+        { workspaceId: workspaceB, userId: departing, role: "editor" },
+      ]);
+      await db.insert(projects).values([
+        {
+          id: projectA,
+          workspaceId: workspaceA,
+          name: "Restricted A",
+          isRestricted: true,
+          createdById: ownerA,
+        },
+        {
+          id: projectB,
+          workspaceId: workspaceB,
+          name: "Restricted B",
+          isRestricted: true,
+          createdById: ownerB,
+        },
+      ]);
+      await db.insert(notes).values([
+        {
+          id: noteA,
+          workspaceId: workspaceA,
+          projectId: projectA,
+          title: "Shared A",
+          createdById: ownerA,
+        },
+        {
+          id: noteB,
+          workspaceId: workspaceB,
+          projectId: projectB,
+          title: "Shared B",
+          createdById: ownerB,
+        },
+      ]);
+      const insertGrants = async () => {
+        await db!
+          .insert(projectAccess)
+          .values({ projectId: projectA, userId: departing, role: "editor", createdById: ownerA });
+        await db!
+          .insert(noteShares)
+          .values({ noteId: noteA, userId: departing, permission: "edit", createdById: ownerA });
+      };
+      await insertGrants();
+      await db
+        .insert(projectAccess)
+        .values({ projectId: projectB, userId: departing, role: "editor", createdById: ownerB });
+      await db
+        .insert(noteShares)
+        .values({ noteId: noteB, userId: departing, permission: "edit", createdById: ownerB });
+
+      const { memberships } = service();
+      await memberships.remove({
+        principal: principal(ownerA),
+        workspaceId: workspaceA,
+        memberId: memberA,
+      });
+      expect(
+        await db
+          .select({ id: projectAccess.id })
+          .from(projectAccess)
+          .where(eq(projectAccess.projectId, projectA)),
+      ).toHaveLength(0);
+      expect(
+        await db.select({ id: noteShares.id }).from(noteShares).where(eq(noteShares.noteId, noteA)),
+      ).toHaveLength(0);
+      expect(
+        await db
+          .select({ isRestricted: projects.isRestricted })
+          .from(projects)
+          .where(eq(projects.id, projectA)),
+      ).toEqual([{ isRestricted: true }]);
+      expect(
+        await db
+          .select({ id: projectAccess.id })
+          .from(projectAccess)
+          .where(eq(projectAccess.projectId, projectB)),
+      ).toHaveLength(1);
+      expect(
+        await db.select({ id: noteShares.id }).from(noteShares).where(eq(noteShares.noteId, noteB)),
+      ).toHaveLength(1);
+
+      await db
+        .insert(workspaceMembers)
+        .values({ workspaceId: workspaceA, userId: departing, role: "editor" });
+      const tenantAfterRejoin = new TenantContextService();
+      const databaseAfterRejoin = new DatabaseService(pool!, db);
+      const authorizationAfterRejoin = new AuthorizationEntryService(
+        new AuthorizationRepository(databaseAfterRejoin, tenantAfterRejoin),
+        new AuthorizationPolicyService(),
+        tenantAfterRejoin,
+      );
+      await expect(
+        authorizationAfterRejoin.authorizeUser({
+          principal: principal(departing),
+          workspaceId: workspaceA,
+          action: "project.read",
+          resource: { kind: "project", id: projectA },
+        }),
+      ).rejects.toMatchObject({ decision: { allowed: false } });
+      await insertGrants();
+      const cleanupVsAccess = await Promise.allSettled([
+        memberships.leave({ principal: principal(departing), workspaceId: workspaceA }),
+        authorizationAfterRejoin.authorizeUser({
+          principal: principal(departing),
+          workspaceId: workspaceA,
+          action: "note.read",
+          resource: { kind: "note", id: noteA },
+        }),
+      ]);
+      expect(cleanupVsAccess[0]?.status).toBe("fulfilled");
+      await db
+        .insert(workspaceMembers)
+        .values({ workspaceId: workspaceA, userId: departing, role: "viewer" });
+      expect(
+        await db
+          .select({ id: projectAccess.id })
+          .from(projectAccess)
+          .where(eq(projectAccess.projectId, projectA)),
+      ).toHaveLength(0);
+      expect(
+        await db.select({ id: noteShares.id }).from(noteShares).where(eq(noteShares.noteId, noteA)),
+      ).toHaveLength(0);
+      expect(
+        await db
+          .select({ isRestricted: projects.isRestricted })
+          .from(projects)
+          .where(eq(projects.id, projectA)),
+      ).toEqual([{ isRestricted: true }]);
+      await expect(
+        authorizationAfterRejoin.authorizeUser({
+          principal: principal(departing),
+          workspaceId: workspaceA,
+          action: "note.read",
+          resource: { kind: "note", id: noteA },
+        }),
+      ).rejects.toMatchObject({ decision: { allowed: false } });
+    } finally {
+      await db
+        .delete(workspaces)
+        .where(inArray(workspaces.id, [workspaceA, workspaceB]))
+        .catch(() => undefined);
+      await db
+        .delete(users)
+        .where(inArray(users.id, [ownerA, ownerB, departing]))
         .catch(() => undefined);
     }
   });

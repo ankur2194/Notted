@@ -9,6 +9,8 @@ import {
   jobOutbox,
   notes,
   projects,
+  tasks,
+  workspaceMembers,
 } from "../database/schema";
 import { createTenantContext, TenantContextService } from "../tenant";
 
@@ -57,6 +59,7 @@ function row(status: ProjectStatus = "active") {
     status,
     dueDate: null,
     isArchived: status === "archived",
+    isRestricted: true,
     createdById: userId,
     createdAt: now,
     updatedAt: now,
@@ -193,6 +196,88 @@ describe("ProjectsService (unit)", () => {
       }),
     );
     expect(select).not.toHaveBeenCalled();
+  });
+
+  it("projects scoped activity, standalone task progress, and only authorized active members", async () => {
+    const tenant = new TenantContextService();
+    const authorized = entry(tenant);
+    const noteUpdated = new Date("2026-08-02T00:00:00Z");
+    const taskUpdated = new Date("2026-08-03T00:00:00Z");
+    const queriedTables: unknown[] = [];
+    const db = {
+      select: () => ({
+        from: (table: unknown) => {
+          queriedTables.push(table);
+          if (table === projects) {
+            return { where: () => ({ limit: () => Promise.resolve([row()]) }) };
+          }
+          if (table === notes) {
+            return { where: () => Promise.resolve([{ lastActivityAt: noteUpdated }]) };
+          }
+          if (table === tasks) {
+            return {
+              where: () =>
+                Promise.resolve([{ lastActivityAt: taskUpdated, completed: 2, total: 3 }]),
+            };
+          }
+          if (table === workspaceMembers) {
+            return {
+              innerJoin: () => ({
+                leftJoin: () => ({
+                  where: () => ({
+                    orderBy: () =>
+                      Promise.resolve([
+                        {
+                          userId,
+                          name: "Workspace Owner",
+                          avatarUrl: null,
+                          workspaceRole: "owner",
+                          projectRole: null,
+                        },
+                        {
+                          userId: "20000000-0000-4000-8000-000000000002",
+                          name: "Project Editor",
+                          avatarUrl: null,
+                          workspaceRole: "editor",
+                          projectRole: "editor",
+                        },
+                      ]),
+                  }),
+                }),
+              }),
+            };
+          }
+          throw new Error("Unexpected table");
+        },
+      }),
+    };
+    const service = new ProjectsService(
+      { db } as unknown as DatabaseService,
+      authorized.value,
+      tenant,
+    );
+
+    const detail = await service.read({ principal: principal(), workspaceId, projectId });
+
+    expect(detail.lastActivityAt).toBe(taskUpdated.toISOString());
+    expect(detail.taskProgress).toEqual({
+      coverage: "standalone-tasks",
+      completed: 2,
+      total: 3,
+    });
+    expect(detail.members).toEqual([
+      expect.objectContaining({
+        name: "Workspace Owner",
+        accessSource: "workspace-admin",
+        projectRole: null,
+      }),
+      expect.objectContaining({
+        name: "Project Editor",
+        accessSource: "project",
+        projectRole: "editor",
+      }),
+    ]);
+    expect(queriedTables).toEqual([projects, notes, tasks, projects, workspaceMembers]);
   });
 
   it("requires a ready cover attachment in the active workspace", async () => {

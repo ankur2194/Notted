@@ -20,6 +20,7 @@ Provide tenant-scoped project pagination, filtering, sorting, create/read/update
 - Keeps `status` and `isArchived` synchronized across transitions.
 - Validates colors, dates, and app-relative attachment cover references; covers must resolve to a ready attachment in the active workspace.
 - Filters restricted projects before pagination for editor/viewer roles while owner/admin roles retain workspace-wide visibility.
+- **2026-08-01 correction (Parts 30–32 fix pass):** ADR 0011 and migration `0013_free_lockheed.sql` make `projects.is_restricted` authoritative. Grant cleanup can no longer widen a restricted project; grant counts are not visibility state.
 - Makes create replay-safe with durable hash-only idempotency records.
 - Atomically writes each mutation, audit row, and identifier-only project-domain outbox event.
 - On deletion, nullifies tenant-scoped note/task project links before deleting the project so those records survive.
@@ -85,3 +86,4 @@ No project-table migration. Project creation uses the Part 26 `api_idempotency_r
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-01 | Coordinated delivery session | Implemented and verified project CRUD and lifecycle APIs |
+| 2026-08-01 | Parts 30–32 integrated fix pass | Recorded the forward-compatible ADR 0011 restriction-state correction; Part 29 remains complete while new combined verification is pending in Parts 30–32 |

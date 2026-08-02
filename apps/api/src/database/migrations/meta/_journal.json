@@ -85,6 +85,20 @@
       "when": 1785564140514,
       "tag": "0011_hot_natasha_romanoff",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785574821212,
+      "tag": "0012_vengeful_payback",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1785580557765,
+      "tag": "0013_free_lockheed",
+      "breakpoints": true
     }
   ]
 }

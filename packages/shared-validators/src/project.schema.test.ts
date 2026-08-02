@@ -87,10 +87,23 @@ describe("project schemas", () => {
       color: "#3b82f6",
       status: "archived",
       isArchived: true,
+      isRestricted: true,
       dueAt: timestamp,
       createdById: "20000000-0000-4000-8200-000000000001",
       createdAt: timestamp,
       updatedAt: timestamp,
+      lastActivityAt: "2026-08-02T00:00:00.000Z",
+      members: [
+        {
+          userId: "20000000-0000-4000-8200-000000000002",
+          name: "Ada Lovelace",
+          avatarUrl: null,
+          workspaceRole: "editor",
+          projectRole: "editor",
+          accessSource: "project",
+        },
+      ],
+      taskProgress: { coverage: "standalone-tasks", completed: 2, total: 3 },
     };
     expect(projectDetailSchema.safeParse(detail).success).toBe(true);
     expect(projectDetailSchema.safeParse({ ...detail, dueDate: timestamp }).success).toBe(false);
@@ -104,6 +117,7 @@ describe("project schemas", () => {
       color: detail.color,
       status: detail.status,
       isArchived: detail.isArchived,
+      isRestricted: detail.isRestricted,
       dueAt: detail.dueAt,
       createdAt: detail.createdAt,
       updatedAt: detail.updatedAt,
@@ -114,16 +128,90 @@ describe("project schemas", () => {
     expect(
       projectPageSchema.safeParse({ items: [detail], page: 1, limit: 25, hasMore: false }).success,
     ).toBe(false);
+    const mutationDetail = {
+      id: detail.id,
+      workspaceId: detail.workspaceId,
+      name: detail.name,
+      description: detail.description,
+      coverImageUrl: detail.coverImageUrl,
+      color: detail.color,
+      status: detail.status,
+      isArchived: detail.isArchived,
+      isRestricted: detail.isRestricted,
+      dueAt: detail.dueAt,
+      createdById: detail.createdById,
+      createdAt: detail.createdAt,
+      updatedAt: detail.updatedAt,
+    };
     for (const schema of [
       projectCreateResultSchema,
       projectUpdateResultSchema,
       projectStatusResultSchema,
     ]) {
-      expect(schema.safeParse({ project: detail }).success).toBe(true);
-      expect(schema.safeParse({ project: detail, internal: true }).success).toBe(false);
+      expect(schema.safeParse({ project: mutationDetail }).success).toBe(true);
+      expect(schema.safeParse({ project: mutationDetail, internal: true }).success).toBe(false);
     }
     expect(projectDeleteResultSchema.safeParse({ id, deleted: true }).success).toBe(true);
     expect(projectDeleteResultSchema.safeParse({ id, deleted: false }).success).toBe(false);
+  });
+
+  it("requires truthful member, activity, and standalone-task detail projections", () => {
+    const base = {
+      id,
+      workspaceId: "20000000-0000-4000-8100-000000000001",
+      name: "Alpha",
+      description: null,
+      coverImageUrl: null,
+      color: "#3b82f6",
+      status: "active",
+      isArchived: false,
+      isRestricted: false,
+      dueAt: null,
+      createdById: "20000000-0000-4000-8200-000000000001",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      lastActivityAt: timestamp,
+      members: [],
+      taskProgress: { coverage: "standalone-tasks", completed: 0, total: 0 },
+    };
+    expect(projectDetailSchema.safeParse(base).success).toBe(true);
+    expect(
+      projectDetailSchema.safeParse({
+        ...base,
+        taskProgress: { ...base.taskProgress, completed: 1 },
+      }).success,
+    ).toBe(false);
+    expect(
+      projectDetailSchema.safeParse({
+        ...base,
+        members: [
+          {
+            userId: id,
+            name: "A",
+            avatarUrl: null,
+            workspaceRole: "viewer",
+            projectRole: null,
+            accessSource: "project",
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      projectDetailSchema.safeParse({
+        ...base,
+        members: [
+          {
+            userId: id,
+            name: "A",
+            avatarUrl: null,
+            workspaceRole: "viewer",
+            projectRole: "viewer",
+            accessSource: "project",
+          },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(projectDetailSchema.safeParse({ ...base, taskProgress: undefined }).success).toBe(false);
   });
 
   it("keeps create and update bodies strict and update non-empty", () => {

@@ -36,6 +36,7 @@ export { AUTH_API_PATHS } from "./auth";
 export type { AttachmentDetail, AttachmentStatus, AttachmentSummary } from "./attachment";
 export type {
   AttachmentId,
+  FolderId,
   IsoTimestamp,
   JsonPrimitive,
   JsonValue,
@@ -52,18 +53,54 @@ export type {
   UserId,
   WorkspaceId,
 } from "./common";
-export type { NoteDetail, NoteSummary, NoteType, PageSize } from "./note";
+export { NOTE_API_PATHS } from "./note";
+export type {
+  FolderCreateResult,
+  FolderDeleteResult,
+  FolderPage,
+  FolderSummary,
+  FolderUpdateResult,
+  NoteCreateResult,
+  NoteDeleteResult,
+  NoteDetail,
+  NoteDocument,
+  NoteListQuery,
+  NoteListView,
+  NoteLocation,
+  NoteMoveResult,
+  NoteNavigation,
+  NoteNavigationItem,
+  NotePage,
+  NotePermanentDeleteResult,
+  NoteRestoreResult,
+  NoteShareDeleteResult,
+  NoteShareGrant,
+  NoteShareList,
+  NoteShareMutationPermission,
+  NoteSharePermission,
+  NoteShareUpsertResult,
+  NoteSortField,
+  NoteSummary,
+  NoteType,
+  NoteUpdateResult,
+  PageSize,
+} from "./note";
 export { PROJECT_API_PATHS } from "./project";
 export type {
   ProjectCreateResult,
   ProjectDeleteResult,
   ProjectDetail,
   ProjectListQuery,
+  ProjectMember,
+  ProjectMemberAccessSource,
+  ProjectMutationProject,
   ProjectPage,
+  ProjectAccessRole,
   ProjectSortField,
   ProjectStatus,
   ProjectStatusResult,
   ProjectSummary,
+  ProjectTaskProgress,
   ProjectUpdateResult,
 } from "./project";
 export { SHELL_API_PATHS } from "./shell";

@@ -1,0 +1,227 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { NoteCard } from "./NoteCard";
+import { NoteDetailView } from "./NoteDetailView";
+import { NoteLifecycleActions } from "./NoteLifecycleActions";
+import { NoteTree } from "./NoteTree";
+import { ShareModal } from "./ShareModal";
+
+import type { NoteSummary } from "@notted/shared-types";
+import type { ReactNode } from "react";
+
+const workspaceId = "30000000-0000-4000-8000-000000000001";
+const note: NoteSummary = {
+  id: "30000000-0000-4000-8000-000000000002",
+  workspaceId,
+  location: "workspace-root",
+  projectId: null,
+  folderId: null,
+  parentId: null,
+  title: "Quarterly notes",
+  type: "document",
+  pageSize: "a4",
+  sortOrder: 1,
+  isTemplate: true,
+  isPinned: true,
+  isArchived: false,
+  isDeleted: false,
+  tagIds: [],
+  version: 3,
+  deletedAt: null,
+  createdAt: "2026-08-01T00:00:00.000Z",
+  updatedAt: "2026-08-01T00:00:00.000Z",
+};
+
+function providers(children: ReactNode) {
+  return (
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      {children}
+    </QueryClientProvider>
+  );
+}
+
+describe("note components", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("renders safe metadata and only an explicitly supplied plain-text excerpt", () => {
+    render(<NoteCard note={note} excerpt={'Plain text <script>alert("no")</script>'} />);
+    expect(screen.getByRole("link", { name: note.title })).toHaveAttribute(
+      "href",
+      `/workspaces/${workspaceId}/notes/${note.id}`,
+    );
+    expect(screen.getByText(/Standalone · Unfiled/u)).toBeInTheDocument();
+    expect(screen.getByText(/<script>/u)).toBeInTheDocument();
+    expect(document.querySelector("script")).toBeNull();
+  });
+
+  it("renders deep-link breadcrumbs and plain text without interpreting persisted JSON or HTML", () => {
+    render(
+      providers(
+        <NoteDetailView
+          note={{
+            ...note,
+            content: { type: "doc", content: [] },
+            contentPlain: "<b>literal text</b>",
+            createdById: note.id,
+            updatedById: null,
+            currentActorId: note.id,
+            capabilities: { canUpdate: true, canDelete: true, canShare: true },
+          }}
+          workspaceName="Alpha"
+        />,
+      ),
+    );
+    expect(screen.getByRole("navigation", { name: "Note breadcrumbs" })).toHaveTextContent("Alpha");
+    expect(screen.getByText("<b>literal text</b>")).toBeVisible();
+    expect(document.querySelector("b")).toBeNull();
+    expect(screen.getByText(/Editor not available yet/u)).toBeVisible();
+  });
+
+  it("presents server-derived sharing capability without treating UI state as authority", () => {
+    render(
+      providers(
+        <NoteDetailView
+          note={{
+            ...note,
+            content: { type: "doc", content: [] },
+            contentPlain: "",
+            createdById: note.id,
+            updatedById: null,
+            currentActorId: note.id,
+            capabilities: { canUpdate: false, canDelete: false, canShare: false },
+          }}
+          workspaceName="Alpha"
+        />,
+      ),
+    );
+    expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
+    expect(screen.getByText(/do not have permission to manage sharing/u)).toBeVisible();
+  });
+
+  it("keeps sidebar failure bounded and exposes truncation to the full browser", () => {
+    const { rerender } = render(
+      <NoteTree workspaceId={workspaceId} state={{ status: "unavailable" }} />,
+    );
+    expect(screen.getByText(/Other workspace tools remain available/u)).toBeInTheDocument();
+    rerender(
+      <NoteTree
+        workspaceId={workspaceId}
+        state={{
+          status: "ready",
+          folders: [],
+          navigation: { items: [], limit: 500, returned: 0, truncated: true },
+        }}
+      />,
+    );
+    expect(screen.getByRole("link", { name: /Open the full note browser/u })).toHaveAttribute(
+      "href",
+      `/workspaces/${workspaceId}/notes`,
+    );
+  });
+
+  it("uses separate 44px disclosure and link controls with tree semantics", async () => {
+    const user = userEvent.setup();
+    const child = {
+      id: "30000000-0000-4000-8000-000000000006",
+      projectId: null,
+      folderId: null,
+      parentId: note.id,
+      title: "Child",
+      type: "document" as const,
+      sortOrder: 2,
+      isTemplate: false,
+      isPinned: false,
+      isArchived: false,
+      version: 1,
+      updatedAt: note.updatedAt,
+    };
+    const parent = { ...child, id: note.id, parentId: null, title: note.title, sortOrder: 1 };
+    render(
+      <NoteTree
+        workspaceId={workspaceId}
+        state={{
+          status: "ready",
+          folders: [],
+          navigation: { items: [parent, child], limit: 500, returned: 2, truncated: false },
+        }}
+      />,
+    );
+    const disclosure = screen.getByRole("button", { name: `Collapse ${note.title}` });
+    const link = screen.getByRole("link", { name: note.title });
+    expect(disclosure).not.toContainElement(link);
+    expect(disclosure).toHaveClass("size-11");
+    expect(disclosure.closest("li")).toHaveAttribute("role", "treeitem");
+    await user.keyboard("{Tab}");
+    disclosure.focus();
+    await user.keyboard("{ArrowLeft}");
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("requires explicit destructive confirmation and restores focus when canceled", async () => {
+    const user = userEvent.setup();
+    const remove = vi.fn();
+    render(
+      <NoteLifecycleActions
+        note={note}
+        pending={false}
+        onTrash={remove}
+        onRestore={vi.fn()}
+        onPermanentDelete={vi.fn()}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: /Move to trash/u });
+    await user.click(trigger);
+    expect(screen.getByRole("dialog", { name: /Move .* to trash/u })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(trigger).toHaveFocus();
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("requires the exact title before permanent deletion", async () => {
+    const user = userEvent.setup();
+    const permanentlyDelete = vi.fn();
+    render(
+      <NoteLifecycleActions
+        note={{ ...note, isDeleted: true, deletedAt: note.updatedAt }}
+        pending={false}
+        onTrash={vi.fn()}
+        onRestore={vi.fn()}
+        onPermanentDelete={permanentlyDelete}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Delete permanently" }));
+    const dialog = screen.getByRole("dialog", { name: /Permanently delete/u });
+    const confirm = within(dialog).getByRole("button", { name: "Delete permanently" });
+    expect(confirm).toBeDisabled();
+    await user.type(within(dialog).getByLabelText("Note title"), note.title);
+    expect(confirm).toBeEnabled();
+    await user.click(confirm);
+    expect(permanentlyDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("labels the copied link as authenticated-only and shows finite loading states", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => undefined)),
+    );
+    render(
+      providers(
+        <ShareModal
+          workspaceId={workspaceId}
+          noteId={note.id}
+          internalPath={`/workspaces/${workspaceId}/notes/${note.id}`}
+          currentActorId={note.id}
+        />,
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    expect(screen.getByText(/Requires Notted access/u)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/Loading authorized workspace members/u);
+    expect(screen.getByText(/not a public link/iu)).toBeInTheDocument();
+  });
+});

@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import type { NoteNavigationState } from "@/components/notes/NoteTree";
 import type { ReactNode } from "react";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { loginPathFor } from "@/lib/auth/redirects";
 import { getServerSession } from "@/lib/auth/server-session";
+import { getServerFolders, getServerNoteNavigation } from "@/lib/notes/server-notes";
 import { getServerShell } from "@/lib/shell/server-shell";
 
 function UnavailableState({
@@ -57,5 +59,26 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     );
   }
 
-  return <DashboardShell shell={shell.data}>{children}</DashboardShell>;
+  let noteNavigation: NoteNavigationState = { status: "no-workspace" };
+  if (shell.data.currentWorkspace !== null) {
+    const workspaceId = shell.data.currentWorkspace.workspaceId;
+    const [navigation, folders] = await Promise.all([
+      getServerNoteNavigation(workspaceId),
+      getServerFolders(workspaceId),
+    ]);
+    noteNavigation =
+      navigation.status === "ready" && folders.status === "ready"
+        ? {
+            status: "ready",
+            navigation: navigation.data,
+            folders: folders.data.items,
+            foldersTruncated: folders.data.hasMore,
+          }
+        : { status: "unavailable" };
+  }
+  return (
+    <DashboardShell shell={shell.data} noteNavigation={noteNavigation}>
+      {children}
+    </DashboardShell>
+  );
 }

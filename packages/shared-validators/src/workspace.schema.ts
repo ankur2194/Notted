@@ -118,7 +118,7 @@ export const workspaceDetailSchema = workspaceSummarySchema
 
 export const workspacePageSchema = z
   .object({
-    items: z.array(workspaceSummarySchema),
+    items: z.array(workspaceSummarySchema).readonly(),
     page: z.number().int().min(1),
     limit: z.number().int().min(1).max(100),
     hasMore: z.boolean(),
@@ -210,7 +210,7 @@ export const workspaceInvitationSummarySchema = z
 
 export const workspaceMemberPageSchema = z
   .object({
-    items: z.array(workspaceMemberSummarySchema),
+    items: z.array(workspaceMemberSummarySchema).readonly(),
     page: z.number().int().min(1).max(10_000),
     limit: z.number().int().min(1).max(100),
     hasMore: z.boolean(),
@@ -219,7 +219,7 @@ export const workspaceMemberPageSchema = z
 
 export const workspaceInvitationPageSchema = z
   .object({
-    items: z.array(workspaceInvitationSummarySchema),
+    items: z.array(workspaceInvitationSummarySchema).readonly(),
     page: z.number().int().min(1).max(10_000),
     limit: z.number().int().min(1).max(100),
     hasMore: z.boolean(),

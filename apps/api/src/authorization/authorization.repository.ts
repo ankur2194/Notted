@@ -164,15 +164,23 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
     actorUserId: string | null,
     db: Database = this.database.db,
   ): Promise<ProjectAuthorizationFacts> {
-    const grants = await db
-      .select({ userId: projectAccess.userId, role: projectAccess.role })
-      .from(projectAccess)
-      .where(eq(projectAccess.projectId, projectId));
-    const actorGrant =
-      actorUserId === null ? undefined : grants.find((grant) => grant.userId === actorUserId);
+    const [project] = await db
+      .select({ isRestricted: projects.isRestricted })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), whereWorkspace(projects, this.tenantContext)))
+      .limit(1);
+    let actorAccess: ProjectAccessRole | null = null;
+    if (actorUserId !== null) {
+      const [actorGrant] = await db
+        .select({ role: projectAccess.role })
+        .from(projectAccess)
+        .where(and(eq(projectAccess.projectId, projectId), eq(projectAccess.userId, actorUserId)))
+        .limit(1);
+      actorAccess = actorGrant?.role ?? null;
+    }
     return Object.freeze({
-      restricted: grants.length > 0,
-      actorAccess: actorGrant?.role ?? null,
+      restricted: project?.isRestricted ?? true,
+      actorAccess,
     });
   }
 

@@ -7,9 +7,12 @@ import {
   sortDirectionSchema,
   uuidSchema,
 } from "./common.schema";
+import { workspaceRoleSchema } from "./workspace.schema";
 
 export const projectStatusSchema = z.enum(["active", "archived", "completed"]);
 export const projectSortFieldSchema = z.enum(["name", "createdAt", "updatedAt", "dueAt"]);
+export const projectAccessRoleSchema = z.enum(["admin", "editor", "viewer"]);
+export const projectMemberAccessSourceSchema = z.enum(["workspace", "workspace-admin", "project"]);
 
 const projectNameSchema = z.string().trim().min(1).max(255);
 const projectDescriptionSchema = z.string().trim().max(5_000).nullable();
@@ -112,6 +115,7 @@ export const projectSummarySchema = z
     color: projectColorSchema,
     status: projectStatusSchema,
     isArchived: z.boolean(),
+    isRestricted: z.boolean(),
     dueAt: isoTimestampSchema.nullable(),
     createdAt: isoTimestampSchema,
     updatedAt: isoTimestampSchema,
@@ -122,22 +126,75 @@ export const projectSummarySchema = z
     message: "isArchived must mirror archived status",
   });
 
-export const projectDetailSchema = projectSummarySchema
+export const projectMutationProjectSchema = projectSummarySchema
   .safeExtend({ createdById: uuidSchema })
+  .strict();
+
+export const projectMemberSchema = z
+  .object({
+    userId: uuidSchema,
+    name: z.string().min(1).max(255),
+    avatarUrl: z.string().max(2_048).nullable(),
+    workspaceRole: workspaceRoleSchema,
+    projectRole: projectAccessRoleSchema.nullable(),
+    accessSource: projectMemberAccessSourceSchema,
+  })
+  .strict()
+  .superRefine((member, context) => {
+    if (member.accessSource === "project" && member.projectRole === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["projectRole"],
+        message: "Explicit project access requires a project role",
+      });
+    }
+    if (member.accessSource !== "project" && member.projectRole !== null) {
+      context.addIssue({
+        code: "custom",
+        path: ["projectRole"],
+        message: "Inherited or administrative access must not claim a project role",
+      });
+    }
+  });
+
+export const projectTaskProgressSchema = z
+  .object({
+    coverage: z.literal("standalone-tasks"),
+    completed: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+  })
+  .strict()
+  .refine(({ completed, total }) => completed <= total, {
+    path: ["completed"],
+    message: "completed must not exceed total",
+  });
+
+export const projectDetailSchema = projectMutationProjectSchema
+  .safeExtend({
+    lastActivityAt: isoTimestampSchema,
+    members: z.array(projectMemberSchema).readonly(),
+    taskProgress: projectTaskProgressSchema,
+  })
   .strict();
 
 export const projectPageSchema = z
   .object({
-    items: z.array(projectSummarySchema),
+    items: z.array(projectSummarySchema).readonly(),
     page: z.number().int().min(1).max(10_000),
     limit: z.number().int().min(1).max(100),
     hasMore: z.boolean(),
   })
   .strict();
 
-export const projectCreateResultSchema = z.object({ project: projectDetailSchema }).strict();
-export const projectUpdateResultSchema = z.object({ project: projectDetailSchema }).strict();
-export const projectStatusResultSchema = z.object({ project: projectDetailSchema }).strict();
+export const projectCreateResultSchema = z
+  .object({ project: projectMutationProjectSchema })
+  .strict();
+export const projectUpdateResultSchema = z
+  .object({ project: projectMutationProjectSchema })
+  .strict();
+export const projectStatusResultSchema = z
+  .object({ project: projectMutationProjectSchema })
+  .strict();
 export const projectDeleteResultSchema = z
   .object({ id: uuidSchema, deleted: z.literal(true) })
   .strict();

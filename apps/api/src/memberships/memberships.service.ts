@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { HttpStatus, Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, gt, isNotNull, isNull, lte, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gt, isNotNull, isNull, lte, sql, type SQL } from "drizzle-orm";
 
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
@@ -11,6 +11,10 @@ import {
   emailDeliveries,
   invitations,
   jobOutbox,
+  noteShares,
+  notes,
+  projectAccess,
+  projects,
   type JobOutboxPayload,
   users,
   workspaces,
@@ -541,6 +545,7 @@ export class MembershipsService {
           throw this.conflict("Use the leave operation to remove your own membership.");
         this.assertCanManageMember(actor, target);
         if (target.role === "owner") await this.assertOwnerRemains(tx);
+        await this.clearWorkspaceGrants(tx, target.userId);
         await tx
           .delete(workspaceMembers)
           .where(
@@ -584,6 +589,7 @@ export class MembershipsService {
         await this.lockMutation(tx, `owners:${input.workspaceId}`);
         const member = await this.actorMembership(tx, input.principal.userId);
         if (member.role === "owner") await this.assertOwnerRemains(tx);
+        await this.clearWorkspaceGrants(tx, member.userId);
         await tx
           .delete(workspaceMembers)
           .where(
@@ -603,6 +609,37 @@ export class MembershipsService {
         });
         return Object.freeze({ memberId: member.id, left: true as const });
       }),
+    );
+  }
+
+  /** Removes only grants whose constrained parent belongs to the active workspace. */
+  private async clearWorkspaceGrants(tx: DatabaseTransaction, userId: string): Promise<void> {
+    await tx.delete(noteShares).where(
+      and(
+        eq(noteShares.userId, userId),
+        exists(
+          tx
+            .select({ id: notes.id })
+            .from(notes)
+            .where(and(eq(notes.id, noteShares.noteId), whereWorkspace(notes, this.tenantContext))),
+        ),
+      ),
+    );
+    await tx.delete(projectAccess).where(
+      and(
+        eq(projectAccess.userId, userId),
+        exists(
+          tx
+            .select({ id: projects.id })
+            .from(projects)
+            .where(
+              and(
+                eq(projects.id, projectAccess.projectId),
+                whereWorkspace(projects, this.tenantContext),
+              ),
+            ),
+        ),
+      ),
     );
   }
 
@@ -699,7 +736,8 @@ export class MembershipsService {
           whereWorkspace(workspaceMembers, this.tenantContext),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update", { of: workspaceMembers });
     if (row === undefined) this.notFound();
     return row;
   }
@@ -723,7 +761,8 @@ export class MembershipsService {
           whereWorkspace(workspaceMembers, this.tenantContext),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for("update", { of: workspaceMembers });
     if (row === undefined) this.notFound();
     return row;
   }

@@ -1,0 +1,1577 @@
+import { createHash, randomUUID } from "node:crypto";
+
+import { HttpStatus, Injectable } from "@nestjs/common";
+import { extractNoteContentPlain } from "@notted/shared-validators";
+import { and, asc, desc, eq, exists, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+
+import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
+import { AuthorizationDeniedError } from "../authorization/authorization.errors";
+import { ApiHttpException } from "../common/errors/api-http.exception";
+import {
+  assertIdempotencyPayload,
+  createApiIdempotencyIdentity,
+  loadApiIdempotency,
+  lockApiIdempotency,
+  storeApiIdempotency,
+} from "../common/idempotency/api-idempotency";
+import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
+import {
+  auditLogs,
+  folders,
+  jobOutbox,
+  type JobOutboxPayload,
+  notes,
+  noteTags,
+  projectAccess,
+  projects,
+  tags,
+  workspaceMembers,
+} from "../database/schema";
+import {
+  activeWorkspaceId,
+  assertWorkspaceInsertValues,
+  TenantContextService,
+  whereWorkspace,
+} from "../tenant";
+
+import {
+  FOLDER_AUDIT_ENTITY_TYPE,
+  FOLDER_MAX_DEPTH,
+  NOTE_AUDIT_ENTITY_TYPE,
+  NOTE_DEFAULT_DOCUMENT,
+  NOTE_DOMAIN_EVENT_IDEMPOTENCY_PREFIX,
+  NOTE_DOMAIN_EVENT_PAYLOAD_VERSION,
+  NOTE_DOMAIN_EVENT_QUEUE,
+  NOTE_DOMAIN_EVENTS,
+  type NoteMutation,
+} from "./notes.constants";
+
+import type {
+  AuthenticatedPrincipal,
+  FolderCreateResult,
+  FolderDeleteResult,
+  FolderPage,
+  FolderSummary,
+  FolderUpdateResult,
+  NoteCreateResult,
+  NoteDeleteResult,
+  NoteDetail,
+  NoteDocument,
+  NoteListView,
+  NoteMoveResult,
+  NoteNavigation,
+  NotePage,
+  NotePermanentDeleteResult,
+  NoteRestoreResult,
+  NoteSortField,
+  NoteSummary,
+  NoteType,
+  NoteUpdateResult,
+  PageSize,
+} from "@notted/shared-types";
+
+interface ScopedInput {
+  readonly principal: AuthenticatedPrincipal;
+  readonly workspaceId: string;
+  readonly requestId?: string | null;
+}
+
+interface NoteSelector extends ScopedInput {
+  readonly noteId: string;
+}
+
+interface Container {
+  readonly projectId: string | null;
+  readonly folderId: string | null;
+  readonly parentId: string | null;
+}
+
+interface NoteRow extends Container {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly title: string;
+  readonly content: unknown;
+  readonly contentPlain: string | null;
+  readonly noteType: "document" | "task";
+  readonly isTemplate: boolean;
+  readonly isPinned: boolean;
+  readonly isArchived: boolean;
+  readonly isDeleted: boolean;
+  readonly deletedAt: Date | null;
+  readonly deletionBatchId: string | null;
+  readonly version: number;
+  readonly pageSize: string;
+  readonly sortOrder: number;
+  readonly createdById: string;
+  readonly updatedById: string | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+interface FolderRow {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly parentId: string | null;
+  readonly name: string;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+export interface CreateNoteServiceInput extends ScopedInput, Container {
+  readonly title: string;
+  readonly type: NoteType;
+  readonly pageSize: PageSize;
+  readonly isTemplate: boolean;
+  readonly isPinned: boolean;
+  readonly isArchived: boolean;
+  readonly tagIds: readonly string[];
+  readonly content?: NoteDocument;
+  readonly idempotencyKey: string;
+}
+
+export interface ListNotesServiceInput extends ScopedInput {
+  readonly page: number;
+  readonly limit: number;
+  readonly scope: "workspace-root" | "project";
+  readonly projectId?: string;
+  readonly folderId?: string;
+  readonly rootFolder?: boolean;
+  readonly parentId?: string;
+  readonly rootParent?: boolean;
+  readonly type?: NoteType;
+  readonly view: NoteListView;
+  readonly isTemplate?: boolean;
+  readonly isPinned?: boolean;
+  readonly isArchived?: boolean;
+  readonly tagId?: string;
+  readonly sortBy: NoteSortField;
+  readonly sortDirection: "asc" | "desc";
+}
+
+export interface UpdateNoteServiceInput extends NoteSelector {
+  readonly expectedVersion: number;
+  readonly title?: string;
+  readonly type?: NoteType;
+  readonly pageSize?: PageSize;
+  readonly isTemplate?: boolean;
+  readonly isPinned?: boolean;
+  readonly isArchived?: boolean;
+  readonly tagIds?: readonly string[];
+  readonly content?: NoteDocument;
+}
+
+export interface MoveNoteServiceInput extends NoteSelector, Container {
+  readonly expectedVersion: number;
+  readonly beforeNoteId?: string | null;
+}
+
+export interface VersionedNoteServiceInput extends NoteSelector {
+  readonly expectedVersion: number;
+}
+
+export interface PermanentDeleteNoteServiceInput extends VersionedNoteServiceInput {
+  readonly expectedTitle: string;
+}
+
+export interface NavigationServiceInput extends ScopedInput {
+  readonly limit: number;
+  readonly includeArchived: boolean;
+  readonly projectId?: string;
+}
+
+export interface ListFoldersServiceInput extends ScopedInput {
+  readonly page: number;
+  readonly limit: number;
+  readonly parentId?: string;
+  readonly root?: boolean;
+}
+
+export interface CreateFolderServiceInput extends ScopedInput {
+  readonly name: string;
+  readonly parentId?: string | null;
+}
+
+export interface UpdateFolderServiceInput extends ScopedInput {
+  readonly folderId: string;
+  readonly name?: string;
+  readonly parentId?: string | null;
+}
+
+export interface DeleteFolderServiceInput extends ScopedInput {
+  readonly folderId: string;
+}
+
+@Injectable()
+export class NotesService {
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly authorizationEntry: AuthorizationEntryService,
+    private readonly tenantContext: TenantContextService,
+  ) {}
+
+  async create(input: CreateNoteServiceInput): Promise<NoteCreateResult> {
+    const operation = await this.authorizeCreateDestination(input, input);
+    return this.authorizationEntry.run(operation, async () => {
+      const noteId = randomUUID();
+      const content: NoteDocument = input.content ?? NOTE_DEFAULT_DOCUMENT;
+      const idempotency = createApiIdempotencyIdentity({
+        actorUserId: input.principal.userId,
+        operation: `note.create:${input.workspaceId}`,
+        key: input.idempotencyKey,
+        payload: {
+          title: input.title,
+          projectId: input.projectId,
+          folderId: input.folderId,
+          parentId: input.parentId,
+          type: input.type,
+          pageSize: input.pageSize,
+          isTemplate: input.isTemplate,
+          isPinned: input.isPinned,
+          isArchived: input.isArchived,
+          tagIds: input.tagIds,
+          content,
+        },
+      });
+      const row = await this.database.transaction(
+        async (tx) => {
+          await lockApiIdempotency(tx, idempotency);
+          const replay = await loadApiIdempotency(tx, idempotency);
+          if (replay !== null) {
+            assertIdempotencyPayload(replay, idempotency);
+            return this.readIdempotentNote(tx, replay.resourceId);
+          }
+          await this.validateContainer(tx, input, null);
+          await this.assertTags(tx, input.tagIds);
+          await this.lockSiblingGroups(tx, [input]);
+          // Parent placement is rechecked after the sibling-group lock so a
+          // concurrent parent move cannot leave the new child behind.
+          if (input.parentId !== null) await this.validateContainer(tx, input, null);
+          const sortOrder = await this.positionFor(tx, input, null, null);
+          await tx.insert(notes).values(
+            assertWorkspaceInsertValues(
+              {
+                id: noteId,
+                workspaceId: activeWorkspaceId(this.tenantContext),
+                projectId: input.projectId,
+                folderId: input.folderId,
+                parentId: input.parentId,
+                title: input.title,
+                content,
+                contentPlain: extractNoteContentPlain(content),
+                noteType: this.toDatabaseType(input.type),
+                isTemplate: input.isTemplate,
+                isPinned: input.isPinned,
+                isArchived: input.isArchived,
+                pageSize: input.pageSize,
+                sortOrder,
+                createdById: input.principal.userId,
+                updatedById: input.principal.userId,
+              },
+              this.tenantContext,
+              "note.create",
+            ),
+          );
+          await this.replaceTags(tx, noteId, input.tagIds);
+          await this.recordMutation(tx, "create", noteId, input);
+          await storeApiIdempotency(tx, idempotency, noteId);
+          return this.readRow(tx, noteId);
+        },
+        { isolationLevel: "read committed" },
+      );
+      return Object.freeze({ note: await this.toDetail(row, { ...input, noteId: row.id }) });
+    });
+  }
+
+  async list(input: ListNotesServiceInput): Promise<NotePage> {
+    const operation =
+      input.scope === "project" && input.projectId !== undefined
+        ? await this.authorizationEntry.authorizeUser({
+            principal: input.principal,
+            workspaceId: input.workspaceId,
+            action: "project.read",
+            resource: { kind: "project", id: input.projectId },
+            requestId: input.requestId,
+          })
+        : await this.authorizeWorkspaceRead(input);
+    return this.authorizationEntry.run(operation, async () => {
+      const conditions = await this.listConditions(input);
+      const sortColumn =
+        input.sortBy === "title"
+          ? notes.title
+          : input.sortBy === "createdAt"
+            ? notes.createdAt
+            : input.sortBy === "deletedAt"
+              ? notes.deletedAt
+              : input.sortBy === "sortOrder"
+                ? notes.sortOrder
+                : notes.updatedAt;
+      const direction = input.sortDirection === "asc" ? asc(sortColumn) : desc(sortColumn);
+      const effectiveOrder =
+        input.view === "trash"
+          ? desc(notes.deletedAt)
+          : input.view === "recent" ||
+              input.view === "pinned" ||
+              input.view === "templates" ||
+              input.isArchived === true
+            ? desc(notes.updatedAt)
+            : direction;
+      const rows = await this.database.db
+        .select(this.noteSelection())
+        .from(notes)
+        .where(and(...conditions))
+        .orderBy(effectiveOrder, asc(notes.id))
+        .limit(input.limit + 1)
+        .offset((input.page - 1) * input.limit);
+      const visible = rows.slice(0, input.limit);
+      const tagsByNote = await this.loadTagMap(
+        this.database.db,
+        visible.map((row) => row.id),
+      );
+      return Object.freeze({
+        items: Object.freeze(
+          visible.map((row) => this.toSummary(row, tagsByNote.get(row.id) ?? [])),
+        ),
+        page: input.page,
+        limit: input.limit,
+        hasMore: rows.length > input.limit,
+      });
+    });
+  }
+
+  async read(input: NoteSelector): Promise<NoteDetail> {
+    const operation = await this.authorizeNote(input, "note.read");
+    return this.authorizationEntry.run(operation, async () =>
+      this.toDetail(await this.readDatabaseRow(input.noteId), input),
+    );
+  }
+
+  async update(input: UpdateNoteServiceInput): Promise<NoteUpdateResult> {
+    const operation = await this.authorizeNote(input, "note.update");
+    if (input.tagIds !== undefined) await this.authorizeNote(input, "note.tag");
+    return this.authorizationEntry.run(operation, async () => {
+      const row = await this.database.transaction(
+        async (tx) => {
+          if (input.tagIds !== undefined) await this.assertTags(tx, input.tagIds);
+          const current = await this.readRow(tx, input.noteId);
+          if (current.isDeleted) this.notFound();
+          const changes = {
+            version: sql`${notes.version} + 1`,
+            updatedAt: new Date(),
+            updatedById: input.principal.userId,
+            ...(input.title === undefined ? {} : { title: input.title }),
+            ...(input.type === undefined ? {} : { noteType: this.toDatabaseType(input.type) }),
+            ...(input.pageSize === undefined ? {} : { pageSize: input.pageSize }),
+            ...(input.isTemplate === undefined ? {} : { isTemplate: input.isTemplate }),
+            ...(input.isPinned === undefined ? {} : { isPinned: input.isPinned }),
+            ...(input.isArchived === undefined ? {} : { isArchived: input.isArchived }),
+            ...(input.content === undefined
+              ? {}
+              : {
+                  content: input.content,
+                  contentPlain: extractNoteContentPlain(input.content),
+                }),
+          };
+          const [updated] = await tx
+            .update(notes)
+            .set(changes)
+            .where(
+              and(
+                eq(notes.id, input.noteId),
+                eq(notes.version, input.expectedVersion),
+                whereWorkspace(notes, this.tenantContext),
+              ),
+            )
+            .returning(this.noteSelection());
+          if (updated === undefined) return this.versionConflictOrNotFound(tx, input.noteId);
+          if (input.tagIds !== undefined) await this.replaceTags(tx, input.noteId, input.tagIds);
+          await this.recordMutation(tx, "update", input.noteId, input);
+          return updated;
+        },
+        { isolationLevel: "serializable" },
+      );
+      return Object.freeze({ note: await this.toDetail(row, input) });
+    });
+  }
+
+  async move(input: MoveNoteServiceInput): Promise<NoteMoveResult> {
+    const operation = await this.authorizeNote(input, "note.update");
+    await this.authorizeCreateDestination(input, input);
+    return this.authorizationEntry.run(operation, async () => {
+      const row = await this.database.transaction(
+        async (tx) => {
+          const source = await this.readRow(tx, input.noteId);
+          this.assertVersion(source, input.expectedVersion);
+          if (source.isDeleted) this.notFound();
+          if (input.parentId === input.noteId || input.beforeNoteId === input.noteId)
+            this.invalidMove();
+          await this.validateContainer(tx, input, input.noteId);
+          await this.assertNoNoteCycle(tx, input.noteId, input.parentId);
+          const subtreeIds = await this.noteSubtreeIds(tx, input.noteId);
+          await this.lockSiblingGroups(tx, [
+            source,
+            input,
+            ...subtreeIds.map((parentId) => ({
+              projectId: source.projectId,
+              folderId: source.folderId,
+              parentId,
+            })),
+          ]);
+          const containerChanges =
+            source.projectId !== input.projectId || source.folderId !== input.folderId;
+          if (containerChanges) {
+            for (const descendantId of subtreeIds.filter((id) => id !== input.noteId)) {
+              await this.authorizeNote(
+                {
+                  principal: input.principal,
+                  workspaceId: input.workspaceId,
+                  noteId: descendantId,
+                  requestId: input.requestId,
+                },
+                "note.update",
+              );
+            }
+          }
+          if (input.parentId !== null) await this.validateContainer(tx, input, input.noteId);
+          const sortOrder = await this.positionFor(
+            tx,
+            input,
+            input.beforeNoteId ?? null,
+            input.noteId,
+          );
+          const descendantIds = subtreeIds.filter((id) => id !== input.noteId);
+          if (descendantIds.length > 0 && containerChanges) {
+            await tx
+              .update(notes)
+              .set({
+                projectId: input.projectId,
+                folderId: input.folderId,
+                version: sql`${notes.version} + 1`,
+                updatedAt: new Date(),
+                updatedById: input.principal.userId,
+              })
+              .where(
+                and(inArray(notes.id, descendantIds), whereWorkspace(notes, this.tenantContext)),
+              );
+          }
+          const [updated] = await tx
+            .update(notes)
+            .set({
+              projectId: input.projectId,
+              folderId: input.folderId,
+              parentId: input.parentId,
+              sortOrder,
+              version: sql`${notes.version} + 1`,
+              updatedAt: new Date(),
+              updatedById: input.principal.userId,
+            })
+            .where(
+              and(
+                eq(notes.id, input.noteId),
+                eq(notes.version, input.expectedVersion),
+                whereWorkspace(notes, this.tenantContext),
+              ),
+            )
+            .returning(this.noteSelection());
+          if (updated === undefined) this.versionConflict();
+          await this.recordMutation(tx, "move", input.noteId, input);
+          return updated;
+        },
+        { isolationLevel: "read committed" },
+      );
+      const tagIds = await this.loadTagIds(this.database.db, row.id);
+      return Object.freeze({ note: Object.freeze(this.toSummary(row, tagIds)) });
+    });
+  }
+
+  softDelete(input: VersionedNoteServiceInput): Promise<NoteDeleteResult> {
+    return this.setSubtreeDeleted(input, true);
+  }
+
+  restore(input: VersionedNoteServiceInput): Promise<NoteRestoreResult> {
+    return this.setSubtreeDeleted(input, false);
+  }
+
+  async permanentDelete(
+    input: PermanentDeleteNoteServiceInput,
+  ): Promise<NotePermanentDeleteResult> {
+    const operation = await this.authorizeNote(input, "note.delete");
+    return this.authorizationEntry.run(operation, async () => {
+      await this.database.transaction(
+        async (tx) => {
+          const row = await this.readRow(tx, input.noteId);
+          this.assertVersion(row, input.expectedVersion);
+          if (!row.isDeleted) this.noteStateConflict();
+          if (row.title !== input.expectedTitle) this.noteStateConflict();
+          const subtree = await this.noteSubtreeRows(tx, input.noteId, true);
+          if (subtree.some((descendant) => !descendant.isDeleted)) this.activeSubtreeConflict();
+          await this.recordMutation(tx, "permanentDelete", input.noteId, input);
+          const deleted = await tx
+            .delete(notes)
+            .where(and(eq(notes.id, input.noteId), whereWorkspace(notes, this.tenantContext)))
+            .returning({ id: notes.id });
+          if (deleted.length !== 1) this.notFound();
+        },
+        { isolationLevel: "serializable" },
+      );
+      return Object.freeze({ id: input.noteId, permanentlyDeleted: true as const });
+    });
+  }
+
+  async navigation(input: NavigationServiceInput): Promise<NoteNavigation> {
+    const operation =
+      input.projectId === undefined
+        ? await this.authorizeWorkspaceRead(input)
+        : await this.authorizationEntry.authorizeUser({
+            principal: input.principal,
+            workspaceId: input.workspaceId,
+            action: "project.read",
+            resource: { kind: "project", id: input.projectId },
+            requestId: input.requestId,
+          });
+    return this.authorizationEntry.run(operation, async () => {
+      const conditions: SQL[] = [
+        whereWorkspace(notes, this.tenantContext),
+        eq(notes.isDeleted, false),
+        await this.projectVisibility(input.principal.userId),
+      ];
+      if (!input.includeArchived) conditions.push(eq(notes.isArchived, false));
+      if (input.projectId !== undefined) conditions.push(eq(notes.projectId, input.projectId));
+      const rows = await this.database.db
+        .select({
+          id: notes.id,
+          projectId: notes.projectId,
+          folderId: notes.folderId,
+          parentId: notes.parentId,
+          title: notes.title,
+          noteType: notes.noteType,
+          sortOrder: notes.sortOrder,
+          isTemplate: notes.isTemplate,
+          isPinned: notes.isPinned,
+          isArchived: notes.isArchived,
+          version: notes.version,
+          updatedAt: notes.updatedAt,
+        })
+        .from(notes)
+        .where(and(...conditions))
+        .orderBy(
+          asc(notes.projectId),
+          asc(notes.folderId),
+          asc(notes.parentId),
+          asc(notes.sortOrder),
+          asc(notes.id),
+        )
+        .limit(input.limit + 1);
+      const items = rows.slice(0, input.limit).map((row) =>
+        Object.freeze({
+          id: row.id,
+          projectId: row.projectId,
+          folderId: row.folderId,
+          parentId: row.parentId,
+          title: row.title,
+          type: this.fromDatabaseType(row.noteType),
+          sortOrder: row.sortOrder,
+          isTemplate: row.isTemplate,
+          isPinned: row.isPinned,
+          isArchived: row.isArchived,
+          version: row.version,
+          updatedAt: row.updatedAt.toISOString(),
+        }),
+      );
+      return Object.freeze({
+        items: Object.freeze(items),
+        limit: input.limit,
+        returned: items.length,
+        truncated: rows.length > input.limit,
+      });
+    });
+  }
+
+  async listFolders(input: ListFoldersServiceInput): Promise<FolderPage> {
+    const operation = await this.authorizeWorkspaceRead(input);
+    return this.authorizationEntry.run(operation, async () => {
+      const conditions: SQL[] = [whereWorkspace(folders, this.tenantContext)];
+      if (input.parentId !== undefined) conditions.push(eq(folders.parentId, input.parentId));
+      if (input.root === true) conditions.push(isNull(folders.parentId));
+      const rows = await this.database.db
+        .select(this.folderSelection())
+        .from(folders)
+        .where(and(...conditions))
+        .orderBy(asc(folders.name), asc(folders.id))
+        .limit(input.limit + 1)
+        .offset((input.page - 1) * input.limit);
+      return Object.freeze({
+        items: Object.freeze(rows.slice(0, input.limit).map((row) => this.toFolder(row))),
+        page: input.page,
+        limit: input.limit,
+        hasMore: rows.length > input.limit,
+      });
+    });
+  }
+
+  async createFolder(input: CreateFolderServiceInput): Promise<FolderCreateResult> {
+    const operation = await this.authorizationEntry.authorizeUser({
+      principal: input.principal,
+      workspaceId: input.workspaceId,
+      action: "folder.create",
+      resource:
+        input.parentId === undefined || input.parentId === null
+          ? { kind: "workspace" }
+          : { kind: "folder", id: input.parentId },
+      requestId: input.requestId,
+    });
+    return this.authorizationEntry.run(operation, async () => {
+      const folderId = randomUUID();
+      const row = await this.database.transaction(
+        async (tx) => {
+          await this.assertFolderPlacement(tx, null, input.parentId ?? null);
+          await tx.insert(folders).values(
+            assertWorkspaceInsertValues(
+              {
+                id: folderId,
+                workspaceId: activeWorkspaceId(this.tenantContext),
+                parentId: input.parentId ?? null,
+                name: input.name,
+                createdById: input.principal.userId,
+              },
+              this.tenantContext,
+              "folder.create",
+            ),
+          );
+          await this.recordMutation(tx, "folderCreate", folderId, input);
+          return this.readFolder(tx, folderId);
+        },
+        { isolationLevel: "serializable" },
+      );
+      return Object.freeze({ folder: Object.freeze(this.toFolder(row)) });
+    });
+  }
+
+  async updateFolder(input: UpdateFolderServiceInput): Promise<FolderUpdateResult> {
+    const operation = await this.authorizationEntry.authorizeUser({
+      principal: input.principal,
+      workspaceId: input.workspaceId,
+      action: "folder.update",
+      resource: { kind: "folder", id: input.folderId },
+      requestId: input.requestId,
+    });
+    return this.authorizationEntry.run(operation, async () => {
+      const row = await this.database.transaction(
+        async (tx) => {
+          await this.readFolder(tx, input.folderId);
+          if (input.parentId !== undefined) {
+            await this.assertFolderPlacement(tx, input.folderId, input.parentId);
+            const tree = await this.loadFolderTree(tx);
+            for (const descendantId of this.folderSubtreeIds(tree, input.folderId).filter(
+              (id) => id !== input.folderId,
+            )) {
+              await this.authorizationEntry.authorizeUser({
+                principal: input.principal,
+                workspaceId: input.workspaceId,
+                action: "folder.update",
+                resource: { kind: "folder", id: descendantId },
+                requestId: input.requestId,
+              });
+            }
+          }
+          const changes = {
+            updatedAt: new Date(),
+            ...(input.name === undefined ? {} : { name: input.name }),
+            ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
+          };
+          const [updated] = await tx
+            .update(folders)
+            .set(changes)
+            .where(and(eq(folders.id, input.folderId), whereWorkspace(folders, this.tenantContext)))
+            .returning(this.folderSelection());
+          if (updated === undefined) this.notFound();
+          await this.recordMutation(tx, "folderUpdate", input.folderId, input);
+          return updated;
+        },
+        { isolationLevel: "serializable" },
+      );
+      return Object.freeze({ folder: Object.freeze(this.toFolder(row)) });
+    });
+  }
+
+  async deleteFolder(input: DeleteFolderServiceInput): Promise<FolderDeleteResult> {
+    const operation = await this.authorizationEntry.authorizeUser({
+      principal: input.principal,
+      workspaceId: input.workspaceId,
+      action: "folder.delete",
+      resource: { kind: "folder", id: input.folderId },
+      requestId: input.requestId,
+    });
+    return this.authorizationEntry.run(operation, async () => {
+      const result = await this.database.transaction(
+        async (tx) => {
+          await this.readFolder(tx, input.folderId);
+          const tree = await this.loadFolderTree(tx);
+          const ids = this.folderSubtreeIds(tree, input.folderId);
+          const unfiled = await tx
+            .update(notes)
+            .set({
+              folderId: null,
+              version: sql`${notes.version} + 1`,
+              updatedAt: new Date(),
+              updatedById: input.principal.userId,
+            })
+            .where(and(inArray(notes.folderId, ids), whereWorkspace(notes, this.tenantContext)))
+            .returning({ id: notes.id });
+          await this.recordMutation(tx, "folderDelete", input.folderId, input);
+          const deleted = await tx
+            .delete(folders)
+            .where(and(eq(folders.id, input.folderId), whereWorkspace(folders, this.tenantContext)))
+            .returning({ id: folders.id });
+          if (deleted.length !== 1) this.notFound();
+          return { removedFolders: ids.length, unfiledNotes: unfiled.length };
+        },
+        { isolationLevel: "serializable" },
+      );
+      return Object.freeze({
+        id: input.folderId,
+        deleted: true as const,
+        removedFolders: result.removedFolders,
+        unfiledNotes: result.unfiledNotes,
+      });
+    });
+  }
+
+  private async setSubtreeDeleted(
+    input: VersionedNoteServiceInput,
+    deleted: true,
+  ): Promise<NoteDeleteResult>;
+  private async setSubtreeDeleted(
+    input: VersionedNoteServiceInput,
+    deleted: false,
+  ): Promise<NoteRestoreResult>;
+  private async setSubtreeDeleted(
+    input: VersionedNoteServiceInput,
+    deleted: boolean,
+  ): Promise<NoteDeleteResult | NoteRestoreResult> {
+    const operation = await this.authorizeNote(input, deleted ? "note.delete" : "note.update");
+    return this.authorizationEntry.run(operation, async () => {
+      const at = new Date();
+      const result = await this.database.transaction(
+        async (tx) => {
+          const root = await this.readRow(tx, input.noteId);
+          this.assertVersion(root, input.expectedVersion);
+          if (root.isDeleted === deleted) this.noteStateConflict();
+          const subtree = await this.noteSubtreeRows(tx, input.noteId, true);
+          const batchId = deleted ? randomUUID() : root.deletionBatchId;
+          if (!deleted) {
+            await this.assertNoDeletedAncestor(tx, root.parentId);
+          }
+          const ids = deleted
+            ? subtree.filter((row) => !row.isDeleted).map((row) => row.id)
+            : batchId === null
+              ? [root.id]
+              : subtree
+                  .filter((row) => row.isDeleted && row.deletionBatchId === batchId)
+                  .map((row) => row.id);
+          if (ids.length === 0) this.noteStateConflict();
+          await this.lockSiblingGroups(
+            tx,
+            ids.map((parentId) => ({
+              projectId: root.projectId,
+              folderId: root.folderId,
+              parentId,
+            })),
+          );
+          if (!deleted) {
+            for (const descendantId of ids.filter((id) => id !== input.noteId)) {
+              await this.authorizeNote(
+                {
+                  principal: input.principal,
+                  workspaceId: input.workspaceId,
+                  noteId: descendantId,
+                  requestId: input.requestId,
+                },
+                "note.update",
+              );
+            }
+          }
+          const updated = await tx
+            .update(notes)
+            .set({
+              isDeleted: deleted,
+              deletedAt: deleted ? at : null,
+              deletionBatchId: deleted ? batchId : null,
+              version: sql`${notes.version} + 1`,
+              updatedAt: at,
+              updatedById: input.principal.userId,
+            })
+            .where(
+              and(
+                inArray(notes.id, ids),
+                deleted ? eq(notes.isDeleted, false) : eq(notes.isDeleted, true),
+                whereWorkspace(notes, this.tenantContext),
+              ),
+            )
+            .returning({ id: notes.id, version: notes.version });
+          const updatedRoot = updated.find((row) => row.id === input.noteId);
+          if (updatedRoot === undefined) this.versionConflict();
+          await this.recordMutation(tx, deleted ? "delete" : "restore", input.noteId, input);
+          return { affected: updated.length, version: updatedRoot.version };
+        },
+        { isolationLevel: "serializable" },
+      );
+      return deleted
+        ? Object.freeze({
+            id: input.noteId,
+            deleted: true as const,
+            affected: result.affected,
+            version: result.version,
+            deletedAt: at.toISOString(),
+          })
+        : Object.freeze({
+            id: input.noteId,
+            restored: true as const,
+            affected: result.affected,
+            version: result.version,
+          });
+    });
+  }
+
+  private async authorizeWorkspaceRead(input: ScopedInput) {
+    return this.authorizationEntry.authorizeUser({
+      principal: input.principal,
+      workspaceId: input.workspaceId,
+      action: "workspace.read",
+      resource: { kind: "workspace" },
+      requestId: input.requestId,
+    });
+  }
+
+  private authorizeNote(
+    input: NoteSelector,
+    action: "note.read" | "note.update" | "note.delete" | "note.tag",
+  ) {
+    return this.authorizationEntry.authorizeUser({
+      principal: input.principal,
+      workspaceId: input.workspaceId,
+      action,
+      resource: { kind: "note", id: input.noteId },
+      requestId: input.requestId,
+    });
+  }
+
+  private authorizeCreateDestination(input: ScopedInput, container: Container) {
+    return this.authorizationEntry.authorizeUser({
+      principal: input.principal,
+      workspaceId: input.workspaceId,
+      action: "note.create",
+      resource:
+        container.parentId !== null
+          ? { kind: "note", id: container.parentId }
+          : container.projectId !== null
+            ? { kind: "project", id: container.projectId }
+            : { kind: "workspace" },
+      requestId: input.requestId,
+    });
+  }
+
+  private async listConditions(input: ListNotesServiceInput): Promise<SQL[]> {
+    const conditions: SQL[] = [
+      whereWorkspace(notes, this.tenantContext),
+      await this.projectVisibility(input.principal.userId),
+      eq(notes.isDeleted, input.view === "trash"),
+    ];
+    if (input.scope === "project" && input.projectId !== undefined)
+      conditions.push(eq(notes.projectId, input.projectId));
+    if (input.scope === "workspace-root") conditions.push(isNull(notes.projectId));
+    if (input.folderId !== undefined) conditions.push(eq(notes.folderId, input.folderId));
+    if (input.rootFolder === true) conditions.push(isNull(notes.folderId));
+    if (input.parentId !== undefined) conditions.push(eq(notes.parentId, input.parentId));
+    if (input.rootParent === true) conditions.push(isNull(notes.parentId));
+    if (input.type !== undefined)
+      conditions.push(eq(notes.noteType, this.toDatabaseType(input.type)));
+    if (input.view === "pinned") conditions.push(eq(notes.isPinned, true));
+    if (input.view === "templates") conditions.push(eq(notes.isTemplate, true));
+    if (input.isTemplate !== undefined) conditions.push(eq(notes.isTemplate, input.isTemplate));
+    if (input.isPinned !== undefined) conditions.push(eq(notes.isPinned, input.isPinned));
+    if (input.isArchived !== undefined) conditions.push(eq(notes.isArchived, input.isArchived));
+    if (input.tagId !== undefined) {
+      conditions.push(
+        exists(
+          this.database.db
+            .select({ noteId: noteTags.noteId })
+            .from(noteTags)
+            .innerJoin(tags, eq(tags.id, noteTags.tagId))
+            .where(
+              and(
+                eq(noteTags.noteId, notes.id),
+                eq(noteTags.tagId, input.tagId),
+                whereWorkspace(tags, this.tenantContext),
+              ),
+            ),
+        ),
+      );
+    }
+    return conditions;
+  }
+
+  private async projectVisibility(userId: string): Promise<SQL> {
+    const [membership] = await this.database.db
+      .select({ role: workspaceMembers.role })
+      .from(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.userId, userId),
+          whereWorkspace(workspaceMembers, this.tenantContext),
+        ),
+      )
+      .limit(1);
+    if (membership === undefined) this.notFound();
+    if (membership.role === "owner" || membership.role === "admin") return sql`true`;
+    const actorGrant = this.database.db
+      .select({ id: projectAccess.id })
+      .from(projectAccess)
+      .where(and(eq(projectAccess.projectId, notes.projectId), eq(projectAccess.userId, userId)));
+    const visibleProject = this.database.db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(
+        and(
+          eq(projects.id, notes.projectId),
+          whereWorkspace(projects, this.tenantContext),
+          or(eq(projects.isRestricted, false), exists(actorGrant)),
+        ),
+      );
+    return or(isNull(notes.projectId), exists(visibleProject)) as SQL;
+  }
+
+  private async validateContainer(
+    tx: DatabaseTransaction,
+    container: Container,
+    movingNoteId: string | null,
+  ): Promise<void> {
+    if (container.projectId !== null) {
+      const [project] = await tx
+        .select({ id: projects.id, status: projects.status })
+        .from(projects)
+        .where(
+          and(eq(projects.id, container.projectId), whereWorkspace(projects, this.tenantContext)),
+        )
+        .limit(1);
+      if (project === undefined || project.status === "archived") this.notFound();
+    }
+    if (container.folderId !== null) await this.readFolder(tx, container.folderId);
+    if (container.parentId !== null) {
+      if (container.parentId === movingNoteId) this.invalidMove();
+      const parent = await this.readRow(tx, container.parentId);
+      if (parent.isDeleted || !this.sameContainer(parent, container)) this.notFound();
+    }
+  }
+
+  private async assertNoNoteCycle(
+    tx: DatabaseTransaction,
+    noteId: string,
+    parentId: string | null,
+  ): Promise<void> {
+    const seen = new Set<string>();
+    let cursor = parentId;
+    while (cursor !== null) {
+      if (cursor === noteId || seen.has(cursor)) this.invalidMove();
+      seen.add(cursor);
+      const ancestor = await this.readRow(tx, cursor);
+      cursor = ancestor.parentId;
+    }
+  }
+
+  private async assertTags(tx: DatabaseTransaction, tagIds: readonly string[]): Promise<void> {
+    if (tagIds.length === 0) return;
+    const rows = await tx
+      .select({ id: tags.id })
+      .from(tags)
+      .where(and(inArray(tags.id, [...tagIds]), whereWorkspace(tags, this.tenantContext)));
+    if (rows.length !== tagIds.length) this.notFound();
+  }
+
+  private async replaceTags(
+    tx: DatabaseTransaction,
+    noteId: string,
+    tagIds: readonly string[],
+  ): Promise<void> {
+    await tx.delete(noteTags).where(eq(noteTags.noteId, noteId));
+    if (tagIds.length > 0) {
+      await tx.insert(noteTags).values(tagIds.map((tagId) => ({ noteId, tagId })));
+    }
+  }
+
+  private async lockSiblingGroups(
+    tx: DatabaseTransaction,
+    containers: readonly Container[],
+  ): Promise<void> {
+    const keys = [...new Set(containers.map((container) => this.containerKey(container)))].sort();
+    for (const key of keys) {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+    }
+  }
+
+  private async positionFor(
+    tx: DatabaseTransaction,
+    container: Container,
+    beforeNoteId: string | null,
+    excludedNoteId: string | null,
+  ): Promise<number> {
+    let siblings = await this.loadSiblings(tx, container, excludedNoteId);
+    if (this.requiresRenormalization(siblings)) {
+      siblings = await this.renormalize(tx, siblings);
+    }
+    let position = this.calculatePosition(siblings, beforeNoteId);
+    if (
+      !Number.isFinite(position) ||
+      Math.abs(position) > Number.MAX_SAFE_INTEGER / 4 ||
+      this.gapExhausted(siblings, beforeNoteId, position)
+    ) {
+      siblings = await this.renormalize(tx, siblings);
+      position = this.calculatePosition(siblings, beforeNoteId);
+    }
+    if (!Number.isFinite(position))
+      throw new ApiHttpException(HttpStatus.CONFLICT, {
+        code: "ORDER_CONFLICT",
+        message: "The note order changed. Retry the operation.",
+      });
+    return position;
+  }
+
+  private async loadSiblings(
+    tx: DatabaseTransaction,
+    container: Container,
+    excludedNoteId: string | null,
+  ): Promise<Array<{ id: string; sortOrder: number; isDeleted: boolean }>> {
+    const conditions = [
+      whereWorkspace(notes, this.tenantContext),
+      ...this.containerConditions(container),
+    ];
+    const rows = await tx
+      .select({ id: notes.id, sortOrder: notes.sortOrder, isDeleted: notes.isDeleted })
+      .from(notes)
+      .where(and(...conditions))
+      .orderBy(asc(notes.sortOrder), asc(notes.id));
+    return excludedNoteId === null ? rows : rows.filter((row) => row.id !== excludedNoteId);
+  }
+
+  private calculatePosition(
+    siblings: readonly { id: string; sortOrder: number; isDeleted: boolean }[],
+    beforeNoteId: string | null,
+  ): number {
+    if (beforeNoteId !== null) {
+      const index = siblings.findIndex((row) => row.id === beforeNoteId);
+      if (index < 0) this.notFound();
+      if (siblings[index]!.isDeleted) this.notFound();
+      if (index === 0) return siblings[0]!.sortOrder - 1;
+      return (siblings[index - 1]!.sortOrder + siblings[index]!.sortOrder) / 2;
+    }
+    if (siblings.length === 0) return 1;
+    return siblings[siblings.length - 1]!.sortOrder + 1;
+  }
+
+  private gapExhausted(
+    siblings: readonly { id: string; sortOrder: number; isDeleted: boolean }[],
+    beforeNoteId: string | null,
+    position: number,
+  ): boolean {
+    if (beforeNoteId === null || siblings.length === 0)
+      return position === siblings.at(-1)?.sortOrder;
+    const index = siblings.findIndex((row) => row.id === beforeNoteId);
+    if (index <= 0) return position === siblings[0]?.sortOrder;
+    return position === siblings[index - 1]?.sortOrder || position === siblings[index]?.sortOrder;
+  }
+
+  private requiresRenormalization(rows: readonly { sortOrder: number }[]): boolean {
+    const values = new Set<number>();
+    for (const row of rows) {
+      if (!Number.isFinite(row.sortOrder) || values.has(row.sortOrder)) return true;
+      values.add(row.sortOrder);
+    }
+    return false;
+  }
+
+  private async renormalize(
+    tx: DatabaseTransaction,
+    rows: readonly { id: string; sortOrder: number; isDeleted: boolean }[],
+  ): Promise<Array<{ id: string; sortOrder: number; isDeleted: boolean }>> {
+    const normalized: Array<{ id: string; sortOrder: number; isDeleted: boolean }> = [];
+    for (const [index, row] of rows.entries()) {
+      const sortOrder = index + 1;
+      if (row.sortOrder !== sortOrder) {
+        await tx
+          .update(notes)
+          .set({
+            sortOrder,
+            version: sql`${notes.version} + 1`,
+            updatedAt: new Date(),
+            updatedById: this.requireActorId(),
+          })
+          .where(and(eq(notes.id, row.id), whereWorkspace(notes, this.tenantContext)));
+      }
+      normalized.push({ id: row.id, sortOrder, isDeleted: row.isDeleted });
+    }
+    return normalized;
+  }
+
+  private containerConditions(container: Container): SQL[] {
+    return [
+      container.projectId === null
+        ? isNull(notes.projectId)
+        : eq(notes.projectId, container.projectId),
+      container.folderId === null ? isNull(notes.folderId) : eq(notes.folderId, container.folderId),
+      container.parentId === null ? isNull(notes.parentId) : eq(notes.parentId, container.parentId),
+    ];
+  }
+
+  private async noteSubtreeIds(tx: DatabaseTransaction, rootId: string): Promise<string[]> {
+    return (await this.noteSubtreeRows(tx, rootId, false)).map((row) => row.id);
+  }
+
+  private async noteSubtreeRows(
+    tx: DatabaseTransaction,
+    rootId: string,
+    lock: boolean,
+  ): Promise<
+    Array<{
+      id: string;
+      parentId: string | null;
+      isDeleted: boolean;
+      deletionBatchId: string | null;
+    }>
+  > {
+    const query = tx
+      .select({
+        id: notes.id,
+        parentId: notes.parentId,
+        isDeleted: notes.isDeleted,
+        deletionBatchId: notes.deletionBatchId,
+      })
+      .from(notes)
+      .where(whereWorkspace(notes, this.tenantContext));
+    const rows = lock ? await query.for("update") : await query;
+    const children = new Map<string, string[]>();
+    for (const row of rows) {
+      if (row.parentId === null) continue;
+      const list = children.get(row.parentId) ?? [];
+      list.push(row.id);
+      children.set(row.parentId, list);
+    }
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const result: Array<{
+      id: string;
+      parentId: string | null;
+      isDeleted: boolean;
+      deletionBatchId: string | null;
+    }> = [];
+    const stack = [rootId];
+    const seen = new Set<string>();
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (seen.has(id)) this.invalidMove();
+      seen.add(id);
+      const row = byId.get(id);
+      if (row === undefined) this.notFound();
+      result.push(row);
+      stack.push(...(children.get(id) ?? []));
+    }
+    return result;
+  }
+
+  private async assertNoDeletedAncestor(
+    tx: DatabaseTransaction,
+    parentId: string | null,
+  ): Promise<void> {
+    const seen = new Set<string>();
+    let cursor = parentId;
+    while (cursor !== null) {
+      if (seen.has(cursor)) this.invalidMove();
+      seen.add(cursor);
+      const ancestor = await this.readRow(tx, cursor);
+      if (ancestor.isDeleted) this.deletedAncestorConflict();
+      cursor = ancestor.parentId;
+    }
+  }
+
+  private async assertFolderPlacement(
+    tx: DatabaseTransaction,
+    movingFolderId: string | null,
+    parentId: string | null,
+  ): Promise<void> {
+    if (movingFolderId !== null && parentId === movingFolderId) this.invalidFolder();
+    const tree = await this.loadFolderTree(tx);
+    if (parentId !== null && !tree.some((folder) => folder.id === parentId)) this.notFound();
+    if (movingFolderId !== null && !tree.some((folder) => folder.id === movingFolderId))
+      this.notFound();
+    const parentDepth = parentId === null ? 0 : this.folderDepth(tree, parentId);
+    const subtreeDepth =
+      movingFolderId === null ? 1 : this.folderSubtreeDepth(tree, movingFolderId);
+    if (
+      movingFolderId !== null &&
+      this.folderSubtreeIds(tree, movingFolderId).includes(parentId ?? "")
+    )
+      this.invalidFolder();
+    if (parentDepth + subtreeDepth > FOLDER_MAX_DEPTH) {
+      throw new ApiHttpException(HttpStatus.BAD_REQUEST, {
+        code: "FOLDER_DEPTH_EXCEEDED",
+        message: "Folders may be nested up to three levels.",
+      });
+    }
+  }
+
+  private loadFolderTree(tx: DatabaseTransaction): Promise<FolderRow[]> {
+    return tx
+      .select(this.folderSelection())
+      .from(folders)
+      .where(whereWorkspace(folders, this.tenantContext));
+  }
+
+  private folderDepth(tree: readonly FolderRow[], folderId: string): number {
+    const byId = new Map(tree.map((folder) => [folder.id, folder]));
+    let depth = 0;
+    let cursor: string | null = folderId;
+    const seen = new Set<string>();
+    while (cursor !== null) {
+      if (seen.has(cursor)) this.invalidFolder();
+      seen.add(cursor);
+      const row = byId.get(cursor);
+      if (row === undefined) this.notFound();
+      depth += 1;
+      cursor = row.parentId;
+    }
+    return depth;
+  }
+
+  private folderSubtreeIds(tree: readonly FolderRow[], rootId: string): string[] {
+    const children = new Map<string, string[]>();
+    for (const row of tree) {
+      if (row.parentId === null) continue;
+      const list = children.get(row.parentId) ?? [];
+      list.push(row.id);
+      children.set(row.parentId, list);
+    }
+    const result: string[] = [];
+    const stack = [rootId];
+    const seen = new Set<string>();
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (seen.has(id)) this.invalidFolder();
+      seen.add(id);
+      result.push(id);
+      stack.push(...(children.get(id) ?? []));
+    }
+    return result;
+  }
+
+  private folderSubtreeDepth(tree: readonly FolderRow[], rootId: string): number {
+    const ids = new Set(this.folderSubtreeIds(tree, rootId));
+    let maximum = 1;
+    for (const id of ids) {
+      let depth = 1;
+      let cursor = tree.find((folder) => folder.id === id)?.parentId ?? null;
+      while (cursor !== null && ids.has(cursor)) {
+        depth += 1;
+        cursor = tree.find((folder) => folder.id === cursor)?.parentId ?? null;
+      }
+      maximum = Math.max(maximum, depth);
+    }
+    return maximum;
+  }
+
+  private async readDatabaseRow(noteId: string): Promise<NoteRow> {
+    const [row] = await this.database.db
+      .select(this.noteSelection())
+      .from(notes)
+      .where(and(eq(notes.id, noteId), whereWorkspace(notes, this.tenantContext)))
+      .limit(1);
+    if (row === undefined) this.notFound();
+    return row;
+  }
+
+  private async readRow(tx: DatabaseTransaction, noteId: string): Promise<NoteRow> {
+    const [row] = await tx
+      .select(this.noteSelection())
+      .from(notes)
+      .where(and(eq(notes.id, noteId), whereWorkspace(notes, this.tenantContext)))
+      .limit(1);
+    if (row === undefined) this.notFound();
+    return row;
+  }
+
+  private async readIdempotentNote(tx: DatabaseTransaction, noteId: string): Promise<NoteRow> {
+    try {
+      return await this.readRow(tx, noteId);
+    } catch (error: unknown) {
+      if (error instanceof ApiHttpException && error.getStatus() === HttpStatus.NOT_FOUND) {
+        throw new ApiHttpException(HttpStatus.CONFLICT, {
+          code: "IDEMPOTENT_RESULT_UNAVAILABLE",
+          message: "The idempotent note result is no longer available.",
+        });
+      }
+      throw error;
+    }
+  }
+
+  private async readFolder(tx: DatabaseTransaction, folderId: string): Promise<FolderRow> {
+    const [row] = await tx
+      .select(this.folderSelection())
+      .from(folders)
+      .where(and(eq(folders.id, folderId), whereWorkspace(folders, this.tenantContext)))
+      .limit(1);
+    if (row === undefined) this.notFound();
+    return row;
+  }
+
+  private async loadTagIds(
+    db: DatabaseService["db"] | DatabaseTransaction,
+    noteId: string,
+  ): Promise<string[]> {
+    const map = await this.loadTagMap(db, [noteId]);
+    return map.get(noteId) ?? [];
+  }
+
+  private async loadTagMap(
+    db: DatabaseService["db"] | DatabaseTransaction,
+    noteIds: readonly string[],
+  ): Promise<Map<string, string[]>> {
+    const result = new Map<string, string[]>();
+    if (noteIds.length === 0) return result;
+    const rows = await db
+      .select({ noteId: noteTags.noteId, tagId: noteTags.tagId })
+      .from(noteTags)
+      .innerJoin(tags, eq(tags.id, noteTags.tagId))
+      .where(and(inArray(noteTags.noteId, [...noteIds]), whereWorkspace(tags, this.tenantContext)))
+      .orderBy(asc(noteTags.noteId), asc(noteTags.tagId));
+    for (const row of rows) {
+      const list = result.get(row.noteId) ?? [];
+      list.push(row.tagId);
+      result.set(row.noteId, list);
+    }
+    return result;
+  }
+
+  private async toDetail(row: NoteRow, input: NoteSelector): Promise<NoteDetail> {
+    const tagIds = await this.loadTagIds(this.database.db, row.id);
+    const [canUpdate, canDelete] = await Promise.all([
+      this.can(input, "note.update"),
+      this.can(input, "note.delete"),
+    ]);
+    return Object.freeze({
+      ...this.toSummary(row, tagIds),
+      content: row.content as NoteDocument,
+      contentPlain: row.contentPlain ?? "",
+      createdById: row.createdById,
+      updatedById: row.updatedById,
+      currentActorId: input.principal.userId,
+      capabilities: Object.freeze({ canUpdate, canDelete, canShare: canUpdate }),
+    });
+  }
+
+  private toSummary(row: NoteRow, tagIds: readonly string[]): NoteSummary {
+    return {
+      id: row.id,
+      workspaceId: row.workspaceId,
+      location: row.projectId === null ? "workspace-root" : "project",
+      projectId: row.projectId,
+      folderId: row.folderId,
+      parentId: row.parentId,
+      title: row.title,
+      type: this.fromDatabaseType(row.noteType),
+      pageSize: row.pageSize === "letter" ? "letter" : "a4",
+      sortOrder: row.sortOrder,
+      isTemplate: row.isTemplate,
+      isPinned: row.isPinned,
+      isArchived: row.isArchived,
+      isDeleted: row.isDeleted,
+      tagIds: Object.freeze([...tagIds]),
+      version: row.version,
+      deletedAt: row.deletedAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  private toFolder(row: FolderRow): FolderSummary {
+    return {
+      id: row.id,
+      workspaceId: row.workspaceId,
+      parentId: row.parentId,
+      name: row.name,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  private noteSelection() {
+    return {
+      id: notes.id,
+      workspaceId: notes.workspaceId,
+      projectId: notes.projectId,
+      folderId: notes.folderId,
+      parentId: notes.parentId,
+      title: notes.title,
+      content: notes.content,
+      contentPlain: notes.contentPlain,
+      noteType: notes.noteType,
+      isTemplate: notes.isTemplate,
+      isPinned: notes.isPinned,
+      isArchived: notes.isArchived,
+      isDeleted: notes.isDeleted,
+      deletedAt: notes.deletedAt,
+      deletionBatchId: notes.deletionBatchId,
+      version: notes.version,
+      pageSize: notes.pageSize,
+      sortOrder: notes.sortOrder,
+      createdById: notes.createdById,
+      updatedById: notes.updatedById,
+      createdAt: notes.createdAt,
+      updatedAt: notes.updatedAt,
+    };
+  }
+
+  private folderSelection() {
+    return {
+      id: folders.id,
+      workspaceId: folders.workspaceId,
+      parentId: folders.parentId,
+      name: folders.name,
+      createdAt: folders.createdAt,
+      updatedAt: folders.updatedAt,
+    };
+  }
+
+  private async recordMutation(
+    tx: DatabaseTransaction,
+    mutation: NoteMutation,
+    entityId: string,
+    input: ScopedInput,
+  ): Promise<void> {
+    const folderMutation = mutation.startsWith("folder");
+    const eventName = NOTE_DOMAIN_EVENTS[mutation];
+    await tx.insert(auditLogs).values({
+      workspaceId: activeWorkspaceId(this.tenantContext),
+      userId: input.principal.userId,
+      action: eventName,
+      entityType: folderMutation ? FOLDER_AUDIT_ENTITY_TYPE : NOTE_AUDIT_ENTITY_TYPE,
+      entityId,
+      metadata: {},
+      requestId: input.requestId ?? null,
+    });
+    const intentId = randomUUID();
+    const payload: JobOutboxPayload = Object.freeze({
+      action: eventName,
+      intentId,
+      workspaceId: activeWorkspaceId(this.tenantContext),
+      resourceIds: Object.freeze([entityId]),
+      actorId: input.principal.userId,
+    });
+    await tx.insert(jobOutbox).values({
+      id: intentId,
+      workspaceId: activeWorkspaceId(this.tenantContext),
+      queueName: NOTE_DOMAIN_EVENT_QUEUE,
+      jobType: eventName,
+      payloadVersion: NOTE_DOMAIN_EVENT_PAYLOAD_VERSION,
+      payload,
+      payloadHash: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
+      idempotencyKey: `${NOTE_DOMAIN_EVENT_IDEMPOTENCY_PREFIX}${eventName}:${entityId}:${intentId}`,
+      correlationId: input.requestId ?? null,
+    });
+  }
+
+  private async versionConflictOrNotFound(tx: DatabaseTransaction, noteId: string): Promise<never> {
+    await this.readRow(tx, noteId);
+    return this.versionConflict();
+  }
+
+  private assertVersion(row: NoteRow, expectedVersion: number): void {
+    if (row.version !== expectedVersion) this.versionConflict();
+  }
+
+  private versionConflict(): never {
+    throw new ApiHttpException(HttpStatus.CONFLICT, {
+      code: "VERSION_CONFLICT",
+      message: "The note changed. Refresh it and retry.",
+    });
+  }
+
+  private noteStateConflict(): never {
+    throw new ApiHttpException(HttpStatus.CONFLICT, {
+      code: "NOTE_STATE_CONFLICT",
+      message: "The note is not in the required lifecycle state.",
+    });
+  }
+
+  private deletedAncestorConflict(): never {
+    throw new ApiHttpException(HttpStatus.CONFLICT, {
+      code: "NOTE_ANCESTOR_DELETED",
+      message: "Restore the deleted ancestor before restoring this note.",
+    });
+  }
+
+  private activeSubtreeConflict(): never {
+    throw new ApiHttpException(HttpStatus.CONFLICT, {
+      code: "NOTE_SUBTREE_ACTIVE",
+      message: "The note subtree contains active notes and cannot be permanently deleted.",
+    });
+  }
+
+  private async can(input: NoteSelector, action: "note.update" | "note.delete"): Promise<boolean> {
+    try {
+      await this.authorizeNote(input, action);
+      return true;
+    } catch (error: unknown) {
+      if (error instanceof AuthorizationDeniedError) return false;
+      throw error;
+    }
+  }
+
+  private requireActorId(): string {
+    const actorId = this.tenantContext.get().userId;
+    if (actorId === null) {
+      throw new ApiHttpException(HttpStatus.FORBIDDEN, {
+        code: "FORBIDDEN",
+        message: "A user actor is required for note ordering changes.",
+      });
+    }
+    return actorId;
+  }
+
+  private invalidMove(): never {
+    throw new ApiHttpException(HttpStatus.BAD_REQUEST, {
+      code: "NOTE_HIERARCHY_INVALID",
+      message: "The requested note hierarchy is invalid.",
+    });
+  }
+
+  private invalidFolder(): never {
+    throw new ApiHttpException(HttpStatus.BAD_REQUEST, {
+      code: "FOLDER_HIERARCHY_INVALID",
+      message: "The requested folder hierarchy is invalid.",
+    });
+  }
+
+  private notFound(): never {
+    throw new ApiHttpException(HttpStatus.NOT_FOUND, {
+      code: "NOT_FOUND",
+      message: "The requested resource was not found.",
+    });
+  }
+
+  private toDatabaseType(type: NoteType): "document" | "task" {
+    return type === "task-list" ? "task" : "document";
+  }
+
+  private fromDatabaseType(type: "document" | "task"): NoteType {
+    return type === "task" ? "task-list" : "document";
+  }
+
+  private sameContainer(left: Container, right: Container): boolean {
+    return left.projectId === right.projectId && left.folderId === right.folderId;
+  }
+
+  private containerKey(container: Container): string {
+    return [
+      activeWorkspaceId(this.tenantContext),
+      container.projectId ?? "root",
+      container.folderId ?? "unfiled",
+      container.parentId ?? "top",
+    ].join(":");
+  }
+}

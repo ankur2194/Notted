@@ -19,7 +19,8 @@ import { RateLimitService } from "./common/rate-limit/rate-limit.service";
 import { RequestContextMiddleware } from "./common/request/request-context.middleware";
 import { APP_CONFIG, type AppConfig } from "./config/app.config";
 import { AUTH_CONFIG, type AuthConfig } from "./config/auth.config";
-import { WORKSPACE_TRPC_PATH, WorkspacesTrpcRouter } from "./workspaces/workspaces.trpc";
+import { TrpcRootRouter } from "./trpc/trpc-root.service";
+import { TRPC_PATH } from "./trpc/trpc.router";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -38,7 +39,7 @@ export async function createApplication(): Promise<NestExpressApplication> {
   const authRateLimit = app.get(AuthRateLimitMiddleware);
   const authService = app.get(AuthService);
   const rateLimit = app.get(RateLimitService);
-  const workspacesTrpc = app.get(WorkspacesTrpcRouter);
+  const rootTrpc = app.get(TrpcRootRouter);
   const authHandler = app.get<
     ((request: IncomingMessage, response: ServerResponse) => Promise<void>) | null
   >(BETTER_AUTH_NODE_HANDLER);
@@ -126,7 +127,7 @@ export async function createApplication(): Promise<NestExpressApplication> {
       });
   });
   express.use(
-    WORKSPACE_TRPC_PATH,
+    TRPC_PATH,
     (request, response, next) => {
       try {
         rateLimit.enforce(request, response);
@@ -144,8 +145,8 @@ export async function createApplication(): Promise<NestExpressApplication> {
       }
     },
     createExpressMiddleware({
-      router: workspacesTrpc.router,
-      createContext: ({ req }) => workspacesTrpc.createContext(req),
+      router: rootTrpc.router,
+      createContext: ({ req }) => rootTrpc.createContext(req),
     }),
   );
   app.setGlobalPrefix("api/v1", {

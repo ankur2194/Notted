@@ -131,6 +131,7 @@ describe("projects, notes, hierarchy, and ordering schema (unit)", () => {
     expect(cols.get("status")?.notNull).toBe(true);
     expect(cols.get("due_date")?.notNull).toBe(false);
     expect(cols.get("is_archived")?.notNull).toBe(true);
+    expect(cols.get("is_restricted")?.notNull).toBe(true);
     expect(cols.get("created_by_id")?.notNull).toBe(true);
     expect(cols.get("created_at")?.notNull).toBe(true);
     expect(cols.get("updated_at")?.notNull).toBe(true);
@@ -172,6 +173,7 @@ describe("projects, notes, hierarchy, and ordering schema (unit)", () => {
       "is_archived",
       "is_deleted",
       "deleted_at",
+      "deletion_batch_id",
       "sort_order",
     ]) {
       expect(cols.has(name), `notes.${name}`).toBe(true);
@@ -180,6 +182,7 @@ describe("projects, notes, hierarchy, and ordering schema (unit)", () => {
     // Soft-delete + ordering columns.
     expect(cols.get("is_deleted")?.notNull).toBe(true);
     expect(cols.get("deleted_at")?.notNull).toBe(false);
+    expect(cols.get("deletion_batch_id")?.notNull).toBe(false);
     expect(cols.get("sort_order")?.notNull).toBe(true);
     expect(cols.get("is_template")?.notNull).toBe(true);
   });

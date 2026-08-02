@@ -9,6 +9,7 @@ export type UserId = string;
 export type WorkspaceId = string;
 export type ProjectId = string;
 export type NoteId = string;
+export type FolderId = string;
 export type AttachmentId = string;
 export type TaskId = string;
 export type TagId = string;

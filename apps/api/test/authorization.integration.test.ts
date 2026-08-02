@@ -16,6 +16,7 @@ import {
   exportJobs,
   noteShares,
   projectAccess,
+  projects,
   schema,
   webhooks,
   workspaceMembers,
@@ -140,8 +141,12 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 24 centralized authorization (live)", (
           }),
         ).rejects.toBeInstanceOf(AuthorizationDeniedError);
 
-        // One project grant makes the project restricted. An edit note share
+        // Explicit durable state makes the project restricted. An edit note share
         // cannot broaden it for a target who lacks project access.
+        await tx
+          .update(projects)
+          .set({ isRestricted: true })
+          .where(eq(projects.id, SEED_IDS.projects.alphaLaunch));
         await tx
           .insert(projectAccess)
           .values({

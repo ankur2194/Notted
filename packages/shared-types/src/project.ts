@@ -1,7 +1,10 @@
 import type { IsoTimestamp, ProjectId, UserId, WorkspaceId } from "./common";
+import type { WorkspaceRole } from "./workspace";
 
 export type ProjectStatus = "active" | "archived" | "completed";
 export type ProjectSortField = "name" | "createdAt" | "updatedAt" | "dueAt";
+export type ProjectMemberAccessSource = "workspace" | "workspace-admin" | "project";
+export type ProjectAccessRole = "admin" | "editor" | "viewer";
 
 /** REST paths mounted under the global /api/v1 prefix. */
 export const PROJECT_API_PATHS = Object.freeze({
@@ -13,22 +16,45 @@ export const PROJECT_API_PATHS = Object.freeze({
 } as const);
 
 export interface ProjectSummary {
-  id: ProjectId;
-  workspaceId: WorkspaceId;
-  name: string;
-  description: string | null;
+  readonly id: ProjectId;
+  readonly workspaceId: WorkspaceId;
+  readonly name: string;
+  readonly description: string | null;
   /** Authorized app-relative attachment reference; the API never fetches it. */
-  coverImageUrl: string | null;
-  color: string;
-  status: ProjectStatus;
-  isArchived: boolean;
-  dueAt: IsoTimestamp | null;
-  createdAt: IsoTimestamp;
-  updatedAt: IsoTimestamp;
+  readonly coverImageUrl: string | null;
+  readonly color: string;
+  readonly status: ProjectStatus;
+  readonly isArchived: boolean;
+  readonly isRestricted: boolean;
+  readonly dueAt: IsoTimestamp | null;
+  readonly createdAt: IsoTimestamp;
+  readonly updatedAt: IsoTimestamp;
 }
 
-export interface ProjectDetail extends ProjectSummary {
-  createdById: UserId;
+export interface ProjectMutationProject extends ProjectSummary {
+  readonly createdById: UserId;
+}
+
+export interface ProjectMember {
+  readonly userId: UserId;
+  readonly name: string;
+  readonly avatarUrl: string | null;
+  readonly workspaceRole: WorkspaceRole;
+  readonly projectRole: ProjectAccessRole | null;
+  readonly accessSource: ProjectMemberAccessSource;
+}
+
+export interface ProjectTaskProgress {
+  /** Part 30 deliberately counts first-class task rows, not inline TipTap checklists. */
+  readonly coverage: "standalone-tasks";
+  readonly completed: number;
+  readonly total: number;
+}
+
+export interface ProjectDetail extends ProjectMutationProject {
+  readonly lastActivityAt: IsoTimestamp;
+  readonly members: readonly ProjectMember[];
+  readonly taskProgress: ProjectTaskProgress;
 }
 
 export interface ProjectListQuery {
@@ -51,15 +77,15 @@ export interface ProjectPage {
 }
 
 export interface ProjectCreateResult {
-  project: ProjectDetail;
+  project: ProjectMutationProject;
 }
 
 export interface ProjectUpdateResult {
-  project: ProjectDetail;
+  project: ProjectMutationProject;
 }
 
 export interface ProjectStatusResult {
-  project: ProjectDetail;
+  project: ProjectMutationProject;
 }
 
 export interface ProjectDeleteResult {

@@ -2,7 +2,21 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { projectCoverImageUrlSchema } from "@notted/shared-validators";
-import { and, asc, desc, eq, exists, gte, ilike, lte, notExists, or, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
@@ -23,6 +37,7 @@ import {
   projectAccess,
   projects,
   tasks,
+  users,
   workspaceMembers,
 } from "../database/schema";
 import {
@@ -47,6 +62,8 @@ import type {
   ProjectCreateResult,
   ProjectDeleteResult,
   ProjectDetail,
+  ProjectMember,
+  ProjectMutationProject,
   ProjectPage,
   ProjectSortField,
   ProjectStatus,
@@ -65,6 +82,7 @@ interface ProjectRow {
   readonly status: ProjectStatus;
   readonly dueDate: Date | null;
   readonly isArchived: boolean;
+  readonly isRestricted: boolean;
   readonly createdById: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -157,16 +175,12 @@ export class ProjectsService {
         conditions.push(ilike(projects.name, `%${escaped}%`));
       }
 
-      // Owner/admin bypass project grants. For editor/viewer, this SQL predicate
-      // exactly mirrors Part 24: no access rows = inherited workspace access;
-      // one or more rows = restricted and the actor needs an explicit row. The
+      // Owner/admin bypass project grants. For editor/viewer, durable
+      // `isRestricted` is authoritative; deleting the final grant never widens
+      // access. The
       // predicate is applied before OFFSET/LIMIT, so inaccessible rows do not
       // occupy pages and no total/count is disclosed.
       if (membership.role !== "owner" && membership.role !== "admin") {
-        const anyGrant = this.database.db
-          .select({ id: projectAccess.id })
-          .from(projectAccess)
-          .where(eq(projectAccess.projectId, projects.id));
         const actorGrant = this.database.db
           .select({ id: projectAccess.id })
           .from(projectAccess)
@@ -176,7 +190,7 @@ export class ProjectsService {
               eq(projectAccess.userId, input.principal.userId),
             ),
           );
-        conditions.push(or(notExists(anyGrant), exists(actorGrant)) as SQL);
+        conditions.push(or(eq(projects.isRestricted, false), exists(actorGrant)) as SQL);
       }
 
       const sortColumn =
@@ -258,15 +272,33 @@ export class ProjectsService {
         await storeApiIdempotency(tx, idempotency, projectId);
         return this.readRow(tx, projectId);
       });
-      return Object.freeze({ project: Object.freeze(this.toDetail(project)) });
+      return Object.freeze({ project: Object.freeze(this.toMutationProject(project)) });
     });
   }
 
   async read(input: ReadProjectInput): Promise<ProjectDetail> {
     const operation = await this.authorizeProject(input, "project.read");
-    return this.authorizationEntry.run(operation, async () =>
-      Object.freeze(this.toDetail(await this.readDatabaseRow(input.projectId))),
-    );
+    return this.authorizationEntry.run(operation, async () => {
+      const project = await this.readDatabaseRow(input.projectId);
+      const [noteActivity, taskProjection, members] = await Promise.all([
+        this.loadNoteActivity(input.projectId),
+        this.loadTaskProjection(input.projectId),
+        this.loadProjectMembers(input.projectId),
+      ]);
+      const lastActivityAt = [project.updatedAt, noteActivity, taskProjection.lastActivityAt]
+        .filter((value): value is Date => value !== null)
+        .reduce((latest, value) => (value.getTime() > latest.getTime() ? value : latest));
+      return Object.freeze({
+        ...this.toMutationProject(project),
+        lastActivityAt: lastActivityAt.toISOString(),
+        members: Object.freeze(members),
+        taskProgress: Object.freeze({
+          coverage: "standalone-tasks" as const,
+          completed: taskProjection.completed,
+          total: taskProjection.total,
+        }),
+      });
+    });
   }
 
   async update(input: UpdateProjectServiceInput): Promise<ProjectUpdateResult> {
@@ -301,7 +333,7 @@ export class ProjectsService {
         });
         return this.readRow(tx, input.projectId);
       });
-      return Object.freeze({ project: Object.freeze(this.toDetail(project)) });
+      return Object.freeze({ project: Object.freeze(this.toMutationProject(project)) });
     });
   }
 
@@ -368,7 +400,7 @@ export class ProjectsService {
         await this.recordMutation(tx, mutation, input.projectId, input, { status });
         return this.readRow(tx, input.projectId);
       });
-      return Object.freeze({ project: Object.freeze(this.toDetail(project)) });
+      return Object.freeze({ project: Object.freeze(this.toMutationProject(project)) });
     });
   }
 
@@ -405,6 +437,86 @@ export class ProjectsService {
     return row;
   }
 
+  private async loadNoteActivity(projectId: string): Promise<Date | null> {
+    const [activity] = await this.database.db
+      .select({ lastActivityAt: sql<Date | null>`max(${notes.updatedAt})` })
+      .from(notes)
+      .where(and(eq(notes.projectId, projectId), whereWorkspace(notes, this.tenantContext)));
+    return activity?.lastActivityAt ?? null;
+  }
+
+  private async loadTaskProjection(projectId: string): Promise<{
+    readonly lastActivityAt: Date | null;
+    readonly completed: number;
+    readonly total: number;
+  }> {
+    const [projection] = await this.database.db
+      .select({
+        lastActivityAt: sql<Date | null>`max(${tasks.updatedAt})`,
+        completed: sql<number>`cast(count(*) filter (where ${tasks.status} = 'done') as integer)`,
+        total: sql<number>`cast(count(*) filter (where ${tasks.status} <> 'canceled') as integer)`,
+      })
+      .from(tasks)
+      .where(and(eq(tasks.projectId, projectId), whereWorkspace(tasks, this.tenantContext)));
+    return {
+      lastActivityAt: projection?.lastActivityAt ?? null,
+      completed: projection?.completed ?? 0,
+      total: projection?.total ?? 0,
+    };
+  }
+
+  private async loadProjectMembers(projectId: string): Promise<readonly ProjectMember[]> {
+    const [restriction] = await this.database.db
+      .select({ isRestricted: projects.isRestricted })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), whereWorkspace(projects, this.tenantContext)))
+      .limit(1);
+    if (restriction === undefined) return this.notFound();
+    const restricted = restriction.isRestricted;
+    const memberConditions: SQL[] = [whereWorkspace(workspaceMembers, this.tenantContext)];
+    if (restricted) {
+      memberConditions.push(
+        or(inArray(workspaceMembers.role, ["owner", "admin"]), isNotNull(projectAccess.id)) as SQL,
+      );
+    }
+    const rows = await this.database.db
+      .select({
+        userId: users.id,
+        name: users.name,
+        avatarUrl: users.image,
+        workspaceRole: workspaceMembers.role,
+        projectRole: projectAccess.role,
+      })
+      .from(workspaceMembers)
+      .innerJoin(users, eq(users.id, workspaceMembers.userId))
+      .leftJoin(
+        projectAccess,
+        and(
+          eq(projectAccess.projectId, projectId),
+          eq(projectAccess.userId, workspaceMembers.userId),
+        ),
+      )
+      .where(and(...memberConditions))
+      .orderBy(asc(users.name), asc(users.id));
+
+    return rows.map((member) => {
+      const workspaceAdministrator =
+        member.workspaceRole === "owner" || member.workspaceRole === "admin";
+      return Object.freeze({
+        userId: member.userId,
+        name: member.name,
+        avatarUrl: member.avatarUrl,
+        workspaceRole: member.workspaceRole,
+        projectRole: restricted && !workspaceAdministrator ? member.projectRole : null,
+        accessSource: restricted
+          ? workspaceAdministrator
+            ? ("workspace-admin" as const)
+            : ("project" as const)
+          : ("workspace" as const),
+      });
+    });
+  }
+
   private async readIdempotentProject(
     tx: DatabaseTransaction,
     projectId: string,
@@ -433,6 +545,7 @@ export class ProjectsService {
       status: projects.status,
       dueDate: projects.dueDate,
       isArchived: projects.isArchived,
+      isRestricted: projects.isRestricted,
       createdById: projects.createdById,
       createdAt: projects.createdAt,
       updatedAt: projects.updatedAt,
@@ -516,13 +629,14 @@ export class ProjectsService {
       color: row.color ?? "#3b82f6",
       status: row.status,
       isArchived: row.status === "archived",
+      isRestricted: row.isRestricted,
       dueAt: row.dueDate?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
   }
 
-  private toDetail(row: ProjectRow): ProjectDetail {
+  private toMutationProject(row: ProjectRow): ProjectMutationProject {
     return { ...this.toSummary(row), createdById: row.createdById };
   }
 

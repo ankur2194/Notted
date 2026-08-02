@@ -236,7 +236,8 @@ SET NULL` would set BOTH referencing columns (`workspace_id` AND
   delegated from workspace ownership; workspace owners/admins are project
   admins via the policy layer (Part 24), never via a row in `project_access`.
   Storing an `owner` value here would imply project-level ownership that does
-  not exist. `project_access` rows exist ONLY for restricted projects;
+  not exist. **ADR 0011 supersedes the original row-presence representation:**
+  `projects.is_restricted` is now authoritative and `project_access` rows are grants only;
   absence means the project inherits workspace access (ADR 0007).
 - **Note sharing has NO public-link columns by default (ADR 0007).**
   `note_shares` stores explicit per-user grants only. Public sharing, if

@@ -130,8 +130,8 @@ describe("project schemas", () => {
   });
 });
 
-describe("note metadata schemas", () => {
-  it("accepts safe metadata while leaving content out of the contract", () => {
+describe("note API schemas", () => {
+  it("accepts safe metadata plus the Part 31 transitional document", () => {
     expect(
       createNoteMetadataSchema.safeParse({
         projectId,
@@ -140,25 +140,31 @@ describe("note metadata schemas", () => {
         pageSize: "a4",
         isTemplate: false,
         tagIds: [tagId],
+        content: { type: "doc", content: [] },
       }).success,
     ).toBe(true);
     expect(
-      noteMetadataFilterSchema.parse({ workspaceId, isPinned: "true", limit: "100" }),
+      noteMetadataFilterSchema.parse({ scope: "workspace-root", isPinned: "true", limit: "100" }),
     ).toMatchObject({ isPinned: true, page: 1, limit: 100 });
   });
 
-  it("rejects editor data, tenant authority, string booleans in bodies and empty updates", () => {
+  it("rejects forged projections, tenant authority, string booleans and missing versions", () => {
     expect(updateNoteMetadataSchema.safeParse({}).success).toBe(false);
     expect(updateNoteMetadataSchema.safeParse({ isPinned: "true" }).success).toBe(false);
     expect(
       createNoteMetadataSchema.safeParse({
         title: "Private",
         content: { type: "doc", content: [] },
+        contentPlain: "forged",
       }).success,
     ).toBe(false);
     expect(
-      updateNoteMetadataSchema.safeParse({ workspaceId, createdById: userId, title: "Changed" })
-        .success,
+      updateNoteMetadataSchema.safeParse({
+        expectedVersion: 1,
+        workspaceId,
+        createdById: userId,
+        title: "Changed",
+      }).success,
     ).toBe(false);
   });
 });

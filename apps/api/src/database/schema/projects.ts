@@ -1,8 +1,8 @@
 // Part 15: projects, project access grants, and project status enum.
 //
 // Projects are workspace-scoped containers that group related notes. Per ADR
-// 0007, projects DEFAULT to inheriting workspace access; explicit
-// `project_access` rows are added ONLY when a project is restricted.
+// 0011, projects DEFAULT to inheriting workspace access and `is_restricted`
+// is the durable restriction state. `project_access` rows are grants only.
 // Restricted projects deny users without an explicit grant; workspace
 // owner/admin retain administrative access via the policy layer (Part 24/29),
 // not via rows in this table. Access is NEVER inferred from authorship alone.
@@ -86,6 +86,9 @@ export const projects = pgTable(
     // Denormalized convenience flag mirroring `status = 'archived'`. Kept for
     // cheap filtered indexes without joining on enum equality.
     isArchived: boolean("is_archived").default(false).notNull(),
+    // Restriction state must survive removal of the final explicit grant.
+    // Never infer this value from the number of `project_access` rows.
+    isRestricted: boolean("is_restricted").default(false).notNull(),
     // Original creator. RESTRICT: a project is a shared tenant entity (many
     // notes), so deleting its creator must not silently destroy the project
     // and its notes. The service (Part 26) transfers or nullifies before the
@@ -113,9 +116,10 @@ export const projects = pgTable(
 // --------------------------------------------------------------------------- //
 // project_access
 // --------------------------------------------------------------------------- //
-// Per ADR 0007, explicit access grants exist ONLY for restricted projects.
-// Absence of any row for a project means the project INHERITS workspace
-// access. Restricted projects deny users without an explicit grant; workspace
+// Per ADR 0011, rows are explicit grants and do not represent restriction
+// state. `projects.is_restricted = false` means workspace access is inherited,
+// including when grant rows happen to exist. Restricted projects deny users
+// without an explicit grant; workspace
 // owner/admin retain administrative access via the policy layer (Part 24/29),
 // not via rows here. Never infer access from authorship.
 //

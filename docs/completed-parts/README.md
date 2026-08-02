@@ -62,3 +62,6 @@ Add one row after creating each record. Keep rows ordered by part number.
 |   27 | Complete | 2026-08-01 | Accessible workspace list/create, overview, settings, switching, permission states, and real-stack Chromium lifecycle/isolation journeys. |
 |   28 | Complete | 2026-08-01 | Verified membership and single-use invitation lifecycle with role/last-owner safety, durable queued email delivery, acceptance UI, and audit evidence. |
 |   29 | Complete | 2026-08-01 | Tenant-scoped project CRUD, filtering, lifecycle transitions, cover authorization, replay safety, durable domain events, and note/task preservation. |
+|   30 | Complete | 2026-08-02 | Project list/detail UI, read projection, durable restriction state; Review #2: a11y, type-check, lint, integration all pass. |
+|   31 | Complete | 2026-08-02 | Transactional note/folder APIs, deletion batches, safe cascade, versioned renormalization, index/concurrency artifacts; Review #2: calculatePosition fix, planner assertions, all gates pass. |
+|   32 | Complete | 2026-08-02 | Note hierarchy/sharing UI, DnD, folders/trash, authenticated sharing, rollback injection; Review #2: a11y, clipboard race, keyboard DnD, focus mgmt, all gates pass. |

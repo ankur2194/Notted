@@ -8,10 +8,12 @@ import { ConfigModule } from "./config/config.module";
 import { DatabaseModule } from "./database/database.module";
 import { HealthModule } from "./health/health.module";
 import { MembershipsModule } from "./memberships/memberships.module";
+import { NotesModule } from "./notes/notes.module";
 import { NotificationModule } from "./notifications/notification.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { ShellModule } from "./shell/shell.module";
 import { TenantContextModule } from "./tenant/tenant-context.module";
+import { TrpcModule } from "./trpc/trpc.module";
 import { WorkspacesModule } from "./workspaces/workspaces.module";
 
 @Module({
@@ -25,8 +27,10 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
     MembershipsModule,
     ShellModule,
     NotificationModule,
+    NotesModule,
     ProjectsModule,
     TenantContextModule,
+    TrpcModule,
     WorkspacesModule,
   ],
   controllers: [ApiController],

@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DashboardShell } from "./DashboardShell";
+import { breadcrumbsFor, DashboardShell } from "./DashboardShell";
 
 import type { ShellBootstrap } from "@notted/shared-types";
 
@@ -44,6 +44,11 @@ const shell: ShellBootstrap = {
   },
   notificationUnreadCount: 1,
 };
+const noteNavigation = {
+  status: "ready" as const,
+  navigation: { items: [], limit: 500, returned: 0, truncated: false },
+  folders: [],
+};
 
 describe("DashboardShell", () => {
   beforeEach(() => {
@@ -51,17 +56,44 @@ describe("DashboardShell", () => {
     window.localStorage.clear();
   });
 
+  it("provides canonical project breadcrumbs and disables project navigation without a workspace", () => {
+    expect(breadcrumbsFor(`/workspaces/${workspaceId}/projects`)).toEqual([
+      { label: "Workspaces", href: "/workspaces" },
+      { label: "Overview", href: `/workspaces/${workspaceId}` },
+      { label: "Projects" },
+    ]);
+    expect(breadcrumbsFor(`/workspaces/${workspaceId}/projects/project-id`)).toEqual([
+      { label: "Workspaces", href: "/workspaces" },
+      { label: "Overview", href: `/workspaces/${workspaceId}` },
+      { label: "Projects", href: `/workspaces/${workspaceId}/projects` },
+      { label: "Project detail" },
+    ]);
+    render(
+      <DashboardShell
+        shell={{ ...shell, currentWorkspace: null }}
+        noteNavigation={{ status: "no-workspace" }}
+      >
+        <p>Content</p>
+      </DashboardShell>,
+    );
+    expect(screen.getByText("Projects").closest("span[aria-disabled='true']")).toBeInTheDocument();
+  });
+
   it("provides landmarks, permission-aware navigation, placeholders and a mobile focus trap", async () => {
     const user = userEvent.setup();
     render(
-      <DashboardShell shell={shell}>
+      <DashboardShell shell={shell} noteNavigation={noteNavigation}>
         <h1>Dashboard content</h1>
       </DashboardShell>,
     );
     expect(screen.getByRole("main")).toHaveTextContent("Dashboard content");
     expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
-    expect(screen.getByText(/note tree unavailable until Parts 31–32/i)).toBeInTheDocument();
+    expect(screen.getByText("No visible project notes.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Workspaces" })).toHaveAttribute("href", "/workspaces");
+    expect(screen.getByRole("link", { name: "Projects" })).toHaveAttribute(
+      "href",
+      `/workspaces/${workspaceId}/projects`,
+    );
     expect(screen.getByRole("link", { name: "Workspace settings" })).toHaveAttribute(
       "href",
       `/workspaces/${workspaceId}/settings`,
@@ -76,7 +108,7 @@ describe("DashboardShell", () => {
   it("opens command placeholder with Ctrl+K and closes the user menu with Escape", async () => {
     const user = userEvent.setup();
     render(
-      <DashboardShell shell={shell}>
+      <DashboardShell shell={shell} noteNavigation={noteNavigation}>
         <p>Content</p>
       </DashboardShell>,
     );
@@ -121,7 +153,7 @@ describe("DashboardShell", () => {
     });
     const user = userEvent.setup();
     render(
-      <DashboardShell shell={shell}>
+      <DashboardShell shell={shell} noteNavigation={noteNavigation}>
         <p>Content</p>
       </DashboardShell>,
     );

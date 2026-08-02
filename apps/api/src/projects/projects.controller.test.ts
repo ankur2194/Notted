@@ -141,6 +141,22 @@ describe("ProjectsController", () => {
     expect(origin).toHaveBeenCalledTimes(4);
   });
 
+  it("returns the service-owned truthful detail projection without transport queries", async () => {
+    const detail = {
+      id: projectId,
+      workspaceId,
+      name: "Alpha",
+      lastActivityAt: "2026-08-03T00:00:00.000Z",
+      members: [],
+      taskProgress: { coverage: "standalone-tasks", completed: 1, total: 2 },
+    };
+    const read = vi.fn().mockResolvedValue(detail);
+    await expect(controller({ read }).read(request({ workspaceId, projectId }))).resolves.toBe(
+      detail,
+    );
+    expect(read).toHaveBeenCalledWith(expect.objectContaining({ workspaceId, projectId }));
+  });
+
   it("wires centralized actions, resources, methods, and success statuses", () => {
     const specs = {
       list: { action: "workspace.read", kind: "workspace" },

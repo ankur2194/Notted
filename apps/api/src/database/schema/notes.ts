@@ -132,6 +132,10 @@ export const notes = pgTable(
     // Hard delete is a separate service-initiated permanent removal.
     isDeleted: boolean("is_deleted").default(false).notNull(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    // One soft-delete operation assigns one UUID to only the active subtree
+    // rows it changes. Restore uses this opaque server-only batch identity so
+    // independently deleted descendants are never revived accidentally.
+    deletionBatchId: uuid("deletion_batch_id"),
     // Monotonically increasing optimistic-concurrency field. The service
     // (Part 31) increments it on every content update and rejects stale
     // writes via `WHERE version = $expected`; the column default of 1 is
@@ -170,6 +174,21 @@ export const notes = pgTable(
     // "List notes in project" hot path. Leftmost prefix on workspace_id
     // also covers "list notes in workspace".
     index("notes_workspace_project_idx").on(t.workspaceId, t.projectId),
+    // Exact destination sibling groups used by transactional project and
+    // folder append/reorder operations. The existing workspace+parent index
+    // cannot distinguish equal parent contexts across these containers.
+    index("notes_workspace_project_parent_order_idx").on(
+      t.workspaceId,
+      t.projectId,
+      t.parentId,
+      t.sortOrder,
+    ),
+    index("notes_workspace_folder_parent_order_idx").on(
+      t.workspaceId,
+      t.folderId,
+      t.parentId,
+      t.sortOrder,
+    ),
     // "Recent ACTIVE notes in workspace" — partial index excludes
     // soft-deleted rows so the hot path stays small. The predicate must
     // match the planner's exactly; the service uses `is_deleted = false`.
@@ -178,6 +197,18 @@ export const notes = pgTable(
       .where(sql`notes.is_deleted = false`),
     // "Templates in workspace" gallery.
     index("notes_workspace_template_idx").on(t.workspaceId, t.isTemplate),
+    index("notes_workspace_template_updated_idx")
+      .on(t.workspaceId, t.isTemplate, t.updatedAt)
+      .where(sql`notes.is_deleted = false`),
+    // Trash and pinned/archive views introduced by Part 31. Recent normal
+    // lists continue to use notes_workspace_active_updated_idx above.
+    index("notes_workspace_trash_deleted_idx").on(t.workspaceId, t.isDeleted, t.deletedAt),
+    index("notes_workspace_pinned_archive_updated_idx")
+      .on(t.workspaceId, t.isPinned, t.isArchived, t.updatedAt)
+      .where(sql`notes.is_deleted = false`),
+    index("notes_workspace_archive_updated_idx")
+      .on(t.workspaceId, t.isArchived, t.updatedAt)
+      .where(sql`notes.is_deleted = false`),
     // "Notes created by user" admin/authoring view.
     index("notes_created_by_id_idx").on(t.createdById),
     // Cross-tenant composite FKs (see module comment). `onDelete("no action")`
