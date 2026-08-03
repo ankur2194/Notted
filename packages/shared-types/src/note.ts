@@ -37,7 +37,15 @@ export type NoteSortField = "title" | "createdAt" | "updatedAt" | "deletedAt" | 
 export type NoteSharePermission = "view" | "comment" | "edit";
 export type NoteShareMutationPermission = "view" | "edit";
 
-/** Transitional bounded JSON projection. Part 33 replaces this with the TipTap allow-list contract. */
+/**
+ * Final TipTap document contract rooted at `{ type: "doc" }`. The allowed
+ * node types, mark types, attribute rules, size bounds, schema version, link
+ * sanitization, plain-text extraction, HTML rendering, and migration policy
+ * are owned by `@notted/shared-validators` (see `NOTE_DOCUMENT_NODE_TYPES`,
+ * `NOTE_DOCUMENT_MARK_TYPES`, `NOTE_DOCUMENT_LIMITS`, `NOTE_DOCUMENT_SCHEMA_VERSION`,
+ * `safeParseNoteDocument`, and `migrateNoteDocument`). This interface is the
+ * framework-neutral projection shared across the API and web boundaries.
+ */
 export interface NoteDocument {
   readonly type: "doc";
   readonly [key: string]: JsonValue;

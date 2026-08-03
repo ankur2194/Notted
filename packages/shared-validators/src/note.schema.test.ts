@@ -23,14 +23,14 @@ const document = noteDocumentSchema.parse({
   type: "doc",
   content: [
     { type: "paragraph", content: [{ type: "text", text: "Alpha" }] },
-    { type: "paragraph", content: [{ type: "text", text: " beta" }] },
+    { type: "paragraph", content: [{ type: "text", text: "beta" }] },
   ],
 });
 
-describe("Part 31 note validators", () => {
-  it("accepts a bounded transitional document and extracts only text nodes in order", () => {
+describe("Part 31 note validators with the Part 33 document contract", () => {
+  it("accepts a bounded document and joins leaf block text with newlines", () => {
     expect(noteDocumentSchema.parse(document)).toEqual(document);
-    expect(extractNoteContentPlain(document)).toBe("Alpha beta");
+    expect(extractNoteContentPlain(document)).toBe("Alpha\nbeta");
   });
 
   it.each([
@@ -173,7 +173,7 @@ describe("Part 31 note validators", () => {
       noteDetailSchema.safeParse({
         ...summary,
         content: document,
-        contentPlain: "Alpha beta",
+        contentPlain: "Alpha\nbeta",
         createdById: id("4"),
         updatedById: null,
         currentActorId: id("4"),

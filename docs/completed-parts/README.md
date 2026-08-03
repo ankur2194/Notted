@@ -65,3 +65,4 @@ Add one row after creating each record. Keep rows ordered by part number.
 |   30 | Complete | 2026-08-02 | Project list/detail UI, read projection, durable restriction state; Review #2: a11y, type-check, lint, integration all pass. |
 |   31 | Complete | 2026-08-02 | Transactional note/folder APIs, deletion batches, safe cascade, versioned renormalization, index/concurrency artifacts; Review #2: calculatePosition fix, planner assertions, all gates pass. |
 |   32 | Complete | 2026-08-02 | Note hierarchy/sharing UI, DnD, folders/trash, authenticated sharing, rollback injection; Review #2: a11y, clipboard race, keyboard DnD, focus mgmt, all gates pass. |
+|   33 | Complete | 2026-08-03 | Versioned TipTap allow-list, bounded migration, safe URL/plain/HTML helpers, exact headless extensions, and verified ProseMirror round-trips. |
