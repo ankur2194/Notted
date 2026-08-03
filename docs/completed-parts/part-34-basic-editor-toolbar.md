@@ -88,7 +88,7 @@ Gates were run serially at the end of the combined Parts 34–36 session; the nu
 | Production-env `pnpm exec turbo run build --concurrency=1 --force` | Pass | 4/4; 26 web routes emitted |
 | `pnpm audit:prod` | Pass | No new vulnerabilities |
 | `git diff --check` | Pass | No whitespace errors |
-| `pnpm --filter @notted/web exec vitest run --coverage` | **Fail (branches only)** | Statements 70.05%, branches 63.31%, functions 73.28%, lines 72.52%. Pre-existing debt — see limitations |
+| `pnpm --filter @notted/web exec vitest run --coverage` | **Fail (branches only)** | Statements 70.05%, branches 63.31%, functions 73.28%, lines 72.52%. Resolved 2026-08-04 — see limitations |
 | Playwright / E2E | Not run | No browsers provisioned; no E2E spec added this session |
 | Docker / compose | Not run | No gate required containers; no compose file or port was touched |
 
@@ -96,7 +96,7 @@ Part-34-specific coverage: `editor-toolbar.test.tsx`, `editor-shortcuts.test.tsx
 
 ## Known Limitations and Follow-up Work
 
-- **Branch coverage (63.31%) is below the 70% threshold, so `pnpm test:ci` fails.** This is pre-existing debt, not attributable to this work: the untouched remainder of `src/**` sits near 59.8% while `components/editor` is ~92% statements / ~85% branches, and this session raised the global number. The shortfall is concentrated in `lib/auth`, `lib/shell`, `lib/workspaces`, `lib/notes/server-notes.ts`, and several 0%-covered components. It needs its own remediation item.
+- ~~**Branch coverage (63.31%) is below the 70% threshold, so `pnpm test:ci` fails.**~~ **Resolved on 2026-08-04**; see the coverage remediation record below. Two things in the original note were wrong: only `apps/web` had been measured, so the claim that this was the sole cause of the `pnpm test:ci` failure was incorrect — `@notted/shared-types` (0% functions) and `@notted/api` (53.64% statements) were failing too. The characterization of the shortfall as pre-existing debt outside this work was accurate.
 - Real-browser behaviour is unverified: caret geometry, print, and pointer-driven interactions are stubbed to zero rects in jsdom. Part 76 owns browser validation.
 - Typing into contenteditable, clipboard interaction, drag/drop, and pointer selection are not directly testable in jsdom; commands and keymaps are driven through the real editor instead.
 - Part 37 owns `PageContainer` and zoom, Part 38 owns page breaks/focus mode/print, Part 39 owns autosave. The editor is deliberately layout-agnostic and persists nothing.

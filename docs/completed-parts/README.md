@@ -69,3 +69,11 @@ Add one row after creating each record. Keep rows ordered by part number.
 |   34 | Complete | 2026-08-03 | TipTap editor and roving-tabindex toolbar, drift-proof shortcut table and help dialog, sanitized link/colour dialogs, remount restoration; Review #2: ARIA and duplicate-render fixes, all gates pass. |
 |   35 | Complete | 2026-08-03 | Table contract widening with bounds, resizable tables, restored nested checklists, lowlight code blocks, markdown rules, single Tab authority; Review #2: Table keymap strip fix, split-cell guard, all gates pass. |
 |   36 | Complete | 2026-08-03 | Mention node contract, slash command menu, workspace-scoped mentions with removed-user fallback, shared suggestion popover; Review #2: member pagination and lazy directory fetch, all gates pass. |
+
+## Cross-cutting records
+
+Work that is not a numbered `Plan.md` part. Keep rows ordered by date.
+
+| Record | Status | Completed | Summary |
+| --- | -------- | ---------- | ------- |
+| [Coverage remediation](coverage-remediation-2026-08-04.md) | Complete | 2026-08-04 | Made `pnpm test:ci` pass in all four workspaces: CI Postgres service plus the `turbo.json` env declaration that makes it effective, serialized DB suites, fixed a leaking concurrency fixture, fixed the archived-notes list query, and covered `src/lib`, the auth service/controller, and the shared route builders. |

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, like } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client, Pool } from "pg";
@@ -13,6 +13,7 @@ import { AuthorizationRepository } from "../src/authorization/authorization.repo
 import { DatabaseService, type DatabaseTransaction } from "../src/database/database.service";
 import {
   auditLogs,
+  folders,
   jobOutbox,
   notes,
   projectAccess,
@@ -31,6 +32,9 @@ import type { PgTransactionConfig } from "drizzle-orm/pg-core/session";
 const DATABASE_URL = process.env.DATABASE_URL;
 const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
+
+/** Marks every row the concurrency test commits so a rerun can clear its own leftovers. */
+const CONCURRENCY_FIXTURE = "concurrency-fixture";
 
 function principal(userId: string): AuthenticatedPrincipal {
   return Object.freeze({
@@ -835,6 +839,17 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
       return;
     }
 
+    // This suite commits rather than rolling back: the barrier-synchronized
+    // races below need genuinely independent transactions, which a wrapping
+    // transaction would serialize. Committed rows therefore survive the run, and
+    // left in place they accumulate as siblings in the same workspace root —
+    // each rerun makes the concurrent reorders contend harder until one of the
+    // "both succeed" expectations legitimately fails. Every row this test
+    // commits carries CONCURRENCY_FIXTURE, so clearing them up front keeps a
+    // reused development database behaving like the empty one CI provisions.
+    await db.delete(notes).where(like(notes.title, `${CONCURRENCY_FIXTURE}%`));
+    await db.delete(folders).where(like(folders.name, `${CONCURRENCY_FIXTURE}%`));
+
     await db.transaction(async (tx) => seedDatabase(tx));
     const owner = principal(SEED_IDS.users.alphaOwner);
     const createService = (database: DatabaseService, tenant: TenantContextService) =>
@@ -861,7 +876,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
       setup.create({
         principal: owner,
         workspaceId: SEED_IDS.workspaces.alpha,
-        title: `${title} ${suffix}`,
+        title: `${CONCURRENCY_FIXTURE} ${title} ${suffix}`,
         projectId: null,
         folderId: null,
         parentId: null,
@@ -976,7 +991,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
     const destinationFolder = await setup.createFolder({
       principal: owner,
       workspaceId: SEED_IDS.workspaces.alpha,
-      name: `Concurrent destination ${suffix}`,
+      name: `${CONCURRENCY_FIXTURE} destination ${suffix}`,
       parentId: null,
     });
     const firstLatest = await setup.read({

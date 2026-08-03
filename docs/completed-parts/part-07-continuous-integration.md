@@ -28,6 +28,13 @@ Part 12 supplies real Drizzle consistency validation.
 - Cached only pnpm's content-addressed package store, keyed by OS, toolchain versions, and
   the lockfile hash. `node_modules`, Turborepo outputs, build outputs, and test outputs are
   not cached.
+- **Amended 2026-08-04:** the job now also provisions an ephemeral, digest-pinned `pgvector`
+  service container, with `DATABASE_URL` scoped to the test step. The API's integration
+  suites are gated on that variable and had never run in CI, which left `apps/api` far below
+  its coverage thresholds. This changes what a green CI run guarantees: the note, project,
+  membership, authorization, and shell services are now exercised against real PostgreSQL.
+  See [`coverage-remediation-2026-08-04.md`](coverage-remediation-2026-08-04.md); note that
+  the matching `env` declaration in `turbo.json` is what makes the variable reach vitest.
 - Added always-running uploads for JUnit XML and V8 coverage outputs with seven-day
   retention. Missing evidence warns rather than masking the originating test/install
   failure.

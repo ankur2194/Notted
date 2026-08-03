@@ -2,10 +2,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   WORKSPACE_MEMBER_MAX_PAGES,
+  createFolder,
   createNote,
+  deleteFolder,
   moveNote,
+  permanentlyDeleteNote,
   requestAllWorkspaceMembers,
+  requestFolders,
+  requestNotePage,
+  requestNoteShares,
+  requestWorkspaceMembers,
+  restoreNote,
+  revokeNoteShare,
+  trashNote,
+  updateFolder,
   updateNote,
+  upsertNoteShare,
 } from "./requests";
 
 const workspaceId = "30000000-0000-4000-8000-000000000001";
@@ -170,5 +182,381 @@ describe("note requests", () => {
       kind: "invalid",
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([0, -1, 1.5, Number.NaN] as const)(
+    "refuses the non-positive-integer member page %s",
+    async (page) => {
+      await expect(requestWorkspaceMembers(workspaceId, page)).resolves.toEqual({
+        ok: false,
+        kind: "invalid",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+});
+
+const folderId = "30000000-0000-4000-8000-000000000003";
+const userId = "30000000-0000-4000-8000-000000000004";
+
+const folder = {
+  id: folderId,
+  workspaceId,
+  parentId: null,
+  name: "Specifications",
+  createdAt: "2026-08-01T00:00:00.000Z",
+  updatedAt: "2026-08-01T00:00:00.000Z",
+};
+
+const grant = {
+  id: "30000000-0000-4000-8000-000000000005",
+  noteId,
+  userId,
+  permission: "edit" as const,
+  createdAt: "2026-08-01T00:00:00.000Z",
+};
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+describe("note list, trash, and folder requests", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  const listQuery = {
+    page: 1,
+    limit: 25,
+    scope: "workspace-root",
+    view: "normal",
+    sortBy: "updatedAt",
+    sortDirection: "desc",
+  } as const;
+
+  it("serializes only the list selectors that were supplied", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ items: [], page: 1, limit: 25, hasMore: false }));
+
+    await expect(requestNotePage(workspaceId, listQuery)).resolves.toEqual({
+      ok: true,
+      data: { items: [], page: 1, limit: 25, hasMore: false },
+    });
+
+    const params = new URL(String(fetchMock.mock.calls[0]![0]), "https://api.test").searchParams;
+    expect(Object.fromEntries(params.entries())).toEqual({
+      page: "1",
+      limit: "25",
+      scope: "workspace-root",
+      view: "normal",
+      sortBy: "updatedAt",
+      sortDirection: "desc",
+    });
+  });
+
+  it("includes the optional project, folder, and type selectors", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ items: [], page: 1, limit: 25, hasMore: false }));
+
+    await requestNotePage(workspaceId, {
+      ...listQuery,
+      scope: "project",
+      projectId: folderId,
+      folderId: noteId,
+      type: "task-list",
+    });
+
+    const params = new URL(String(fetchMock.mock.calls[0]![0]), "https://api.test").searchParams;
+    expect(params.get("projectId")).toBe(folderId);
+    expect(params.get("folderId")).toBe(noteId);
+    expect(params.get("type")).toBe("task-list");
+  });
+
+  /**
+   * Regression: callers hold the schema's *output*, where the explicit boolean
+   * selectors are real booleans and the optional id selectors may be `null` —
+   * `parseNoteSearchParams` returns exactly that and the page components pass
+   * it straight through. Re-validating it against the schema's query-string
+   * *input* contract used to reject the whole query, so the archived view
+   * failed closed and rendered empty without ever issuing a request.
+   */
+  it("accepts the parsed query shape its own callers produce", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ items: [], page: 1, limit: 25, hasMore: false }));
+
+    await expect(
+      requestNotePage(workspaceId, {
+        ...listQuery,
+        folderId: null,
+        parentId: null,
+        isArchived: true,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+
+    const params = new URL(String(fetchMock.mock.calls[0]![0]), "https://api.test").searchParams;
+    expect(params.get("isArchived")).toBe("true");
+    expect(params.has("folderId")).toBe(false);
+  });
+
+  it("rejects an out-of-contract list query before the network boundary", async () => {
+    await expect(
+      requestNotePage(workspaceId, { ...listQuery, limit: 5_000 }),
+    ).resolves.toMatchObject({ ok: false, kind: "invalid" });
+    await expect(requestNotePage("not-a-uuid", listQuery)).resolves.toMatchObject({
+      ok: false,
+      kind: "invalid",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a note page whose items do not match the contract", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ items: [{ id: noteId }], page: 1, limit: 25 }));
+
+    await expect(requestNotePage(workspaceId, listQuery)).resolves.toEqual({
+      ok: false,
+      kind: "invalid",
+    });
+  });
+
+  /**
+   * Every destructive note mutation carries `expectedVersion`, so a stale tab
+   * loses the race instead of overwriting a newer edit. The client refuses to
+   * send the request at all when that field is missing.
+   */
+  it.each([
+    ["trashNote", (input: unknown) => trashNote(workspaceId, noteId, input as never), "DELETE"],
+    ["restoreNote", (input: unknown) => restoreNote(workspaceId, noteId, input as never), "POST"],
+  ])(
+    "sends %s with its expected version and refuses without one",
+    async (_name, invoke, method) => {
+      await expect(invoke({})).resolves.toEqual({ ok: false, kind: "invalid" });
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      fetchMock.mockResolvedValue(
+        jsonResponse({
+          id: noteId,
+          ...(method === "DELETE"
+            ? { deleted: true, affected: 1, version: 2, deletedAt: "2026-08-01T00:00:00.000Z" }
+            : { restored: true, affected: 1, version: 3 }),
+        }),
+      );
+
+      await expect(invoke({ expectedVersion: 1 })).resolves.toMatchObject({ ok: true });
+      expect(fetchMock.mock.calls[0]![1]?.method).toBe(method);
+      expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))).toEqual({ expectedVersion: 1 });
+    },
+  );
+
+  /**
+   * Permanent deletion is unrecoverable, so the contract demands the exact
+   * title alongside an explicit confirmation. A caller that supplies only the
+   * version never reaches the network.
+   */
+  it("requires confirmation and the exact title to permanently delete", async () => {
+    await expect(
+      permanentlyDeleteNote(workspaceId, noteId, { expectedVersion: 1 } as never),
+    ).resolves.toEqual({ ok: false, kind: "invalid" });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValue(jsonResponse({ id: noteId, permanentlyDeleted: true }));
+
+    await expect(
+      permanentlyDeleteNote(workspaceId, noteId, {
+        expectedVersion: 1,
+        confirm: true,
+        expectedTitle: "Quarterly plan",
+      }),
+    ).resolves.toEqual({ ok: true, data: { id: noteId, permanentlyDeleted: true } });
+  });
+
+  it("rejects note mutations whose route ids are not UUIDs", async () => {
+    await expect(trashNote(workspaceId, "forged", { expectedVersion: 1 })).resolves.toEqual({
+      ok: false,
+      kind: "invalid",
+    });
+    await expect(restoreNote("forged", noteId, { expectedVersion: 1 })).resolves.toEqual({
+      ok: false,
+      kind: "invalid",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("requests folders with a bounded page size", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ items: [folder], page: 1, limit: 100, hasMore: false }),
+    );
+
+    await expect(requestFolders(workspaceId)).resolves.toEqual({
+      ok: true,
+      data: { items: [folder], page: 1, limit: 100, hasMore: false },
+    });
+    expect(String(fetchMock.mock.calls[0]![0])).toContain("page=1&limit=100");
+  });
+
+  it("refuses a folder listing for an invalid workspace id", async () => {
+    await expect(requestFolders("not-a-uuid")).resolves.toEqual({ ok: false, kind: "invalid" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("creates a folder and rejects an empty name", async () => {
+    await expect(createFolder(workspaceId, { name: "" })).resolves.toEqual({
+      ok: false,
+      kind: "invalid",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValue(jsonResponse({ folder }));
+
+    await expect(createFolder(workspaceId, { name: folder.name })).resolves.toEqual({
+      ok: true,
+      data: { folder },
+    });
+    expect(fetchMock.mock.calls[0]![1]?.method).toBe("POST");
+  });
+
+  it("requires at least one changed field to update a folder", async () => {
+    await expect(updateFolder(workspaceId, folderId, {})).resolves.toEqual({
+      ok: false,
+      kind: "invalid",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValue(jsonResponse({ folder }));
+
+    await expect(updateFolder(workspaceId, folderId, { name: "Renamed" })).resolves.toEqual({
+      ok: true,
+      data: { folder },
+    });
+    expect(fetchMock.mock.calls[0]![1]?.method).toBe("PATCH");
+  });
+
+  it("always sends an explicit confirmation when deleting a folder", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ id: folderId, deleted: true, removedFolders: 2, unfiledNotes: 5 }),
+    );
+
+    await expect(deleteFolder(workspaceId, folderId)).resolves.toEqual({
+      ok: true,
+      data: { id: folderId, deleted: true, removedFolders: 2, unfiledNotes: 5 },
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))).toEqual({ confirm: true });
+  });
+
+  it("refuses a folder deletion for a malformed folder id", async () => {
+    await expect(deleteFolder(workspaceId, "forged")).resolves.toEqual({
+      ok: false,
+      kind: "invalid",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("note sharing requests", () => {
+  const fetchMock = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("lists the grants on one note", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ items: [grant], limit: 1_000, returned: 1, truncated: false }),
+    );
+
+    await expect(requestNoteShares(workspaceId, noteId)).resolves.toEqual({
+      ok: true,
+      data: { items: [grant], limit: 1_000, returned: 1, truncated: false },
+    });
+    expect(new URL(String(fetchMock.mock.calls[0]![0])).pathname).toBe(
+      `/api/v1/workspaces/${workspaceId}/notes/${noteId}/shares`,
+    );
+  });
+
+  it("upserts a grant with a contract-allowed permission only", async () => {
+    await expect(
+      upsertNoteShare(workspaceId, noteId, userId, { permission: "owner" } as never),
+    ).resolves.toEqual({ ok: false, kind: "invalid" });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValue(jsonResponse({ share: grant }));
+
+    await expect(
+      upsertNoteShare(workspaceId, noteId, userId, { permission: "edit" }),
+    ).resolves.toEqual({ ok: true, data: { share: grant } });
+    expect(fetchMock.mock.calls[0]![1]?.method).toBe("PUT");
+  });
+
+  it("revokes a grant by user id", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ noteId, userId, revoked: true }));
+
+    await expect(revokeNoteShare(workspaceId, noteId, userId)).resolves.toEqual({
+      ok: true,
+      data: { noteId, userId, revoked: true },
+    });
+    expect(fetchMock.mock.calls[0]![1]?.method).toBe("DELETE");
+  });
+
+  /**
+   * A share route carries three identifiers and any one of them being forged is
+   * a cross-tenant probe. All three are validated before a request is made, so
+   * the API never has to answer a question that would disclose existence.
+   */
+  it.each([
+    ["workspace", ["forged", noteId, userId]],
+    ["note", [workspaceId, "forged", userId]],
+    ["user", [workspaceId, noteId, "forged"]],
+  ] as const)("refuses a share mutation with a forged %s id", async (_which, ids) => {
+    const [ws, note, user] = ids;
+
+    await expect(revokeNoteShare(ws, note, user)).resolves.toEqual({ ok: false, kind: "invalid" });
+    await expect(upsertNoteShare(ws, note, user, { permission: "view" })).resolves.toEqual({
+      ok: false,
+      kind: "invalid",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["workspace", ["forged", noteId]],
+    ["note", [workspaceId, "forged"]],
+  ] as const)("refuses a share listing with a forged %s id", async (_which, ids) => {
+    await expect(requestNoteShares(ids[0], ids[1])).resolves.toEqual({
+      ok: false,
+      kind: "invalid",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("treats an unreadable conflict envelope as a generic conflict", async () => {
+    fetchMock.mockResolvedValue(new Response("not json", { status: 409 }));
+
+    await expect(
+      upsertNoteShare(workspaceId, noteId, userId, { permission: "view" }),
+    ).resolves.toEqual({ ok: false, kind: "conflict" });
+  });
+
+  it("reads a version conflict from a nested error envelope", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ error: { code: "VERSION_CONFLICT" } }, 409));
+
+    await expect(
+      upsertNoteShare(workspaceId, noteId, userId, { permission: "view" }),
+    ).resolves.toEqual({ ok: false, kind: "version-conflict" });
+  });
+
+  it("maps a thrown request to unavailable", async () => {
+    fetchMock.mockRejectedValue(new DOMException("The operation timed out.", "TimeoutError"));
+
+    await expect(requestNoteShares(workspaceId, noteId)).resolves.toEqual({
+      ok: false,
+      kind: "unavailable",
+    });
   });
 });

@@ -205,6 +205,19 @@ pnpm build
 pnpm audit:prod
 ```
 
+`pnpm test:ci` adds coverage and enforces a 70% threshold on statements, branches,
+functions, and lines in every workspace. **It requires a reachable PostgreSQL database.**
+The API's integration suites are gated on `DATABASE_URL` (`describe.skipIf`) and run their
+own migrations and seed against it. Without one they all skip, and `apps/api` lands near
+55% — well under the threshold — so the command fails with only coverage numbers to
+explain why. Run `pnpm infra:up` first; `apps/api/.env` already points `DATABASE_URL` at
+the local instance. Plain `pnpm test` has no threshold and needs no database. CI provisions
+its own throwaway `pgvector` service for this reason.
+
+Those suites commit rather than rolling back, because their barrier-synchronized races need
+genuinely independent transactions. They clean up their own committed rows on the next run,
+so a long-lived development database stays usable, but a truly clean run is what CI gets.
+
 `pnpm test:e2e` uses exact `@playwright/test@1.62.0` and expects the development
 infrastructure, migrated Part 21 schema, API, web app, and Mailpit. Install browser binaries
 separately when needed with `pnpm --filter @notted/web exec playwright install`; browser

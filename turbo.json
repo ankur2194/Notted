@@ -34,6 +34,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
+      "env": ["DATABASE_URL"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "src/**/*",
@@ -45,6 +46,13 @@
     },
     "test:ci": {
       "dependsOn": ["^build"],
+      // The API's integration suites are gated on DATABASE_URL. Turbo filters
+      // the environment strictly, so without this declaration the variable never
+      // reaches vitest, every gated suite skips, and coverage falls far below
+      // the thresholds. Declaring it also makes it part of the cache key, which
+      // is correct: the same sources produce different coverage with and
+      // without a database.
+      "env": ["DATABASE_URL"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "src/**/*",

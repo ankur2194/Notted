@@ -26,6 +26,28 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
+    # The API's integration suites are gated on DATABASE_URL and skip without
+    # one. Skipped, they leave `apps/api` far below its coverage thresholds and
+    # `pnpm test:ci` cannot pass. The suites run their own migrations and seed,
+    # so an empty database is all they need. The image must be pgvector rather
+    # than stock postgres: migration 0000 enables the `vector` extension.
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.5-pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
+        env:
+          # Throwaway credentials for an ephemeral, runner-local database. It is
+          # never reachable off the runner and holds only generated fixtures.
+          POSTGRES_USER: notted_ci
+          POSTGRES_PASSWORD: notted_ci
+          POSTGRES_DB: notted_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U notted_ci -d notted_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -63,6 +85,10 @@ jobs:
         run: pnpm type-check
 
       - name: Run unit tests with coverage
+        # Scoped to this step only: `pnpm build` and `pnpm db:check` must keep
+        # running against their own configuration, not the CI service database.
+        env:
+          DATABASE_URL: postgres://notted_ci:notted_ci@127.0.0.1:5432/notted_ci
         run: pnpm test:ci
 
       - name: Build production artifacts

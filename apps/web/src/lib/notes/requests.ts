@@ -147,11 +147,39 @@ function listSearch(query: NoteListQuery): string {
   return params.toString();
 }
 
+/**
+ * Restates an already-parsed `NoteListQuery` in the query-string shape
+ * `noteListQuerySchema` accepts as input.
+ *
+ * Callers hold the schema's *output* — `parseNoteSearchParams` returns it, and
+ * the page components pass it straight through — where the explicit boolean
+ * selectors are real booleans and the optional id selectors may be `null`. The
+ * schema's *input* is the raw URL form: `"true"`/`"false"` strings, and absent
+ * rather than null. Re-validating the output against the input contract without
+ * this step rejects every query that uses one of those selectors, so a view
+ * like archived notes would fail closed and render empty while never issuing a
+ * request.
+ */
+function listQueryInput(query: NoteListQuery): Record<string, unknown> {
+  const asQueryString = (value: boolean | undefined): string | undefined =>
+    value === undefined ? undefined : String(value);
+  return {
+    ...query,
+    folderId: query.folderId ?? undefined,
+    parentId: query.parentId ?? undefined,
+    rootFolder: asQueryString(query.rootFolder),
+    rootParent: asQueryString(query.rootParent),
+    isTemplate: asQueryString(query.isTemplate),
+    isPinned: asQueryString(query.isPinned),
+    isArchived: asQueryString(query.isArchived),
+  };
+}
+
 export function requestNotePage(
   workspaceId: string,
   query: NoteListQuery,
 ): Promise<NoteRequestResult<NotePage>> {
-  const parsed = noteListQuerySchema.safeParse(query);
+  const parsed = noteListQuerySchema.safeParse(listQueryInput(query));
   if (!validIds(workspaceId) || !parsed.success)
     return Promise.resolve({ ok: false, kind: "invalid" });
   return requestJson(

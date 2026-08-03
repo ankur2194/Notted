@@ -92,7 +92,7 @@ Gates were run serially at the end of the combined Parts 34–36 session.
 | Production-env `pnpm exec turbo run build --concurrency=1 --force` | Pass | 4/4 |
 | `pnpm audit:prod` | Pass | |
 | `git diff --check` | Pass | |
-| `pnpm --filter @notted/web exec vitest run --coverage` | **Fail (branches only)** | Branches 63.31% vs 70%; pre-existing debt (see Part 34 record) |
+| `pnpm --filter @notted/web exec vitest run --coverage` | **Fail (branches only)** | Branches 63.31% vs 70%; resolved 2026-08-04 (see Part 34 record) |
 | Playwright / E2E | Not run | Popup placement/flipping is layout-dependent; browser verification belongs to Part 76 |
 | Docker / compose | Not run | Not required; no container or port was touched |
 
