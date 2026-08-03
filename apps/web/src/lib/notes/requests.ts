@@ -295,17 +295,69 @@ export function deleteFolder(
   );
 }
 
+/** Largest page the member listing contract allows (`workspaceMemberPageSchema`). */
+export const WORKSPACE_MEMBER_PAGE_SIZE = 100;
+
+/**
+ * How many member pages a client may request before it stops.
+ *
+ * A bound is required: without one an unexpectedly long listing would turn one
+ * UI interaction into an unbounded request loop. Ten pages covers every
+ * workspace the product targets; beyond it the client reports truncation
+ * honestly rather than pretending the extra members do not exist.
+ */
+export const WORKSPACE_MEMBER_MAX_PAGES = 10;
+
+/** Largest number of members any client-side member directory will hold. */
+export const WORKSPACE_MEMBER_DIRECTORY_LIMIT =
+  WORKSPACE_MEMBER_PAGE_SIZE * WORKSPACE_MEMBER_MAX_PAGES;
+
 export function requestWorkspaceMembers(
   workspaceId: string,
+  page = 1,
 ): Promise<NoteRequestResult<WorkspaceMemberPage>> {
-  if (!validIds(workspaceId)) return Promise.resolve({ ok: false, kind: "invalid" });
+  if (!validIds(workspaceId) || !Number.isInteger(page) || page < 1) {
+    return Promise.resolve({ ok: false, kind: "invalid" });
+  }
   const path = MEMBERSHIP_API_PATHS.members.replace(
     ":workspaceId",
     encodeURIComponent(workspaceId),
   );
-  return requestJson(`${path}?page=1&limit=100`, {}, (value) =>
+  return requestJson(`${path}?page=${page}&limit=${WORKSPACE_MEMBER_PAGE_SIZE}`, {}, (value) =>
     workspaceMemberPageSchema.safeParse(value),
   );
+}
+
+/**
+ * Every authorized member of one workspace, as a single page-shaped result.
+ *
+ * The member listing has no server-side name filter, so any client that has to
+ * match members locally — the mention menu, the share dialog — needs the whole
+ * list rather than its first page. Pages are fetched in order until the server
+ * reports no more, or until `WORKSPACE_MEMBER_MAX_PAGES` is reached. The
+ * returned `hasMore` means exactly "this client stopped before the server ran
+ * out", so callers can say so instead of implying the missing people are not
+ * members. A failed page fails the whole request: a partial directory that
+ * claims to be complete is worse than an error state.
+ */
+export async function requestAllWorkspaceMembers(
+  workspaceId: string,
+): Promise<NoteRequestResult<WorkspaceMemberPage>> {
+  const items: WorkspaceMemberPage["items"][number][] = [];
+  let hasMore = false;
+
+  for (let page = 1; page <= WORKSPACE_MEMBER_MAX_PAGES; page += 1) {
+    const result = await requestWorkspaceMembers(workspaceId, page);
+    if (!result.ok) return result;
+    items.push(...result.data.items);
+    hasMore = result.data.hasMore;
+    if (!hasMore) break;
+  }
+
+  return {
+    ok: true,
+    data: { items, page: 1, limit: WORKSPACE_MEMBER_DIRECTORY_LIMIT, hasMore },
+  };
 }
 
 export function requestNoteShares(

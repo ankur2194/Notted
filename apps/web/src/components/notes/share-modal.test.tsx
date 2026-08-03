@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  requestWorkspaceMembers: vi.fn(),
+  WORKSPACE_MEMBER_DIRECTORY_LIMIT: 1_000,
+  requestAllWorkspaceMembers: vi.fn(),
   requestNoteShares: vi.fn(),
   upsertNoteShare: vi.fn(),
   revokeNoteShare: vi.fn(),
@@ -38,7 +39,7 @@ function view() {
 describe("ShareModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requestWorkspaceMembers.mockResolvedValue({
+    mocks.requestAllWorkspaceMembers.mockResolvedValue({
       ok: true,
       data: {
         items: [

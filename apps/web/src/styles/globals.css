@@ -79,6 +79,297 @@
   }
 }
 
+@layer components {
+  /*
+   * Note editor content styles (Part 34).
+   *
+   * Tailwind's preflight resets headings, lists, and quotes, so the editable
+   * surface restores them here. Only layout-neutral typography lives in this
+   * block: page sizing, zoom, and print belong to `PageContainer` (Part 37).
+   */
+  .notted-editor-content {
+    @apply min-h-40 w-full max-w-full break-words text-base leading-7 outline-none;
+  }
+
+  .notted-editor-content:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  .notted-editor-content > * + * {
+    margin-top: 0.75em;
+  }
+
+  .notted-editor-content h1 {
+    @apply text-3xl font-bold tracking-tight;
+  }
+
+  .notted-editor-content h2 {
+    @apply text-2xl font-bold tracking-tight;
+  }
+
+  .notted-editor-content h3 {
+    @apply text-xl font-semibold;
+  }
+
+  .notted-editor-content h4 {
+    @apply text-lg font-semibold;
+  }
+
+  .notted-editor-content h5 {
+    @apply text-base font-semibold;
+  }
+
+  .notted-editor-content h6 {
+    @apply text-sm font-semibold uppercase tracking-wide;
+  }
+
+  .notted-editor-content ul,
+  .notted-editor-content ol {
+    @apply my-2 pl-6;
+  }
+
+  .notted-editor-content ul {
+    list-style-type: disc;
+  }
+
+  .notted-editor-content ol {
+    list-style-type: decimal;
+  }
+
+  .notted-editor-content li p {
+    margin: 0;
+  }
+
+  .notted-editor-content ul[data-type="taskList"] {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  .notted-editor-content ul[data-type="taskList"] li {
+    @apply flex items-start gap-2;
+  }
+
+  .notted-editor-content ul[data-type="taskList"] li > label {
+    @apply mt-1 flex select-none items-center;
+  }
+
+  .notted-editor-content ul[data-type="taskList"] li > div {
+    @apply min-w-0 flex-1;
+  }
+
+  /* Completed items read as done without removing their text from the DOM. */
+  .notted-editor-content ul[data-type="taskList"] li[data-checked="true"] > div {
+    @apply text-muted-foreground line-through;
+  }
+
+  /* A nested checklist indents rather than repeating the parent's checkbox row. */
+  .notted-editor-content ul[data-type="taskList"] ul[data-type="taskList"] {
+    @apply mt-1 pl-5;
+  }
+
+  .notted-editor-content blockquote {
+    @apply border-l-4 border-border pl-4 italic text-muted-foreground;
+  }
+
+  .notted-editor-content code {
+    @apply rounded bg-muted px-1 py-0.5 font-mono text-sm;
+  }
+
+  .notted-editor-content pre {
+    @apply overflow-x-auto rounded-md bg-muted p-4 font-mono text-sm;
+  }
+
+  .notted-editor-content pre code {
+    @apply bg-transparent p-0;
+  }
+
+  /*
+   * Syntax highlighting tokens emitted by lowlight. Only the token groups the
+   * registered grammars actually produce are styled, using palette colours that
+   * meet WCAG AA against the muted code-block background.
+   */
+  .notted-editor-content pre .hljs-comment,
+  .notted-editor-content pre .hljs-quote {
+    @apply italic text-muted-foreground;
+  }
+
+  .notted-editor-content pre .hljs-keyword,
+  .notted-editor-content pre .hljs-selector-tag,
+  .notted-editor-content pre .hljs-built_in,
+  .notted-editor-content pre .hljs-literal {
+    @apply font-semibold text-info;
+  }
+
+  .notted-editor-content pre .hljs-string,
+  .notted-editor-content pre .hljs-attr,
+  .notted-editor-content pre .hljs-symbol,
+  .notted-editor-content pre .hljs-addition {
+    @apply text-success;
+  }
+
+  .notted-editor-content pre .hljs-number,
+  .notted-editor-content pre .hljs-variable,
+  .notted-editor-content pre .hljs-template-variable,
+  .notted-editor-content pre .hljs-deletion {
+    @apply text-destructive;
+  }
+
+  .notted-editor-content pre .hljs-title,
+  .notted-editor-content pre .hljs-section,
+  .notted-editor-content pre .hljs-name,
+  .notted-editor-content pre .hljs-type {
+    @apply text-warning;
+  }
+
+  .notted-editor-content pre .hljs-emphasis {
+    @apply italic;
+  }
+
+  .notted-editor-content pre .hljs-strong {
+    @apply font-bold;
+  }
+
+  .notted-editor-content hr {
+    @apply my-6 border-t border-border;
+  }
+
+  .notted-editor-content a {
+    @apply text-info underline underline-offset-2;
+  }
+
+  .notted-editor-content mark {
+    @apply rounded-sm px-0.5;
+  }
+
+  .notted-editor-content[contenteditable="false"] {
+    @apply cursor-default;
+  }
+
+  /*
+   * Part 35 block behaviour.
+   *
+   * Tailwind provides none of the styling ProseMirror's gap cursor, drop
+   * cursor, table view, and the Placeholder extension rely on, and the upstream
+   * `prosemirror-tables` / `prosemirror-gapcursor` stylesheets are global. Both
+   * are reproduced here scoped to the editor surface so nothing leaks into the
+   * rest of the application.
+   */
+  .notted-editor-content p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    @apply pointer-events-none float-left h-0 text-muted-foreground;
+  }
+
+  .notted-editor-content .ProseMirror-gapcursor {
+    display: none;
+    pointer-events: none;
+    position: absolute;
+  }
+
+  .notted-editor-content .ProseMirror-gapcursor::after {
+    content: "";
+    display: block;
+    position: absolute;
+    top: -2px;
+    width: 1.25rem;
+    @apply border-t border-foreground;
+    animation: notted-cursor-blink 1.1s steps(2, start) infinite;
+  }
+
+  .notted-editor-content.ProseMirror-focused .ProseMirror-gapcursor {
+    display: block;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .notted-editor-content .ProseMirror-gapcursor::after {
+      animation: none;
+    }
+  }
+
+  .notted-editor-content .tableWrapper {
+    @apply my-4 overflow-x-auto;
+  }
+
+  .notted-editor-content table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+    @apply text-sm;
+  }
+
+  .notted-editor-content th,
+  .notted-editor-content td {
+    vertical-align: top;
+    box-sizing: border-box;
+    position: relative;
+    min-width: 3rem;
+    @apply border border-border px-2 py-1;
+  }
+
+  .notted-editor-content th {
+    @apply bg-muted text-left font-semibold;
+  }
+
+  .notted-editor-content th > *,
+  .notted-editor-content td > * {
+    margin-top: 0;
+  }
+
+  /* Blue overlay on the cells covered by a table cell selection. */
+  .notted-editor-content .selectedCell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    @apply bg-info/20;
+  }
+
+  .notted-editor-content .column-resize-handle {
+    position: absolute;
+    right: -2px;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    z-index: 20;
+    pointer-events: none;
+    @apply bg-info;
+  }
+
+  .notted-editor-content.resize-cursor {
+    cursor: col-resize;
+  }
+
+  /*
+   * Part 36 slash commands and mentions.
+   *
+   * The suggestion decoration marks the `/` or `@` the user is typing so the
+   * trigger reads as an active token rather than stray punctuation.
+   */
+  .notted-editor-content .notted-suggestion-trigger {
+    @apply rounded-sm bg-accent px-0.5 text-accent-foreground;
+  }
+
+  .notted-editor-content .notted-mention {
+    @apply rounded-sm bg-info/15 px-1 py-0.5 font-medium text-info;
+    white-space: nowrap;
+  }
+
+  /*
+   * A mention whose user has left the workspace. Colour is never the only
+   * signal: the node view also adds a visually hidden "(former member)" and a
+   * matching title, so the state is available without seeing the styling.
+   */
+  .notted-editor-content .notted-mention--removed {
+    @apply bg-muted text-muted-foreground line-through decoration-1;
+  }
+}
+
+@keyframes notted-cursor-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
 @layer utilities {
   .container {
     @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8;

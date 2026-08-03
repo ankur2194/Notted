@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { NoteEditorSurface } from "./NoteEditorSurface";
 import { ShareModal } from "./ShareModal";
 
 import type { NoteDetail, NoteNavigationItem } from "@notted/shared-types";
@@ -23,6 +24,12 @@ export function NoteDetailView({
     note.projectId === null
       ? noteDetailPath(note.workspaceId, note)
       : projectNotePath(note.workspaceId, note.projectId, note.id);
+  // Deny by default: an absent or unknown capability is treated as read only,
+  // and a trashed note is never editable in place.
+  const canEdit = note.capabilities.canUpdate === true && !note.isDeleted;
+  const readOnlyReason = note.isDeleted
+    ? "This note is in the trash. Restore it before editing."
+    : "You can read this note, but you do not have permission to edit it.";
   return (
     <article className="mx-auto max-w-4xl space-y-6">
       <nav
@@ -109,20 +116,15 @@ export function NoteDetailView({
         <h2 id="note-content-heading" className="sr-only">
           Note content
         </h2>
-        {note.contentPlain.trim().length === 0 ? (
-          <p className="text-sm text-slate-500">This note has no plain-text content.</p>
-        ) : (
-          <p className="whitespace-pre-wrap break-words leading-7">{note.contentPlain}</p>
-        )}
+        <NoteEditorSurface
+          workspaceId={note.workspaceId}
+          noteId={note.id}
+          initialDocument={note.content}
+          editable={canEdit}
+          ariaLabel={`Note content: ${note.title}`}
+          readOnlyReason={readOnlyReason}
+        />
       </section>
-      <aside
-        className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground"
-        role="note"
-      >
-        <strong className="text-foreground">Editor not available yet.</strong> This page
-        intentionally renders only the server-derived plain-text projection. TipTap editing arrives
-        in Part 34; persisted HTML and arbitrary JSON are never interpreted here.
-      </aside>
     </article>
   );
 }

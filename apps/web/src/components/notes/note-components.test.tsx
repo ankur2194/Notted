@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -59,13 +59,21 @@ describe("note components", () => {
     expect(document.querySelector("script")).toBeNull();
   });
 
-  it("renders deep-link breadcrumbs and plain text without interpreting persisted JSON or HTML", () => {
+  it("renders deep-link breadcrumbs and persisted content without interpreting it as HTML", async () => {
+    // The note body is rendered exactly once, by the editor. Persisted text that
+    // looks like markup must reach the screen as characters: TipTap is fed
+    // contract JSON, never an HTML string, so `<b>` stays literal text.
     render(
       providers(
         <NoteDetailView
           note={{
             ...note,
-            content: { type: "doc", content: [] },
+            content: {
+              type: "doc",
+              content: [
+                { type: "paragraph", content: [{ type: "text", text: "<b>literal text</b>" }] },
+              ],
+            },
             contentPlain: "<b>literal text</b>",
             createdById: note.id,
             updatedById: null,
@@ -77,9 +85,13 @@ describe("note components", () => {
       ),
     );
     expect(screen.getByRole("navigation", { name: "Note breadcrumbs" })).toHaveTextContent("Alpha");
-    expect(screen.getByText("<b>literal text</b>")).toBeVisible();
+    const surface = await screen.findByRole("textbox", { name: `Note content: ${note.title}` });
+    await waitFor(() => expect(surface).toHaveTextContent("<b>literal text</b>"));
     expect(document.querySelector("b")).toBeNull();
-    expect(screen.getByText(/Editor not available yet/u)).toBeVisible();
+    expect(screen.getByRole("toolbar", { name: "Note formatting" })).toBeInTheDocument();
+    // Exactly one rendering of the body: the placeholder plain-text panel that
+    // used to duplicate it below the editor is gone.
+    expect(screen.getAllByText("<b>literal text</b>")).toHaveLength(1);
   });
 
   it("presents server-derived sharing capability without treating UI state as authority", () => {
@@ -101,6 +113,54 @@ describe("note components", () => {
     );
     expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
     expect(screen.getByText(/do not have permission to manage sharing/u)).toBeVisible();
+  });
+
+  it("renders the editor read only when the update capability is absent", () => {
+    render(
+      providers(
+        <NoteDetailView
+          note={{
+            ...note,
+            content: { type: "doc", content: [] },
+            contentPlain: "",
+            createdById: note.id,
+            updatedById: null,
+            currentActorId: note.id,
+            capabilities: { canUpdate: false, canDelete: false, canShare: false },
+          }}
+          workspaceName="Alpha"
+        />,
+      ),
+    );
+    expect(screen.queryByRole("toolbar", { name: "Note formatting" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("toolbar", { name: "Note editor actions (read only)" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Bold/u })).not.toBeInTheDocument();
+    expect(screen.getByText(/do not have permission to edit it/u)).toHaveAttribute("role", "note");
+  });
+
+  it("renders the editor read only for a trashed note even with the update capability", () => {
+    render(
+      providers(
+        <NoteDetailView
+          note={{
+            ...note,
+            isDeleted: true,
+            deletedAt: "2026-08-02T00:00:00.000Z",
+            content: { type: "doc", content: [] },
+            contentPlain: "",
+            createdById: note.id,
+            updatedById: null,
+            currentActorId: note.id,
+            capabilities: { canUpdate: true, canDelete: true, canShare: true },
+          }}
+          workspaceName="Alpha"
+        />,
+      ),
+    );
+    expect(screen.queryByRole("toolbar", { name: "Note formatting" })).not.toBeInTheDocument();
+    expect(screen.getByText(/This note is in the trash/u)).toHaveAttribute("role", "note");
   });
 
   it("keeps sidebar failure bounded and exposes truncation to the full browser", () => {

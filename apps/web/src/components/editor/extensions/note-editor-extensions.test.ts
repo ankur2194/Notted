@@ -1,4 +1,5 @@
 import {
+  NOTE_DOCUMENT_CODE_LANGUAGES,
   NOTE_DOCUMENT_MARK_TYPES,
   NOTE_DOCUMENT_NODE_TYPES,
   safeParseNoteDocument,
@@ -9,7 +10,13 @@ import { describe, expect, it } from "vitest";
 
 import { isAllowedDocumentLink } from "../document-contract";
 
-import { NOTE_FONT_SIZES, createNoteEditorExtensions, isAllowedNoteFontSize } from "./index";
+import {
+  CODE_BLOCK_LANGUAGE_OPTIONS,
+  NOTE_FONT_SIZES,
+  createNoteEditorExtensions,
+  createNoteLowlight,
+  isAllowedNoteFontSize,
+} from "./index";
 
 const SAFE_LINK_ATTRS = {
   href: "https://example.com/note",
@@ -330,5 +337,144 @@ describe("note editor extensions", () => {
     const html = serializeDocument(output);
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer nofollow"');
+  });
+});
+
+const tableFixture = {
+  type: "doc",
+  content: [
+    {
+      type: "table",
+      content: [
+        {
+          type: "tableRow",
+          content: [
+            {
+              type: "tableHeader",
+              attrs: { colspan: 1, rowspan: 1, colwidth: null },
+              content: [{ type: "paragraph", content: [{ type: "text", text: "Head" }] }],
+            },
+          ],
+        },
+        {
+          type: "tableRow",
+          content: [
+            {
+              type: "tableCell",
+              attrs: { colspan: 1, rowspan: 1, colwidth: [200] },
+              content: [{ type: "paragraph", content: [{ type: "text", text: "Body" }] }],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+describe("Part 35 editor schema additions", () => {
+  it("round-trips a resizable table through ProseMirror and the shared contract", () => {
+    const output = roundTripDocument(tableFixture);
+    // ProseMirror fills in the paragraph's nullable alignment default; the
+    // structure and every reviewed cell attribute survive unchanged.
+    expect(output).toMatchObject(tableFixture);
+    expect(safeParseNoteDocument(output).success).toBe(true);
+    const html = serializeDocument(output);
+    expect(html).toContain("<td");
+    expect(html).toContain("<th");
+  });
+
+  it("registers exactly the contract's code languages with lowlight", () => {
+    const registered = [...createNoteLowlight().listLanguages()].sort();
+    expect(registered).toEqual([...NOTE_DOCUMENT_CODE_LANGUAGES].sort());
+
+    const offered = CODE_BLOCK_LANGUAGE_OPTIONS.map((option) => option.value).sort();
+    expect(offered).toEqual([...NOTE_DOCUMENT_CODE_LANGUAGES].sort());
+    expect(new Set(CODE_BLOCK_LANGUAGE_OPTIONS.map((option) => option.label)).size).toBe(
+      CODE_BLOCK_LANGUAGE_OPTIONS.length,
+    );
+  });
+
+  it("keeps the block-behaviour extensions registered exactly once", () => {
+    const names = createNoteEditorExtensions().map((extension) => extension.name);
+    for (const required of [
+      "table",
+      "tableRow",
+      "tableHeader",
+      "tableCell",
+      "taskList",
+      "taskItem",
+      "codeBlock",
+      "placeholder",
+      "nottedBlockTab",
+      "nottedSlashCommand",
+      "mention",
+    ]) {
+      expect(names.filter((name) => name === required)).toHaveLength(1);
+    }
+  });
+});
+
+const MENTION_USER_ID = "9c858901-8a57-4791-81fe-4c455b099bc9";
+
+const mentionFixture = {
+  type: "doc",
+  content: [
+    {
+      type: "paragraph",
+      attrs: { textAlign: null },
+      content: [
+        { type: "text", text: "cc " },
+        { type: "mention", attrs: { id: MENTION_USER_ID, label: "Ada Lovelace" } },
+      ],
+    },
+  ],
+};
+
+describe("Part 36 editor schema additions", () => {
+  it("round-trips a mention through ProseMirror and the shared contract", () => {
+    const output = roundTripDocument(mentionFixture);
+    expect(output).toMatchObject(mentionFixture);
+    expect(safeParseNoteDocument(output).success).toBe(true);
+  });
+
+  it("persists exactly the two reviewed mention attributes", () => {
+    const schema = getSchema(createNoteEditorExtensions());
+    const node = schema.nodeFromJSON(mentionFixture);
+    const mention = node.firstChild?.lastChild;
+    // TipTap's stock extension also stores `mentionSuggestionChar`, which the
+    // shared contract rejects; the attribute set is replaced, not extended.
+    expect(Object.keys(mention?.attrs ?? {}).sort()).toEqual(["id", "label"]);
+    expect(mention?.isAtom).toBe(true);
+    expect(mention?.isInline).toBe(true);
+  });
+
+  it("serializes a hostile label as inert text, never as markup", () => {
+    const html = serializeDocument({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "mention",
+              attrs: { id: MENTION_USER_ID, label: '<script>alert("x")</script>' },
+            },
+          ],
+        },
+      ],
+    });
+    expect(html).toContain('data-type="mention"');
+    expect(html).toContain(`data-mention-id="${MENTION_USER_ID}"`);
+    expect(html).not.toContain("mentionSuggestionChar");
+
+    // Re-parsing the serialized output must yield one span and no element the
+    // label was able to introduce. `data-mention-label` survives as an ordinary
+    // attribute so a clipboard round-trip inside the editor keeps the name.
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    expect(container.querySelectorAll("script")).toHaveLength(0);
+    const span = container.querySelector('[data-type="mention"]');
+    expect(span?.children).toHaveLength(0);
+    expect(span?.textContent).toBe('@<script>alert("x")</script>');
   });
 });

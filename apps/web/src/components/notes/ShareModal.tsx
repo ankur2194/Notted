@@ -4,11 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Share2, UserMinus } from "lucide-react";
 import { useState } from "react";
 
-import type {
-  NoteShareList,
-  NoteShareMutationPermission,
-  WorkspaceMemberPage,
-} from "@notted/shared-types";
+import type { NoteShareList, NoteShareMutationPermission } from "@notted/shared-types";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,10 +15,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { fetchWorkspaceMemberDirectory } from "@/lib/notes/member-directory";
 import { noteQueryKeys } from "@/lib/notes/query-keys";
 import {
+  WORKSPACE_MEMBER_DIRECTORY_LIMIT,
   requestNoteShares,
-  requestWorkspaceMembers,
   revokeNoteShare,
   upsertNoteShare,
 } from "@/lib/notes/requests";
@@ -52,11 +49,7 @@ export function ShareModal({
   const members = useQuery({
     queryKey: noteQueryKeys.members(workspaceId),
     enabled: open,
-    queryFn: async (): Promise<WorkspaceMemberPage> => {
-      const result = await requestWorkspaceMembers(workspaceId);
-      if (!result.ok) throw new Error(result.kind);
-      return result.data;
-    },
+    queryFn: () => fetchWorkspaceMemberDirectory(workspaceId),
   });
   const shares = useQuery({
     queryKey: noteQueryKeys.shares(workspaceId, noteId),
@@ -217,8 +210,9 @@ export function ShareModal({
               </h3>
               {members.data?.hasMore ? (
                 <p className="text-sm text-muted-foreground">
-                  Member candidates are bounded to the first 100 authorized workspace members. No
-                  omitted member is treated as unauthorized.
+                  Member candidates are bounded to the first{" "}
+                  {WORKSPACE_MEMBER_DIRECTORY_LIMIT.toLocaleString("en-GB")} authorized workspace
+                  members. No omitted member is treated as unauthorized.
                 </p>
               ) : null}
               {candidates.length === 0 ? (

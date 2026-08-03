@@ -42,9 +42,13 @@ export type NoteShareMutationPermission = "view" | "edit";
  * node types, mark types, attribute rules, size bounds, schema version, link
  * sanitization, plain-text extraction, HTML rendering, and migration policy
  * are owned by `@notted/shared-validators` (see `NOTE_DOCUMENT_NODE_TYPES`,
- * `NOTE_DOCUMENT_MARK_TYPES`, `NOTE_DOCUMENT_LIMITS`, `NOTE_DOCUMENT_SCHEMA_VERSION`,
- * `safeParseNoteDocument`, and `migrateNoteDocument`). This interface is the
- * framework-neutral projection shared across the API and web boundaries.
+ * `NOTE_DOCUMENT_MARK_TYPES`, `NOTE_DOCUMENT_LIMITS`,
+ * `NOTE_DOCUMENT_CODE_LANGUAGES`, `NOTE_DOCUMENT_SCHEMA_VERSION`,
+ * `noteDocumentMentionAttrs`, `safeParseNoteDocument`, and
+ * `migrateNoteDocument`). A `mention` node persists a stable UUID user id plus
+ * a bounded display-name snapshot; the snapshot is untrusted display data and
+ * is escaped everywhere it is rendered. This interface is the framework-neutral
+ * projection shared across the API and web boundaries.
  */
 export interface NoteDocument {
   readonly type: "doc";

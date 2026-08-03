@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  NOTE_DOCUMENT_CODE_LANGUAGES,
   NOTE_DOCUMENT_LIMITS,
   NOTE_DOCUMENT_SCHEMA_VERSION,
   NoteDocumentMigrationError,
   extractNoteContentPlain,
   migrateNoteDocument,
   noteDocumentSchema,
+  normalizeNoteDocumentCodeLanguage,
   renderDocumentHtml,
   safeParseNoteDocument,
   sanitizeDocumentUrl,
@@ -558,5 +560,566 @@ describe("Part 33 TipTap document contract", () => {
     });
     expect(result.success).toBe(false);
     expect(result.errors.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+const CELL_ATTRS = { colspan: 1, rowspan: 1, colwidth: null } as const;
+
+function cell(text: string, attrs: Record<string, unknown> = CELL_ATTRS) {
+  return {
+    type: "tableCell",
+    attrs,
+    content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+  };
+}
+
+function header(text: string, attrs: Record<string, unknown> = CELL_ATTRS) {
+  return {
+    type: "tableHeader",
+    attrs,
+    content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+  };
+}
+
+function tableDocument(rows: readonly unknown[]) {
+  return { type: "doc", content: [{ type: "table", content: rows }] };
+}
+
+describe("Part 35 table contract", () => {
+  it("accepts the structure TipTap's table extensions actually emit", () => {
+    const document = tableDocument([
+      { type: "tableRow", content: [header("Metric"), header("Value")] },
+      {
+        type: "tableRow",
+        content: [cell("Revenue"), cell("42", { colspan: 2, rowspan: 1, colwidth: [180] })],
+      },
+    ]);
+    expect(noteDocumentSchema.safeParse(document).success).toBe(true);
+  });
+
+  it("accepts block content, fractional widths, and prosemirror's zero placeholders", () => {
+    const document = tableDocument([
+      {
+        type: "tableRow",
+        content: [
+          {
+            type: "tableCell",
+            attrs: { colspan: 2, rowspan: 2, colwidth: [120.5, 0] },
+            content: [
+              { type: "paragraph", content: [{ type: "text", text: "intro" }] },
+              {
+                type: "bulletList",
+                content: [
+                  {
+                    type: "listItem",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "detail" }] }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    expect(safeParseNoteDocument(document).success).toBe(true);
+  });
+
+  it.each([
+    [
+      "zero colspan",
+      tableDocument([
+        { type: "tableRow", content: [cell("a", { colspan: 0, rowspan: 1, colwidth: null })] },
+      ]),
+    ],
+    [
+      "fractional colspan",
+      tableDocument([
+        { type: "tableRow", content: [cell("a", { colspan: 1.5, rowspan: 1, colwidth: null })] },
+      ]),
+    ],
+    [
+      "oversized rowspan",
+      tableDocument([
+        {
+          type: "tableRow",
+          content: [
+            cell("a", {
+              colspan: 1,
+              rowspan: NOTE_DOCUMENT_LIMITS.maxTableCellSpan + 1,
+              colwidth: null,
+            }),
+          ],
+        },
+      ]),
+    ],
+    [
+      "missing cell attrs",
+      tableDocument([
+        { type: "tableRow", content: [{ type: "tableCell", content: [{ type: "paragraph" }] }] },
+      ]),
+    ],
+    [
+      "unknown cell attr",
+      tableDocument([
+        { type: "tableRow", content: [cell("a", { ...CELL_ATTRS, background: "#fff" })] },
+      ]),
+    ],
+    [
+      "negative column width",
+      tableDocument([
+        { type: "tableRow", content: [cell("a", { colspan: 1, rowspan: 1, colwidth: [-10] })] },
+      ]),
+    ],
+    [
+      "oversized column width",
+      tableDocument([
+        {
+          type: "tableRow",
+          content: [
+            cell("a", {
+              colspan: 1,
+              rowspan: 1,
+              colwidth: [NOTE_DOCUMENT_LIMITS.maxTableColumnWidth + 1],
+            }),
+          ],
+        },
+      ]),
+    ],
+    [
+      "non-numeric column width",
+      tableDocument([
+        { type: "tableRow", content: [cell("a", { colspan: 1, rowspan: 1, colwidth: ["120"] })] },
+      ]),
+    ],
+    ["empty table", tableDocument([])],
+    ["row outside a table", { type: "doc", content: [{ type: "tableRow", content: [cell("a")] }] }],
+    [
+      "non-cell child of a row",
+      tableDocument([{ type: "tableRow", content: [{ type: "paragraph" }] }]),
+    ],
+    ["paragraph child of table", tableDocument([{ type: "paragraph" }])],
+    ["empty row", tableDocument([{ type: "tableRow", content: [] }])],
+    [
+      "inline content in a cell",
+      tableDocument([
+        {
+          type: "tableRow",
+          content: [
+            { type: "tableCell", attrs: CELL_ATTRS, content: [{ type: "text", text: "x" }] },
+          ],
+        },
+      ]),
+    ],
+    [
+      "empty cell",
+      tableDocument([
+        { type: "tableRow", content: [{ type: "tableCell", attrs: CELL_ATTRS, content: [] }] },
+      ]),
+    ],
+  ])("rejects a malformed table: %s", (_label, document) => {
+    expect(safeParseNoteDocument(document).success).toBe(false);
+  });
+
+  it("rejects tables beyond the explicit row, column, and total-cell bounds", () => {
+    const wideRow = {
+      type: "tableRow",
+      content: Array.from({ length: NOTE_DOCUMENT_LIMITS.maxTableColumns + 1 }, () => cell("x")),
+    };
+    expect(safeParseNoteDocument(tableDocument([wideRow])).success).toBe(false);
+
+    const tallTable = tableDocument(
+      Array.from({ length: NOTE_DOCUMENT_LIMITS.maxTableRows + 1 }, () => ({
+        type: "tableRow",
+        content: [cell("x")],
+      })),
+    );
+    expect(safeParseNoteDocument(tallTable).success).toBe(false);
+
+    const rowOfTen = {
+      type: "tableRow",
+      content: Array.from({ length: 10 }, () => cell("x")),
+    };
+    const tooManyCells = tableDocument(
+      Array.from({ length: NOTE_DOCUMENT_LIMITS.maxTableCells / 10 + 1 }, () => rowOfTen),
+    );
+    const errors = safeParseNoteDocument(tooManyCells);
+    expect(errors.success).toBe(false);
+    expect(errors.success ? [] : errors.errors).toContain("Document has too many table cells");
+  });
+
+  it("renders escaped table HTML with only the reviewed attributes", () => {
+    const html = renderDocumentHtml(
+      tableDocument([
+        { type: "tableRow", content: [header("<b>Metric</b>")] },
+        {
+          type: "tableRow",
+          content: [cell("a & b", { colspan: 2, rowspan: 3, colwidth: [100, 80] })],
+        },
+        { type: "tableRow", content: [cell("plain")] },
+      ]),
+    );
+
+    expect(html).toContain("<table><tbody>");
+    expect(html).toContain("<th><p>&lt;b&gt;Metric&lt;/b&gt;</p></th>");
+    expect(html).toContain('<td colspan="2" rowspan="3" style="width:180px"><p>a &amp; b</p></td>');
+    expect(html).toContain("<td><p>plain</p></td>");
+    expect(html).not.toContain("colwidth");
+    expect(html).not.toContain("<script");
+  });
+
+  it("extracts one readable line per table row", () => {
+    const plain = extractNoteContentPlain(
+      tableDocument([
+        { type: "tableRow", content: [header("Metric"), header("Value")] },
+        { type: "tableRow", content: [cell("Revenue"), cell("42")] },
+      ]),
+    );
+    expect(plain).toBe("Metric\tValue\nRevenue\t42");
+  });
+
+  it("recovers historical table-like structures without losing text", () => {
+    const result = migrateNoteDocument({
+      type: "doc",
+      content: [
+        {
+          type: "table",
+          attrs: { legacy: true },
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                {
+                  type: "tableHeader",
+                  attrs: { colspan: "2" },
+                  content: [{ type: "text", text: "Head" }],
+                },
+                { type: "paragraph", content: [{ type: "text", text: "Loose" }] },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.migrated).toBe(true);
+    expect(noteDocumentSchema.safeParse(result.doc).success).toBe(true);
+    expect(extractNoteContentPlain(result.doc)).toContain("Head");
+    expect(extractNoteContentPlain(result.doc)).toContain("Loose");
+  });
+
+  it("keeps recoverable text when a table cannot be represented as a table", () => {
+    const result = migrateNoteDocument({
+      type: "doc",
+      content: [
+        { type: "table", content: [{ type: "tableRow" }] },
+        {
+          type: "tableCell",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "orphan" }] }],
+        },
+      ],
+    });
+    expect(noteDocumentSchema.safeParse(result.doc).success).toBe(true);
+    expect(extractNoteContentPlain(result.doc)).toContain("orphan");
+  });
+
+  it("does not change the contract version for the additive table widening", () => {
+    expect(NOTE_DOCUMENT_SCHEMA_VERSION).toBe(1);
+    expect(noteDocumentSchema.safeParse(RICH_DOCUMENT).success).toBe(true);
+  });
+});
+
+describe("Part 35 code block language registry", () => {
+  it("accepts every registered language and rejects anything else", () => {
+    for (const language of NOTE_DOCUMENT_CODE_LANGUAGES) {
+      expect(
+        safeParseNoteDocument({
+          type: "doc",
+          content: [{ type: "codeBlock", attrs: { language } }],
+        }).success,
+      ).toBe(true);
+    }
+    for (const language of ["ts", "cobol", "LANGUAGE-INJECTION", "", "javascript "]) {
+      expect(
+        safeParseNoteDocument({
+          type: "doc",
+          content: [{ type: "codeBlock", attrs: { language } }],
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it("normalizes aliases and refuses unknown or unbounded values", () => {
+    expect(normalizeNoteDocumentCodeLanguage("ts")).toBe("typescript");
+    expect(normalizeNoteDocumentCodeLanguage("TSX")).toBe("typescript");
+    expect(normalizeNoteDocumentCodeLanguage(" html ")).toBe("xml");
+    expect(normalizeNoteDocumentCodeLanguage("yaml")).toBe("yaml");
+    expect(normalizeNoteDocumentCodeLanguage("cobol")).toBeNull();
+    expect(normalizeNoteDocumentCodeLanguage(null)).toBeNull();
+    expect(normalizeNoteDocumentCodeLanguage(42)).toBeNull();
+    expect(normalizeNoteDocumentCodeLanguage("x".repeat(500))).toBeNull();
+  });
+
+  it("migrates an out-of-registry language to a normalized value", () => {
+    const aliased = migrateNoteDocument({
+      type: "doc",
+      content: [
+        { type: "codeBlock", attrs: { language: "ts" }, content: [{ type: "text", text: "x" }] },
+      ],
+    });
+    expect(aliased.migrated).toBe(true);
+    expect(aliased.doc).toMatchObject({
+      content: [{ type: "codeBlock", attrs: { language: "typescript" } }],
+    });
+
+    const unknown = migrateNoteDocument({
+      type: "doc",
+      content: [
+        { type: "codeBlock", attrs: { language: "cobol" }, content: [{ type: "text", text: "x" }] },
+      ],
+    });
+    expect(unknown.doc).toMatchObject({
+      content: [{ type: "codeBlock", attrs: { language: null } }],
+    });
+    expect(extractNoteContentPlain(unknown.doc)).toBe("x");
+  });
+});
+
+const MENTION_USER_ID = "9c858901-8a57-4791-81fe-4c455b099bc9";
+const OTHER_USER_ID = "1f0c3b52-6ad6-4a10-9c4e-4ce0d19f2f11";
+
+function mention(attrs: Record<string, unknown>) {
+  return { type: "mention", attrs };
+}
+
+function mentionDocument(attrs: Record<string, unknown>, leading = "Hello ") {
+  return {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { textAlign: null },
+        content: [{ type: "text", text: leading }, mention(attrs)],
+      },
+    ],
+  };
+}
+
+describe("Part 36 mention contract", () => {
+  it("accepts the structure the mention extension actually emits", () => {
+    const document = mentionDocument({ id: MENTION_USER_ID, label: "Ada Lovelace" });
+    expect(noteDocumentSchema.safeParse(document).success).toBe(true);
+    // Round-tripping the accepted value must not change it.
+    const parsed = safeParseNoteDocument(document);
+    expect(parsed.success ? parsed.doc : null).toEqual(document);
+  });
+
+  it("accepts a mention in every inline position the contract allows", () => {
+    const inline = [mention({ id: MENTION_USER_ID, label: "Ada" })];
+    expect(
+      noteDocumentSchema.safeParse({
+        type: "doc",
+        content: [
+          { type: "heading", attrs: { level: 2, textAlign: null }, content: inline },
+          { type: "paragraph", attrs: { textAlign: null }, content: inline },
+          {
+            type: "bulletList",
+            content: [
+              {
+                type: "listItem",
+                content: [{ type: "paragraph", attrs: { textAlign: null }, content: inline }],
+              },
+            ],
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    ["a non-UUID id", { id: "ada", label: "Ada" }],
+    ["a numeric id", { id: 7, label: "Ada" }],
+    ["a null id", { id: null, label: "Ada" }],
+    ["a missing id", { label: "Ada" }],
+    ["a missing label", { id: MENTION_USER_ID }],
+    ["an empty label", { id: MENTION_USER_ID, label: "" }],
+    ["a null label", { id: MENTION_USER_ID, label: null }],
+    [
+      "an oversized label",
+      { id: MENTION_USER_ID, label: "x".repeat(NOTE_DOCUMENT_LIMITS.maxMentionLabel + 1) },
+    ],
+    ["a control character in the label", { id: MENTION_USER_ID, label: "Ada\nLovelace" }],
+    ["an extra attribute", { id: MENTION_USER_ID, label: "Ada", href: "https://example.test" }],
+    ["a workspace attribute", { id: MENTION_USER_ID, label: "Ada", workspaceId: OTHER_USER_ID }],
+  ])("rejects a mention with %s", (_label, attrs) => {
+    expect(safeParseNoteDocument(mentionDocument(attrs)).success).toBe(false);
+  });
+
+  it("rejects a mention that carries content, marks, or no attributes at all", () => {
+    const base = { id: MENTION_USER_ID, label: "Ada" };
+    const withContent = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "mention", attrs: base, content: [{ type: "text", text: "x" }] }],
+        },
+      ],
+    };
+    const withMarks = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "mention", attrs: base, marks: [{ type: "bold" }] }],
+        },
+      ],
+    };
+    const withoutAttrs = {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "mention" }] }],
+    };
+
+    expect(safeParseNoteDocument(withContent).success).toBe(false);
+    expect(safeParseNoteDocument(withMarks).success).toBe(false);
+    expect(safeParseNoteDocument(withoutAttrs).success).toBe(false);
+  });
+
+  it("rejects a mention in block position", () => {
+    expect(
+      safeParseNoteDocument({
+        type: "doc",
+        content: [mention({ id: MENTION_USER_ID, label: "Ada" })],
+      }).success,
+    ).toBe(false);
+    expect(
+      safeParseNoteDocument({
+        type: "doc",
+        content: [
+          {
+            type: "codeBlock",
+            attrs: { language: null },
+            content: [mention({ id: MENTION_USER_ID, label: "Ada" })],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a document beyond the explicit mention bound", () => {
+    const one = mention({ id: MENTION_USER_ID, label: "Ada" });
+    const paragraphs = Array.from({ length: NOTE_DOCUMENT_LIMITS.maxMentions / 100 + 1 }, () => ({
+      type: "paragraph",
+      content: Array.from({ length: 100 }, () => one),
+    }));
+    const result = safeParseNoteDocument({ type: "doc", content: paragraphs });
+    expect(result.success).toBe(false);
+    expect(result.success ? [] : result.errors).toContain("Document has too many mentions");
+  });
+
+  it("renders a mention as an escaped span with only the reviewed attributes", () => {
+    const html = renderDocumentHtml(
+      mentionDocument({
+        id: MENTION_USER_ID,
+        label: `<script>alert("x&y")</script> 'Ada'`,
+      }),
+    );
+
+    expect(html).toContain(`<span class="notted-mention" data-mention-id="${MENTION_USER_ID}">`);
+    expect(html).toContain(
+      "@&lt;script&gt;alert(&quot;x&amp;y&quot;)&lt;/script&gt; &#39;Ada&#39;",
+    );
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("data-label");
+  });
+
+  it("renders an unusable historical mention as escaped text instead of dropping it", () => {
+    const html = renderDocumentHtml({
+      type: "doc",
+      content: [{ type: "paragraph", content: [mention({ id: "ada", label: "<b>Ada</b>" })] }],
+    });
+    expect(html).toBe("<p>@&lt;b&gt;Ada&lt;/b&gt;</p>");
+  });
+
+  it("extracts a mention as readable @label text", () => {
+    expect(
+      extractNoteContentPlain(mentionDocument({ id: MENTION_USER_ID, label: "Ada Lovelace" })),
+    ).toBe("Hello @Ada Lovelace");
+  });
+
+  it("migrates a malformed mention to recoverable text without losing the name", () => {
+    const result = migrateNoteDocument({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "cc " },
+            { type: "mention", attrs: { id: "legacy-42", label: "Ada Lovelace", role: "owner" } },
+          ],
+        },
+      ],
+    });
+
+    expect(result.migrated).toBe(true);
+    expect(noteDocumentSchema.safeParse(result.doc).success).toBe(true);
+    expect(extractNoteContentPlain(result.doc)).toBe("cc @Ada Lovelace");
+  });
+
+  it("keeps a valid mention as a mention while repairing the block around it", () => {
+    const result = migrateNoteDocument({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { textAlign: "middle" },
+          content: [
+            { type: "mention", attrs: { id: MENTION_USER_ID, label: "Ada", extra: "drop me" } },
+          ],
+        },
+      ],
+    });
+
+    expect(result.migrated).toBe(true);
+    expect(noteDocumentSchema.safeParse(result.doc).success).toBe(true);
+    expect(result.doc).toMatchObject({
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "mention", attrs: { id: MENTION_USER_ID, label: "Ada" } }],
+        },
+      ],
+    });
+  });
+
+  it("degrades a mention nested in an unrepresentable historical node to its name", () => {
+    const result = migrateNoteDocument({
+      type: "doc",
+      content: [
+        {
+          type: "legacyCallout",
+          content: [{ type: "mention", attrs: { id: MENTION_USER_ID, label: "Ada" } }],
+        },
+      ],
+    });
+
+    expect(result.migrated).toBe(true);
+    expect(noteDocumentSchema.safeParse(result.doc).success).toBe(true);
+    // The node type cannot be represented, so the mention becomes readable text
+    // rather than disappearing along with the block that held it.
+    expect(extractNoteContentPlain(result.doc)).toBe("@Ada");
+  });
+
+  it("promotes a block-position mention into a paragraph rather than dropping it", () => {
+    const result = migrateNoteDocument({
+      type: "doc",
+      content: [{ type: "mention", attrs: { id: MENTION_USER_ID, label: "Ada" } }],
+    });
+    expect(noteDocumentSchema.safeParse(result.doc).success).toBe(true);
+    expect(extractNoteContentPlain(result.doc)).toBe("@Ada");
+  });
+
+  it("does not change the contract version for the additive mention widening", () => {
+    expect(NOTE_DOCUMENT_SCHEMA_VERSION).toBe(1);
+    expect(noteDocumentSchema.safeParse(RICH_DOCUMENT).success).toBe(true);
   });
 });

@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-22
+- **Last revised:** 2026-08-03 — Parts 34–36 extended the TipTap row to the editor extension family and added the `lowlight`/`highlight.js` syntax-highlighting chain.
 - **Related plan parts:** 1–7, 21, 33–38
 
 ## Context
@@ -22,7 +23,9 @@ Use this foundation matrix, with exact patch versions resolved and locked during
 | NestJS core/common/platform | `10.4.22` | Runs on the common Node 22 runtime; core Nest packages stay on this patch. |
 | tRPC client/server/React Query | `11.18.0` | Identical adapter patches, paired with `@tanstack/react-query` `5.101.4`; shared Zod is pinned when Part 6 introduces its contracts. |
 | Drizzle ORM / Kit / PostgreSQL driver | `0.45.2` / `0.31.10` / `pg` `8.22.0` | Explicit material deviation from `Notted.md`'s Drizzle ORM `0.30.x` line. Better Auth's current stable adapter requires Drizzle ORM `^0.45.2`; these exact stable versions pass strict peer resolution. Drizzle 1.0 prereleases remain excluded. |
-| TipTap core/react/starter-kit | `2.27.1` | Identical package patches; use the headless React integration, not the separately packaged UI Components. |
+| TipTap core/react/pm/starter-kit and every `@tiptap/extension-*` plus `@tiptap/suggestion` | `2.27.1` | MIT. One identical patch across the whole family, including the Part 34–36 additions (`extension-table`, `-table-row`, `-table-header`, `-table-cell`, `-code-block-lowlight`, `-placeholder`, `-mention`, and `@tiptap/suggestion`). Extensions peer on `^2.7.0` of core/pm, so a mixed-patch install must never be allowed to satisfy them. Use the headless React integration, not the separately packaged UI Components. |
+| `lowlight` | `3.3.0` | MIT. The highlighting engine `@tiptap/extension-code-block-lowlight` peers on and the only one it supports; its declared peers are `lowlight: ^2 \|\| ^3` and `highlight.js: ^11`; the 3.x line is chosen for its ESM build and current maintenance. It depends on `highlight.js@~11.11.0`, which fixes the paired grammar version below. |
+| `highlight.js` | `11.11.1` | BSD-3-Clause. The matching release inside `lowlight@3.3.0`'s `~11.11.0` range and inside the extension's `^11` peer. **Only individual `highlight.js/lib/languages/*` grammars may be imported — never the `all` or `common` bundle**, which would pull nearly two hundred grammars into the client bundle. `apps/web/src/types/highlight-js.d.ts` enforces this at the type level by declaring only the per-language subpath, and `apps/web/src/components/editor/extensions/code-block-languages.ts` registers the reviewed grammar list explicitly. |
 | Better Auth | `1.6.24` | Current stable release. Its package and `@better-auth/drizzle-adapter@1.6.24` both require Drizzle ORM `^0.45.2`; Better Auth 1.7 prereleases remain excluded. |
 | Socket.io / Yjs | `4.8.3` / `13.6.31` | Transport and CRDT packages remain separate authorities as defined by ADR 0004. |
 | BullMQ | `5.80.10` | Redis-backed delivery only; durable intent remains in PostgreSQL as defined by ADR 0006. |
@@ -85,6 +88,17 @@ the same runtime gate.
 This is a deliberate compatibility baseline, not permission to float ranges in a lockfile. Registry metadata and official integration documentation were reviewed on 2026-07-22. Before each first installation, inspect the then-published engine and peer metadata, resolve this exact set with pnpm's strict peer checks enabled, and run install, type-check, tests, and production builds. Any inability to resolve without peer overrides blocks that later part and requires an ADR update; `--force`, ignored peers, and unreviewed package patches are not validation.
 
 TipTap's separately distributed UI Components currently warn that React 19 and newer framework support is still being upgraded. Notted therefore uses `@tiptap/react` as a headless editor binding and builds its own Shadcn-based UI as specified. Part 34 must smoke-test editor mount, SSR/client boundaries, and production build before accepting the combination.
+
+### Parts 34–36 editor dependency review
+
+The rich editor added eight further `@tiptap/*` packages, all at the already-evaluated `2.27.1` and all MIT, plus two genuinely new third-party runtime dependencies.
+
+- **Need.** `extension-table`/`-table-row`/`-table-header`/`-table-cell` and `-placeholder` are required by `Notted.md`'s editor feature set; `-mention` and `@tiptap/suggestion` back `@` mentions and the slash menu; `-code-block-lowlight` is what makes code blocks highlightable. `lowlight` and `highlight.js` are the only chain that extension supports, so they are transitive by design rather than a free choice.
+- **Maintenance.** All `@tiptap/*` packages ship from one release train, so they move together with the existing pin. `lowlight` and `highlight.js` are long-lived, actively released packages in wide use.
+- **Licence.** `@tiptap/*` MIT, `lowlight` MIT, `highlight.js` BSD-3-Clause. All are permissive and compatible with the project's distribution.
+- **Security and cost.** None of the three adds a network client, native binding, or telemetry. The only material cost is bundle size, which is why the grammar allow-list above is a hard constraint rather than a preference: the full `highlight.js` bundle is roughly an order of magnitude larger than the fourteen registered grammars. `pnpm audit --prod --audit-level=high` covers the additions and must stay green.
+
+No new advisory override was needed for any of them.
 
 ## Validation evidence
 

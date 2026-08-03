@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { uuidSchema } from "./common.schema";
+
 /** JSON values accepted by the framework-neutral document contract. */
 export type NoteDocumentJson =
   boolean | number | string | null | NoteDocumentJson[] | { [key: string]: NoteDocumentJson };
@@ -50,7 +52,16 @@ function utf8ByteLength(value: string): number {
  */
 export const NOTE_DOCUMENT_SCHEMA_VERSION = 1 as const;
 
-/** Bounds retained from the Part 31 transitional safety envelope. */
+/**
+ * Bounds retained from the Part 31 transitional safety envelope, plus the
+ * explicit table bounds added in Part 35 and the mention bounds added in
+ * Part 36. `maxNodes`/`maxChildren` alone would still admit a single
+ * pathological table, so rows, columns, total cells, cell spans, and stored
+ * column widths are each capped on their own. A mention is likewise capped
+ * twice: `maxMentionLabel` bounds a single cached display name far below the
+ * generic `maxString`, and `maxMentions` bounds how many a document may carry
+ * so a later notification fan-out can never be unbounded.
+ */
 export const NOTE_DOCUMENT_LIMITS = Object.freeze({
   serializedBytes: 512_000,
   maxDepth: 32,
@@ -62,6 +73,13 @@ export const NOTE_DOCUMENT_LIMITS = Object.freeze({
   maxAttributeArray: 50,
   maxString: 20_000,
   maxTotalText: 200_000,
+  maxTableRows: 100,
+  maxTableColumns: 32,
+  maxTableCells: 600,
+  maxTableCellSpan: 100,
+  maxTableColumnWidth: 2_000,
+  maxMentions: 200,
+  maxMentionLabel: 200,
 } as const);
 
 export const NOTE_DOCUMENT_NODE_TYPES = Object.freeze([
@@ -78,8 +96,135 @@ export const NOTE_DOCUMENT_NODE_TYPES = Object.freeze([
   "horizontalRule",
   "taskList",
   "taskItem",
+  "table",
+  "tableRow",
+  "tableHeader",
+  "tableCell",
+  "mention",
 ] as const);
 export type NoteDocumentNodeType = (typeof NOTE_DOCUMENT_NODE_TYPES)[number];
+
+/** Rendered before a mention's cached label, in HTML and in plain text alike. */
+export const NOTE_DOCUMENT_MENTION_PREFIX = "@" as const;
+
+/** Sole class emitted for a mention; the renderer never copies stored classes. */
+export const NOTE_DOCUMENT_MENTION_CLASS = "notted-mention" as const;
+
+export interface NoteDocumentMentionAttrs {
+  /** Stable user id. Display names change; this never does. */
+  readonly id: string;
+  /** Display-name snapshot taken when the mention was inserted. Untrusted. */
+  readonly label: string;
+}
+
+/** C0 and C1 control characters, which a display name never legitimately contains. */
+// eslint-disable-next-line no-control-regex -- matching control characters is the point.
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f]/gu;
+
+/**
+ * A cached display name is untrusted text that is echoed back to every reader,
+ * so it is bounded and stripped of control characters here — before it can
+ * reach the renderer or the plain-text projection — rather than only escaped at
+ * the point of use. Keeping the label single-line also keeps the plain-text
+ * projection's one-line-per-block shape intact.
+ */
+function isUsableMentionLabel(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (value.length === 0 || value.length > NOTE_DOCUMENT_LIMITS.maxMentionLabel) return false;
+  CONTROL_CHARACTER_PATTERN.lastIndex = 0;
+  return !CONTROL_CHARACTER_PATTERN.test(value);
+}
+
+function isMentionId(value: unknown): value is string {
+  return typeof value === "string" && uuidSchema.safeParse(value).success;
+}
+
+/**
+ * Return the two reviewed mention attributes, or `null` when the node does not
+ * carry a stable user id and a usable label. Never throws.
+ */
+export function noteDocumentMentionAttrs(attrs: unknown): NoteDocumentMentionAttrs | null {
+  if (!isRecord(attrs)) return null;
+  const { id, label } = attrs;
+  return isMentionId(id) && isUsableMentionLabel(label) ? { id, label } : null;
+}
+
+/** `@Ada Lovelace` for a usable mention, or an empty string when unusable. */
+function mentionPlainText(node: PlainRecord): string {
+  const attrs = noteDocumentMentionAttrs(node.attrs);
+  if (attrs !== null) return `${NOTE_DOCUMENT_MENTION_PREFIX}${attrs.label}`;
+  // A malformed historical mention still contributes whatever readable label it
+  // stored, so recovery degrades to text rather than silently dropping it.
+  const rawLabel = isRecord(node.attrs) ? node.attrs.label : undefined;
+  if (typeof rawLabel !== "string") return "";
+  const cleaned = rawLabel
+    .replace(CONTROL_CHARACTER_PATTERN, " ")
+    .trim()
+    .slice(0, NOTE_DOCUMENT_LIMITS.maxMentionLabel);
+  return cleaned.length === 0 ? "" : `${NOTE_DOCUMENT_MENTION_PREFIX}${cleaned}`;
+}
+
+/**
+ * The only `codeBlock.language` values the contract stores. The web editor
+ * registers exactly this set with lowlight, so a persisted language can always
+ * be highlighted and an unknown language can never reach the renderer.
+ */
+export const NOTE_DOCUMENT_CODE_LANGUAGES = Object.freeze([
+  "bash",
+  "css",
+  "go",
+  "java",
+  "javascript",
+  "json",
+  "markdown",
+  "python",
+  "rust",
+  "shell",
+  "sql",
+  "typescript",
+  "xml",
+  "yaml",
+] as const);
+export type NoteDocumentCodeLanguage = (typeof NOTE_DOCUMENT_CODE_LANGUAGES)[number];
+
+const CODE_LANGUAGE_SET: ReadonlySet<string> = new Set(NOTE_DOCUMENT_CODE_LANGUAGES);
+
+/**
+ * Aliases accepted from markdown fences and pasted `language-*` classes. They
+ * are normalized to a canonical name so the stored attribute stays inside
+ * `NOTE_DOCUMENT_CODE_LANGUAGES`.
+ */
+const CODE_LANGUAGE_ALIASES: Readonly<Record<string, NoteDocumentCodeLanguage>> = {
+  golang: "go",
+  htm: "xml",
+  html: "xml",
+  js: "javascript",
+  jsx: "javascript",
+  md: "markdown",
+  mjs: "javascript",
+  py: "python",
+  rs: "rust",
+  sh: "shell",
+  ts: "typescript",
+  tsx: "typescript",
+  yml: "yaml",
+  zsh: "shell",
+};
+
+/** Longest accepted alias/name; keeps the lookup bounded for hostile input. */
+const CODE_LANGUAGE_MAX_LENGTH = 32;
+
+/**
+ * Return the canonical registered language for `value`, or `null` when it is
+ * absent, unknown, or out of bounds. Never throws and never returns free text.
+ */
+export function normalizeNoteDocumentCodeLanguage(value: unknown): NoteDocumentCodeLanguage | null {
+  if (typeof value !== "string") return null;
+  const cleaned = value.trim().toLowerCase();
+  if (cleaned.length === 0 || cleaned.length > CODE_LANGUAGE_MAX_LENGTH) return null;
+  if (CODE_LANGUAGE_SET.has(cleaned)) return cleaned as NoteDocumentCodeLanguage;
+  return CODE_LANGUAGE_ALIASES[cleaned] ?? null;
+}
 
 export const NOTE_DOCUMENT_MARK_TYPES = Object.freeze([
   "bold",
@@ -106,8 +251,10 @@ const BLOCK_NODE_TYPES: ReadonlySet<string> = new Set([
   "codeBlock",
   "horizontalRule",
   "taskList",
+  "table",
 ]);
-const INLINE_NODE_TYPES: ReadonlySet<string> = new Set(["text", "hardBreak"]);
+const INLINE_NODE_TYPES: ReadonlySet<string> = new Set(["text", "hardBreak", "mention"]);
+const TABLE_CELL_TYPES: ReadonlySet<string> = new Set(["tableHeader", "tableCell"]);
 
 const NODE_ALLOWED_FIELDS: Readonly<Record<NoteDocumentNodeType, ReadonlySet<string>>> = {
   doc: new Set(["type", "content"]),
@@ -123,6 +270,13 @@ const NODE_ALLOWED_FIELDS: Readonly<Record<NoteDocumentNodeType, ReadonlySet<str
   horizontalRule: new Set(["type"]),
   taskList: new Set(["type", "content"]),
   taskItem: new Set(["type", "attrs", "content"]),
+  table: new Set(["type", "content"]),
+  tableRow: new Set(["type", "content"]),
+  tableHeader: new Set(["type", "attrs", "content"]),
+  tableCell: new Set(["type", "attrs", "content"]),
+  // An atom: no content, and — like hardBreak — no marks, so a mention can
+  // never smuggle a link, a colour, or any other mark through the renderer.
+  mention: new Set(["type", "attrs"]),
 };
 
 const NODE_ALLOWED_ATTRS: Readonly<Record<NoteDocumentNodeType, ReadonlySet<string>>> = {
@@ -139,6 +293,11 @@ const NODE_ALLOWED_ATTRS: Readonly<Record<NoteDocumentNodeType, ReadonlySet<stri
   horizontalRule: new Set(),
   taskList: new Set(),
   taskItem: new Set(["checked"]),
+  table: new Set(),
+  tableRow: new Set(),
+  tableHeader: new Set(["colspan", "rowspan", "colwidth"]),
+  tableCell: new Set(["colspan", "rowspan", "colwidth"]),
+  mention: new Set(["id", "label"]),
 };
 
 const MARK_ALLOWED_ATTRS: Readonly<Record<NoteDocumentMarkType, ReadonlySet<string>>> = {
@@ -379,7 +538,11 @@ export function sanitizeDocumentUrl(value: unknown): string | null {
   return null;
 }
 
-/** Join the text of each paragraph, heading, or code block with a newline. */
+/**
+ * Join the text of each paragraph, heading, or code block with a newline. A
+ * table contributes one line per row, with cells separated by a tab, so search
+ * and export see readable tabular text instead of a run-on sentence.
+ */
 export function extractNoteContentPlain(document: unknown): string {
   const blocks: string[] = [];
 
@@ -387,22 +550,33 @@ export function extractNoteContentPlain(document: unknown): string {
     if (!isRecord(node)) return "";
     if (node.type === "text") return typeof node.text === "string" ? node.text : "";
     if (node.type === "hardBreak") return "\n";
+    // A mention reads as `@Ada Lovelace` so search and exports see a name.
+    if (node.type === "mention") return mentionPlainText(node);
     if (!Array.isArray(node.content)) return "";
     return node.content.map(collectInline).join("");
   };
 
-  const visit = (node: unknown): void => {
+  const visit = (node: unknown, sink: string[]): void => {
     if (!isRecord(node)) return;
     if (node.type === "paragraph" || node.type === "heading" || node.type === "codeBlock") {
-      blocks.push(collectInline(node));
+      sink.push(collectInline(node));
+      return;
+    }
+    if (node.type === "tableRow") {
+      const cells = (Array.isArray(node.content) ? node.content : []).map((cell) => {
+        const cellBlocks: string[] = [];
+        visit(cell, cellBlocks);
+        return cellBlocks.join(" ");
+      });
+      sink.push(cells.join("\t"));
       return;
     }
     if (Array.isArray(node.content)) {
-      for (const child of node.content) visit(child);
+      for (const child of node.content) visit(child, sink);
     }
   };
 
-  visit(document);
+  visit(document, blocks);
   return blocks.join("\n");
 }
 
@@ -441,6 +615,54 @@ function orderedListStartOrNull(attrs: unknown): number | null {
   if (!isRecord(attrs)) return null;
   const start = attrs.start;
   return typeof start === "number" && Number.isInteger(start) && start >= 1 ? start : null;
+}
+
+/** `colspan`/`rowspan`: an integer between 1 and the table span limit. */
+function cellSpanOrNull(value: unknown): number | null {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= NOTE_DOCUMENT_LIMITS.maxTableCellSpan
+    ? value
+    : null;
+}
+
+/**
+ * `colwidth` is either `null` or one width per spanned column.
+ * prosemirror-tables writes `0` for a column that has never been resized and
+ * fractional pixel widths while dragging, so both are accepted; anything
+ * negative, non-finite, oversized, or beyond the array bound is not.
+ */
+function columnWidthsOrNull(value: unknown): readonly number[] | null {
+  if (!Array.isArray(value)) return null;
+  const maxLength = Math.min(
+    NOTE_DOCUMENT_LIMITS.maxAttributeArray,
+    NOTE_DOCUMENT_LIMITS.maxTableCellSpan,
+  );
+  if (value.length === 0 || value.length > maxLength) return null;
+  const widths: number[] = [];
+  for (const width of value) {
+    if (
+      typeof width !== "number" ||
+      !Number.isFinite(width) ||
+      width < 0 ||
+      width > NOTE_DOCUMENT_LIMITS.maxTableColumnWidth
+    ) {
+      return null;
+    }
+    widths.push(width);
+  }
+  return widths;
+}
+
+/** Total rendered width of a cell, or `null` when no column width is stored. */
+function cellWidthOrNull(attrs: unknown): number | null {
+  if (!isRecord(attrs)) return null;
+  const widths = columnWidthsOrNull(attrs.colwidth);
+  if (widths === null) return null;
+  let total = 0;
+  for (const width of widths) total += width;
+  return total > 0 && total <= NOTE_DOCUMENT_LIMITS.maxTableColumnWidth ? total : null;
 }
 
 function renderMark(mark: unknown): { open: string; close: string } | null {
@@ -506,6 +728,48 @@ function renderTextWithMarks(text: string, marks: unknown): string {
   return open + escaped + close;
 }
 
+/**
+ * Emit only the three reviewed cell attributes. `colspan`/`rowspan` are printed
+ * as integers and omitted when they are the default `1`; `colwidth` becomes a
+ * single bounded `width` declaration rather than a stored style string, so no
+ * attacker-controlled CSS can reach the output.
+ */
+function cellAttributesHtml(attrs: unknown): string {
+  if (!isRecord(attrs)) return "";
+  const parts: string[] = [];
+  const colspan = cellSpanOrNull(attrs.colspan);
+  const rowspan = cellSpanOrNull(attrs.rowspan);
+  if (colspan !== null && colspan > 1) parts.push(` colspan="${colspan}"`);
+  if (rowspan !== null && rowspan > 1) parts.push(` rowspan="${rowspan}"`);
+  const width = cellWidthOrNull(attrs);
+  if (width !== null) parts.push(` style="width:${width}px"`);
+  return parts.join("");
+}
+
+/**
+ * A mention becomes a fixed `<span>` carrying one allow-listed class, the
+ * escaped user id, and the escaped label. Nothing else from the stored node
+ * reaches the output, and a node whose attributes do not validate degrades to
+ * escaped `@label` text rather than disappearing.
+ *
+ * This projection is deliberately **one-way**, and deliberately does *not*
+ * match the editor's `parseHTML` shape (`span[data-type="mention"]` with
+ * `data-mention-label`). Contract JSON is the canonical persisted format; this
+ * HTML is an export/preview surface only. Pasting it back into the editor
+ * therefore degrades a mention to plain `@Label` text and drops the user id,
+ * which is the intended, safe direction of loss: the alternative would be an
+ * export surface whose attributes are trusted as editor input on the way back
+ * in. See `renderDocumentHtml`.
+ */
+function renderMentionHtml(node: PlainRecord): string {
+  const attrs = noteDocumentMentionAttrs(node.attrs);
+  if (attrs === null) return escapeHtml(mentionPlainText(node));
+  return (
+    `<span class="${NOTE_DOCUMENT_MENTION_CLASS}" data-mention-id="${escapeHtml(attrs.id)}">` +
+    `${escapeHtml(`${NOTE_DOCUMENT_MENTION_PREFIX}${attrs.label}`)}</span>`
+  );
+}
+
 function renderNodeHtml(node: unknown): string {
   if (!isRecord(node)) return "";
   if (node.type === "text") {
@@ -513,6 +777,7 @@ function renderNodeHtml(node: unknown): string {
   }
   if (node.type === "hardBreak") return "<br>";
   if (node.type === "horizontalRule") return "<hr>";
+  if (node.type === "mention") return renderMentionHtml(node);
 
   const children = Array.isArray(node.content) ? node.content.map(renderNodeHtml).join("") : "";
   switch (node.type) {
@@ -546,12 +811,31 @@ function renderNodeHtml(node: unknown): string {
       const checked = isRecord(node.attrs) && node.attrs.checked === true ? "true" : "false";
       return `<li class="task-item" data-checked="${checked}">${children}</li>`;
     }
+    case "table":
+      return `<table><tbody>${children}</tbody></table>`;
+    case "tableRow":
+      return `<tr>${children}</tr>`;
+    case "tableHeader":
+    case "tableCell": {
+      const tag = node.type === "tableHeader" ? "th" : "td";
+      return `<${tag}${cellAttributesHtml(node.attrs)}>${children}</${tag}>`;
+    }
     default:
       return "";
   }
 }
 
-/** Render only escaped text and the contract's fixed safe tag/attribute map. */
+/**
+ * Render only escaped text and the contract's fixed safe tag/attribute map.
+ *
+ * **One-way by design.** This is an export/preview projection, not a storage or
+ * interchange format: the canonical persisted representation of a note is the
+ * contract JSON validated by `parseNoteDocument`. The output is intentionally
+ * not round-trippable — it carries no schema version, no editor `data-type`
+ * hooks, and a deliberately narrower attribute set than the JSON it came from
+ * (mentions in particular, see `renderMentionHtml`). Re-importing this HTML
+ * into the editor is unsupported and lossy; import from the JSON instead.
+ */
 export function renderDocumentHtml(document: unknown): string {
   return renderNodeHtml(document);
 }
@@ -637,9 +921,36 @@ function validateNodeAttrs(type: NoteDocumentNodeType, attrs: unknown, errors: s
     if (
       language !== undefined &&
       language !== null &&
-      (typeof language !== "string" || language.length > 64)
+      (typeof language !== "string" || !CODE_LANGUAGE_SET.has(language))
     ) {
-      errors.push("Document codeBlock language attribute must be null or a string <= 64 chars");
+      errors.push("Document codeBlock language attribute must be null or a registered language");
+    }
+  }
+  if (type === "tableHeader" || type === "tableCell") {
+    if (cellSpanOrNull(attrs.colspan) === null) {
+      errors.push(
+        `Document ${type} colspan attribute must be an integer 1-${NOTE_DOCUMENT_LIMITS.maxTableCellSpan}`,
+      );
+    }
+    if (cellSpanOrNull(attrs.rowspan) === null) {
+      errors.push(
+        `Document ${type} rowspan attribute must be an integer 1-${NOTE_DOCUMENT_LIMITS.maxTableCellSpan}`,
+      );
+    }
+    if (attrs.colwidth !== null && columnWidthsOrNull(attrs.colwidth) === null) {
+      errors.push(
+        `Document ${type} colwidth attribute must be null or an array of widths 0-${NOTE_DOCUMENT_LIMITS.maxTableColumnWidth}`,
+      );
+    }
+  }
+  if (type === "mention") {
+    if (!isMentionId(attrs.id)) {
+      errors.push("Document mention id attribute is required and must be a UUID user id");
+    }
+    if (!isUsableMentionLabel(attrs.label)) {
+      errors.push(
+        `Document mention label attribute is required and must be 1-${NOTE_DOCUMENT_LIMITS.maxMentionLabel} characters without control characters`,
+      );
     }
   }
 }
@@ -753,7 +1064,7 @@ function validateContentStructure(
   }
   if (type === "paragraph" || type === "heading") {
     if (children.some((child) => !INLINE_NODE_TYPES.has(nodeType(child) ?? ""))) {
-      errors.push(`Document ${type} content must contain inline text or hardBreak nodes only`);
+      errors.push(`Document ${type} content must contain inline text, hardBreak, or mention nodes`);
     }
     return;
   }
@@ -798,18 +1109,55 @@ function validateContentStructure(
     }
     return;
   }
+  if (type === "table") {
+    if (children.length === 0 || children.some((child) => nodeType(child) !== "tableRow")) {
+      errors.push("Document table requires one or more tableRow children");
+    }
+    if (children.length > NOTE_DOCUMENT_LIMITS.maxTableRows) {
+      errors.push("Document table has too many rows");
+    }
+    return;
+  }
+  if (type === "tableRow") {
+    if (
+      children.length === 0 ||
+      children.some((child) => !TABLE_CELL_TYPES.has(nodeType(child) ?? ""))
+    ) {
+      errors.push("Document tableRow requires one or more tableHeader or tableCell children");
+    }
+    if (children.length > NOTE_DOCUMENT_LIMITS.maxTableColumns) {
+      errors.push("Document tableRow has too many cells");
+    }
+    return;
+  }
+  if (type === "tableHeader" || type === "tableCell") {
+    if (
+      children.length === 0 ||
+      children.some((child) => !BLOCK_NODE_TYPES.has(nodeType(child) ?? ""))
+    ) {
+      errors.push(`Document ${type} requires one or more block children`);
+    }
+    return;
+  }
   if (
-    (type === "hardBreak" || type === "horizontalRule" || type === "text") &&
+    (type === "hardBreak" || type === "horizontalRule" || type === "text" || type === "mention") &&
     content !== undefined
   ) {
     errors.push(`Document ${type} must be a leaf node`);
   }
 }
 
+interface DocumentCounters {
+  nodes: number;
+  totalText: number;
+  tableCells: number;
+  mentions: number;
+}
+
 function validateNode(
   node: unknown,
   depth: number,
-  counters: { nodes: number; totalText: number },
+  counters: DocumentCounters,
   errors: string[],
 ): void {
   if (depth > NOTE_DOCUMENT_LIMITS.maxDepth) {
@@ -857,8 +1205,29 @@ function validateNode(
     }
   }
 
+  if (type === "tableHeader" || type === "tableCell") {
+    counters.tableCells += 1;
+    if (counters.tableCells > NOTE_DOCUMENT_LIMITS.maxTableCells) {
+      errors.push("Document has too many table cells");
+      return;
+    }
+  }
+
+  if (type === "mention") {
+    counters.mentions += 1;
+    if (counters.mentions > NOTE_DOCUMENT_LIMITS.maxMentions) {
+      errors.push("Document has too many mentions");
+      return;
+    }
+  }
+
   if (
-    (type === "heading" || type === "orderedList" || type === "taskItem") &&
+    (type === "heading" ||
+      type === "orderedList" ||
+      type === "taskItem" ||
+      type === "tableHeader" ||
+      type === "tableCell" ||
+      type === "mention") &&
     node.attrs === undefined
   ) {
     errors.push(`Document ${type} node attributes are required`);
@@ -909,7 +1278,7 @@ function validateDocumentContract(value: unknown, errors: string[]): void {
     errors.push('Document root must be { type: "doc" }');
     return;
   }
-  validateNode(value, 0, { nodes: 0, totalText: 0 }, errors);
+  validateNode(value, 0, { nodes: 0, totalText: 0, tableCells: 0, mentions: 0 }, errors);
 }
 
 /** Validate the complete contract while collecting all independently reachable issues. */
@@ -1029,6 +1398,9 @@ function recoverTextFromNode(node: unknown): string {
   if (!isRecord(node)) return "";
   let recovered = typeof node.text === "string" ? node.text : "";
   if (node.type === "hardBreak") recovered += "\n";
+  // A mention stores its readable name in an attribute, so the last-resort
+  // text-only recovery has to read it explicitly or the name would be lost.
+  if (node.type === "mention") recovered += mentionPlainText(node);
   if (Array.isArray(node.content)) {
     for (const child of node.content) recovered += recoverTextFromNode(child);
   }
@@ -1139,11 +1511,25 @@ function normalizedTextAlignAttrs(attrs: unknown): PlainRecord | undefined {
     : undefined;
 }
 
+/**
+ * Keep a mention as a mention when it still carries a stable user id and a
+ * usable label; otherwise degrade it to its readable `@label` text. A mention
+ * is never silently dropped.
+ */
+function normalizeMentionNode(node: PlainRecord): PlainRecord[] {
+  const attrs = noteDocumentMentionAttrs(node.attrs);
+  if (attrs !== null && node.content === undefined) {
+    return [{ type: "mention", attrs: { id: attrs.id, label: attrs.label } }];
+  }
+  return textNodes(recoverTextFromNode(node));
+}
+
 function normalizeInlineNode(node: unknown): PlainRecord[] {
   if (!isRecord(node)) return [];
   if (node.type === "hardBreak" && node.text === undefined && node.content === undefined) {
     return [{ type: "hardBreak" }];
   }
+  if (node.type === "mention") return normalizeMentionNode(node);
   if (node.type === "text") {
     const recovered = recoverTextFromNode(node);
     const marks = normalizeMarks(node.marks);
@@ -1167,7 +1553,7 @@ function ensureItemContent(blocks: PlainRecord[]): PlainRecord[] {
   return [{ type: "paragraph" }, ...blocks];
 }
 
-function normalizeItemNode(node: PlainRecord): PlainRecord[] {
+function normalizeChildBlocks(node: PlainRecord): PlainRecord[] {
   const blocks: PlainRecord[] = [];
   if (typeof node.text === "string" && node.text.length > 0) {
     blocks.push(...paragraphsFromRecoveredText(node.text));
@@ -1175,7 +1561,39 @@ function normalizeItemNode(node: PlainRecord): PlainRecord[] {
   if (Array.isArray(node.content)) {
     for (const child of node.content) blocks.push(...normalizeToBlocks(child));
   }
-  return ensureItemContent(blocks);
+  return blocks;
+}
+
+function normalizeItemNode(node: PlainRecord): PlainRecord[] {
+  return ensureItemContent(normalizeChildBlocks(node));
+}
+
+/** Recover any node into a canonical table cell carrying only reviewed attrs. */
+function normalizeTableCell(node: unknown): PlainRecord {
+  const record = isRecord(node) ? node : {};
+  const isHeader = record.type === "tableHeader";
+  const blocks =
+    isHeader || record.type === "tableCell"
+      ? normalizeChildBlocks(record)
+      : normalizeToBlocks(node);
+  const attrs = isRecord(record.attrs) ? record.attrs : {};
+  const widths = columnWidthsOrNull(attrs.colwidth);
+  return {
+    type: isHeader ? "tableHeader" : "tableCell",
+    attrs: {
+      colspan: cellSpanOrNull(attrs.colspan) ?? 1,
+      rowspan: cellSpanOrNull(attrs.rowspan) ?? 1,
+      colwidth: widths === null ? null : [...widths],
+    },
+    content: blocks.length > 0 ? blocks : [{ type: "paragraph" }],
+  };
+}
+
+function normalizeTableRow(node: unknown): PlainRecord | null {
+  const record = isRecord(node) ? node : {};
+  const children = Array.isArray(record.content) ? record.content : [];
+  if (children.length === 0) return null;
+  return { type: "tableRow", content: children.map(normalizeTableCell) };
 }
 
 function normalizeListItem(node: unknown): PlainRecord {
@@ -1271,11 +1689,7 @@ function normalizeToBlocks(node: unknown): PlainRecord[] {
   if (node.type === "codeBlock") {
     const text = recoverTextFromNode(node);
     const sourceAttrs = isRecord(node.attrs) ? node.attrs : {};
-    const language =
-      sourceAttrs.language === null ||
-      (typeof sourceAttrs.language === "string" && sourceAttrs.language.length <= 64)
-        ? sourceAttrs.language
-        : null;
+    const language = normalizeNoteDocumentCodeLanguage(sourceAttrs.language);
     return [
       {
         type: "codeBlock",
@@ -1296,6 +1710,27 @@ function normalizeToBlocks(node: unknown): PlainRecord[] {
       for (const child of node.content) content.push(normalizeTaskItem(child));
     }
     return content.length === 0 ? [] : [{ type: "taskList", content }];
+  }
+  if (node.type === "table") {
+    const rows: PlainRecord[] = [];
+    if (Array.isArray(node.content)) {
+      for (const child of node.content) {
+        const row = normalizeTableRow(child);
+        if (row !== null) rows.push(row);
+      }
+    }
+    if (rows.length === 0) return paragraphsFromRecoveredText(recoverTextFromNode(node));
+    return [{ type: "table", content: rows }];
+  }
+  if (node.type === "tableRow" || node.type === "tableHeader" || node.type === "tableCell") {
+    // A row or cell outside a table cannot be represented; keep only its blocks.
+    return normalizeChildBlocks(node);
+  }
+  if (node.type === "mention") {
+    // A mention in block position cannot stay there; wrap it in a paragraph so
+    // the stable user id survives instead of collapsing to text.
+    const inline = normalizeMentionNode(node);
+    return inline.length === 0 ? [] : [{ type: "paragraph", content: inline }];
   }
   if (node.type === "hardBreak") {
     return paragraphsFromRecoveredText(recoverTextFromNode(node));
