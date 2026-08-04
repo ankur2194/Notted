@@ -1,0 +1,455 @@
+# Notted development stack — infrastructure *and* both applications.
+#
+#   docker compose up
+#
+# is the only command required. It installs workspace dependencies, builds the
+# shared contract packages, applies Drizzle migrations, seeds the deterministic
+# development fixture on first run, and starts the API and web app with hot
+# reload. `pnpm infra:up` is a thin wrapper over the same file.
+#
+# Only the three ports a developer's browser needs are published:
+#   3000  web        http://localhost:3000
+#   3001  API        http://localhost:3001  (the browser calls it cross-origin)
+#   8025  Mailpit UI http://localhost:8025  (verification/magic-link emails)
+#
+# PostgreSQL, Redis, Meilisearch, MinIO and Mailpit's SMTP port sit on an
+# internal network with no host binding. Add `docker/compose.debug-ports.yml`
+# when host-side tooling needs a direct connection.
+#
+# Every value below has a default, so no environment file is required. Compose
+# still auto-loads an optional root `.env` (see `.env.example`) for overrides.
+
+name: notted-dev
+
+x-workspace-image: &workspace-image
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.dev
+  image: notted-dev-workspace:local
+  init: true
+
+# Source is read-only inside containers. Writable generated output and every
+# `node_modules` directory are shadowed by named volumes, so container tools
+# cannot alter source and a host install cannot collide with the container's.
+#
+# None of these declare `nocopy`, and that is deliberate. Docker seeds a fresh
+# named volume from the *image* directory underneath it — not from the host
+# bind mount — and `docker/Dockerfile.dev` pre-creates every target below and
+# chowns it to `node`. So each volume is born empty and already owned by the
+# right user, which is why no privileged one-shot has to chown them first.
+x-workspace-volumes: &workspace-volumes
+  - type: bind
+    source: .
+    target: /workspace
+    read_only: true
+  - type: volume
+    source: pnpm-store
+    target: /home/node/.local/share/pnpm
+  - type: volume
+    source: root-node-modules
+    target: /workspace/node_modules
+  - type: volume
+    source: api-node-modules
+    target: /workspace/apps/api/node_modules
+  - type: volume
+    source: web-node-modules
+    target: /workspace/apps/web/node_modules
+  - type: volume
+    source: shared-types-node-modules
+    target: /workspace/packages/shared-types/node_modules
+  - type: volume
+    source: shared-validators-node-modules
+    target: /workspace/packages/shared-validators/node_modules
+  - type: volume
+    source: api-dist
+    target: /workspace/apps/api/dist
+  - type: volume
+    source: web-next
+    target: /workspace/apps/web/.next
+  - type: volume
+    source: shared-types-dist
+    target: /workspace/packages/shared-types/dist
+  - type: volume
+    source: shared-validators-dist
+    target: /workspace/packages/shared-validators/dist
+  # Shared so `db-init` can use this one list too; the seed marker is inert
+  # everywhere else.
+  - type: volume
+    source: db-init-state
+    target: /state
+  # `next dev` rewrites this generated file on every start and rejects a
+  # read-only tree with EROFS, which leaves the dev server hung before it
+  # answers a request. It is a tracked file, so it exists in every clone;
+  # mounting the single path writable over the read-only bind keeps every
+  # other source file immutable.
+  - type: bind
+    source: ./apps/web/next-env.d.ts
+    target: /workspace/apps/web/next-env.d.ts
+
+# Only the *server-side* dependency hosts differ from `apps/api/.env.example`;
+# they become Compose service names. Browser-facing origins stay on localhost
+# because they are what the browser resolves, and they also feed the CORS
+# allow-list and Better Auth trusted origins. Every other API variable keeps the
+# default declared in `apps/api/src/config/*.config.ts`, which stays the single
+# source of truth.
+x-api-environment: &api-environment
+  NODE_ENV: development
+  API_HOST: 0.0.0.0
+  # Match the browser-facing host port because `web` shares this network
+  # namespace and its server-side requests also use NEXT_PUBLIC_API_URL.
+  API_PORT: "${NOTTED_API_PORT:-3001}"
+  APP_URL: http://localhost:${NOTTED_WEB_PORT:-3000}
+  API_URL: http://localhost:${NOTTED_API_PORT:-3001}
+  WS_URL: ws://localhost:${NOTTED_API_PORT:-3001}
+  DATABASE_URL: postgres://${POSTGRES_USER:-notted}:${POSTGRES_PASSWORD:-notted_dev_password}@postgres:5432/${POSTGRES_DB:-notted_dev}
+  REDIS_URL: redis://redis:6379
+  MINIO_ENDPOINT: minio
+  MINIO_PORT: "9000"
+  MINIO_USE_SSL: "false"
+  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-nottedminio}
+  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-notted-dev-minio-secret}
+  MINIO_BUCKET_ATTACHMENTS: ${MINIO_BUCKET_ATTACHMENTS:-notted-attachments}
+  MINIO_BUCKET_EXPORTS: ${MINIO_BUCKET_EXPORTS:-notted-exports}
+  MEILISEARCH_HOST: http://meilisearch:7700
+  MEILISEARCH_API_KEY: ${MEILI_MASTER_KEY:-notted-dev-meili-master-key}
+  EMAIL_SMTP_HOST: mailpit
+  EMAIL_SMTP_PORT: "1025"
+  EMAIL_SMTP_SECURE: "false"
+  EMAIL_FROM: ${EMAIL_FROM:-noreply@notted.local}
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-notted-development-auth-secret-change-me}
+  BETTER_AUTH_URL: http://localhost:${NOTTED_API_PORT:-3001}
+  BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:${NOTTED_WEB_PORT:-3000}
+  DATA_ENCRYPTION_KEYS: ${DATA_ENCRYPTION_KEYS:-1:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=}
+
+services:
+  # --------------------------------------------------------------- infrastructure
+  postgres:
+    image: pgvector/pgvector:0.8.5-pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-notted}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-notted_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-notted_dev}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/init-scripts/init-postgres.sql:/docker-entrypoint-initdb.d/init-postgres.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks: [backend]
+
+  redis:
+    image: redis:7.2.14-alpine@sha256:dfa18828cbc07b3ae6a95ec7343f6c214fdee2d836197b4be8e9904420762cd8
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks: [backend]
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.45.1@sha256:ac40212f9e5a7526d8007586e3e46fb0441d29dd36c7b02fa2341d2c9a1f6493
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: ${MEILI_ENV:-development}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-notted-dev-meili-master-key}
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meilisearch-data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks: [backend]
+
+  # The image creates `/data` owned by 10001:10001, and Docker's copy-up gives a
+  # fresh `minio-data` volume that same ownership, so the unprivileged server
+  # can write to it without a privileged chown one-shot running first.
+  #
+  # Attachments and exports are not implemented yet, so nothing hands a MinIO
+  # URL to the browser and port 9000 does not need publishing. When signed URLs
+  # land, MinIO must become browser-resolvable — publish 9000 (see
+  # docker/compose.debug-ports.yml) or proxy object reads through the API.
+  minio:
+    build:
+      context: ./docker/minio-source
+      target: minio-server
+      args:
+        MINIO_SERVER_COMMIT: 7aac2a2c5b7c882e68c1ce017d8256be2feea27f
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-nottedminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-notted-dev-minio-secret}
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:${NOTTED_MINIO_CONSOLE_PORT:-9001}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9000/minio/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    networks: [backend]
+
+  minio-init:
+    build:
+      context: ./docker/minio-source
+      target: minio-client
+      args:
+        MINIO_CLIENT_COMMIT: 77f82e18b5401a65958f1619df6ebb994634bd88
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-eu", "-c"]
+    command:
+      - |
+        attempt=1
+        while [ "$${attempt}" -le 30 ]; do
+          if mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" \
+            && mc mb "local/$${MINIO_BUCKET_ATTACHMENTS}" --ignore-existing \
+            && mc mb "local/$${MINIO_BUCKET_EXPORTS}" --ignore-existing \
+            && mc anonymous set none "local/$${MINIO_BUCKET_ATTACHMENTS}" \
+            && mc anonymous set none "local/$${MINIO_BUCKET_EXPORTS}" \
+            && mc anonymous get "local/$${MINIO_BUCKET_ATTACHMENTS}" | grep -F private \
+            && mc anonymous get "local/$${MINIO_BUCKET_EXPORTS}" | grep -F private; then
+            exit 0
+          fi
+          attempt=$$((attempt + 1))
+          sleep 1
+        done
+        echo "MinIO bucket initialization did not become ready" >&2
+        exit 1
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-nottedminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-notted-dev-minio-secret}
+      MINIO_BUCKET_ATTACHMENTS: ${MINIO_BUCKET_ATTACHMENTS:-notted-attachments}
+      MINIO_BUCKET_EXPORTS: ${MINIO_BUCKET_EXPORTS:-notted-exports}
+    restart: "no"
+    networks: [backend]
+
+  # On `edge` as well because publishing a port requires host-routable
+  # networking; only the web UI is published, SMTP 1025 stays internal.
+  mailpit:
+    image: axllent/mailpit:v1.30.0@sha256:0059ef81e492a7192af3816281eed6859eb078bd7bdc58b76757c13e10e53a7d
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    ports:
+      - "127.0.0.1:${NOTTED_MAILPIT_WEB_PORT:-8025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks: [backend, edge]
+
+  # ------------------------------------------------------------------- workspace
+  # The only container that writes node_modules. `api`, `web` and `db-init` all
+  # wait for it to exit 0, so there is no install race and no duplicated work.
+  # `pnpm install --frozen-lockfile` is a fast no-op on subsequent starts, which
+  # is why this needs no marker: correctness comes for free.
+  deps:
+    <<: *workspace-image
+    working_dir: /workspace
+    command:
+      - /bin/sh
+      - -eu
+      - -c
+      - |
+        pnpm install --frozen-lockfile --strict-peer-dependencies
+        rm -rf \
+          packages/shared-types/dist/* \
+          packages/shared-types/dist/.[!.]* \
+          packages/shared-types/dist/..?* \
+          packages/shared-validators/dist/* \
+          packages/shared-validators/dist/.[!.]* \
+          packages/shared-validators/dist/..?*
+        pnpm build:packages
+        echo "Dependencies installed and shared contract packages built."
+    volumes: *workspace-volumes
+    restart: "no"
+    networks: [edge]
+
+  # Keep both runtime contract packages compiled after the initial build. The
+  # API's outer Node watcher and Next's package watcher then reload consumers
+  # when these generated files change, without another Compose command.
+  contracts:
+    <<: *workspace-image
+    depends_on:
+      deps:
+        condition: service_completed_successfully
+    working_dir: /workspace
+    command:
+      - pnpm
+      - --parallel
+      - --filter
+      - "@notted/shared-types"
+      - --filter
+      - "@notted/shared-validators"
+      - run
+      - dev
+    volumes: *workspace-volumes
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -f packages/shared-types/dist/index.js && test -f packages/shared-validators/dist/index.js
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks: [edge]
+
+  # Migrations run on every start (Drizzle skips already-applied files). The
+  # seed is a conflict-aware upsert and safe to repeat, but repeating it would
+  # discard local edits to fixture rows, so a marker keeps it to the first run.
+  # Force a reseed with `pnpm db:seed` (or `docker compose exec api …`).
+  db-init:
+    <<: *workspace-image
+    depends_on:
+      deps:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    working_dir: /workspace/apps/api
+    environment: *api-environment
+    command:
+      - /bin/sh
+      - -eu
+      - -c
+      - |
+        node ./node_modules/drizzle-kit/bin.cjs migrate
+        if [ -f /state/seeded ]; then
+          echo "Development seed already applied; skipping."
+        else
+          node --import tsx src/database/seed.ts
+          touch /state/seeded
+        fi
+    volumes: *workspace-volumes
+    restart: "no"
+    networks: [backend]
+
+  # ------------------------------------------------------------------ applications
+  # Publishes the web port as well: `web` shares this container's network
+  # namespace (see its `network_mode`), so both ports belong here.
+  api:
+    <<: *workspace-image
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      contracts:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+    restart: unless-stopped
+    working_dir: /workspace/apps/api
+    environment: *api-environment
+    # `pnpm dev` cannot be used: it is `node --env-file=.env …`, which fails
+    # when apps/api/.env is absent. Compose injects the environment instead.
+    command:
+      - /bin/sh
+      - -eu
+      - -c
+      - |
+        rm -rf dist/* dist/.[!.]* dist/..?*
+        exec node --watch-preserve-output \
+          --watch-path=../../packages/shared-types/dist \
+          --watch-path=../../packages/shared-validators/dist \
+          ./node_modules/@nestjs/cli/bin/nest.js start --watch
+    ports:
+      - "127.0.0.1:${NOTTED_WEB_PORT:-3000}:3000"
+      - "127.0.0.1:${NOTTED_API_PORT:-3001}:${NOTTED_API_PORT:-3001}"
+    volumes: *workspace-volumes
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch("http://127.0.0.1:"+process.env.API_PORT+"/health/ready").then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 180s
+    networks: [backend, edge]
+
+  # Server Components and route handlers under apps/web/src/lib/*/server-*.ts
+  # fetch NEXT_PUBLIC_API_URL from *inside* this container, and that value must
+  # stay on the browser-facing localhost port for CORS and Better Auth. Sharing
+  # the API container's network namespace and listening on the same configurable
+  # port makes that origin valid on both sides without a second URL.
+  # Consequences: ports and networks are declared on `api` above, and recreating
+  # the `api` container requires recreating this one too.
+  web:
+    <<: *workspace-image
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    network_mode: "service:api"
+    working_dir: /workspace/apps/web
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_APP_URL: http://localhost:${NOTTED_WEB_PORT:-3000}
+      NEXT_PUBLIC_API_URL: http://localhost:${NOTTED_API_PORT:-3001}
+      NEXT_PUBLIC_WS_URL: ws://localhost:${NOTTED_API_PORT:-3001}
+    command:
+      - /bin/sh
+      - -eu
+      - -c
+      - |
+        pnpm env:validate
+        exec pnpm exec next dev --hostname 0.0.0.0 --port 3000
+    volumes: *workspace-volumes
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch("http://127.0.0.1:3000").then((r)=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 120s
+
+volumes:
+  postgres-data:
+  redis-data:
+  meilisearch-data:
+  minio-data:
+  pnpm-store:
+  root-node-modules:
+  api-node-modules:
+  web-node-modules:
+  shared-types-node-modules:
+  shared-validators-node-modules:
+  api-dist:
+  web-next:
+  shared-types-dist:
+  shared-validators-dist:
+  db-init-state:
+
+networks:
+  backend:
+    driver: bridge
+    internal: true
+  edge:
+    driver: bridge

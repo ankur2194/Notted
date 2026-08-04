@@ -1,0 +1,65 @@
+# syntax=docker/dockerfile:1.18
+#
+# Shared development image for every Notted workspace service
+# (workspace-permissions, deps, contracts, db-init, api, web). It deliberately copies no
+# application source: the repository is bind-mounted at /workspace by
+# `compose.yaml`, so a file edited on the host is immediately visible to the
+# watchers inside the containers and the image never rebuilds for a code change.
+ARG NODE_IMAGE=node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
+
+FROM ${NODE_IMAGE} AS workspace
+
+# Corepack pins pnpm to the exact version in the root package.json
+# `packageManager` field so the container and the host resolve dependencies
+# identically.
+ARG PNPM_VERSION=10.34.5
+
+ENV PNPM_HOME=/home/node/.local/share/pnpm
+ENV COREPACK_HOME=/home/node/.cache/node/corepack
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+# An absolute store path is required, not just preferred. pnpm's default store
+# is `~`-relative, and resolving it runs `storePathRelativeToHome`, which
+# touches a temporary file in the workspace root to find the mount point. That
+# root is bind-mounted read-only, so the probe fails with EROFS before install
+# begins. An absolute path takes the branch that performs no probe.
+ENV npm_config_store_dir=/home/node/.local/share/pnpm/store
+ENV PATH="${PNPM_HOME}:${PATH}"
+# Turborepo and Next.js otherwise prompt for or emit telemetry on first run.
+ENV TURBO_TELEMETRY_DISABLED=1
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV DO_NOT_TRACK=1
+# Husky hooks are a host-side convenience with no meaning inside a container.
+ENV HUSKY=0
+
+# `ca-certificates` is required to reach the npm registry; `git` is required by
+# the Next.js and Turborepo toolchains when they inspect the working tree;
+# `procps` supplies `ps`, which the Nest CLI's `tree-kill` shells out to when
+# `nest start --watch` restarts the application after a change. Without it the
+# first edit recompiles and then kills the watcher, leaving the API serving
+# stale code until the container is restarted.
+RUN apt-get update \
+    && apt-get install --no-install-recommends --yes ca-certificates git procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# The `mkdir` list pre-creates every path `compose.yaml` mounts a named volume
+# onto. `compose.yaml` also runs a one-shot root container to chown them,
+# because those volumes are declared `nocopy` and start out owned by root.
+RUN corepack enable \
+    && corepack prepare "pnpm@${PNPM_VERSION}" --activate \
+    && mkdir -p \
+        /state \
+        /workspace/node_modules \
+        /workspace/apps/api/node_modules \
+        /workspace/apps/api/dist \
+        /workspace/apps/web/node_modules \
+        /workspace/apps/web/.next \
+        /workspace/packages/shared-types/node_modules \
+        /workspace/packages/shared-types/dist \
+        /workspace/packages/shared-validators/node_modules \
+        /workspace/packages/shared-validators/dist \
+        "${PNPM_HOME}" \
+        "${COREPACK_HOME}" \
+    && chown -R node:node /state /workspace /home/node
+
+WORKDIR /workspace
+USER node

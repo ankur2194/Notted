@@ -1,0 +1,47 @@
+# Optional override that republishes the internal development services on the
+# loopback interface. The default stack keeps them unreachable from the host;
+# add this file only when host-side tooling needs a direct connection:
+#
+#   * `pnpm db:studio`, `pnpm db:check`, `psql`     → PostgreSQL 5432
+#   * `pnpm test:ci` — its API integration suites   → PostgreSQL 5432
+#     are `describe.skipIf(DATABASE_URL)`-gated and
+#     the coverage gate fails without a live database
+#   * MinIO console and signed-URL work             → MinIO 9000, 9001
+#   * an external SMTP client                       → Mailpit 1025
+#
+# Usage:
+#   docker compose -f compose.yaml -f docker/compose.debug-ports.yml up -d
+#   pnpm infra:up --with-service-ports        # equivalent wrapper
+#
+# Publishing a port requires host-routable networking, so each service also
+# joins `edge`; `backend` is repeated because Compose merges the two lists.
+#
+# The published ports match the defaults in `apps/api/.env.example`, so the
+# host-side `apps/api/.env` created by `pnpm env:init` works unchanged.
+
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:${NOTTED_POSTGRES_PORT:-5432}:5432"
+    networks: [backend, edge]
+
+  redis:
+    ports:
+      - "127.0.0.1:${NOTTED_REDIS_PORT:-6379}:6379"
+    networks: [backend, edge]
+
+  meilisearch:
+    ports:
+      - "127.0.0.1:${NOTTED_MEILISEARCH_PORT:-7700}:7700"
+    networks: [backend, edge]
+
+  minio:
+    ports:
+      - "127.0.0.1:${NOTTED_MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${NOTTED_MINIO_CONSOLE_PORT:-9001}:9001"
+    networks: [backend, edge]
+
+  mailpit:
+    ports:
+      - "127.0.0.1:${NOTTED_MAILPIT_SMTP_PORT:-1025}:1025"
+    networks: [backend, edge]

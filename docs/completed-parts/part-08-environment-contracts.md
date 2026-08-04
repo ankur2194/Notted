@@ -6,7 +6,14 @@
 - **Completed on:** 2026-07-27
 - **Implemented by:** Phase 2 work-in-progress checkpoint
 - **Plan reference:** `Plan.md`, Part 8
-- **Related records:** `part-05-nestjs-api-scaffold.md`; `part-09-development-compose-stack.md`; `part-10-developer-commands-onboarding.md`; `part-11-configuration-dependency-clients.md`
+- **Related records:** `part-05-nestjs-api-scaffold.md`; `part-09-development-compose-stack.md`; `part-10-developer-commands-onboarding.md`; `part-11-configuration-dependency-clients.md`; `all-in-docker-development-2026-08-04.md`
+
+> **Correction (2026-08-04):** `docker/.env.example` has been deleted. Compose configuration
+> now lives as inline defaults in the root `compose.yaml`, with an optional root `.env`
+> (`.env.example`) for overrides. `apps/api/.env` and `apps/web/.env.local` survive
+> unchanged but are host-tooling-only. The typed API and web validators, the public/server
+> separation, and the production rules below are unaffected. See
+> [`all-in-docker-development-2026-08-04.md`](all-in-docker-development-2026-08-04.md).
 
 ## Objective
 

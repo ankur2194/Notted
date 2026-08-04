@@ -6,7 +6,14 @@
 - **Completed on:** 2026-07-27
 - **Implemented by:** Phase 2 work-in-progress checkpoint
 - **Plan reference:** `Plan.md`, Part 10
-- **Related records:** `part-08-environment-contracts.md`; `part-09-development-compose-stack.md`; `part-11-configuration-dependency-clients.md`
+- **Related records:** `part-08-environment-contracts.md`; `part-09-development-compose-stack.md`; `part-11-configuration-dependency-clients.md`; `all-in-docker-development-2026-08-04.md`
+
+> **Correction (2026-08-04):** `docker compose up` is now the only required setup command.
+> `pnpm env:init` no longer creates `docker/.env` and is no longer a prerequisite for
+> running the stack, `pnpm env:check` no longer cross-validates Compose configuration, and
+> the Compose project name is the fixed `notted-dev` rather than a per-checkout hash. The
+> reset guards, confirmation phrase, and legacy-volume warning are unchanged. See
+> [`all-in-docker-development-2026-08-04.md`](all-in-docker-development-2026-08-04.md).
 
 ## Objective
 

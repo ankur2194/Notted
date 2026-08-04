@@ -275,14 +275,13 @@ Notted/
 │       ├── package.json
 │       └── tsconfig.json
 │
+├── compose.yaml                       # Complete development stack
 ├── docker/
-│   ├── docker-compose.yml            # Production compose
-│   ├── docker-compose.dev.yml        # Development compose
-│   ├── docker-compose.override.yml   # Local overrides
-│   ├── .env.example                  # Environment template
-│   └── init-scripts/
-│       ├── init-postgres.sql
-│       └── init-minio.sh
+│   ├── Dockerfile.dev                 # Shared development workspace image
+│   ├── compose.debug-ports.yml        # Optional host-tooling ports
+│   ├── init-scripts/
+│   │   └── init-postgres.sql
+│   └── minio-source/                  # Source-pinned MinIO builds
 │
 ├── scripts/
 │   ├── setup.sh                      # Initial server setup
@@ -501,54 +500,16 @@ networks:
     driver: bridge
 ```
 
-### Development Stack (`docker/docker-compose.dev.yml`)
+### Development Stack (`compose.yaml`)
 
-```yaml
-version: "3.8"
-
-services:
-  postgres:
-    image: ankane/pgvector:latest
-    environment:
-      POSTGRES_USER: notted
-      POSTGRES_PASSWORD: notted_dev_password
-      POSTGRES_DB: notted_dev
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_dev_data:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
-  meilisearch:
-    image: getmeili/meilisearch:v1.7
-    environment:
-      MEILI_MASTER_KEY: dev-master-key
-    ports:
-      - "7700:7700"
-
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: mintedminio
-      MINIO_ROOT_PASSWORD: nottedminio123
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-
-  mailpit:
-    image: axllent/mailpit:latest
-    ports:
-      - "1025:1025"
-      - "8025:8025"
-
-volumes:
-  postgres_dev_data:
-```
+The root `compose.yaml` is the canonical development stack. `docker compose up` installs
+locked dependencies, continuously compiles shared contracts, applies migrations, seeds the
+development fixture on first startup, and runs PostgreSQL/pgvector, Redis, Meilisearch,
+MinIO, Mailpit, NestJS, and Next.js. Source is mounted read-only and generated output uses
+named volumes. Only web, API, and the Mailpit UI bind loopback ports by default; use
+`docker/compose.debug-ports.yml` only for host-side data tooling. Image versions and digests,
+health checks, dependency ordering, networks, volume policy, and development defaults live
+in the Compose file and ADR 0008 rather than being duplicated here.
 
 ---
 
@@ -1567,32 +1528,13 @@ Add to crontab:
 git clone git@github.com:yourusername/notted.git
 cd Notted
 
-# 2. Install dependencies
-pnpm install
-
-# 3. Start infrastructure services
-cd docker
-docker compose -f docker-compose.dev.yml up -d
-
-# 4. Copy environment
-cp .env.example .env
-# Edit .env with local values
-
-# 5. Run database migrations
-cd ../apps/api
-pnpm drizzle-kit migrate
-
-# 6. Seed database (optional)
-pnpm tsx src/database/seed.ts
-
-# 7. Start API (terminal 1)
-cd apps/api
-pnpm dev  # Runs on http://localhost:3001
-
-# 8. Start Web (terminal 2)
-cd apps/web
-pnpm dev  # Runs on http://localhost:3000
+# 2. Start the complete development environment
+docker compose up
 ```
+
+No host Node.js, pnpm installation, environment copy, migration command, seed command, or
+separate application terminal is required. See `docs/README.md` for port overrides,
+host-side quality tooling, and lifecycle commands.
 
 ### Available Make Commands
 
@@ -1602,8 +1544,7 @@ Create `Makefile` at root:
 .PHONY: dev build test deploy migrate backup
 
 dev:
-	cd docker && docker compose -f docker-compose.dev.yml up -d
-	pnpm dev
+	docker compose up
 
 build:
 	pnpm build

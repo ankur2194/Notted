@@ -2,49 +2,77 @@
 
 ## Prerequisites
 
-- Node.js `22.23.1` (minimum supported `22.12.0`, Node 23+ is outside the baseline)
-- Corepack with pnpm `10.34.5`
+Required:
+
 - Docker Engine/Desktop with Docker Compose v2 and BuildKit
 - Git
 
+Optional, for host-side tooling and the quality gates only:
+
+- Node.js `22.23.1` (minimum supported `22.12.0`, Node 23+ is outside the baseline)
+- Corepack with pnpm `10.34.5`
+
 On Windows, use WSL 2 integration and keep Docker Desktop running. A repository on an
 NTFS-mounted `/mnt/*` path works but TypeScript/Vitest file traversal can be slower than a
-WSL-native filesystem. If Docker commands fail from WSL, enable integration for that
-distribution and verify `docker info` before changing project files.
+WSL-native filesystem, and container file watching may need `WATCHPACK_POLLING=true`. If
+Docker commands fail from WSL, enable integration for that distribution and verify
+`docker info` before changing project files.
 
 ## Clone to running
 
 ```bash
-corepack enable
-pnpm install --frozen-lockfile --strict-peer-dependencies
-pnpm env:init
-pnpm env:check
-pnpm infra:up
-pnpm db:migrate
-pnpm db:seed
-pnpm dev
+docker compose up
 ```
 
-`env:init` creates only missing `docker/.env`, `apps/api/.env`, and
-`apps/web/.env.local`; it never overwrites an existing file. The API development launcher
-explicitly loads `apps/api/.env`. Next.js loads `apps/web/.env.local` using native
-precedence.
+That is the whole setup. The stack in [`compose.yaml`](../compose.yaml) installs workspace
+dependencies, builds the shared contract packages, applies every Drizzle migration, seeds
+the deterministic fixture on first run, continuously rebuilds shared contracts, and starts
+the API and web app with hot reload. Source is mounted read-only; dependencies and generated
+outputs use Docker volumes, so host uid/gid does not affect startup. No environment file,
+host toolchain, or follow-up command is required.
 
-The root `dev` command runs API and web through Turborepo. Use `pnpm dev:api` or
-`pnpm dev:web` separately.
+Expect the first run to take several minutes: it builds the two source-pinned MinIO
+binaries and performs a full `pnpm install`. Follow it with `docker compose logs -f deps`.
+Subsequent runs reuse the pnpm store and dependency volumes.
 
-### Deterministic development seed
-
-Run the seed only after healthy infrastructure and all migrations are present:
+The equivalent wrapper waits for readiness and names the service holding it up:
 
 ```bash
 pnpm infra:up
-pnpm db:migrate
+```
+
+Neither path needs `pnpm env:init`. That command now only creates `apps/api/.env` and
+`apps/web/.env.local` for *host-side* tooling such as `pnpm db:studio` and `pnpm test:ci`.
+
+### Running the applications on the host instead
+
+Still supported, but no longer the default. The data services have no published ports, so
+start the stack with the override below, then run the apps yourself:
+
+```bash
+pnpm install --frozen-lockfile --strict-peer-dependencies
+pnpm env:init
+pnpm env:check
+pnpm infra:up:ports
+pnpm build:packages
+docker compose stop api web
+pnpm dev
+```
+
+### Deterministic development seed
+
+The `db-init` service applies migrations on every start and runs the seed only on the
+first normal stack start, guarded by a marker on the `db-init-state` volume. Both volumes
+are deleted together by the documented reset. If either volume is manually removed or
+restored independently, remove the other one too or run `pnpm db:seed` after startup.
+
+Reseed on demand — for example after editing fixture rows:
+
+```bash
 pnpm db:seed
 ```
 
-`pnpm db:seed` validates the development environment, loads `apps/api/.env`, and writes
-the complete fixture atomically through PostgreSQL. Rerunning the command is safe: every
+That executes the seed inside the running `api` container. Rerunning it is safe: every
 canonical row has a stable UUID, mutable fixture fields are restored with conflict-aware
 upserts, and composite junction rows ignore an already-present pair. It does not truncate
 tables or delete developer-created rows.
@@ -129,35 +157,76 @@ lifecycle until Part 26, and notification production/mention behavior until Part
 
 ## Services and ports
 
-| Service       | Loopback URL/port       | Health or use                   |
-| ------------- | ----------------------- | ------------------------------- |
-| Web           | `http://localhost:3000` | Next.js application             |
-| API           | `http://localhost:3001` | `/health/live`, `/health/ready` |
-| PostgreSQL    | `127.0.0.1:5432`        | Drizzle database                |
-| Redis         | `127.0.0.1:6379`        | Cache/realtime foundation       |
-| Meilisearch   | `http://localhost:7700` | `/health`                       |
-| MinIO API     | `http://localhost:9000` | Private object API              |
-| MinIO console | `http://localhost:9001` | Development administration      |
-| Mailpit SMTP  | `127.0.0.1:1025`        | Development SMTP capture        |
-| Mailpit web   | `http://localhost:8025` | Captured messages               |
+Only three ports are published, all bound to `127.0.0.1`:
 
-Override published ports only in `docker/.env`, then update corresponding API host
-endpoints. All ports bind to `127.0.0.1`.
+| Service     | Loopback URL            | Health or use                   |
+| ----------- | ----------------------- | ------------------------------- |
+| Web         | `http://localhost:3000` | Next.js application             |
+| API         | `http://localhost:3001` | `/health/live`, `/health/ready` |
+| Mailpit web | `http://localhost:8025` | Captured messages               |
+
+Everything else is reachable only from inside the stack, by Compose service name:
+
+| Service       | In-cluster address      | Health or use              |
+| ------------- | ----------------------- | -------------------------- |
+| PostgreSQL    | `postgres:5432`         | Drizzle database           |
+| Redis         | `redis:6379`            | Cache/realtime foundation  |
+| Meilisearch   | `http://meilisearch:7700` | `/health`                |
+| MinIO API     | `http://minio:9000`     | Private object API         |
+| MinIO console | `http://minio:9001`     | Development administration |
+| Mailpit SMTP  | `mailpit:1025`          | Development SMTP capture   |
+
+They sit on an `internal` Compose network with no route to or from the host. The `api`,
+`web` (which shares the API container's network namespace), and `mailpit` runtime services
+also use the routable `edge` network because they publish ports. The dependency installer
+and contract compiler use `edge` without publishing anything.
+
+Change a published port through a root `.env` — copy [`.env.example`](../.env.example).
+Changing `NOTTED_WEB_PORT` or `NOTTED_API_PORT` also rewrites `APP_URL`, `API_URL`,
+`WS_URL`, the CORS allow-list, and the `NEXT_PUBLIC_*` origins together, so the browser
+and the API cannot drift apart.
+
+### Host tooling and the debug-ports override
+
+Anything on the host that opens a socket to a data service needs
+[`docker/compose.debug-ports.yml`](../docker/compose.debug-ports.yml), which republishes
+PostgreSQL, Redis, Meilisearch, MinIO, and Mailpit SMTP on `127.0.0.1`:
+
+```bash
+pnpm infra:up:ports
+# or: docker compose -f compose.yaml -f docker/compose.debug-ports.yml up -d
+```
+
+That is required for `pnpm db:studio`, `pnpm db:check`, the MinIO console, and host
+`pnpm test:ci`. The alternative that needs no host prerequisites is to run the command
+inside the stack, for example `docker compose exec api pnpm test`.
 
 ## Infrastructure lifecycle
 
 ```bash
-pnpm infra:up
+docker compose up          # or: pnpm infra:up
 pnpm infra:project
 pnpm infra:status
 pnpm infra:logs
 pnpm infra:down
 ```
 
-Each checkout derives `notted-dev-<workspace-path-hash>` as its Compose project name, so
-containers and volumes do not collide across worktrees. Startup builds the two
-source-pinned MinIO targets, waits at most 180 seconds for health, and verifies the
-one-shot bucket initializer. Normal shutdown preserves data volumes.
+The Compose project name is the fixed `notted-dev` declared by `name:` in `compose.yaml`,
+so `docker compose` and the `pnpm infra:*` wrappers always address the same containers and
+volumes. Worktrees no longer get their own volume set automatically. An isolated worktree
+may export `COMPOSE_PROJECT_NAME` only when it uses bare `docker compose` commands
+consistently; the `pnpm infra:*` wrappers deliberately target the fixed `notted-dev` stack.
+
+> **Upgrading an existing checkout:** the old per-checkout `notted-dev-<hash>` project is
+> not reused, so its volumes are orphaned rather than deleted. Inspect them with
+> `docker volume ls --filter name=notted-dev-` and remove them once you no longer need the
+> data.
+
+`pnpm infra:up` builds the two source-pinned MinIO targets and the shared dev image, waits
+up to 900 seconds (a first run installs the whole workspace), and fails fast naming any
+one-shot service — `deps`, `db-init`, `minio-init` — that exited
+non-zero. It also waits for the persistent shared-contract compiler and both applications.
+Normal shutdown preserves data volumes.
 
 If exact legacy `notted-dev_notted_*_dev_data` volumes are present, startup warns and
 leaves them untouched. Follow
@@ -170,7 +239,7 @@ The only volume-deleting command is:
 pnpm infra:reset:dev
 ```
 
-It targets only the canonical development Compose file and derived project, refuses
+It targets only the root `compose.yaml` and the exact `notted-dev` project, refuses
 production, ambient Compose/Docker overrides, and non-local Docker endpoints, and
 requires typing exactly
 `DELETE NOTTED DEV DATA`. It never runs a global Docker prune.
@@ -178,12 +247,18 @@ requires typing exactly
 ## Database workflow
 
 ```bash
+pnpm db:seed                 # runs inside the api container
+pnpm infra:up:ports          # required by everything below
 pnpm db:check
 pnpm db:generate
 pnpm db:migrate
 pnpm db:studio
-pnpm db:seed
 ```
+
+`db:generate` and `db:check` are host `drizzle-kit` commands and need `apps/api/.env` plus
+a reachable database, so run `pnpm env:init` and `pnpm infra:up:ports` first. Routine
+migration *application* needs neither: the `db-init` service already applies migrations on
+every `docker compose up`.
 
 Review generated migrations before committing and never edit a deployed migration.
 `db:seed` requires migrations `0000`–`0007` and fails with a safe message when they are
@@ -210,16 +285,19 @@ functions, and lines in every workspace. **It requires a reachable PostgreSQL da
 The API's integration suites are gated on `DATABASE_URL` (`describe.skipIf`) and run their
 own migrations and seed against it. Without one they all skip, and `apps/api` lands near
 55% — well under the threshold — so the command fails with only coverage numbers to
-explain why. Run `pnpm infra:up` first; `apps/api/.env` already points `DATABASE_URL` at
-the local instance. Plain `pnpm test` has no threshold and needs no database. CI provisions
-its own throwaway `pgvector` service for this reason.
+explain why. Run `pnpm infra:up:ports` first so PostgreSQL is reachable from the host;
+`apps/api/.env` already points `DATABASE_URL` at the published instance. Plain `pnpm test`
+has no threshold and needs no database. CI provisions its own throwaway `pgvector` service
+for this reason.
 
 Those suites commit rather than rolling back, because their barrier-synchronized races need
 genuinely independent transactions. They clean up their own committed rows on the next run,
 so a long-lived development database stays usable, but a truly clean run is what CI gets.
 
-`pnpm test:e2e` uses exact `@playwright/test@1.62.0` and expects the development
-infrastructure, migrated Part 21 schema, API, web app, and Mailpit. Install browser binaries
+`pnpm test:e2e` uses exact `@playwright/test@1.62.0` and expects the running stack — it
+drives `http://localhost:3000`, `http://localhost:3001`, and Mailpit on
+`http://localhost:8025`, all of which the default `docker compose up` publishes. Install
+browser binaries
 separately when needed with `pnpm --filter @notted/web exec playwright install`; browser
 binaries are not installed by dependency installation and are not committed. The suite
 creates fresh `.test` accounts and never relies on seed credentials.
@@ -229,12 +307,22 @@ The root `Makefile` is an optional thin alias layer (`make infra-up`, `make test
 
 ## Troubleshooting
 
-- Run `pnpm env:check` after editing configuration. It reports variable names and safe
-  categories, never values.
-- If a port is occupied, edit only its published port in `docker/.env`, update the API
-  endpoint if needed, then run `pnpm infra:down` and `pnpm infra:up`.
-- Use `pnpm infra:status` before reading logs. `minio-init` should be exited with code 0;
-  persistent services should be healthy.
+- If the apps never start, read `docker compose logs deps` first. Dependency installation
+  is the one step everything else waits on.
+- If a port is occupied, set `NOTTED_WEB_PORT`, `NOTTED_API_PORT`, or
+  `NOTTED_MAILPIT_WEB_PORT` in a root `.env`, then `pnpm infra:down` and `pnpm infra:up`.
+  The dependent URLs follow automatically.
+- Use `pnpm infra:status` before reading logs. `deps`, `minio-init`, and `db-init` should
+  be exited with code 0; persistent services including `contracts` should be healthy.
+- Source is read-only in containers. Dependency and build-output volumes take their
+  ownership from the image directory underneath them, so a write error inside a container
+  usually means a volume survived from an older image — `pnpm infra:reset:dev` clears it.
+- Changes to `packages/shared-*` are rebuilt by the persistent `contracts` service. The
+  API and web watchers consume its generated output without another command.
+- The `web` container shares the `api` container's network namespace, so recreating `api`
+  requires recreating `web`. `docker compose up -d` does both.
+- Run `pnpm env:check` after editing the host-side environment files. It reports variable
+  names and safe categories, never values.
 - Docker Desktop file sharing/build failures usually mean the workspace drive or WSL
   distribution is not enabled. Source-based MinIO builds also require registry and GitHub
   access on first build.

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install env-init env-check infra-project infra-up infra-down infra-status infra-logs infra-reset-dev dev dev-api dev-web build format format-check lint type-check test test-ci db-check db-generate db-migrate db-studio seed
+.PHONY: help install env-init env-check infra-project infra-up infra-up-ports infra-down infra-status infra-logs infra-reset-dev dev dev-api dev-web build format format-check lint type-check test test-ci db-check db-generate db-migrate db-studio seed
 
 help:
 	@echo "Notted developer targets delegate to the canonical pnpm scripts."
@@ -16,6 +16,9 @@ env-check:
 
 infra-up:
 	pnpm infra:up
+
+infra-up-ports:
+	pnpm infra:up:ports
 
 infra-project:
 	pnpm infra:project

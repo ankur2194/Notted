@@ -61,7 +61,8 @@ Notted/
 ├── packages/
 │   ├── shared-types/           # Shared TypeScript contracts
 │   └── shared-validators/      # Shared Zod schemas
-├── docker/                     # Development and production Compose files
+├── compose.yaml                # Development stack: infrastructure and both applications
+├── docker/                     # Dev image, Compose overrides, service init scripts
 ├── scripts/                    # Setup, deployment, migration, backup, restore
 ├── docs/
 │   ├── completed-parts/        # Durable cross-session implementation records
@@ -179,28 +180,28 @@ A part is not complete merely because code exists. Its stated criteria and requi
 
 ## Local Development
 
-The host-run applications and checkout-isolated development infrastructure are available:
+The entire stack — infrastructure and both applications — runs in Docker. From a fresh
+clone, with Docker Engine/Desktop the only prerequisite:
 
 ```bash
-pnpm install --frozen-lockfile --strict-peer-dependencies
-pnpm env:init
-pnpm env:check
-pnpm infra:up
-pnpm db:migrate
-pnpm db:seed
-pnpm build:packages   # build shared workspace packages required by apps
-pnpm dev
+docker compose up
 ```
 
-The `pnpm build:packages` step compiles `@notted/shared-types` and
-`@notted/shared-validators` into their `dist/` directories. It is required once
-before `pnpm dev` (and again whenever the shared packages change) because the
-`dev` task runs apps in parallel without first building their upstream workspace
-dependencies. Full `pnpm build` is intended for production-style builds and
-requires `https`/`wss` public URLs, so prefer `pnpm build:packages` followed by
-`pnpm dev` for local development.
+That installs workspace dependencies, continuously builds the shared contract packages,
+applies migrations, seeds the deterministic fixture on first run, and starts the API and
+web app with hot reload. Source is read-only in the containers and all generated output is
+kept in Docker volumes. Only three ports are published: `3000` (web), `3001` (API), and `8025`
+(Mailpit). PostgreSQL, Redis, Meilisearch, MinIO, and Mailpit's SMTP port stay on an
+internal network. `pnpm infra:up` is an equivalent wrapper that also waits for readiness
+and reports which service is holding things up.
 
-Common commands include `pnpm dev:api`, `pnpm dev:web`, `pnpm infra:status`,
+Node and pnpm on the host remain useful for the quality gates and database tooling
+(`pnpm install --frozen-lockfile --strict-peer-dependencies`, then `pnpm env:init`), but
+they are no longer required to run the application. Host-side tooling that connects
+directly to a data service also needs `docker/compose.debug-ports.yml`; see
+[`docs/README.md`](docs/README.md).
+
+Common commands include `pnpm infra:status`,
 `pnpm infra:project`, `pnpm infra:logs`, `pnpm infra:down`, `pnpm build`, `pnpm lint`,
 `pnpm type-check`, `pnpm test`, `pnpm test:e2e`, `pnpm db:check`, `pnpm db:generate`,
 `pnpm db:migrate`, `pnpm db:seed`, and `pnpm db:studio`. The deterministic seed is

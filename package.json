@@ -12,6 +12,7 @@
     "env:init": "node scripts/dev-tooling.mjs env:init",
     "env:check": "node scripts/dev-tooling.mjs env:check",
     "infra:up": "node scripts/dev-tooling.mjs infra:up",
+    "infra:up:ports": "node scripts/dev-tooling.mjs infra:up --with-service-ports",
     "infra:project": "node scripts/dev-tooling.mjs infra:project",
     "infra:down": "node scripts/dev-tooling.mjs infra:down",
     "infra:status": "node scripts/dev-tooling.mjs infra:status",
@@ -36,8 +37,8 @@
     "db:generate": "pnpm --filter @notted/api db:generate",
     "db:studio": "pnpm --filter @notted/api db:studio",
     "db:seed": "node scripts/dev-tooling.mjs db:seed",
-    "clean": "rimraf --glob \"**/dist\" \"**/.turbo\" \"**/coverage\" .turbo coverage",
-    "clean:deps": "rimraf --glob \"**/node_modules\" node_modules",
+    "clean": "rimraf --glob \"**/dist\" \"**/.turbo\" \"**/coverage\" .turbo coverage && node scripts/ensure-docker-mounts.mjs",
+    "clean:deps": "rimraf --glob \"**/node_modules\" node_modules && node scripts/ensure-docker-mounts.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

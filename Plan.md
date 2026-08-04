@@ -66,6 +66,13 @@ Create a CI workflow that installs with a frozen lockfile, restores safe caches,
 
 ## Phase 2 — Local Infrastructure and Configuration
 
+> **Development-stack update (2026-08-04):** Parts 8–10 were originally delivered with
+> host-run applications and `docker/docker-compose.dev.yml`. The canonical development
+> environment is now the root `compose.yaml`: one `docker compose up` runs infrastructure,
+> migrations, seed initialization, shared contract watchers, API, and web. The original
+> acceptance history remains in the numbered completion records; current operation is
+> documented in `docs/completed-parts/all-in-docker-development-2026-08-04.md`.
+
 ### Part 8 — Define environment contracts
 
 Create `docker/.env.example` and application-specific typed environment schemas. Separate public browser variables from server secrets, supply safe development defaults, and document how to generate strong secrets. Include database, Redis, MinIO, Meilisearch, SMTP, auth, URLs, rate limits, storage limits, AI providers, encryption keys, and feature flags. Never commit real credentials.
@@ -517,6 +524,13 @@ Implement structured correlated logs, metrics for HTTP/jobs/websockets/dependenc
 **Verify:** inject representative failures and confirm alerts and diagnostic context identify the affected tenant/request without revealing secrets.
 
 ## Phase 15 — Production Packaging and Operations
+
+> **Note (2026-08-04):** development now runs entirely in Docker from the root
+> `compose.yaml` (see `docs/completed-parts/all-in-docker-development-2026-08-04.md`).
+> Parts 79 and 80 should build on that file's service graph, networks, and health gating
+> rather than starting over — the production stack differs by using built images instead of
+> a bind-mounted workspace, and by adding resource limits, restart policy, and the proxy.
+> `docker/Dockerfile.dev` is development-only and is not a base for the production images.
 
 ### Part 79 — Create production Docker images
 

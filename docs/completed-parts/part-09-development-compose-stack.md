@@ -6,7 +6,14 @@
 - **Completed on:** 2026-07-27
 - **Implemented by:** Initial Part 9 implementation; rewritten during Phase 2 integration
 - **Plan reference:** `Plan.md`, Part 9
-- **Related records:** `part-08-environment-contracts.md`; `part-10-developer-commands-onboarding.md`; `part-11-configuration-dependency-clients.md`; `docs/decisions/0005-private-object-storage.md`; `docs/decisions/0008-runtime-and-package-compatibility.md`
+- **Related records:** `part-08-environment-contracts.md`; `part-10-developer-commands-onboarding.md`; `part-11-configuration-dependency-clients.md`; `all-in-docker-development-2026-08-04.md`; `docs/decisions/0005-private-object-storage.md`; `docs/decisions/0008-runtime-and-package-compatibility.md`
+
+> **Correction (2026-08-04):** the delivery vehicle described below,
+> `docker/docker-compose.dev.yml`, has been deleted. Its services moved verbatim — same
+> digests, healthchecks, volumes, and MinIO source pins — into the root `compose.yaml`,
+> which also runs the applications and publishes only ports 3000, 3001, and 8025. The
+> host-run application model and the per-checkout hashed project name are no longer in
+> use. See [`all-in-docker-development-2026-08-04.md`](all-in-docker-development-2026-08-04.md).
 
 ## Objective
 

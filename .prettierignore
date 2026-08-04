@@ -20,3 +20,5 @@ apps/api/src/database/migrations/
 .agents/
 .codex/
 .opencode/
+# Written by the Claude Code CLI, not by hand; globally gitignored
+.claude/settings.local.json

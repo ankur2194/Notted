@@ -1,34 +1,42 @@
 # Legacy development volume recovery
 
-The current developer tooling derives a Compose project name from the checkout path.
-Older Notted checkouts used the fixed project `notted-dev` and different volume keys.
-`pnpm infra:up` detects those exact legacy names, warns, and leaves them untouched.
+Two older layouts can leave volumes behind. The earliest Notted checkouts used the fixed
+project `notted-dev` with `notted_*_dev_data` volume keys; a later revision derived a
+`notted-dev-<checkout-path-hash>` project name. The current stack is back to the fixed
+`notted-dev`, declared by `name:` in the root `compose.yaml`, with plain volume keys such
+as `postgres-data`.
 
-Do not run either stack's volume-reset command until you have classified and backed up
-both sets. Normal `pnpm infra:down` never deletes volumes.
+`pnpm infra:up` detects the exact earliest names, warns, and leaves them untouched. It
+cannot detect the hash-derived set, so enumerate those yourself.
+
+Nothing here is deleted implicitly. `docker compose down --volumes` removes only the
+volumes declared in the compose file it was given, so neither legacy set is in scope; and
+normal `pnpm infra:down` never deletes volumes at all. Still, do not run any volume-reset
+command until you have classified and backed up every set.
 
 ## 1. Inventory and stop writers
 
 ```bash
 pnpm infra:project
 pnpm infra:down
-docker compose \
-  --env-file docker/.env \
-  --file docker/docker-compose.dev.yml \
-  --project-name notted-dev \
-  down --remove-orphans
 docker volume ls --format '{{.Name}}' | sort
+docker volume ls --filter name=notted-dev- --format '{{.Name}}'   # hash-derived set
 ```
 
-The legacy names are:
+The earliest legacy names are:
 
 - `notted-dev_notted_postgres_dev_data`
 - `notted-dev_notted_redis_dev_data`
 - `notted-dev_notted_meilisearch_dev_data`
 - `notted-dev_notted_minio_dev_data`
 
-The current names start with the value printed by `pnpm infra:project`. If either
-stack is still running, stop and identify it before continuing.
+The hash-derived names look like `notted-dev-f80448ec7cf5_postgres-data`. The current
+names are `notted-dev_postgres-data`, `notted-dev_redis-data`,
+`notted-dev_meilisearch-data`, and `notted-dev_minio-data`, alongside the dependency and
+state volumes `notted-dev_root-node-modules`, `notted-dev_pnpm-store`,
+`notted-dev_api-dist`, `notted-dev_web-next`, `notted-dev_shared-types-dist`,
+`notted-dev_shared-validators-dist`, and `notted-dev_db-init-state`. If any stack is still
+running, stop and identify it before continuing.
 
 ## 2. Back up the legacy volumes
 
@@ -73,17 +81,17 @@ non-empty volume trees. Prefer service-native export/import:
 - Redis and Meilisearch are disposable/rebuildable. Preserve their archives for
   rollback, but do not treat them as authoritative application data.
 
-At this foundation stage the only committed database migration enables `uuid-ossp` and
-`vector`, and no application tables or seed credentials exist. Later data-bearing
-migrations must provide their own compatibility procedure.
+The current schema includes application tables and deterministic relational seed fixtures.
+Those fixture identities are not login credentials. Review every migration added since a
+legacy volume was last used before restoring data into the current schema.
 
 ## 4. Verify and retain rollback
 
 After recovery, run:
 
 ```bash
-pnpm infra:up
-pnpm db:migrate
+pnpm env:init
+pnpm infra:up:ports
 pnpm infra:status
 curl --fail --silent http://127.0.0.1:7700/health
 curl --fail --silent http://127.0.0.1:9000/minio/health/ready

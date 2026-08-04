@@ -1,14 +1,19 @@
 # Environment contracts
 
 Notted separates configuration by consumer. Real environment files are ignored by Git;
-only examples are committed. Run `pnpm env:init` to copy missing examples without
-overwriting local values, then `pnpm env:check`.
+only examples are committed.
 
-| Owner | Local file | Allowed contents |
-|---|---|---|
-| Docker Compose | `docker/.env` | Service administration credentials, bucket names, and loopback-published ports |
-| NestJS API | `apps/api/.env` | Server URLs and secrets, dependency clients, limits, and feature flags |
-| Next.js web | `apps/web/.env.local` | Only `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_API_URL`, and `NEXT_PUBLIC_WS_URL` |
+| Owner | Local file | Required? | Allowed contents |
+|---|---|---|---|
+| Docker Compose | root `.env` | No — every value defaults in `compose.yaml` | Published-port overrides, service administration credentials, bucket names |
+| NestJS API | `apps/api/.env` | Host-side tooling only | Server URLs and secrets, dependency clients, limits, and feature flags |
+| Next.js web | `apps/web/.env.local` | Host-side tooling only | Only `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_API_URL`, and `NEXT_PUBLIC_WS_URL` |
+
+The development stack configures the API and web containers entirely from
+[`compose.yaml`](../compose.yaml), so `docker compose up` needs no file from this table.
+`apps/api/.env` and `apps/web/.env.local` exist for commands run on the host —
+`pnpm db:studio`, `pnpm db:generate`, `pnpm test:ci`, Playwright. Run `pnpm env:init` to
+copy missing examples without overwriting local values, then `pnpm env:check`.
 
 Never put a database URL, auth secret, provider credential, or encryption key in a
 `NEXT_PUBLIC_*` variable. Next.js embeds public variables into browser bundles at build
@@ -44,8 +49,8 @@ supported implicit fallback.
   `3:<base64>,2:<base64>`. Versions are unique positive integers, each value decodes to
   exactly 32 bytes, and the first version is active.
 - Enabled Redis, MinIO, Meilisearch, SMTP, and AI providers require their application
-  credentials. Compose-only root/master credentials remain in `docker/.env`; application
-  credentials belong in `apps/api/.env`.
+  credentials. Compose-only root/master credentials belong to the Compose file or its
+  root `.env`; application credentials belong in the API environment.
 - Production SMTP uses implicit TLS or requires STARTTLS. SMTP user and password are
   either both present or both absent.
 - AI remains disabled unless `FEATURE_AI_ENABLED=true` and at least one provider key is
@@ -56,15 +61,23 @@ values. Do not paste real environment files into issue reports, logs, or test ar
 
 ## Cross-file development consistency
 
-For the local stack, the PostgreSQL user/password/database in `docker/.env` must match the
-credentials and database name in the API `DATABASE_URL`. `MINIO_ROOT_USER` and
-`MINIO_ROOT_PASSWORD` currently match the API development access key pair, and
-`MEILI_MASTER_KEY` matches the API development search key. These are documented local
-defaults only, not production credential-sharing guidance.
+Inside the Docker stack there is nothing to keep in sync: `compose.yaml` derives
+`DATABASE_URL` from the same `POSTGRES_*` values it gives PostgreSQL, hands the MinIO root
+credentials to the API as its access key pair, reuses `MEILI_MASTER_KEY` as the API search
+key, and derives `APP_URL`, `API_URL`, `WS_URL`, `BETTER_AUTH_TRUSTED_ORIGINS`, and the
+three `NEXT_PUBLIC_*` origins from `NOTTED_WEB_PORT` and `NOTTED_API_PORT`. These are
+documented local defaults only, not production credential-sharing guidance.
 
-Published ports in `docker/.env` must match the host endpoints in `apps/api/.env`.
-MinIO bucket names must also agree. `pnpm env:check` validates the credential/name
-relationships and invokes both typed application validators.
+The host-side files can still drift from each other, so `pnpm env:check` verifies that
+`apps/web/.env.local`'s `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_API_URL`, and
+`NEXT_PUBLIC_WS_URL` match `apps/api/.env`'s `APP_URL`, `API_URL`, and `WS_URL`, then
+invokes both typed application validators. It succeeds and says so when the files are
+absent, because the Docker stack does not need them.
+
+`apps/api/.env` points its `DATABASE_URL`, `MINIO_ENDPOINT`, `MEILISEARCH_HOST`, and
+`EMAIL_SMTP_HOST` at `127.0.0.1`. Those are reachable only while
+`docker/compose.debug-ports.yml` is layered in (`pnpm infra:up:ports`); the default stack
+keeps the data services off the host.
 
 ## Portable secret generation
 

@@ -5,12 +5,45 @@ Agent-Prompt-Examples.md
 node_modules/
 .pnpm-store/
 
+# Compose overlays writable volumes at these tracked mount points. Keep only
+# the placeholders; dependency contents remain ignored.
+!node_modules/
+node_modules/*
+!node_modules/.docker-mount
+!apps/api/node_modules/
+apps/api/node_modules/*
+!apps/api/node_modules/.docker-mount
+!apps/web/node_modules/
+apps/web/node_modules/*
+!apps/web/node_modules/.docker-mount
+!packages/shared-types/node_modules/
+packages/shared-types/node_modules/*
+!packages/shared-types/node_modules/.docker-mount
+!packages/shared-validators/node_modules/
+packages/shared-validators/node_modules/*
+!packages/shared-validators/node_modules/.docker-mount
+
 # Build outputs
 dist/
 build/
 out/
 .next/
 *.tsbuildinfo
+
+# Generated output is ignored except for mount points required by a clean
+# Compose checkout before the read-only source bind is applied.
+!apps/api/dist/
+apps/api/dist/*
+!apps/api/dist/.docker-mount
+!apps/web/.next/
+apps/web/.next/*
+!apps/web/.next/.docker-mount
+!packages/shared-types/dist/
+packages/shared-types/dist/*
+!packages/shared-types/dist/.docker-mount
+!packages/shared-validators/dist/
+packages/shared-validators/dist/*
+!packages/shared-validators/dist/.docker-mount
 
 # Turborepo
 .turbo/

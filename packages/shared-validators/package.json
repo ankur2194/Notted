@@ -20,6 +20,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "type-check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:ci": "vitest run --coverage --reporter=default --reporter=junit --outputFile.junit=test-results/junit.xml",
