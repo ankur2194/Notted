@@ -40,7 +40,15 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="scroll-smooth" data-scroll-behavior="smooth">
-      <body className="min-h-screen bg-background font-sans antialiased">
+      {/*
+        Extensions such as Grammarly and ColorZilla add attributes to <body>
+        (`data-gr-ext-installed`, `cz-shortcut-listen`, …) before React
+        hydrates, which React reports as an attribute mismatch the server can
+        never match. This suppresses that comparison for this element's own
+        attributes only; children are still checked normally, so a real
+        mismatch in the application tree is still reported.
+      */}
+      <body className="min-h-screen bg-background font-sans antialiased" suppressHydrationWarning>
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-background focus:text-foreground"

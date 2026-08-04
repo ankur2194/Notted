@@ -165,6 +165,17 @@ Only three ports are published, all bound to `127.0.0.1`:
 | API         | `http://localhost:3001` | `/health/live`, `/health/ready` |
 | Mailpit web | `http://localhost:8025` | Captured messages               |
 
+Use the `localhost` spelling, not `127.0.0.1`, even though the ports are published on
+`127.0.0.1` and Docker Desktop's port link opens that address. The stack is configured for a
+single browser origin — `APP_URL`, `BETTER_AUTH_TRUSTED_ORIGINS`, and the `NEXT_PUBLIC_*` values
+in `compose.yaml` all name `http://localhost:3000` — so the API rejects `http://127.0.0.1:3000`
+at the CORS and CSRF origin checks and sign-in fails. The two spellings cannot both work:
+`NEXT_PUBLIC_API_URL` compiles to one value, and a `SameSite=Lax` session cookie is not sent from
+a `127.0.0.1` page to a `localhost` API, so widening CORS alone would still leave sessions
+broken. `apps/web/next.config.js` does allow `127.0.0.1` as a Next development origin, which only
+keeps the page interactive enough to report that CORS error instead of failing silently; see the
+troubleshooting entry below.
+
 Everything else is reachable only from inside the stack, by Compose service name:
 
 | Service       | In-cluster address      | Health or use              |
@@ -323,6 +334,21 @@ The root `Makefile` is an optional thin alias layer (`make infra-up`, `make test
   requires recreating `web`. `docker compose up -d` does both.
 - Run `pnpm env:check` after editing the host-side environment files. It reports variable
   names and safe categories, never values.
+- If a form reloads the page with its field values in the query string, the page never
+  hydrated: React is not intercepting the submit, so the browser is performing the plain HTML
+  submit. Check the browser origin first. Next blocks cross-origin access to `/_next/*`
+  development resources, which includes the HMR socket that the Turbopack client runtime waits
+  on before it hydrates, and the dev server logs `Blocked cross-origin request to Next.js dev
+  resource`. `apps/web/next.config.js` allows the loopback addresses; any other host — a LAN
+  address, a container IP, a tunnel hostname — reproduces this with no error in the browser.
+- If registration or sign-in reports that the request could not be completed and the browser
+  console shows a CORS failure naming `Access-Control-Allow-Origin`, the page origin does not
+  match the configured one. Open `http://localhost:3000` rather than `http://127.0.0.1:3000`
+  or a LAN address; see "Services and ports" for why only one spelling works.
+- Attributes such as `data-gr-ext-installed` or `cz-shortcut-listen` in a hydration mismatch
+  come from browser extensions (Grammarly, ColorZilla) editing `<body>` before React loads, not
+  from application code. `apps/web/src/app/layout.tsx` sets `suppressHydrationWarning` on that
+  one element; mismatches inside the application tree are still reported.
 - Docker Desktop file sharing/build failures usually mean the workspace drive or WSL
   distribution is not enabled. Source-based MinIO builds also require registry and GitHub
   access on first build.
