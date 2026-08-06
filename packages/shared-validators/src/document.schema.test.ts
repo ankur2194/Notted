@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   NOTE_DOCUMENT_CODE_LANGUAGES,
+  NOTE_DOCUMENT_IMAGE_CLASS,
   NOTE_DOCUMENT_LIMITS,
   NOTE_DOCUMENT_NODE_TYPES,
   NOTE_DOCUMENT_PAGE_BREAK_CLASS,
@@ -9,6 +10,7 @@ import {
   NoteDocumentMigrationError,
   extractNoteContentPlain,
   migrateNoteDocument,
+  noteDocumentImageAttrs,
   noteDocumentSchema,
   normalizeNoteDocumentCodeLanguage,
   renderDocumentHtml,
@@ -1214,5 +1216,271 @@ describe("Part 38 page break contract", () => {
   it("does not change the contract version for the additive page-break widening", () => {
     expect(NOTE_DOCUMENT_SCHEMA_VERSION).toBe(1);
     expect(NOTE_DOCUMENT_NODE_TYPES).toContain("pageBreak");
+  });
+});
+
+describe("Part 42 image contract", () => {
+  const ATTACHMENT_ID = "3f4a1b2c-5d6e-4f70-8a91-b2c3d4e5f607";
+
+  const imageNode = (attrs: Record<string, unknown> = {}) => ({
+    type: "image",
+    attrs: { attachmentId: ATTACHMENT_ID, alt: "A chart", width: 800, height: 600, ...attrs },
+  });
+
+  const imageDocument = {
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "Before" }] },
+      imageNode(),
+      { type: "paragraph", content: [{ type: "text", text: "After" }] },
+    ],
+  };
+
+  it("accepts an image as a block node and round-trips it unchanged", () => {
+    const parsed = safeParseNoteDocument(imageDocument);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.doc).toEqual(imageDocument);
+    expect(noteDocumentSchema.safeParse(parsed.doc).success).toBe(true);
+  });
+
+  it("accepts an image wherever a block node is allowed", () => {
+    for (const wrapper of [
+      { type: "doc", content: [{ type: "blockquote", content: [imageNode()] }] },
+      {
+        type: "doc",
+        content: [
+          {
+            type: "bulletList",
+            content: [{ type: "listItem", content: [{ type: "paragraph" }, imageNode()] }],
+          },
+        ],
+      },
+      {
+        type: "doc",
+        content: [
+          {
+            type: "table",
+            content: [
+              {
+                type: "tableRow",
+                content: [
+                  {
+                    type: "tableCell",
+                    attrs: { colspan: 1, rowspan: 1, colwidth: null },
+                    content: [imageNode()],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]) {
+      expect(safeParseNoteDocument(wrapper).success).toBe(true);
+    }
+  });
+
+  it("rejects an image in inline position, because it is a block node", () => {
+    expect(
+      safeParseNoteDocument({
+        type: "doc",
+        content: [{ type: "paragraph", content: [imageNode()] }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts an empty alt, which is how a decorative image is marked", () => {
+    expect(safeParseNoteDocument({ type: "doc", content: [imageNode({ alt: "" })] }).success).toBe(
+      true,
+    );
+  });
+
+  it("accepts null intrinsic dimensions, which are only a layout hint", () => {
+    expect(
+      safeParseNoteDocument({ type: "doc", content: [imageNode({ width: null, height: null })] })
+        .success,
+    ).toBe(true);
+  });
+
+  /**
+   * The load-bearing test for the Part 42 criterion "the saved document never
+   * relies on temporary blob or base64 URLs". It is not a style check: the
+   * contract has NO attribute that could hold a URL, so every one of these is
+   * rejected by `NODE_ALLOWED_ATTRS`'s loop rather than by a special case.
+   */
+  it.each(["src", "url", "previewUrl", "dataUri", "href", "srcset", "blurDataUri"])(
+    "rejects an image carrying a %s attribute, so no blob: or data: URL can ever be persisted",
+    (attribute) => {
+      const blob = { type: "doc", content: [imageNode({ [attribute]: "blob:http://x/abc" })] };
+      const base64 = {
+        type: "doc",
+        content: [imageNode({ [attribute]: "data:image/webp;base64,AAAA" })],
+      };
+      const blobResult = safeParseNoteDocument(blob);
+      expect(blobResult.success).toBe(false);
+      if (!blobResult.success) {
+        expect(blobResult.errors.join("; ")).toContain(`not allowed on image: ${attribute}`);
+      }
+      expect(safeParseNoteDocument(base64).success).toBe(false);
+    },
+  );
+
+  it.each([
+    ["a missing attachmentId", imageNode({ attachmentId: undefined })],
+    ["a non-UUID attachmentId", imageNode({ attachmentId: "../../etc/passwd" })],
+    ["a missing alt", imageNode({ alt: undefined })],
+    ["a null alt", imageNode({ alt: null })],
+    ["control characters in alt", imageNode({ alt: "line\u0000break" })],
+    ["an oversized alt", imageNode({ alt: "a".repeat(NOTE_DOCUMENT_LIMITS.maxImageAlt + 1) })],
+    ["a zero width", imageNode({ width: 0 })],
+    ["a fractional height", imageNode({ height: 12.5 })],
+    ["a negative width", imageNode({ width: -1 })],
+    ["an oversized dimension", imageNode({ width: NOTE_DOCUMENT_LIMITS.maxImageDimension + 1 })],
+    ["children", { ...imageNode(), content: [{ type: "paragraph" }] }],
+    ["marks", { ...imageNode(), marks: [{ type: "link", attrs: SAFE_LINK_ATTRS }] }],
+    ["stray fields", { ...imageNode(), text: "x" }],
+  ])("rejects an image with %s", (_label, node) => {
+    expect(safeParseNoteDocument({ type: "doc", content: [node] }).success).toBe(false);
+  });
+
+  it("rejects a node with no attrs at all", () => {
+    expect(safeParseNoteDocument({ type: "doc", content: [{ type: "image" }] }).success).toBe(
+      false,
+    );
+  });
+
+  it("bounds how many images one note may reference", () => {
+    const atLimit = {
+      type: "doc",
+      content: Array.from({ length: NOTE_DOCUMENT_LIMITS.maxImages }, () => imageNode()),
+    };
+    const overLimit = {
+      type: "doc",
+      content: Array.from({ length: NOTE_DOCUMENT_LIMITS.maxImages + 1 }, () => imageNode()),
+    };
+    expect(safeParseNoteDocument(atLimit).success).toBe(true);
+    const rejected = safeParseNoteDocument(overLimit);
+    expect(rejected.success).toBe(false);
+    if (!rejected.success) expect(rejected.errors).toContain("Document has too many images");
+  });
+
+  it("renders an img with the contract class and no src of any kind", () => {
+    expect(NOTE_DOCUMENT_IMAGE_CLASS).toBe("notted-image");
+    const html = renderDocumentHtml(imageDocument);
+    expect(html).toBe(
+      `<p>Before</p><img class="${NOTE_DOCUMENT_IMAGE_CLASS}" ` +
+        `data-attachment-id="${ATTACHMENT_ID}" alt="A chart" loading="lazy" decoding="async">` +
+        "<p>After</p>",
+    );
+    // Part 63's export pipeline substitutes the source; this module has no
+    // workspace id and no authorization context, so it never invents one.
+    expect(html).not.toContain("src=");
+    expect(html).not.toContain("blob:");
+    expect(html).not.toContain("data:");
+  });
+
+  it("escapes alt text rather than trusting it", () => {
+    const html = renderDocumentHtml({
+      type: "doc",
+      content: [imageNode({ alt: '"><script>alert(1)</script>' })],
+    });
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("contributes alt text to the plain-text projection, and nothing when decorative", () => {
+    expect(extractNoteContentPlain(imageDocument)).toBe("Before\nA chart\nAfter");
+    expect(
+      extractNoteContentPlain({
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Before" }] },
+          imageNode({ alt: "" }),
+          { type: "paragraph", content: [{ type: "text", text: "After" }] },
+        ],
+      }),
+    ).toBe("Before\nAfter");
+  });
+
+  it("survives migration untouched", () => {
+    const clean = migrateNoteDocument(imageDocument);
+    expect(clean.migrated).toBe(false);
+    expect(clean.doc).toEqual(imageDocument);
+  });
+
+  it("strips a historical src during recovery instead of losing the image", () => {
+    const recovered = migrateNoteDocument({
+      type: "doc",
+      content: [
+        {
+          type: "image",
+          attrs: {
+            attachmentId: ATTACHMENT_ID,
+            src: "blob:http://localhost:3000/9d1f",
+            alt: "Recovered",
+            width: 100,
+            height: 50,
+          },
+        },
+      ],
+    });
+    expect(recovered.migrated).toBe(true);
+    expect(recovered.doc).toEqual({
+      type: "doc",
+      content: [
+        {
+          type: "image",
+          attrs: { attachmentId: ATTACHMENT_ID, alt: "Recovered", width: 100, height: 50 },
+        },
+      ],
+    });
+    expect(JSON.stringify(recovered.doc)).not.toContain("blob:");
+  });
+
+  it("degrades an image with no usable attachment id to its alt text", () => {
+    const recovered = migrateNoteDocument({
+      type: "doc",
+      content: [{ type: "image", attrs: { src: "data:image/png;base64,AAA", alt: "Lost chart" } }],
+    });
+    expect(recovered.migrated).toBe(true);
+    expect(recovered.doc).toEqual({
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "Lost chart" }] }],
+    });
+  });
+
+  it("moves an inline image into block position rather than dropping it", () => {
+    const recovered = migrateNoteDocument({
+      type: "doc",
+      content: [{ type: "paragraph", content: [imageNode({ alt: "Inline" })] }],
+    });
+    expect(recovered.migrated).toBe(true);
+    expect(extractNoteContentPlain(recovered.doc)).toContain("Inline");
+    expect(noteDocumentSchema.safeParse(recovered.doc).success).toBe(true);
+  });
+
+  it("exposes the reviewed attribute accessor used by the editor node view", () => {
+    expect(noteDocumentImageAttrs(imageNode().attrs)).toEqual({
+      attachmentId: ATTACHMENT_ID,
+      alt: "A chart",
+      width: 800,
+      height: 600,
+    });
+    expect(noteDocumentImageAttrs({ attachmentId: "nope", alt: "" })).toBeNull();
+    expect(noteDocumentImageAttrs({ attachmentId: ATTACHMENT_ID, alt: "x" })).toEqual({
+      attachmentId: ATTACHMENT_ID,
+      alt: "x",
+      width: null,
+      height: null,
+    });
+  });
+
+  it("does not change the contract version for the additive image widening", () => {
+    // Additive and forward-only: every stored v1 document is still valid v1, so
+    // there is nothing to migrate and no persisted version to compare against.
+    // The first incompatible change bumps this and adds the column plus backfill.
+    expect(NOTE_DOCUMENT_SCHEMA_VERSION).toBe(1);
+    expect(NOTE_DOCUMENT_NODE_TYPES).toContain("image");
   });
 });

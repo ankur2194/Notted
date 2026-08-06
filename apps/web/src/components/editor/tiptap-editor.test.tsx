@@ -149,6 +149,19 @@ describe("TiptapEditor document contract handling", () => {
   it("emits only contract-valid documents and never contacts the server", async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
+    /*
+     * `fetch` alone stopped being a sufficient guard in Part 42.
+     *
+     * Image upload reports progress, which `fetch` cannot do, so it uses
+     * `XMLHttpRequest` — a second, entirely separate way for this component to
+     * start talking to the server. The Part 34 rule is "the editor performs no
+     * network I/O", not "the editor performs no `fetch`", so the transport that
+     * was introduced to work around `fetch`'s limits is asserted here too.
+     * Without this, a future refactor that moved an upload into the editor would
+     * pass a green test suite.
+     */
+    const xhrSpy = vi.fn();
+    vi.stubGlobal("XMLHttpRequest", xhrSpy);
     const emitted: NoteDocument[] = [];
     const { editor } = await renderEditor({ onDocumentChange: (doc) => emitted.push(doc) });
 
@@ -160,6 +173,7 @@ describe("TiptapEditor document contract handling", () => {
     await waitFor(() => expect(emitted.length).toBeGreaterThanOrEqual(3));
     for (const document of emitted) expect(safeParseNoteDocument(document).success).toBe(true);
     expect(fetchSpy).not.toHaveBeenCalled();
+    expect(xhrSpy).not.toHaveBeenCalled();
   });
 
   it("repairs a historical document and says so without blocking editing", async () => {

@@ -1,4 +1,19 @@
 export {
+  IMAGE_EXTENSION_NAME,
+  IMAGE_FALLBACK_CLASS,
+  IMAGE_FRAME_CLASS,
+  IMAGE_LOADING_TEXT,
+  IMAGE_UNAVAILABLE_TEXT,
+  createNoteImage,
+  paintImage,
+  type ImageDom,
+  type ImageFilePickerHandler,
+  type ImageFilePickerRequest,
+  type ImageUploadHandler,
+  type ImageUploadRequest,
+  type NoteImageConfig,
+} from "./CustomImage";
+export {
   MENTION_EXTENSION_NAME,
   MENTION_PRIORITY,
   MENTION_REMOVED_CLASS,
@@ -20,6 +35,19 @@ export {
   type EditorShortcutsOptions,
 } from "./editor-shortcuts";
 export { FontSize, NOTE_FONT_SIZES, isAllowedNoteFontSize, type NoteFontSize } from "./font-size";
+export {
+  IMAGE_DROP_ACTIVE_CLASS,
+  IMAGE_UPLOAD_PLACEHOLDER_CLASS,
+  IMAGE_UPLOAD_PLACEHOLDER_KEY,
+  createImageInsertionController,
+  createImageUploadPlaceholderPlugin,
+  imageUploadIds,
+  imageUploadPosition,
+  paintPlaceholder,
+  type ImageInsertionController,
+  type ImagePlaceholderPhase,
+  type ImagePlaceholderState,
+} from "./image-upload-placeholder";
 export { NoteBlockTab, runBlockTab, type BlockTabDirection } from "./note-block-tab";
 export {
   NOTE_EDITOR_PLACEHOLDER,

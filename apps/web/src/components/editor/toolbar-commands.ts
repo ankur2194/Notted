@@ -7,6 +7,7 @@ import {
   AtSign,
   Bold,
   Code,
+  ImagePlus,
   Italic,
   List,
   ListOrdered,
@@ -34,6 +35,8 @@ import "@tiptap/extension-table";
 import "@tiptap/extension-task-list";
 import "@tiptap/extension-text-align";
 import "@tiptap/extension-underline";
+// Declares `nottedRequestImageUpload` on the chained-command interface (Part 42).
+import "./extensions/CustomImage";
 
 import { isAllowedEditorColor } from "./editor-colors";
 import { CODE_BLOCK_LANGUAGE_OPTIONS } from "./extensions/code-block-languages";
@@ -630,6 +633,22 @@ export const EDITOR_TOOLBAR_GROUPS: readonly ToolbarGroup[] = Object.freeze([
         isAvailable: (editor) => editor.isEditable,
         run: (editor) => {
           openMentionMenuAtCaret(editor);
+        },
+      },
+      {
+        /*
+         * A plain button item, so `EditorToolbar.tsx` needs no change at all and
+         * no new `ToolbarControlKind` is introduced: button items already render
+         * generically. It opens the host's file picker rather than inserting
+         * anything, for the same reason `/image` does.
+         */
+        kind: "button",
+        id: "insertImage",
+        label: "Insert image",
+        icon: ImagePlus,
+        isAvailable: (editor) => editor.isEditable && editor.can().nottedRequestImageUpload(),
+        run: (editor) => {
+          editor.chain().focus().nottedRequestImageUpload().run();
         },
       },
       { kind: "control", id: "link", label: "Link", control: "link", shortcutId: "link" },

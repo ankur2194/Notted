@@ -2,8 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-22
-- **Last revised:** 2026-08-03 — Parts 34–36 extended the TipTap row to the editor extension family and added the `lowlight`/`highlight.js` syntax-highlighting chain.
-- **Related plan parts:** 1–7, 21, 33–38
+- **Last revised:** 2026-08-06 — Part 40 added the `busboy` upload-parser row and recorded why `file-type` cannot be a direct API dependency. Part 41 added the `sharp` and `heic-convert` image-pipeline rows, reconciled `sharp 0.35.0` against `Notted.md`'s `0.33.x` line, and recorded the LGPL flag in the HEIC decoder chain.
+- **Related plan parts:** 1–7, 21, 33–38, 40, 41
 
 ## Context
 
@@ -33,6 +33,10 @@ Use this foundation matrix, with exact patch versions resolved and locked during
 | Object client | `minio 8.0.7` | Apache-2.0 SDK; raw client and credentials remain private behind the storage adapter. |
 | Search client | `meilisearch 0.60.0` | MIT and ESM-only; Nest's CommonJS output loads it through one typed native dynamic-import boundary. |
 | SMTP client | `nodemailer 9.0.3` / `@types/nodemailer 8.0.1` | MIT; bounded pooled transport with provider logging disabled. |
+| Multipart upload parser | `busboy 1.6.0` / `@types/busboy 1.5.4` | MIT. Promoted from a `@nestjs/platform-express` transitive to a direct `apps/api` dependency (pnpm's strict layout makes a transitive un-importable). Chosen over `multer` because ADR 0005 requires byte limits enforced **before and during** transfer: busboy exposes the raw part stream so a running counter can abort mid-upload, while multer only buffers or spools and offers no per-chunk hook. It is CommonJS, so it loads directly under the API's `module: CommonJS` output, and skipping multer also avoids `@types/multer`. Registered per route in `src/attachments/multipart-upload.parser.ts`, never globally. |
+| Image processing | `sharp 0.35.0` | Apache-2.0. **Explicit material deviation from `Notted.md`'s Sharp `0.33.x` line** (the second such deviation in this ADR, after Drizzle). `sharp` was already resolved in this tree at `0.35.0` through the reviewed `next@16.2.11 > sharp` advisory override below; Part 41 promotes that exact version to a direct `apps/api` dependency rather than installing a second one. Pinning `apps/api` to `0.33.x` would put **two sharp majors, and therefore two copies of the prebuilt libvips native binary, in one pnpm store** — duplicated native ABI surface, duplicated image-decoder CVE exposure, and two versions to patch on every advisory. It is `"type": "commonjs"` with a `./dist/index.cjs` main, so it loads directly under the API's `module: CommonJS` output. `Notted.md` is **not edited**: it is the product brief, and this ADR is the designated place to record a compatibility deviation from it (see the Drizzle `0.30.x` precedent above and the Consequences section). |
+| HEIC decoding | `heic-convert 2.1.0` / `@types/heic-convert 2.1.1` | ISC (types MIT/DefinitelyTyped). **Needed because Sharp cannot decode HEIC here**: the installed `sharp@0.35.0` bundles the prebuilt libvips 8.18.3, which reports `sharp.format.heif.input.fileSuffix === [".avif"]`; Sharp's own typings state HEIC requires a globally installed libvips built with libheif/libde265/x265, which the container does not ship. `Notted.md` requires "HEIC (convert to JPEG)", so the decode happens in JavaScript first and the resulting JPEG then travels the ordinary Sharp pipeline. CommonJS (`main: index.js`, no `type: module`, no exports map), so unlike `file-type` it loads directly under `module: CommonJS` + `moduleResolution: Node10`. **Licence flag for human sign-off:** the chain is `heic-convert@2.1.0` (ISC) → `heic-decode@2.1.0` (ISC) → **`libheif-js@1.19.8` (LGPL-3.0)**, plus `jpeg-js@0.4.4` (BSD-3-Clause) and `pngjs@6.0.0` (MIT). The API is server-side and is not distributed to users, and the package is a separately replaceable `node_modules` dependency rather than a static link, so the LGPL relinking obligation is satisfied structurally — but it is the one Part 41 item that is a licence judgement rather than a fact. Containment: a pure-JS/WASM decoder cannot be interrupted once running, so it is guarded by its own `MAX_HEIC_UPLOAD_BYTES` cap checked *before* entry and a `Promise.race` wall-clock timeout, and every reference in the codebase lives in the single file `src/attachments/heic-decoder.ts`. Dropping HEIC is therefore a one-file change: `supports()` already consults `isHeicDecoderAvailable()` and returns 415 before any database row exists. |
+| Content sniffing | first-party (`src/attachments/image-signature.ts`) | `file-type@21.3.4` — already listed below as a transitive advisory override — is **not usable as a direct API import**. It is `"type": "module"` with an exports-map-only entry, and its `strtok3`/`token-types` dependencies are ESM too; `apps/api` compiles with `module: CommonJS` + `moduleResolution: Node10`, so TypeScript cannot resolve it and a dynamic `import()` downlevels to `require()`. The supported surface is six image formats, so Part 40 ships a reviewed magic-byte sniffer with no runtime dependency. The `file-type` override row stays: it patches the transitive copy other tooling pulls in. |
 
 ### Targeted advisory overrides
 
@@ -43,7 +47,7 @@ manifests did not yet select. Phase 2 therefore applies only these reviewed over
 |---|---|---|
 | `@nestjs/platform-express@10.4.22` | `multer@2.2.0` | Removes the inherited high-severity upload-parser advisories without changing Nest's major. |
 | `next@16.2.11` | `postcss@8.5.18` | Keeps Next 16 while selecting the patched CSS parser used by its internal path. |
-| `next@16.2.11` | `sharp@0.35.0` | Keeps Next 16 while selecting the patched optional image runtime. |
+| `next@16.2.11` | `sharp@0.35.0` | Keeps Next 16 while selecting the patched optional image runtime. Part 41 added `sharp` as a direct `apps/api` dependency at this **same exact version**, so the override and the direct pin must be changed together — letting them diverge reintroduces the duplicate-libvips problem the matrix row above rejects. |
 | Various (Phase 4) | `body-parser@1.20.6` | Resolves GHSA-v422 (DoS via invalid limit value) without changing Express major. |
 | Various (Phase 4) | `esbuild@0.28.1` | Resolves GHSA‑67mh (dev-server request leakage) without changing tooling majors. |
 | Various (Phase 4) | `file-type@21.3.4` | Resolves GHSA‑5v7r (infinite loop) and GHSA‑j47w (ZIP bomb) without changing NestJS v10. |
@@ -100,6 +104,22 @@ The rich editor added eight further `@tiptap/*` packages, all at the already-eva
 
 No new advisory override was needed for any of them.
 
+### Part 41 image-pipeline dependency review
+
+Image ingestion added exactly **two** direct runtime dependencies (`sharp`, `heic-convert`) plus one `@types/*` package. Both matrix rows above carry the detail; this section is the four-point review the standard requires.
+
+- **Need.** `Notted.md` names Sharp as the image-processing library and requires JPEG/PNG/GIF/WebP/SVG/HEIC ingestion with thumbnail/medium/full variants. Sharp covers everything except HEIC, which its prebuilt libvips genuinely cannot decode, so `heic-convert` is the minimum addition that satisfies the stated requirement rather than a convenience.
+- **Maintenance.** `sharp` is one of the most widely deployed Node image libraries and was already being tracked in this repository through the Next.js override. `heic-convert` is small and infrequently released; that is a real risk, which is why it sits behind a one-file seam that can be removed without touching the pipeline.
+- **Licence.** `sharp` Apache-2.0. `heic-convert` ISC, but its transitive `libheif-js@1.19.8` is **LGPL-3.0** — flagged above and in the completion record as the single item needing explicit human sign-off.
+- **Security and cost.** Both are decoders operating on untrusted bytes, which is the highest-risk dependency class in this codebase. Every decode is therefore bounded before it starts: a byte cap, a `.metadata()`-first pixel and frame budget, a per-format admission gate, and a wall-clock timeout, all operator-configurable through `src/config/image-processing.config.ts`. `sharp` adds a prebuilt native binary (no compiler needed at install); `heic-convert` is pure JS/WASM with no network client and no telemetry. `pnpm audit --prod --audit-level=high` covers both and must stay green.
+
+**Deliberately not added** (each was considered and rejected, so a later contributor does not re-litigate it):
+
+- `file-type` — **verified ESM-only**; see the Content sniffing row above. Replaced by the first-party magic-byte sniffer.
+- `dompurify` / `jsdom` / `svgo` — not needed, because SVG is **rasterized rather than sanitized and served**. Rasterization uses the librsvg already inside libvips, so it costs no dependency, and it removes the whole sanitizer-bypass CVE class instead of subscribing to it.
+- `blurhash` — not needed; the placeholder is a 16 px WebP carried as a `data:` URI inside the existing attachment metadata, so it needs no decoder on the client and no extra request.
+- `multer` — already rejected in the busboy row above.
+
 ## Validation evidence
 
 - Next.js installation documentation states Node `>=20.9`, TypeScript `>=5.1`, and direct React/React DOM declarations: <https://nextjs.org/docs/app/getting-started/installation>.
@@ -110,6 +130,8 @@ No new advisory override was needed for any of them.
 - Live npm registry metadata recorded the evaluated stable releases, including Next.js `16.2.11`, NestJS `10.4.22`, Better Auth `1.6.24`, Drizzle ORM `0.45.2`, Drizzle Kit `0.31.10`, `pg` `8.22.0`, tRPC `11.18.0`, and pnpm `10.34.5`. It confirms that Better Auth and its Drizzle adapter require Drizzle ORM `^0.45.2`, and that `@tiptap/react` `2.27.1` permits React 19 and peers with the TipTap 2 core/ProseMirror packages: <https://www.npmjs.com/package/next>, <https://www.npmjs.com/package/%40nestjs/core>, <https://www.npmjs.com/package/better-auth>, <https://www.npmjs.com/package/%40better-auth%2Fdrizzle-adapter>, <https://www.npmjs.com/package/drizzle-orm>, <https://www.npmjs.com/package/drizzle-kit>, <https://www.npmjs.com/package/pg>, <https://www.npmjs.com/package/%40trpc/react-query>, <https://www.npmjs.com/package/%40tiptap/react>, and <https://www.npmjs.com/package/pnpm>.
 - A disposable pnpm `10.34.5` install with strict peer checks failed with `ERR_PNPM_PEER_DEP_ISSUES` for Better Auth `1.6.24`, Drizzle ORM `0.30.10`, and `pg` `8.16.3`: Better Auth and `@better-auth/drizzle-adapter` both required Drizzle ORM `^0.45.2`.
 - A disposable pnpm `10.34.5` install with strict peer checks succeeded for Better Auth `1.6.24`, Drizzle ORM `0.45.2`, Drizzle Kit `0.31.10`, and `pg` `8.22.0`, resolving 125 packages without peer errors.
+- Part 41: the **installed** package manifests were read directly out of the pnpm store rather than taken from registry pages. `sharp@0.35.0` reports `license: "Apache-2.0"`, `type: "commonjs"`, `main: "./dist/index.cjs"`. `heic-convert@2.1.0` reports `license: "ISC"`, `main: "index.js"`, no `type` field and no exports map, with dependencies `heic-decode@^2.0.0`, `jpeg-js@^0.4.4`, `pngjs@^6.0.0`. Resolved transitively: `heic-decode@2.1.0` (ISC) → `libheif-js@1.19.8` (**LGPL-3.0**); `jpeg-js@0.4.4` (BSD-3-Clause); `pngjs@6.0.0` (MIT).
+- Part 41: that Sharp's prebuilt libvips cannot decode HEIC is the load-bearing justification for `heic-convert` and is recorded in `apps/api/src/attachments/heic-decoder.ts` from the implementing session's probe (libvips 8.18.3; `sharp.format.heif.input.fileSuffix === [".avif"]`). A reviewer can re-confirm it in one line: `node -e "console.log(require('sharp').format.heif.input.fileSuffix, require('sharp').versions)"` inside the API container. If that probe ever reports `.heic`, this dependency should be removed — the seam is designed for exactly that outcome.
 
 The matrix is mutually compatible at the documented engine and peer-resolution level: Node 22.23.1 satisfies the runtime floors, React 19.2 satisfies Next 16, and the exact Better Auth/Drizzle/PostgreSQL package set resolves under strict pnpm peer checks. This ADR explicitly deviates from the product brief's Drizzle ORM `0.30.x` line because retaining that line is incompatible with the current stable Better Auth adapter. Full typed integration, migration, runtime, and production-build proof occurs when Parts 2, 4, 5, 12, 13, 21, and 33 introduce runnable packages.
 

@@ -11,4 +11,11 @@ export const noteQueryKeys = Object.freeze({
   shares: (workspaceId: string, noteId: string) =>
     ["notes", workspaceId, noteId, "shares"] as const,
   members: (workspaceId: string) => ["workspace-members", workspaceId] as const,
+  /**
+   * Attachment metadata for one note (Part 42). Nested under the note rather
+   * than the workspace because the listing endpoint is note-scoped and the
+   * editor only ever needs the images of the note it has open.
+   */
+  attachments: (workspaceId: string, noteId: string) =>
+    ["notes", workspaceId, noteId, "attachments"] as const,
 });

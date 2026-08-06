@@ -4,6 +4,7 @@ import { parseAiConfig } from "./ai.config";
 import { parseAuthEmailQueueConfig } from "./auth-email-queue.config";
 import { parseAuthConfig } from "./auth.config";
 import { parseFeaturesConfig } from "./features.config";
+import { parseImageProcessingConfig } from "./image-processing.config";
 import { parseMeilisearchConfig } from "./meilisearch.config";
 import { parseMinioConfig } from "./minio.config";
 import { parseRedisConfig } from "./redis.config";
@@ -22,6 +23,7 @@ describe("server environment contract", () => {
       parseAuthConfig({}),
       parseAuthEmailQueueConfig({}),
       parseSecurityConfig({}),
+      parseImageProcessingConfig({}),
       parseAiConfig({}),
     ];
 
@@ -40,6 +42,17 @@ describe("server environment contract", () => {
     expect(parseMeilisearchConfig({}).host).toBe("http://127.0.0.1:7700");
     expect(parseSmtpConfig({}).port).toBe(1025);
     expect(parseSecurityConfig({}).maximumUploadBytes).toBe(50 * 1_024 * 1_024);
+    // Part 41: every image budget must have a safe default so
+    // `env:validate --production` passes with none of them set.
+    expect(parseImageProcessingConfig({})).toEqual({
+      maximumImageUploadBytes: 15 * 1_024 * 1_024,
+      maximumImagePixels: 50_000_000,
+      maximumAnimationFrames: 400,
+      processingTimeoutMs: 20_000,
+      maximumSvgSourceBytes: 2 * 1_024 * 1_024,
+      maximumHeicUploadBytes: 8 * 1_024 * 1_024,
+      heicDecodeTimeoutMs: 10_000,
+    });
     expect(parseAiConfig({})).toEqual({
       enabled: false,
       openAi: undefined,
@@ -152,8 +165,41 @@ describe("server environment contract", () => {
       () => parseAiConfig({ FEATURE_AI_ENABLED: "true" }),
       "at least one AI provider key is required",
     ],
+    [
+      () => parseImageProcessingConfig({ MAX_IMAGE_PIXELS: "500" }),
+      "Invalid image processing configuration",
+    ],
+    [
+      () => parseImageProcessingConfig({ IMAGE_PROCESSING_TIMEOUT_MS: "twenty-seconds" }),
+      "IMAGE_PROCESSING_TIMEOUT_MS must be an integer",
+    ],
+    [
+      () => parseImageProcessingConfig({ MAX_IMAGE_ANIMATION_FRAMES: "0" }),
+      "MAX_IMAGE_ANIMATION_FRAMES must be an integer",
+    ],
+    [
+      // The image ceiling can only be lowered by the generic transport ceiling,
+      // never raised above it.
+      () =>
+        parseImageProcessingConfig({
+          MAX_UPLOAD_SIZE_BYTES: String(4 * 1_024 * 1_024),
+          MAX_IMAGE_UPLOAD_BYTES: String(32 * 1_024 * 1_024),
+        }),
+      "MAX_IMAGE_UPLOAD_BYTES must be an integer",
+    ],
   ])("rejects invalid environment input without accepting coercion", (parse, message) => {
     expect(parse).toThrowError(message);
+  });
+
+  it("lowers the image ceiling with the generic upload ceiling", () => {
+    const lowered = parseImageProcessingConfig({
+      MAX_UPLOAD_SIZE_BYTES: String(4 * 1_024 * 1_024),
+    });
+
+    expect(lowered.maximumImageUploadBytes).toBe(4 * 1_024 * 1_024);
+    expect(parseImageProcessingConfig({ MAX_IMAGE_PIXELS: "1000000" }).maximumImagePixels).toBe(
+      1_000_000,
+    );
   });
 
   it("does not include secret values in validation errors", () => {

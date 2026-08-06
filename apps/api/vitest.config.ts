@@ -20,6 +20,18 @@ export default defineConfig({
       exclude: ["src/main.ts"],
       reporter: ["text", "json-summary", "lcov"],
       reportsDirectory: "./coverage",
+      // `clean` defaults to removing this directory before a run. In the dev
+      // container it is a writable volume mounted over a read-only source bind,
+      // so the *contents* can be rewritten but the mount point itself cannot be
+      // rmdir'd — which failed the run with EROFS before a single test executed.
+      // Every configured reporter writes one file and overwrites it, so nothing
+      // stale survives a run anyway.
+      clean: false,
+      // Without this a single failing suite suppresses the whole report, so a
+      // run that fails one test looks identical to a run with no coverage at
+      // all — and the numbers needed to diagnose the failure are exactly the
+      // ones withheld.
+      reportOnFailure: true,
       thresholds: {
         branches: 70,
         functions: 70,

@@ -51,6 +51,8 @@ RUN corepack enable \
         /workspace/node_modules \
         /workspace/apps/api/node_modules \
         /workspace/apps/api/dist \
+        /workspace/apps/api/coverage \
+        /workspace/apps/api/test-results \
         /workspace/apps/web/node_modules \
         /workspace/apps/web/.next \
         /workspace/packages/shared-types/node_modules \

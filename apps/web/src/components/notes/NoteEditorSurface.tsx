@@ -4,10 +4,16 @@ import { safeParseNoteDocument } from "@notted/shared-validators";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
+import { ImageUploadFileInput } from "./ImageUploadFileInput";
 import { useHasNoteSaveHost, useNoteSave } from "./note-save-context";
+import { useImageUploads } from "./useImageUploads";
 
 import type { Editor } from "@tiptap/core";
 
+import {
+  createAttachmentDirectory,
+  documentHasImage,
+} from "@/components/editor/attachment-directory";
 import {
   createDebouncedSearch,
   createMentionDirectory,
@@ -17,6 +23,7 @@ import {
   type MentionCandidate,
 } from "@/components/editor/mention-members";
 import { TiptapEditor } from "@/components/editor/TiptapEditor";
+import { attachmentEntries, requestNoteAttachments } from "@/lib/notes/attachment-requests";
 import { fetchWorkspaceMemberDirectory } from "@/lib/notes/member-directory";
 import { noteQueryKeys } from "@/lib/notes/query-keys";
 
@@ -108,6 +115,48 @@ export function NoteEditorSurface({
 
   useEffect(() => () => mentionSearch.cancel(), [mentionSearch]);
 
+  // Part 42, gated exactly like the member directory: only a note that already
+  // stores an image has anything to resolve on open. A note without one fetches
+  // nothing until an upload happens, and that upload seeds the same cache entry.
+  const needsAttachments = useMemo(() => documentHasImage(initialDocument), [initialDocument]);
+
+  const attachments = useQuery({
+    queryKey: noteQueryKeys.attachments(workspaceId, noteId),
+    queryFn: async () => {
+      const result = await requestNoteAttachments(workspaceId, noteId);
+      // A failed listing must not resolve to "no attachments", or every stored
+      // image would render as permanently deleted. Throwing keeps the directory
+      // `null`, which renders them as still loading.
+      if (!result.ok) throw new Error(`attachments unavailable: ${result.kind}`);
+      return result.data;
+    },
+    enabled: needsAttachments,
+  });
+
+  // Created once and mutated, for the same reason as the mention directory:
+  // node views subscribe to it, and replacing the object would mean rebuilding
+  // the editor and discarding editing history.
+  const attachmentDirectoryRef = useRef(createAttachmentDirectory());
+  const attachmentDirectory = attachmentDirectoryRef.current;
+
+  useEffect(() => {
+    // `null` means "not loaded or unavailable", which renders a stored image as
+    // loading rather than falsely claiming the attachment was deleted.
+    if (attachments.data === undefined) {
+      if (!needsAttachments) return;
+      attachmentDirectory.setEntries(null);
+      return;
+    }
+    attachmentDirectory.setEntries(attachmentEntries(attachments.data));
+  }, [attachmentDirectory, attachments.data, needsAttachments]);
+
+  const images = useImageUploads({
+    workspaceId,
+    noteId,
+    directory: attachmentDirectory,
+    editable,
+  });
+
   /**
    * Hand autosave the editor's own serialization of the document it opened
    * with, before any editing happens.
@@ -129,18 +178,32 @@ export function NoteEditorSurface({
   );
 
   return (
-    <TiptapEditor
-      noteId={noteId}
-      initialDocument={initialDocument}
-      editable={editable}
-      ariaLabel={ariaLabel}
-      readOnlyReason={readOnlyReason}
-      mentionSearch={mentionSearch}
-      mentionDirectory={directory}
-      mentionDirectoryTruncated={members.data?.hasMore === true}
-      onDocumentChange={save.onDocumentChange}
-      onDocumentRejected={hasSaveHost ? save.onDocumentRejected : undefined}
-      onEditorReady={handleEditorReady}
-    />
+    <>
+      <TiptapEditor
+        noteId={noteId}
+        initialDocument={initialDocument}
+        editable={editable}
+        ariaLabel={ariaLabel}
+        readOnlyReason={readOnlyReason}
+        mentionSearch={mentionSearch}
+        mentionDirectory={directory}
+        mentionDirectoryTruncated={members.data?.hasMore === true}
+        uploadImages={editable ? images.uploadImages : undefined}
+        onRequestImageFiles={editable ? images.requestImageFiles : undefined}
+        attachmentDirectory={attachmentDirectory}
+        onDocumentChange={save.onDocumentChange}
+        onDocumentRejected={hasSaveHost ? save.onDocumentRejected : undefined}
+        onEditorReady={handleEditorReady}
+      />
+      {/*
+       * The picker lives here rather than inside the editor: a file input is a
+       * DOM control with its own lifecycle, and the editor performs no I/O and
+       * owns no dialogs. Its visible, accessible triggers are the toolbar's
+       * "Insert image" button and the `/image` command.
+       */}
+      {editable ? (
+        <ImageUploadFileInput ref={images.fileInputRef} onFiles={images.handlePickedFiles} />
+      ) : null}
+    </>
   );
 }

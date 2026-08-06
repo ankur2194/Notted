@@ -72,6 +72,19 @@ x-workspace-volumes: &workspace-volumes
   - type: volume
     source: shared-validators-dist
     target: /workspace/packages/shared-validators/dist
+  # `vitest --coverage` writes the JUnit report and the coverage output back
+  # into the workspace, which the read-only bind refuses with EROFS. That made
+  # `docker compose exec api pnpm test:ci` unrunnable — and the container is the
+  # only place the coverage gate is meaningful, because the PostgreSQL- and
+  # MinIO-gated suites skip on the host and drag the totals under the threshold.
+  # Both paths are generated output and gitignored, so a writable volume over
+  # each keeps every tracked source file immutable.
+  - type: volume
+    source: api-coverage
+    target: /workspace/apps/api/coverage
+  - type: volume
+    source: api-test-results
+    target: /workspace/apps/api/test-results
   # Shared so `db-init` can use this one list too; the seed marker is inert
   # everywhere else.
   - type: volume
@@ -442,6 +455,8 @@ volumes:
   shared-types-node-modules:
   shared-validators-node-modules:
   api-dist:
+  api-coverage:
+  api-test-results:
   web-next:
   shared-types-dist:
   shared-validators-dist:

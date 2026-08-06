@@ -8,6 +8,7 @@ import { MINIO_CONFIG, type MinioConfig } from "../../config/minio.config";
 
 import { MinioService } from "./minio.service";
 import { MINIO_AGENT, MINIO_CLIENT } from "./minio.tokens";
+import { ObjectStorageService } from "./object-storage.service";
 
 import type { Agent } from "node:http";
 
@@ -40,7 +41,8 @@ import type { Agent } from "node:http";
           : null,
     },
     MinioService,
+    ObjectStorageService,
   ],
-  exports: [MinioService],
+  exports: [MinioService, ObjectStorageService],
 })
 export class MinioModule {}

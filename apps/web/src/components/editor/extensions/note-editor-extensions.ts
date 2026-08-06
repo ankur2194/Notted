@@ -19,15 +19,18 @@ import { Underline } from "@tiptap/extension-underline";
 import { StarterKit } from "@tiptap/starter-kit";
 
 import { createNoteLowlight } from "./code-block-languages";
+import { createNoteImage } from "./CustomImage";
 import { FontSize } from "./font-size";
 import { createNoteMention } from "./Mention";
 import { NoteBlockTab } from "./note-block-tab";
 import { createPageBreakExtension } from "./page-break";
 import { createNoteSlashCommand } from "./slash-command";
 
+import type { AttachmentDirectory } from "../attachment-directory";
 import type { MentionCandidate, MentionDirectory } from "../mention-members";
 import type { SlashCommand } from "../slash-commands";
 import type { SuggestionSink } from "../suggestion-popup";
+import type { ImageFilePickerHandler, ImageUploadHandler } from "./CustomImage";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 /** Exact copy required by the product brief for an empty note. */
@@ -216,6 +219,15 @@ export interface NoteEditorExtensionOptions {
    */
   readonly searchMentions?: (query: string) => Promise<readonly MentionCandidate[]>;
   readonly mentionDirectory?: MentionDirectory | null;
+  /**
+   * Part 42. Every field is optional for the same reason the mention fields are:
+   * `createNoteEditorExtensions()` must still build the complete schema —
+   * including the `image` node — for schema round-trip tests and for any caller
+   * that has no upload host. Without a host, paste and drop simply decline.
+   */
+  readonly attachmentDirectory?: AttachmentDirectory | null;
+  readonly resolveImageUploader?: () => ImageUploadHandler | null;
+  readonly resolveImageFilePicker?: () => ImageFilePickerHandler | null;
 }
 
 /** Build an isolated schema configuration for each editor instance. */
@@ -260,6 +272,14 @@ export function createNoteEditorExtensions(options: NoteEditorExtensionOptions =
       resolveSink: options.resolveMentionSink,
       search: options.searchMentions,
       directory: options.mentionDirectory,
+    }),
+    // Part 42's block-level image atom. It also registers the upload-placeholder
+    // decoration plugin and the paste/drop handlers, so `editorProps` in
+    // `TiptapEditor` stays `attributes`-only.
+    createNoteImage({
+      directory: options.attachmentDirectory,
+      resolveUploader: options.resolveImageUploader,
+      resolveFilePicker: options.resolveImageFilePicker,
     }),
   ];
 }

@@ -152,23 +152,36 @@ describe("slash menu filtering", () => {
 });
 
 /**
+ * Everything a command's expectation is allowed to look at.
+ *
+ * `/image` (Part 42) is the reason this is a context object rather than the bare
+ * editor: it deliberately inserts *nothing*, so the only observable effect is
+ * the request it makes of the host's file picker. `imageFileRequests` is the
+ * harness's spy on exactly that.
+ */
+interface CommandContext {
+  readonly editor: Editor;
+  readonly imageFileRequests: readonly { readonly insertAt: number }[];
+}
+
+/**
  * Every command in `SLASH_COMMANDS` must appear here. The completeness test
  * fails when one is added without a proven expectation, so the menu can never
  * offer something that was never shown to work.
  */
-const COMMAND_EXPECTATIONS: Readonly<Record<string, (editor: Editor) => void>> = {
-  heading1: (editor) => expect(editor.isActive("heading", { level: 1 })).toBe(true),
-  heading2: (editor) => expect(editor.isActive("heading", { level: 2 })).toBe(true),
-  heading3: (editor) => expect(editor.isActive("heading", { level: 3 })).toBe(true),
-  paragraph: (editor) => expect(editor.isActive("paragraph")).toBe(true),
-  bulletList: (editor) => expect(editor.isActive("bulletList")).toBe(true),
-  orderedList: (editor) => expect(editor.isActive("orderedList")).toBe(true),
-  taskList: (editor) => expect(editor.isActive("taskList")).toBe(true),
-  table: (editor) => expect(nodeTypes(editor)).toContain("tableHeader"),
-  blockquote: (editor) => expect(editor.isActive("blockquote")).toBe(true),
-  codeBlock: (editor) => expect(editor.isActive("codeBlock")).toBe(true),
-  divider: (editor) => expect(nodeTypes(editor)).toContain("horizontalRule"),
-  pageBreak: (editor) => {
+const COMMAND_EXPECTATIONS: Readonly<Record<string, (context: CommandContext) => void>> = {
+  heading1: ({ editor }) => expect(editor.isActive("heading", { level: 1 })).toBe(true),
+  heading2: ({ editor }) => expect(editor.isActive("heading", { level: 2 })).toBe(true),
+  heading3: ({ editor }) => expect(editor.isActive("heading", { level: 3 })).toBe(true),
+  paragraph: ({ editor }) => expect(editor.isActive("paragraph")).toBe(true),
+  bulletList: ({ editor }) => expect(editor.isActive("bulletList")).toBe(true),
+  orderedList: ({ editor }) => expect(editor.isActive("orderedList")).toBe(true),
+  taskList: ({ editor }) => expect(editor.isActive("taskList")).toBe(true),
+  table: ({ editor }) => expect(nodeTypes(editor)).toContain("tableHeader"),
+  blockquote: ({ editor }) => expect(editor.isActive("blockquote")).toBe(true),
+  codeBlock: ({ editor }) => expect(editor.isActive("codeBlock")).toBe(true),
+  divider: ({ editor }) => expect(nodeTypes(editor)).toContain("horizontalRule"),
+  pageBreak: ({ editor }) => {
     expect(nodeTypes(editor)).toContain("pageBreak");
     // A stateless leaf atom: the contract accepts `{ "type": "pageBreak" }` and
     // nothing else, so the inserted node must carry no attributes or children.
@@ -177,6 +190,20 @@ const COMMAND_EXPECTATIONS: Readonly<Record<string, (editor: Editor) => void>> =
     expect(inserted.toJSON()).toEqual({ type: "pageBreak" });
     // A document may never end on an atom, or there is nowhere to type next.
     expect(editor.state.doc.lastChild?.type.name).toBe("paragraph");
+  },
+  image: ({ editor, imageFileRequests }) => {
+    // The behaviour, stated fully: exactly one request to open the picker, at
+    // the position the trigger text used to occupy, and NO node of any kind
+    // added to the document. An image node appears only once real bytes have a
+    // permanent attachment id, which is what keeps a temporary source out of
+    // the saved document by construction.
+    expect(imageFileRequests).toHaveLength(1);
+    expect(imageFileRequests[0]?.insertAt).toBe(1);
+    expect(nodeTypes(editor)).not.toContain("image");
+    expect(editor.state.doc.toJSON()).toEqual({
+      type: "doc",
+      content: [{ type: "paragraph", attrs: { textAlign: null } }],
+    });
   },
 };
 
@@ -189,12 +216,14 @@ describe("slash menu commands", () => {
 
   for (const command of SLASH_COMMANDS) {
     it(`inserts a contract-valid document for "${command.label}"`, async () => {
-      const { editor } = await renderEditor({ initialDocument: EMPTY_DOCUMENT });
+      const { editor, imageFileRequests } = await renderEditor({
+        initialDocument: EMPTY_DOCUMENT,
+      });
       await openSlashMenu(editor, 1);
       fireEvent.click(optionLabelled(command.label));
 
       await waitFor(() => expect(slashMenu()).toBeNull());
-      COMMAND_EXPECTATIONS[command.id]?.(editor);
+      COMMAND_EXPECTATIONS[command.id]?.({ editor, imageFileRequests });
       expect(safeParseNoteDocument(editor.getJSON()).success).toBe(true);
       // The trigger text is always consumed, never left behind as content.
       expect(editor.getText()).not.toContain("/");

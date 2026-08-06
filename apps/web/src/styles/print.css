@@ -45,6 +45,12 @@
   .notted-page-controls,
   .notted-page-breaks,
   .notted-focus-toolbar,
+  /*
+   * Part 42: an in-flight upload is a decoration, not content. It carries
+   * `data-notted-print-hide` as well; naming the class is belt and braces so a
+   * printed note can never contain a progress bar.
+   */
+  .notted-image-upload,
   .skip-link,
   [role="toolbar"],
   [role="dialog"],
@@ -144,6 +150,24 @@
   th,
   td {
     break-inside: avoid;
+  }
+
+  /*
+   * Part 42: an embedded image must never exceed the printed content column, and
+   * the blur placeholder must not print behind an image that already loaded. The
+   * frame keeps its reserved aspect ratio so pagination matches the screen.
+   */
+  .notted-image-frame {
+    background-image: none !important;
+    max-width: 100% !important;
+    break-inside: avoid;
+  }
+
+  .notted-image {
+    /* A faded-in image must be fully opaque on paper regardless of load state. */
+    opacity: 1 !important;
+    max-width: 100% !important;
+    height: auto !important;
   }
 
   thead {

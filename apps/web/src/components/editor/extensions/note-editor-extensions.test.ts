@@ -93,6 +93,22 @@ const richDocumentFixture = {
     },
     { type: "codeBlock", attrs: { language: null }, content: [{ type: "text", text: "code()" }] },
     { type: "horizontalRule" },
+    /*
+     * Part 42. Present here so the image node is proven to survive the full
+     * ProseMirror round trip — schema check, serialize, reparse, check — with
+     * exactly the four contract attributes and no `src` invented along the way.
+     * A block-level position is the only valid one; Part 43's alignment, wrap,
+     * and caption all need that block box.
+     */
+    {
+      type: "image",
+      attrs: {
+        attachmentId: "8f14e45f-ceea-467a-9a7c-0b3f8f6ee9b1",
+        alt: "Round-tripped image",
+        width: 1200,
+        height: 800,
+      },
+    },
   ],
 };
 
@@ -161,6 +177,38 @@ describe("note editor extensions", () => {
       expect.arrayContaining([...NOTE_DOCUMENT_MARK_TYPES]),
     );
     expect(schema.marks.color).toBeUndefined();
+  });
+
+  it("serializes an image without a src and ignores a pasted remote img", () => {
+    const html = serializeDocument({
+      type: "doc",
+      content: [
+        {
+          type: "image",
+          attrs: {
+            attachmentId: "8f14e45f-ceea-467a-9a7c-0b3f8f6ee9b1",
+            alt: "Chart",
+            width: 120,
+            height: 60,
+          },
+        },
+      ],
+    });
+    expect(html).toContain('data-attachment-id="8f14e45f-ceea-467a-9a7c-0b3f8f6ee9b1"');
+    expect(html).toContain('alt="Chart"');
+    // The node has no `src` attribute to emit, which is the whole point.
+    expect(html).not.toContain("src=");
+
+    // `parseHTML` adopts only `img[data-attachment-id]`, so a pasted remote
+    // image is dropped rather than becoming a tracker embedded in the note.
+    const schema = getSchema(createNoteEditorExtensions());
+    const container = document.createElement("div");
+    container.innerHTML = '<p>kept</p><img src="https://evil.example/tracker.gif" alt="x">';
+    const parsed = ProseMirrorDOMParser.fromSchema(schema).parse(container);
+    const json = JSON.stringify(parsed.toJSON());
+    expect(json).not.toContain("evil.example");
+    expect(json).not.toContain('"image"');
+    expect(parsed.textContent).toBe("kept");
   });
 
   it("serializes a font-size-only textStyle with the actual nullable color default", () => {

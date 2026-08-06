@@ -2,6 +2,7 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  ImagePlus,
   List,
   ListOrdered,
   ListTodo,
@@ -18,6 +19,8 @@ import "@tiptap/extension-table";
 import "@tiptap/extension-task-list";
 // Declares `setPageBreak` on the chained-command interface (Part 38).
 import "./extensions/page-break";
+// Declares `nottedRequestImageUpload` on the same interface (Part 42).
+import "./extensions/CustomImage";
 
 import { TABLE_ACTIONS } from "./toolbar-commands";
 
@@ -173,6 +176,20 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
     icon: ScissorsLineDashed,
     keywords: ["page-break", "pagebreak", "new-page", "pagination", "print"],
     run: replaceRange((chain) => chain.setPageBreak()),
+  },
+  {
+    id: "image",
+    label: "Image",
+    description: "Upload an image from this device",
+    icon: ImagePlus,
+    keywords: ["image", "picture", "photo", "upload", "attachment", "media"],
+    /*
+     * Inserts nothing on its own, and that is deliberate. The command deletes
+     * the typed `/image` and asks the host to open the file picker; the image
+     * node only ever appears once real bytes have a permanent attachment id.
+     * Nothing temporary is written to the document at any point.
+     */
+    run: replaceRange((chain) => chain.nottedRequestImageUpload()),
   },
 ]);
 

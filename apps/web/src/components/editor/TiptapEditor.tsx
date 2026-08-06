@@ -17,6 +17,8 @@ import { openMentionMenuAtCaret, openSlashMenuAtCaret } from "./suggestion-trigg
 import { FOCUS_TOOLBAR_GROUPS } from "./toolbar-commands";
 import { useSuggestionPopup } from "./useSuggestionPopup";
 
+import type { AttachmentDirectory } from "./attachment-directory";
+import type { ImageFilePickerHandler, ImageUploadHandler } from "./extensions/CustomImage";
 import type { MentionCandidate, MentionDirectory } from "./mention-members";
 import type { SlashCommand } from "./slash-commands";
 import type { Editor } from "@tiptap/core";
@@ -63,6 +65,22 @@ export interface TiptapEditorProps {
    * presented as "not a member of this workspace".
    */
   readonly mentionDirectoryTruncated?: boolean;
+  /**
+   * Part 42 seam. Receives the files from a paste, a drop, or the file picker
+   * together with a controller for the placeholder decorations, and owns the
+   * whole upload. This component still performs no I/O of any kind: it never
+   * learns what an attachment is, only that something can be handed files.
+   * Absent means paste and drop decline and the images are left alone.
+   */
+  readonly uploadImages?: ImageUploadHandler;
+  /**
+   * Part 42 seam. Asked to open the host-owned `<input type="file">` when the
+   * `/image` command or the toolbar button runs. The host is the owner because
+   * a file input is a DOM control with its own lifecycle, not editor state.
+   */
+  readonly onRequestImageFiles?: ImageFilePickerHandler;
+  /** Loaded attachment metadata, used only to render existing images. */
+  readonly attachmentDirectory?: AttachmentDirectory | null;
 }
 
 type PreparedDocument =
@@ -119,6 +137,9 @@ export function TiptapEditor({
   mentionSearch,
   mentionDirectory,
   mentionDirectoryTruncated,
+  uploadImages,
+  onRequestImageFiles,
+  attachmentDirectory,
 }: TiptapEditorProps) {
   const prepared = useMemo(() => prepare(initialDocument), [initialDocument]);
 
@@ -146,6 +167,9 @@ export function TiptapEditor({
       mentionSearch={mentionSearch}
       mentionDirectory={mentionDirectory}
       mentionDirectoryTruncated={mentionDirectoryTruncated}
+      uploadImages={uploadImages}
+      onRequestImageFiles={onRequestImageFiles}
+      attachmentDirectory={attachmentDirectory}
     />
   );
 }
@@ -163,6 +187,9 @@ interface EditorSurfaceProps {
   readonly mentionSearch?: (query: string) => Promise<readonly MentionCandidate[]>;
   readonly mentionDirectory?: MentionDirectory | null;
   readonly mentionDirectoryTruncated?: boolean;
+  readonly uploadImages?: ImageUploadHandler;
+  readonly onRequestImageFiles?: ImageFilePickerHandler;
+  readonly attachmentDirectory?: AttachmentDirectory | null;
 }
 
 function EditorSurface({
@@ -178,6 +205,9 @@ function EditorSurface({
   mentionSearch,
   mentionDirectory,
   mentionDirectoryTruncated = false,
+  uploadImages,
+  onRequestImageFiles,
+  attachmentDirectory,
 }: EditorSurfaceProps) {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -258,6 +288,18 @@ function EditorSurface({
   // editor and discarding editing history.
   const mentionDirectoryRef = useRef(mentionDirectory ?? null);
 
+  // Part 42 follows the identical rule: the upload host and the file-picker
+  // opener are read through refs at call time, so a host that re-renders with a
+  // new callback never rebuilds the editor and never discards editing history.
+  // Neither is ever captured by the `useMemo(…, [])` extension list below.
+  const uploadImagesRef = useRef(uploadImages);
+  uploadImagesRef.current = uploadImages;
+  const requestImageFilesRef = useRef(onRequestImageFiles);
+  requestImageFilesRef.current = onRequestImageFiles;
+  // A mutable observable, kept for the editor's lifetime for the same reason as
+  // the mention directory: swapping it would mean rebuilding the editor.
+  const attachmentDirectoryRef = useRef(attachmentDirectory ?? null);
+
   const extensions = useMemo(
     () => [
       ...createNoteEditorExtensions({
@@ -265,6 +307,9 @@ function EditorSurface({
         resolveMentionSink: () => mentionSinkRef.current,
         searchMentions: async (query) => (await mentionSearchRef.current?.(query)) ?? [],
         mentionDirectory: mentionDirectoryRef.current,
+        attachmentDirectory: attachmentDirectoryRef.current,
+        resolveImageUploader: () => uploadImagesRef.current ?? null,
+        resolveImageFilePicker: () => requestImageFilesRef.current ?? null,
       }),
       EditorShortcuts.configure({ resolveHandlers: () => handlersRef.current }),
     ],

@@ -2,6 +2,7 @@ import { fireEvent, render, waitFor, type RenderResult } from "@testing-library/
 import userEvent from "@testing-library/user-event";
 import { expect } from "vitest";
 
+import type { ImageFilePickerRequest } from "@/components/editor/extensions/CustomImage";
 import type { NoteDocument } from "@notted/shared-validators";
 import type { Editor } from "@tiptap/core";
 
@@ -37,19 +38,34 @@ export interface EditorHarness extends RenderResult {
    * real keymap; only user-event's focus emulation is bypassed.
    */
   readonly pressKey: (key: string, options?: { readonly shiftKey?: boolean }) => void;
+  /**
+   * Every file-picker request the editor made (Part 42), newest last.
+   *
+   * The harness always supplies an `onRequestImageFiles` handler, because the
+   * `/image` command and the "Insert image" toolbar button are *only* observable
+   * through it: they deliberately insert nothing into the document, so without
+   * this spy a test could not tell "asked the host to open the picker" apart
+   * from "did nothing at all". A caller's own handler still runs afterwards.
+   */
+  readonly imageFileRequests: readonly ImageFilePickerRequest[];
 }
 
 /** Render the real editor and wait for the deferred ProseMirror instance. */
 export async function renderEditor(props: Partial<TiptapEditorProps> = {}): Promise<EditorHarness> {
   const holder: { instance: Editor | null } = { instance: null };
   const user = userEvent.setup();
-  const { onEditorReady, ...rest } = props;
+  const imageFileRequests: ImageFilePickerRequest[] = [];
+  const { onEditorReady, onRequestImageFiles, ...rest } = props;
   const utils = render(
     <TiptapEditor
       noteId={NOTE_ID}
       initialDocument={HELLO_DOCUMENT}
       editable
       {...rest}
+      onRequestImageFiles={(request) => {
+        imageFileRequests.push(request);
+        onRequestImageFiles?.(request);
+      }}
       onEditorReady={(instance) => {
         if (instance !== null) holder.instance = instance;
         onEditorReady?.(instance);
@@ -63,6 +79,7 @@ export async function renderEditor(props: Partial<TiptapEditorProps> = {}): Prom
     ...utils,
     editor,
     user,
+    imageFileRequests,
     focusEditor: () => {
       (editor.view.dom as HTMLElement).focus();
     },

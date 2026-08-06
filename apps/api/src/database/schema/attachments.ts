@@ -91,6 +91,50 @@ export const attachmentStatusEnum = pgEnum("attachment_status", [
 export const attachmentMediaTypeEnum = pgEnum("attachment_media_type", ["image", "file"]);
 
 // --------------------------------------------------------------------------- //
+// Variant map shape
+// --------------------------------------------------------------------------- //
+// Declared here rather than imported from `@notted/shared-types` because no
+// schema module depends on the shared packages (ADR 0001 keeps the database
+// layer framework- and contract-neutral). `.$type<T>()` is compile-time only:
+// it emits no DDL, does not enter the drizzle-kit snapshot, and therefore needs
+// no migration. Every member is optional so `.default({})` still type-checks
+// and a row written before the processing pipeline existed stays readable.
+//
+// `key` is the opaque object key. It is stored here so cleanup and
+// reconciliation can locate every derived object without listing the bucket,
+// and it is stripped from every wire projection (ADR 0005).
+
+export interface AttachmentVariantObject {
+  readonly key: string;
+  readonly width: number;
+  readonly height: number;
+  readonly bytes: number;
+  readonly mimeType: string;
+}
+
+/**
+ * Out-of-band preview rendition for a NON-image attachment (the module comment
+ * above names it). It is not part of the image variant vocabulary, is not
+ * addressable through the image content endpoint, and is owned by Part 44.
+ */
+export interface AttachmentPreviewObject {
+  readonly key: string;
+  readonly mimeType: string;
+  readonly width: number;
+  readonly height: number;
+  readonly bytes?: number;
+}
+
+export interface AttachmentVariantRecord {
+  readonly original?: AttachmentVariantObject;
+  readonly full?: AttachmentVariantObject;
+  readonly medium?: AttachmentVariantObject;
+  readonly thumbnail?: AttachmentVariantObject;
+  readonly preview?: AttachmentPreviewObject;
+  readonly blur?: { readonly dataUri: string; readonly width: number; readonly height: number };
+}
+
+// --------------------------------------------------------------------------- //
 // attachments
 // --------------------------------------------------------------------------- //
 
@@ -131,7 +175,7 @@ export const attachments = pgTable(
     processingError: text("processing_error"),
     // Variant-key references + dimensions (thumbnail/medium/full...). Default
     // empty object; shape owned by the processing pipeline (Part 40+).
-    variants: jsonb("variants").default({}),
+    variants: jsonb("variants").$type<AttachmentVariantRecord>().default({}),
     // Primary (original) image dimensions. NULL for non-images or before
     // metadata extraction.
     width: integer("width"),

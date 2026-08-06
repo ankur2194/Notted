@@ -4,6 +4,7 @@ import { parseAuthEmailQueueConfig } from "./auth-email-queue.config";
 import { parseAuthConfig } from "./auth.config";
 import { parseDatabaseConfig } from "./database.config";
 import { parseFeaturesConfig } from "./features.config";
+import { parseImageProcessingConfig } from "./image-processing.config";
 import { parseMeilisearchConfig } from "./meilisearch.config";
 import { parseMinioConfig } from "./minio.config";
 import { parseRedisConfig } from "./redis.config";
@@ -33,5 +34,6 @@ export function validateApiEnvironment(environment: Environment): void {
   parseAuthConfig(environment);
   parseAuthEmailQueueConfig(environment);
   parseSecurityConfig(environment);
+  parseImageProcessingConfig(environment);
   parseAiConfig(environment);
 }

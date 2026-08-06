@@ -370,6 +370,117 @@
   }
 
   /*
+   * Part 42 images.
+   *
+   * The frame reserves the image's aspect ratio before a byte is fetched, so a
+   * note with images never reflows as they arrive. The blur placeholder from the
+   * Part 41 pipeline is painted as this element's background; the real image
+   * fades in on top of it. Sizing, alignment, wrap, and captions belong to
+   * Part 43 and are deliberately absent here.
+   */
+  .notted-editor-content .notted-image-figure {
+    @apply my-4 block;
+  }
+
+  .notted-editor-content .notted-image-figure.ProseMirror-selectednode .notted-image-frame {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  .notted-editor-content .notted-image-frame {
+    @apply relative overflow-hidden rounded-md bg-muted;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+    max-width: 100%;
+  }
+
+  .notted-editor-content .notted-image {
+    @apply block h-auto w-full max-w-full;
+    opacity: 0;
+    transition: opacity 200ms ease-out;
+  }
+
+  .notted-editor-content .notted-image-figure[data-image-loaded="true"] .notted-image {
+    opacity: 1;
+  }
+
+  /*
+   * Without the blur placeholder there is nothing to fade *from*, so a
+   * transition would only delay the image. Reduced motion removes it outright.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .notted-editor-content .notted-image {
+      transition: none;
+    }
+  }
+
+  .notted-editor-content .notted-image-fallback {
+    @apply flex min-h-24 items-center justify-center border border-dashed p-4 text-sm text-muted-foreground;
+  }
+
+  /*
+   * An in-flight upload. This is a decoration widget, never a document node:
+   * nothing here is ever saved, exported, or printed.
+   */
+  .notted-editor-content .notted-image-upload {
+    @apply my-4 flex items-start gap-3 rounded-md border border-dashed bg-muted/40 p-3 text-sm;
+  }
+
+  .notted-editor-content .notted-image-upload__preview {
+    @apply h-16 w-16 shrink-0 rounded object-cover;
+  }
+
+  .notted-editor-content .notted-image-upload__body {
+    @apply min-w-0 flex-1 space-y-1;
+  }
+
+  .notted-editor-content .notted-image-upload__name {
+    @apply truncate font-medium;
+  }
+
+  .notted-editor-content .notted-image-upload__bar {
+    @apply h-1.5 w-full overflow-hidden rounded-full bg-border;
+  }
+
+  .notted-editor-content .notted-image-upload__fill {
+    @apply block h-full bg-info;
+    transition: width 150ms linear;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .notted-editor-content .notted-image-upload__fill {
+      transition: none;
+    }
+  }
+
+  .notted-editor-content .notted-image-upload__status {
+    @apply text-muted-foreground;
+  }
+
+  .notted-editor-content .notted-image-upload[data-upload-phase="error"] {
+    @apply border-solid border-destructive/40;
+  }
+
+  .notted-editor-content
+    .notted-image-upload[data-upload-phase="error"]
+    .notted-image-upload__status {
+    @apply text-destructive;
+  }
+
+  .notted-editor-content .notted-image-upload__actions {
+    @apply flex flex-wrap gap-2 pt-1;
+  }
+
+  .notted-editor-content .notted-image-upload__action {
+    @apply rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent hover:text-accent-foreground;
+  }
+
+  /* Dragging image files over the writing surface. */
+  .notted-editor-content.notted-image-drop-active {
+    @apply rounded-md outline-dashed outline-2 outline-offset-2 outline-info;
+  }
+
+  /*
    * Part 37 page container.
    *
    * The sheet is sized in physical CSS units (`210mm`/`297mm`, `8.5in`/`11in`)

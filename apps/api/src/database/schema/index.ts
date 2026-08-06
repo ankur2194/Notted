@@ -168,6 +168,11 @@ export {
   attachments,
   attachmentsRelations,
 } from "./attachments";
+export type {
+  AttachmentPreviewObject,
+  AttachmentVariantObject,
+  AttachmentVariantRecord,
+} from "./attachments";
 export { comments, commentsRelations } from "./comments";
 export { noteVersions, noteVersionsRelations } from "./note-versions";
 export { noteTags, noteTagsRelations, tags, tagsRelations } from "./tags";

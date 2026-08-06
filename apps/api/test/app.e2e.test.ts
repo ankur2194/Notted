@@ -10,6 +10,12 @@ const ENVIRONMENT_KEYS = [
   "API_HOST",
   "API_PORT",
   "APP_URL",
+  // Overridden alongside `APP_URL` below: the auth config requires the trusted
+  // origins to include it, so inheriting the ambient value — which the dev
+  // container sets to `http://localhost:3000` — aborts boot with "Invalid auth
+  // configuration". Unset on a developer host, which is why this only failed
+  // under `docker compose exec api pnpm test`.
+  "BETTER_AUTH_TRUSTED_ORIGINS",
   "DATABASE_URL",
   "LOG_LEVEL",
   "TRUST_PROXY_HOPS",
@@ -50,6 +56,7 @@ describe.sequential("API scaffold", () => {
     Object.assign(process.env, {
       NODE_ENV: "test",
       APP_URL: "https://notted.example",
+      BETTER_AUTH_TRUSTED_ORIGINS: "https://notted.example",
       // Point the database at a closed local port so the readiness indicator
       // fails fast and deterministically instead of depending on a live
       // PostgreSQL in the CI runner.

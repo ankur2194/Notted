@@ -49,6 +49,22 @@ function utf8ByteLength(value: string): number {
  * Contract-only version. Part 33 adds no database column; a persisted version
  * and reviewed backfill are required only before an incompatible contract is
  * introduced.
+ *
+ * **Still 1 after Part 42's `image` node**, for the same reason Part 38's
+ * `pageBreak` left it at 1: the change is purely *additive and forward-only*.
+ * A new node type widens what the contract accepts, so every document already
+ * stored as v1 is still valid v1, `migrateNoteDocument` has nothing to do, and
+ * no reader anywhere branches on the number — there is no persisted version
+ * column, so bumping it would change a constant nothing reads while implying a
+ * migration that does not exist.
+ *
+ * **Trigger for the first real bump.** The first *incompatible* change — one
+ * that removes a node/mark/attribute, narrows an accepted value, or changes the
+ * meaning of a stored attribute so an old document would be rejected or
+ * silently misread — must, in the same part: bump this constant, add the
+ * persisted `content_schema_version` column to `notes`, and ship a reviewed
+ * backfill plus a read-path migration keyed off that column. Adding a node type
+ * is not that change; renaming or re-typing one is.
  */
 export const NOTE_DOCUMENT_SCHEMA_VERSION = 1 as const;
 
@@ -61,6 +77,13 @@ export const NOTE_DOCUMENT_SCHEMA_VERSION = 1 as const;
  * twice: `maxMentionLabel` bounds a single cached display name far below the
  * generic `maxString`, and `maxMentions` bounds how many a document may carry
  * so a later notification fan-out can never be unbounded.
+ *
+ * Part 42's image bounds follow the same shape. `maxImages` bounds how many
+ * attachment references one note may carry, so opening a note can never fan out
+ * into an unbounded number of authorized content requests; `maxImageAlt` bounds
+ * the one free-text field an image stores; and `maxImageDimension` bounds the
+ * *stored* intrinsic size, which is only ever a layout hint — the authoritative
+ * pixel budget is enforced server-side by the Part 41 pipeline.
  */
 export const NOTE_DOCUMENT_LIMITS = Object.freeze({
   serializedBytes: 512_000,
@@ -80,6 +103,9 @@ export const NOTE_DOCUMENT_LIMITS = Object.freeze({
   maxTableColumnWidth: 2_000,
   maxMentions: 200,
   maxMentionLabel: 200,
+  maxImages: 100,
+  maxImageAlt: 500,
+  maxImageDimension: 10_000,
 } as const);
 
 export const NOTE_DOCUMENT_NODE_TYPES = Object.freeze([
@@ -102,6 +128,7 @@ export const NOTE_DOCUMENT_NODE_TYPES = Object.freeze([
   "tableHeader",
   "tableCell",
   "mention",
+  "image",
 ] as const);
 export type NoteDocumentNodeType = (typeof NOTE_DOCUMENT_NODE_TYPES)[number];
 
@@ -122,6 +149,15 @@ export const NOTE_DOCUMENT_MENTION_CLASS = "notted-mention" as const;
  * semantic the node does not mean.
  */
 export const NOTE_DOCUMENT_PAGE_BREAK_CLASS = "notted-page-break" as const;
+
+/**
+ * Sole class emitted for an embedded image (Part 42).
+ *
+ * The editor's own `renderHTML`, the node view, the screen stylesheet, and
+ * Part 63's export template all key off this one class, exactly as they do for
+ * `NOTE_DOCUMENT_MENTION_CLASS`. Stored classes are never copied through.
+ */
+export const NOTE_DOCUMENT_IMAGE_CLASS = "notted-image" as const;
 
 export interface NoteDocumentMentionAttrs {
   /** Stable user id. Display names change; this never does. */
@@ -148,8 +184,12 @@ function isUsableMentionLabel(value: unknown): value is string {
   return !CONTROL_CHARACTER_PATTERN.test(value);
 }
 
-function isMentionId(value: unknown): value is string {
+function isUuidValue(value: unknown): value is string {
   return typeof value === "string" && uuidSchema.safeParse(value).success;
+}
+
+function isMentionId(value: unknown): value is string {
+  return isUuidValue(value);
 }
 
 /**
@@ -175,6 +215,92 @@ function mentionPlainText(node: PlainRecord): string {
     .trim()
     .slice(0, NOTE_DOCUMENT_LIMITS.maxMentionLabel);
   return cleaned.length === 0 ? "" : `${NOTE_DOCUMENT_MENTION_PREFIX}${cleaned}`;
+}
+
+/**
+ * The four attributes an embedded image stores (Part 42).
+ *
+ * **There is deliberately no `src`, `url`, `previewUrl`, or `dataUri` field, and
+ * `NODE_ALLOWED_ATTRS.image` rejects one.** That absence is the structural
+ * guarantee behind the Part 42 criterion "the saved document never relies on
+ * temporary blob or base64 URLs": a `blob:` preview or a `data:` placeholder has
+ * nowhere in the contract to live, so no code path — not a bug, not a future
+ * refactor, not a hostile client — can persist one. A reader resolves bytes by
+ * asking the authorized content endpoint for `attachmentId`, which re-checks
+ * workspace membership on every request; the blur placeholder travels in the
+ * attachment metadata projection instead, never in the document.
+ *
+ * `width`/`height` are the intrinsic pixel size recorded at insertion time. They
+ * exist only so a renderer can reserve layout space before the bytes arrive;
+ * they are advisory, `null` is always allowed, and nothing trusts them for
+ * anything but avoiding layout shift.
+ */
+export interface NoteDocumentImageAttrs {
+  /** Stable attachment UUID. The only handle on the bytes. */
+  readonly attachmentId: string;
+  /** Text alternative. `""` means *decorative* and is an explicit, valid value. */
+  readonly alt: string;
+  readonly width: number | null;
+  readonly height: number | null;
+}
+
+/**
+ * Alt text is untrusted author input echoed to every reader, so it is bounded
+ * and stripped of control characters here rather than only escaped at the point
+ * of use — the same treatment a mention's cached label gets. Empty is valid and
+ * means the image is decorative (WAI `alt=""`).
+ */
+function isUsableImageAlt(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (value.length > NOTE_DOCUMENT_LIMITS.maxImageAlt) return false;
+  CONTROL_CHARACTER_PATTERN.lastIndex = 0;
+  return !CONTROL_CHARACTER_PATTERN.test(value);
+}
+
+/** `null`, absent, or a positive integer within the stored-dimension bound. */
+function isImageDimension(value: unknown): value is number | null | undefined {
+  if (value === null || value === undefined) return true;
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value > 0 &&
+    value <= NOTE_DOCUMENT_LIMITS.maxImageDimension
+  );
+}
+
+function imageDimensionOrNull(value: unknown): number | null {
+  return isImageDimension(value) && typeof value === "number" ? value : null;
+}
+
+/**
+ * Return the four reviewed image attributes, or `null` when the node does not
+ * carry a stable attachment id and a usable alt. Never throws.
+ */
+export function noteDocumentImageAttrs(attrs: unknown): NoteDocumentImageAttrs | null {
+  if (!isRecord(attrs)) return null;
+  const { attachmentId, alt, width, height } = attrs;
+  if (!isUuidValue(attachmentId) || !isUsableImageAlt(alt)) return null;
+  if (!isImageDimension(width) || !isImageDimension(height)) return null;
+  return {
+    attachmentId,
+    alt,
+    width: imageDimensionOrNull(width),
+    height: imageDimensionOrNull(height),
+  };
+}
+
+/**
+ * Whatever readable alternative text a node carries, cleaned and bounded. Used
+ * by the plain-text projection and by last-resort migration recovery so a
+ * malformed historical image still contributes its text rather than vanishing.
+ */
+function imagePlainText(node: PlainRecord): string {
+  const raw = isRecord(node.attrs) ? node.attrs.alt : undefined;
+  if (typeof raw !== "string") return "";
+  return raw
+    .replace(CONTROL_CHARACTER_PATTERN, " ")
+    .trim()
+    .slice(0, NOTE_DOCUMENT_LIMITS.maxImageAlt);
 }
 
 /**
@@ -266,6 +392,10 @@ const BLOCK_NODE_TYPES: ReadonlySet<string> = new Set([
   "pageBreak",
   "taskList",
   "table",
+  // Block, not inline. Part 43's alignment, text wrap, full-bleed width, and
+  // caption all need a block box to lay out; an inline image could carry none
+  // of them without a second, incompatible widening later.
+  "image",
 ]);
 const INLINE_NODE_TYPES: ReadonlySet<string> = new Set(["text", "hardBreak", "mention"]);
 const TABLE_CELL_TYPES: ReadonlySet<string> = new Set(["tableHeader", "tableCell"]);
@@ -294,6 +424,9 @@ const NODE_ALLOWED_FIELDS: Readonly<Record<NoteDocumentNodeType, ReadonlySet<str
   // An atom: no content, and — like hardBreak — no marks, so a mention can
   // never smuggle a link, a colour, or any other mark through the renderer.
   mention: new Set(["type", "attrs"]),
+  // An atom with no content and — like `mention` — no marks, so an image can
+  // never smuggle a link, a colour, or any other mark through the renderer.
+  image: new Set(["type", "attrs"]),
 };
 
 const NODE_ALLOWED_ATTRS: Readonly<Record<NoteDocumentNodeType, ReadonlySet<string>>> = {
@@ -316,6 +449,10 @@ const NODE_ALLOWED_ATTRS: Readonly<Record<NoteDocumentNodeType, ReadonlySet<stri
   tableHeader: new Set(["colspan", "rowspan", "colwidth"]),
   tableCell: new Set(["colspan", "rowspan", "colwidth"]),
   mention: new Set(["id", "label"]),
+  // No `src`. See `NoteDocumentImageAttrs`: the absence is the guarantee that a
+  // temporary `blob:`/`data:` URL can never be persisted, and this loop is what
+  // rejects a node that tries to carry one.
+  image: new Set(["attachmentId", "alt", "width", "height"]),
 };
 
 const MARK_ALLOWED_ATTRS: Readonly<Record<NoteDocumentMarkType, ReadonlySet<string>>> = {
@@ -580,6 +717,14 @@ export function extractNoteContentPlain(document: unknown): string {
       sink.push(collectInline(node));
       return;
     }
+    // An image contributes its alt text so search and exports see the words the
+    // author wrote. A decorative image (`alt: ""`) deliberately contributes
+    // nothing at all rather than an empty line.
+    if (node.type === "image") {
+      const alt = imagePlainText(node);
+      if (alt.length > 0) sink.push(alt);
+      return;
+    }
     if (node.type === "tableRow") {
       const cells = (Array.isArray(node.content) ? node.content : []).map((cell) => {
         const cellBlocks: string[] = [];
@@ -788,6 +933,31 @@ function renderMentionHtml(node: PlainRecord): string {
   );
 }
 
+/**
+ * An image becomes a fixed `<img>` carrying one allow-listed class, the escaped
+ * attachment id, and the escaped alt text — **and deliberately no `src`**.
+ *
+ * This module knows neither the workspace the note belongs to nor the reader's
+ * authorization context, and the bytes are only reachable through an endpoint
+ * that re-checks both. Inventing a URL here would therefore either be wrong or
+ * would smuggle an unauthorized guess into an export. Substituting a real
+ * source (a proxied URL for a preview, an embedded data URI for a self-contained
+ * export) is Part 63's job, keyed off `data-attachment-id`.
+ *
+ * A node whose attributes do not validate renders as nothing: an image with no
+ * resolvable attachment has no bytes and no meaning. Its alt text is still
+ * recovered by `extractNoteContentPlain`.
+ */
+function renderImageHtml(node: PlainRecord): string {
+  const attrs = noteDocumentImageAttrs(node.attrs);
+  if (attrs === null) return "";
+  return (
+    `<img class="${NOTE_DOCUMENT_IMAGE_CLASS}" ` +
+    `data-attachment-id="${escapeHtml(attrs.attachmentId)}" ` +
+    `alt="${escapeHtml(attrs.alt)}" loading="lazy" decoding="async">`
+  );
+}
+
 function renderNodeHtml(node: unknown): string {
   if (!isRecord(node)) return "";
   if (node.type === "text") {
@@ -799,6 +969,7 @@ function renderNodeHtml(node: unknown): string {
   // the class is the whole contract, so no attribute can be smuggled through.
   if (node.type === "pageBreak") return `<div class="${NOTE_DOCUMENT_PAGE_BREAK_CLASS}"></div>`;
   if (node.type === "mention") return renderMentionHtml(node);
+  if (node.type === "image") return renderImageHtml(node);
 
   const children = Array.isArray(node.content) ? node.content.map(renderNodeHtml).join("") : "";
   switch (node.type) {
@@ -972,6 +1143,25 @@ function validateNodeAttrs(type: NoteDocumentNodeType, attrs: unknown, errors: s
       errors.push(
         `Document mention label attribute is required and must be 1-${NOTE_DOCUMENT_LIMITS.maxMentionLabel} characters without control characters`,
       );
+    }
+  }
+  if (type === "image") {
+    if (!isUuidValue(attrs.attachmentId)) {
+      errors.push("Document image attachmentId attribute is required and must be a UUID");
+    }
+    // Deliberately permits `""`: an empty alt is the accessible way to mark an
+    // image decorative, and rejecting it would push authors toward filler text.
+    if (!isUsableImageAlt(attrs.alt)) {
+      errors.push(
+        `Document image alt attribute is required and must be 0-${NOTE_DOCUMENT_LIMITS.maxImageAlt} characters without control characters`,
+      );
+    }
+    for (const key of ["width", "height"] as const) {
+      if (!isImageDimension(attrs[key])) {
+        errors.push(
+          `Document image ${key} attribute must be null or an integer 1-${NOTE_DOCUMENT_LIMITS.maxImageDimension}`,
+        );
+      }
     }
   }
 }
@@ -1165,7 +1355,8 @@ function validateContentStructure(
       type === "horizontalRule" ||
       type === "pageBreak" ||
       type === "text" ||
-      type === "mention") &&
+      type === "mention" ||
+      type === "image") &&
     content !== undefined
   ) {
     errors.push(`Document ${type} must be a leaf node`);
@@ -1177,6 +1368,7 @@ interface DocumentCounters {
   totalText: number;
   tableCells: number;
   mentions: number;
+  images: number;
 }
 
 function validateNode(
@@ -1246,13 +1438,23 @@ function validateNode(
     }
   }
 
+  if (type === "image") {
+    counters.images += 1;
+    if (counters.images > NOTE_DOCUMENT_LIMITS.maxImages) {
+      // Bounds the authorized content requests one note can fan out into.
+      errors.push("Document has too many images");
+      return;
+    }
+  }
+
   if (
     (type === "heading" ||
       type === "orderedList" ||
       type === "taskItem" ||
       type === "tableHeader" ||
       type === "tableCell" ||
-      type === "mention") &&
+      type === "mention" ||
+      type === "image") &&
     node.attrs === undefined
   ) {
     errors.push(`Document ${type} node attributes are required`);
@@ -1303,7 +1505,7 @@ function validateDocumentContract(value: unknown, errors: string[]): void {
     errors.push('Document root must be { type: "doc" }');
     return;
   }
-  validateNode(value, 0, { nodes: 0, totalText: 0, tableCells: 0, mentions: 0 }, errors);
+  validateNode(value, 0, { nodes: 0, totalText: 0, tableCells: 0, mentions: 0, images: 0 }, errors);
 }
 
 /** Validate the complete contract while collecting all independently reachable issues. */
@@ -1426,6 +1628,9 @@ function recoverTextFromNode(node: unknown): string {
   // A mention stores its readable name in an attribute, so the last-resort
   // text-only recovery has to read it explicitly or the name would be lost.
   if (node.type === "mention") recovered += mentionPlainText(node);
+  // Same reasoning for an image: its alt text is the only readable thing it
+  // carries, so text-only recovery has to read the attribute explicitly.
+  if (node.type === "image") recovered += imagePlainText(node);
   if (Array.isArray(node.content)) {
     for (const child of node.content) recovered += recoverTextFromNode(child);
   }
@@ -1547,6 +1752,46 @@ function normalizeMentionNode(node: PlainRecord): PlainRecord[] {
     return [{ type: "mention", attrs: { id: attrs.id, label: attrs.label } }];
   }
   return textNodes(recoverTextFromNode(node));
+}
+
+/**
+ * Keep an image as an image when it still carries a stable attachment id and a
+ * usable alt; otherwise degrade it to its alt text. Attributes are re-emitted in
+ * canonical form, so a historical node carrying a stray `src` — the one thing
+ * the contract must never store — loses it here instead of failing the note.
+ */
+function normalizeImageNode(node: PlainRecord): PlainRecord[] {
+  const attrs = noteDocumentImageAttrs(node.attrs);
+  if (attrs !== null) {
+    return [
+      {
+        type: "image",
+        attrs: {
+          attachmentId: attrs.attachmentId,
+          alt: attrs.alt,
+          width: attrs.width,
+          height: attrs.height,
+        },
+      },
+    ];
+  }
+  // Salvage what a malformed node can still contribute: a bounded alt, and a
+  // bounded id only when it is genuinely a UUID.
+  const raw = isRecord(node.attrs) ? node.attrs : {};
+  if (isUuidValue(raw.attachmentId)) {
+    return [
+      {
+        type: "image",
+        attrs: {
+          attachmentId: raw.attachmentId,
+          alt: imagePlainText(node),
+          width: imageDimensionOrNull(raw.width),
+          height: imageDimensionOrNull(raw.height),
+        },
+      },
+    ];
+  }
+  return paragraphsFromRecoveredText(imagePlainText(node));
 }
 
 function normalizeInlineNode(node: unknown): PlainRecord[] {
@@ -1762,6 +2007,7 @@ function normalizeToBlocks(node: unknown): PlainRecord[] {
     const inline = normalizeMentionNode(node);
     return inline.length === 0 ? [] : [{ type: "paragraph", content: inline }];
   }
+  if (node.type === "image") return normalizeImageNode(node);
   if (node.type === "hardBreak") {
     return paragraphsFromRecoveredText(recoverTextFromNode(node));
   }

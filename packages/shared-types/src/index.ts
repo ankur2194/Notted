@@ -33,7 +33,22 @@ export type {
   UserSummary,
 } from "./auth";
 export { AUTH_API_PATHS } from "./auth";
-export type { AttachmentDetail, AttachmentStatus, AttachmentSummary } from "./attachment";
+export { ATTACHMENT_API_PATHS } from "./attachment";
+export type {
+  AttachmentBlurPlaceholder,
+  AttachmentDeleteResult,
+  AttachmentDetail,
+  AttachmentListResult,
+  AttachmentMedia,
+  AttachmentMediaType,
+  AttachmentServableVariant,
+  AttachmentStatus,
+  AttachmentSummary,
+  AttachmentUploadResult,
+  AttachmentVariantName,
+  AttachmentVariantProjection,
+  AttachmentVariantSet,
+} from "./attachment";
 export type {
   AttachmentId,
   FolderId,

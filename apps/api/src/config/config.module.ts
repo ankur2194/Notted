@@ -11,6 +11,11 @@ import { AUTH_CONFIG, AuthConfigProvider, authConfigProvider } from "./auth.conf
 import { DATABASE_CONFIG, DatabaseConfigProvider, databaseConfigProvider } from "./database.config";
 import { FEATURES_CONFIG, FeaturesConfigProvider, featuresConfigProvider } from "./features.config";
 import {
+  IMAGE_PROCESSING_CONFIG,
+  ImageProcessingConfigProvider,
+  imageProcessingConfigProvider,
+} from "./image-processing.config";
+import {
   MEILISEARCH_CONFIG,
   MeilisearchConfigProvider,
   meilisearchConfigProvider,
@@ -40,6 +45,8 @@ import { SMTP_CONFIG, SmtpConfigProvider, smtpConfigProvider } from "./smtp.conf
     databaseConfigProvider,
     FeaturesConfigProvider,
     featuresConfigProvider,
+    ImageProcessingConfigProvider,
+    imageProcessingConfigProvider,
     MeilisearchConfigProvider,
     meilisearchConfigProvider,
     MinioConfigProvider,
@@ -60,6 +67,7 @@ import { SMTP_CONFIG, SmtpConfigProvider, smtpConfigProvider } from "./smtp.conf
     AUTH_EMAIL_QUEUE_CONFIG,
     DATABASE_CONFIG,
     FEATURES_CONFIG,
+    IMAGE_PROCESSING_CONFIG,
     MEILISEARCH_CONFIG,
     MINIO_CONFIG,
     REDIS_CONFIG,
