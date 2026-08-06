@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   NOTE_DOCUMENT_CODE_LANGUAGES,
   NOTE_DOCUMENT_LIMITS,
+  NOTE_DOCUMENT_NODE_TYPES,
+  NOTE_DOCUMENT_PAGE_BREAK_CLASS,
   NOTE_DOCUMENT_SCHEMA_VERSION,
   NoteDocumentMigrationError,
   extractNoteContentPlain,
@@ -1121,5 +1123,96 @@ describe("Part 36 mention contract", () => {
   it("does not change the contract version for the additive mention widening", () => {
     expect(NOTE_DOCUMENT_SCHEMA_VERSION).toBe(1);
     expect(noteDocumentSchema.safeParse(RICH_DOCUMENT).success).toBe(true);
+  });
+});
+
+describe("Part 38 page break contract", () => {
+  const pageBreakDocument = {
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "Cover page" }] },
+      { type: "pageBreak" },
+      { type: "paragraph", content: [{ type: "text", text: "Appendix" }] },
+    ],
+  } as const;
+
+  it("accepts an attribute-free page break as a block node and round-trips it unchanged", () => {
+    const parsed = safeParseNoteDocument(pageBreakDocument);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.doc).toEqual(pageBreakDocument);
+    expect(noteDocumentSchema.safeParse(parsed.doc).success).toBe(true);
+  });
+
+  it("accepts a page break nested wherever a block node is allowed", () => {
+    expect(
+      safeParseNoteDocument({
+        type: "doc",
+        content: [
+          {
+            type: "blockquote",
+            content: [{ type: "paragraph" }, { type: "pageBreak" }],
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    ["children", { type: "doc", content: [{ type: "pageBreak", content: [] }] }],
+    [
+      "text children",
+      {
+        type: "doc",
+        content: [{ type: "pageBreak", content: [{ type: "text", text: "x" }] }],
+      },
+    ],
+    ["attributes", { type: "doc", content: [{ type: "pageBreak", attrs: { after: 2 } }] }],
+    ["marks", { type: "doc", content: [{ type: "pageBreak", marks: [{ type: "bold" }] }] }],
+    ["stray fields", { type: "doc", content: [{ type: "pageBreak", text: "x" }] }],
+  ])("rejects a page break carrying %s", (_label, document) => {
+    expect(safeParseNoteDocument(document).success).toBe(false);
+  });
+
+  it("renders the one class print.css and the Part 63 export template key off", () => {
+    expect(NOTE_DOCUMENT_PAGE_BREAK_CLASS).toBe("notted-page-break");
+    expect(renderDocumentHtml(pageBreakDocument)).toBe(
+      `<p>Cover page</p><div class="${NOTE_DOCUMENT_PAGE_BREAK_CLASS}"></div><p>Appendix</p>`,
+    );
+    // A `div`, never an `hr`: `break-after: page` on a block box is unambiguous
+    // and the node carries no separator semantic.
+    expect(renderDocumentHtml(pageBreakDocument)).not.toContain("<hr>");
+  });
+
+  it("contributes nothing to the plain-text projection, exactly like a horizontal rule", () => {
+    const rule = {
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "Cover page" }] },
+        { type: "horizontalRule" },
+        { type: "paragraph", content: [{ type: "text", text: "Appendix" }] },
+      ],
+    };
+    expect(extractNoteContentPlain(pageBreakDocument)).toBe("Cover page\nAppendix");
+    expect(extractNoteContentPlain(pageBreakDocument)).toBe(extractNoteContentPlain(rule));
+  });
+
+  it("survives migration untouched and recovers a malformed historical break", () => {
+    const clean = migrateNoteDocument(pageBreakDocument);
+    expect(clean.migrated).toBe(false);
+    expect(clean.doc).toEqual(pageBreakDocument);
+
+    const recovered = migrateNoteDocument({
+      type: "doc",
+      content: [{ type: "pageBreak", attrs: { legacy: true }, content: [] }],
+    });
+    expect(recovered.migrated).toBe(true);
+    expect(recovered.doc).toEqual({ type: "doc", content: [{ type: "pageBreak" }] });
+    expect(noteDocumentSchema.safeParse(recovered.doc).success).toBe(true);
+  });
+
+  it("does not change the contract version for the additive page-break widening", () => {
+    expect(NOTE_DOCUMENT_SCHEMA_VERSION).toBe(1);
+    expect(NOTE_DOCUMENT_NODE_TYPES).toContain("pageBreak");
   });
 });

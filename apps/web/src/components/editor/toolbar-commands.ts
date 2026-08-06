@@ -692,6 +692,46 @@ export const EDITOR_TOOLBAR_GROUPS: readonly ToolbarGroup[] = Object.freeze([
   },
 ]);
 
+/**
+ * The controls the Part 38 floating focus-mode toolbar keeps.
+ *
+ * Focus mode exists to remove chrome, so the floating bar carries the smallest
+ * set that still lets someone write: block type, the three core marks, the three
+ * list toggles, and the shortcuts dialog (the way back to everything else).
+ */
+const FOCUS_TOOLBAR_GROUP_IDS: readonly string[] = Object.freeze([
+  "block",
+  "marks",
+  "lists",
+  "help",
+]);
+
+const FOCUS_TOOLBAR_ITEM_IDS: ReadonlySet<string> = new Set([
+  "blockType",
+  "bold",
+  "italic",
+  "underline",
+  "bulletList",
+  "orderedList",
+  "taskList",
+  "shortcuts",
+]);
+
+/**
+ * Derived from `EDITOR_TOOLBAR_GROUPS`, never retyped: a command whose
+ * behaviour, label, shortcut id, or availability rule changes there changes here
+ * too, and `EditorToolbar` renders this through its existing `groups` prop
+ * rather than through a forked component.
+ */
+export const FOCUS_TOOLBAR_GROUPS: readonly ToolbarGroup[] = Object.freeze(
+  EDITOR_TOOLBAR_GROUPS.filter((group) => FOCUS_TOOLBAR_GROUP_IDS.includes(group.id))
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => FOCUS_TOOLBAR_ITEM_IDS.has(item.id)),
+    }))
+    .filter((group) => group.items.length > 0),
+);
+
 /** Toolbar control ids in visual order; drives the roving tab index. */
 export function toolbarItemIds(groups: readonly ToolbarGroup[]): readonly string[] {
   return groups.flatMap((group) => group.items.map((item) => item.id));

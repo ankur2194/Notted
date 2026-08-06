@@ -16,11 +16,17 @@ export type EditorShortcutScope = "editor" | "global";
 /** `tiptap` bindings ship with the configured extensions; `notted` bindings are ours. */
 export type EditorShortcutSource = "tiptap" | "notted";
 
-export type EditorShortcutGroupId = "text" | "blocks" | "lists" | "alignment" | "history" | "help";
+export type EditorShortcutGroupId =
+  "text" | "blocks" | "lists" | "alignment" | "history" | "view" | "help";
 
 /** Handlers the host component supplies for bindings that drive React UI. */
 export type EditorShortcutHandlerId =
-  "insertLink" | "openShortcutsHelp" | "openSlashMenu" | "insertMention";
+  | "insertLink"
+  | "openShortcutsHelp"
+  | "openSlashMenu"
+  | "insertMention"
+  | "insertPageBreak"
+  | "toggleFocusMode";
 
 export interface EditorShortcutGroup {
   readonly id: EditorShortcutGroupId;
@@ -51,6 +57,7 @@ export const EDITOR_SHORTCUT_GROUPS: readonly EditorShortcutGroup[] = Object.fre
   { id: "lists", label: "Lists" },
   { id: "alignment", label: "Alignment" },
   { id: "history", label: "History" },
+  { id: "view", label: "View" },
   { id: "help", label: "Help" },
 ]);
 
@@ -195,6 +202,19 @@ export const EDITOR_SHORTCUTS: readonly EditorShortcut[] = Object.freeze([
     handler: null,
   },
   {
+    // Free binding: StarterKit only claims `Enter`, `Mod-Enter`, and
+    // `Shift-Enter` around Enter, and no configured extension binds
+    // `Mod-Shift-Enter`. `Shift-Enter` cannot swallow it either, because
+    // ProseMirror matches the whole modifier set, not a subset.
+    id: "pageBreak",
+    group: "blocks",
+    description: "Insert a page break",
+    binding: "Mod-Shift-Enter",
+    scope: "editor",
+    source: "notted",
+    handler: "insertPageBreak",
+  },
+  {
     id: "bulletList",
     group: "lists",
     description: "Bulleted list",
@@ -301,6 +321,18 @@ export const EDITOR_SHORTCUTS: readonly EditorShortcut[] = Object.freeze([
     scope: "editor",
     source: "tiptap",
     handler: null,
+  },
+  {
+    // `Mod-Shift-f` is unclaimed: the only `Mod-Shift-<letter>` bindings in this
+    // table are s, b, l, e, r, j, and z, and Highlight's `Mod-Shift-h` is the
+    // only other one any configured extension registers.
+    id: "focusMode",
+    group: "view",
+    description: "Toggle focus mode",
+    binding: "Mod-Shift-f",
+    scope: "editor",
+    source: "notted",
+    handler: "toggleFocusMode",
   },
   {
     id: "shortcutsHelp",

@@ -5,7 +5,7 @@
 // JSON PROJECTION for reads/search/export, an extracted plain-text
 // projection, and a monotonically increasing `version` for optimistic
 // concurrency. The Yjs binary state itself is persisted in a later part
-// (Part 39); this table is the read/search projection and the relational
+// (Part 58, per ADR 0004); this table is the read/search projection and the relational
 // anchor for hierarchy, ordering, sharing, tags, attachments, comments,
 // versions, etc.
 //
@@ -116,7 +116,7 @@ export const notes = pgTable(
     }),
     title: varchar("title", { length: 500 }).notNull(),
     // TipTap JSON projection (ADR 0004). Default empty document. The Yjs
-    // binary state is persisted separately (Part 39); this column is the
+    // binary state is persisted separately (Part 58); this column is the
     // deterministic read/search/export projection, kept in sync by the
     // projection pipeline (Parts 33/39).
     content: jsonb("content").default({ type: "doc", content: [] }).notNull(),

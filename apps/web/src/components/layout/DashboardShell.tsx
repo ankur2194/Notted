@@ -112,13 +112,21 @@ export function DashboardShell({
   return (
     <ReactQueryProvider>
       <div className="min-h-dvh bg-background">
-        <a href="#workspace-navigation" className="skip-link">
+        <a href="#workspace-navigation" className="skip-link" data-notted-focus-hide>
           Skip to workspace navigation
         </a>
+        {/*
+         * Part 38: focus mode hides the sidebar and the top bar and drops the
+         * offset they reserve; print hides them outright. Both are attribute
+         * hooks so `styles/globals.css` and `styles/print.css` never have to
+         * know this file's Tailwind classes.
+         */}
         <div
           id="workspace-navigation"
           tabIndex={-1}
           className={`fixed inset-y-0 left-0 z-40 hidden border-r md:block ${collapsed ? "w-20" : "w-72"}`}
+          data-notted-focus-hide
+          data-notted-print-hide
         >
           <Sidebar
             shell={shell}
@@ -142,7 +150,7 @@ export function DashboardShell({
             <Sidebar shell={shell} collapsed={false} mobile noteNavigation={noteNavigation} />
           </DialogContent>
         </Dialog>
-        <div className={collapsed ? "md:pl-20" : "md:pl-72"}>
+        <div className={`notted-shell-offset ${collapsed ? "md:pl-20" : "md:pl-72"}`}>
           <TopBar
             shell={shell}
             breadcrumbs={breadcrumbsFor(pathname)}

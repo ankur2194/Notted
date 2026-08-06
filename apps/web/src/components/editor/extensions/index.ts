@@ -27,6 +27,12 @@ export {
   type NoteEditorExtensionOptions,
 } from "./note-editor-extensions";
 export {
+  PAGE_BREAK_CLASS,
+  PAGE_BREAK_LABEL,
+  PAGE_BREAK_NODE_NAME,
+  createPageBreakExtension,
+} from "./page-break";
+export {
   SLASH_COMMAND_EXTENSION_NAME,
   SLASH_COMMAND_PRIORITY,
   createNoteSlashCommand,

@@ -3,6 +3,11 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// `NoteDetailView` now wraps the editor in `PageContainer` (Part 37), which
+// offers a `router.refresh()` reload affordance on a version conflict. No app
+// router is mounted in jsdom, so `useRouter` needs a stub here.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
 import { NoteCard } from "./NoteCard";
 import { NoteDetailView } from "./NoteDetailView";
 import { NoteLifecycleActions } from "./NoteLifecycleActions";

@@ -69,6 +69,9 @@ Add one row after creating each record. Keep rows ordered by part number.
 |   34 | Complete | 2026-08-03 | TipTap editor and roving-tabindex toolbar, drift-proof shortcut table and help dialog, sanitized link/colour dialogs, remount restoration; Review #2: ARIA and duplicate-render fixes, all gates pass. |
 |   35 | Complete | 2026-08-03 | Table contract widening with bounds, resizable tables, restored nested checklists, lowlight code blocks, markdown rules, single Tab authority; Review #2: Table keymap strip fix, split-cell guard, all gates pass. |
 |   36 | Complete | 2026-08-03 | Mention node contract, slash command menu, workspace-scoped mentions with removed-user fallback, shared suggestion popover; Review #2: member pagination and lazy directory fetch, all gates pass. |
+|   37 | Complete | 2026-08-06 | A4/US Letter paper in physical CSS units, configurable margins, seven zoom settings with scaled scroll extents, server-persisted per-note page size. Measured in Chromium: 794x1123 and 816x1056 at 100%, size survives reload, controls unclipped at 390/768/1440. |
+|   38 | Complete | 2026-08-06 | Additive `pageBreak` contract node, TipTap atom, `/page-break` command, two shortcuts, non-destructive overflow guides, focus mode, standalone `print.css` with a generated `@page` rule. A4/Letter PDF snapshots taken in Chromium — correct MediaBox, two pages from the explicit break, no chrome in print; browser pass also caught and fixed a break-deleted-by-typing defect. |
+|   39 | Complete with follow-up | 2026-08-06 | Pure autosave state machine — one version cell, one in-flight request, coalesced content+settings PATCH, out-of-order discard, bounded backoff, halting conflict, in-memory offline queue, keepalive navigation flush, explicit retry/reload UI. All six named verify scenarios covered without a browser; Review #2 raised no blocking finding. |
 
 ## Cross-cutting records
 

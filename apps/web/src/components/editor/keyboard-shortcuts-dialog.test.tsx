@@ -53,6 +53,29 @@ describe("keyboard shortcuts dialog", () => {
     expect(rows).toHaveLength(EDITOR_SHORTCUTS.length);
   });
 
+  it("documents the Part 38 page-break and focus-mode bindings under View and Blocks", async () => {
+    const user = userEvent.setup();
+    render(<DialogHarness />);
+    await user.click(screen.getByRole("button", { name: "Open shortcuts" }));
+    const dialog = await screen.findByRole("dialog", { name: "Keyboard shortcuts" });
+
+    // The dialog is driven entirely by `EDITOR_SHORTCUTS`, so this asserts the
+    // two new bindings are declared there rather than advertised from anywhere
+    // else — a binding the table does not declare can never be shown.
+    const pageBreak = dialog.querySelector('[data-shortcut-id="pageBreak"]');
+    expect(pageBreak).toHaveTextContent("Insert a page break");
+    expect(
+      Array.from(pageBreak?.querySelectorAll("kbd") ?? []).map((cap) => cap.textContent),
+    ).toEqual(["Ctrl", "Shift", "Enter"]);
+
+    expect(within(dialog).getByRole("heading", { name: "View" })).toBeInTheDocument();
+    const focusMode = dialog.querySelector('[data-shortcut-id="focusMode"]');
+    expect(focusMode).toHaveTextContent("Toggle focus mode");
+    expect(
+      Array.from(focusMode?.querySelectorAll("kbd") ?? []).map((cap) => cap.textContent),
+    ).toEqual(["Ctrl", "Shift", "F"]);
+  });
+
   it("closes on Escape and restores focus to the trigger", async () => {
     const user = userEvent.setup();
     render(<DialogHarness />);

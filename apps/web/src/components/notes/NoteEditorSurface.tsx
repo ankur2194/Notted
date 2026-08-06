@@ -1,7 +1,10 @@
 "use client";
 
+import { safeParseNoteDocument } from "@notted/shared-validators";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+
+import { useHasNoteSaveHost, useNoteSave } from "./note-save-context";
 
 import type { Editor } from "@tiptap/core";
 
@@ -52,6 +55,13 @@ export function NoteEditorSurface({
   onEditorReady,
 }: NoteEditorSurfaceProps) {
   const queryClient = useQueryClient();
+  // Part 39. The editor arrives inside `PageContainer` as opaque `children`
+  // rendered by a Server Component, so the save handle is read from context
+  // rather than threaded as a prop. Outside a provider every method is a no-op.
+  const save = useNoteSave();
+  // Whether anything is actually showing save state. The editor keeps its own
+  // contract-rejection alert unless a host takes ownership of announcing it.
+  const hasSaveHost = useHasNoteSaveHost();
 
   // Only notes that already store mentions need the directory on load. Fetching
   // it unconditionally would spend up to `WORKSPACE_MEMBER_MAX_PAGES` sequential
@@ -98,6 +108,26 @@ export function NoteEditorSurface({
 
   useEffect(() => () => mentionSearch.cancel(), [mentionSearch]);
 
+  /**
+   * Hand autosave the editor's own serialization of the document it opened
+   * with, before any editing happens.
+   *
+   * ProseMirror fills in default attributes the stored contract document omits,
+   * so the server's JSON and the editor's JSON for identical content are not
+   * byte-identical. Without this baseline, typing a character and deleting it
+   * again would look like a real change and issue a pointless save.
+   */
+  const handleEditorReady = useCallback(
+    (instance: Editor | null): void => {
+      if (instance !== null) {
+        const parsed = safeParseNoteDocument(instance.getJSON());
+        if (parsed.success) save.onDocumentBaseline(parsed.doc);
+      }
+      onEditorReady?.(instance);
+    },
+    [onEditorReady, save],
+  );
+
   return (
     <TiptapEditor
       noteId={noteId}
@@ -108,7 +138,9 @@ export function NoteEditorSurface({
       mentionSearch={mentionSearch}
       mentionDirectory={directory}
       mentionDirectoryTruncated={members.data?.hasMore === true}
-      onEditorReady={onEditorReady}
+      onDocumentChange={save.onDocumentChange}
+      onDocumentRejected={hasSaveHost ? save.onDocumentRejected : undefined}
+      onEditorReady={handleEditorReady}
     />
   );
 }

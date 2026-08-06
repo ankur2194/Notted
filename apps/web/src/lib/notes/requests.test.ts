@@ -72,23 +72,107 @@ describe("note requests", () => {
     expect(String(init?.body)).not.toContain("contentPlain");
   });
 
+  // The fourth column is Part 39's retryability hint. It is deliberately absent
+  // for the kinds that describe the request itself: repeating those unchanged
+  // would fail identically forever, so autosave must not loop on them.
   it.each([
-    [400, null, "invalid"],
-    [403, null, "forbidden-or-not-found"],
-    [404, null, "forbidden-or-not-found"],
-    [409, { code: "VERSION_CONFLICT" }, "version-conflict"],
-    [409, { code: "ORDER_CONFLICT" }, "conflict"],
-    [503, null, "unavailable"],
-  ] as const)("maps %s failures to an exact rollback category", async (status, body, kind) => {
+    [400, null, "invalid", undefined],
+    [403, null, "forbidden-or-not-found", undefined],
+    [404, null, "forbidden-or-not-found", undefined],
+    [409, { code: "VERSION_CONFLICT" }, "version-conflict", undefined],
+    [409, { code: "ORDER_CONFLICT" }, "conflict", undefined],
+    [405, null, "unavailable", false],
+    [429, null, "unavailable", true],
+    [500, null, "unavailable", true],
+    [503, null, "unavailable", true],
+  ] as const)(
+    "maps %s failures to an exact rollback category",
+    async (status, body, kind, retryable) => {
+      fetchMock.mockResolvedValue(
+        new Response(body === null ? null : JSON.stringify(body), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      await expect(
+        updateNote(workspaceId, noteId, { expectedVersion: 1, title: "B" }),
+      ).resolves.toEqual({ ok: false, kind, retryable });
+    },
+  );
+
+  it.each([
+    ["2", 2_000],
+    ["0", 0],
+    ["-1", undefined],
+    ["not a number", undefined],
+  ] as const)("reads a Retry-After of %s as %s ms", async (header, retryAfterMs) => {
     fetchMock.mockResolvedValue(
-      new Response(body === null ? null : JSON.stringify(body), {
-        status,
-        headers: { "Content-Type": "application/json" },
-      }),
+      new Response(null, { status: 429, headers: { "Retry-After": header } }),
     );
     await expect(
       updateNote(workspaceId, noteId, { expectedVersion: 1, title: "B" }),
-    ).resolves.toEqual({ ok: false, kind });
+    ).resolves.toEqual({ ok: false, kind: "unavailable", retryable: true, retryAfterMs });
+  });
+
+  it("clamps an absurd Retry-After rather than stalling a client indefinitely", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(null, { status: 503, headers: { "Retry-After": "99999" } }),
+    );
+    const result = await updateNote(workspaceId, noteId, { expectedVersion: 1, title: "B" });
+    expect(result).toEqual({
+      ok: false,
+      kind: "unavailable",
+      retryable: true,
+      retryAfterMs: 300_000,
+    });
+  });
+
+  it("sends a navigation flush as keepalive, with no abort timer to cancel it", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 503 }));
+    await updateNote(workspaceId, noteId, { expectedVersion: 1, title: "B" }, { keepalive: true });
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init?.keepalive).toBe(true);
+    // An abort timer scheduled on a page that is going away either never fires
+    // or cancels the very request the flush exists to deliver.
+    expect(init?.signal).toBeUndefined();
+    // `sendBeacon` is not used: it cannot carry the JSON content type and the
+    // credentialed same-site request the API's trusted-origin check needs.
+    expect(init?.credentials).toBe("include");
+    expect(new Headers(init?.headers).get("Content-Type")).toBe("application/json");
+  });
+
+  it("falls back to an ordinary request when the body exceeds the keepalive limit", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 503 }));
+    await updateNote(
+      workspaceId,
+      noteId,
+      {
+        expectedVersion: 1,
+        content: {
+          type: "doc",
+          content: [
+            { type: "paragraph", content: [{ type: "text", text: "x".repeat(19_000) }] },
+            { type: "paragraph", content: [{ type: "text", text: "y".repeat(19_000) }] },
+            { type: "paragraph", content: [{ type: "text", text: "z".repeat(19_000) }] },
+            { type: "paragraph", content: [{ type: "text", text: "w".repeat(19_000) }] },
+          ],
+        },
+      },
+      { keepalive: true },
+    );
+
+    // The fetch specification rejects a keepalive body over 64 KiB outright, so
+    // a large note flushes as a normal request instead of vanishing.
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init?.keepalive).toBeUndefined();
+    expect(init?.signal).toBeDefined();
+  });
+
+  it("does not mark an ordinary request as keepalive", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 503 }));
+    await updateNote(workspaceId, noteId, { expectedVersion: 1, title: "B" });
+    expect(fetchMock.mock.calls[0]?.[1]?.keepalive).toBeUndefined();
   });
 
   it("rejects incomplete move selectors before the network boundary", async () => {
@@ -173,6 +257,7 @@ describe("note requests", () => {
     await expect(requestAllWorkspaceMembers(workspaceId)).resolves.toEqual({
       ok: false,
       kind: "unavailable",
+      retryable: true,
     });
   });
 
@@ -557,6 +642,7 @@ describe("note sharing requests", () => {
     await expect(requestNoteShares(workspaceId, noteId)).resolves.toEqual({
       ok: false,
       kind: "unavailable",
+      retryable: true,
     });
   });
 });

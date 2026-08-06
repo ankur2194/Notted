@@ -168,6 +168,16 @@ const COMMAND_EXPECTATIONS: Readonly<Record<string, (editor: Editor) => void>> =
   blockquote: (editor) => expect(editor.isActive("blockquote")).toBe(true),
   codeBlock: (editor) => expect(editor.isActive("codeBlock")).toBe(true),
   divider: (editor) => expect(nodeTypes(editor)).toContain("horizontalRule"),
+  pageBreak: (editor) => {
+    expect(nodeTypes(editor)).toContain("pageBreak");
+    // A stateless leaf atom: the contract accepts `{ "type": "pageBreak" }` and
+    // nothing else, so the inserted node must carry no attributes or children.
+    const inserted = editor.state.doc.child(0);
+    expect(inserted.type.name).toBe("pageBreak");
+    expect(inserted.toJSON()).toEqual({ type: "pageBreak" });
+    // A document may never end on an atom, or there is nowhere to type next.
+    expect(editor.state.doc.lastChild?.type.name).toBe("paragraph");
+  },
 };
 
 describe("slash menu commands", () => {

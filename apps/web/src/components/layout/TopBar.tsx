@@ -49,7 +49,11 @@ export function TopBar({
     return () => document.removeEventListener("keydown", keyboard);
   }, [userOpen]);
   return (
-    <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+    <header
+      className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85"
+      data-notted-focus-hide
+      data-notted-print-hide
+    >
       <div className="flex min-h-16 items-center gap-2 px-3 sm:px-5">
         <Button
           ref={navigationTriggerRef}

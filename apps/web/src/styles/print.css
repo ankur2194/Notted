@@ -1,0 +1,189 @@
+/*
+ * Notted print stylesheet (Plan Part 38).
+ *
+ * DELIBERATELY STANDALONE. Part 63 (PDF and HTML export) loads this file
+ * directly into Puppeteer alongside `renderDocumentHtml` output, and its
+ * verification criterion is that the exported fixtures match the editor's print
+ * output. Nothing here may therefore depend on:
+ *   - the Next.js application shell existing (every chrome selector below is
+ *     tolerated-if-absent, never required),
+ *   - client-only state (the zoom transform and focus mode are *neutralised*
+ *     here, never read),
+ *   - Tailwind (`@apply`, `theme()`, and custom properties from `@theme` are all
+ *     avoided; this is plain CSS),
+ *   - a session-authenticated asset URL.
+ *
+ * The one rule this file cannot own is `@page`'s size, because `@page` has no
+ * selector and the sheet is per note. `PagePrintStyle` emits that rule at
+ * runtime from `page-geometry.ts`; the default below is what applies when it is
+ * absent, which is exactly the standalone export case.
+ *
+ * Structural note recorded with Part 38: `Notted.md` names both
+ * `styles/editor.css` and `styles/print.css`. Only `print.css` is created,
+ * because only it is genuinely required standalone. Editor styles stay in
+ * `globals.css` where Parts 34-36 put them; splitting them now would be
+ * unrelated refactoring.
+ */
+
+@page {
+  size: 210mm 297mm;
+  margin: 25mm 20mm;
+  /*
+   * The page header and footer bands are left EMPTY on purpose. Part 63 supplies
+   * page numbers through Puppeteer's `headerTemplate`/`footerTemplate`, which
+   * live outside document flow; baking a running header in here would either
+   * double it or push the content column out of alignment with the export.
+   */
+}
+
+@media print {
+  /* ---------------------------------------------------------------------- */
+  /* 1. Application chrome never prints.                                     */
+  /* ---------------------------------------------------------------------- */
+  [data-notted-print-hide],
+  #workspace-navigation,
+  .notted-page-controls,
+  .notted-page-breaks,
+  .notted-focus-toolbar,
+  .skip-link,
+  [role="toolbar"],
+  [role="dialog"],
+  [role="listbox"],
+  [data-radix-popper-content-wrapper] {
+    display: none !important;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* 2. Screen presentation is neutralised: the sheet IS the page.           */
+  /* ---------------------------------------------------------------------- */
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    /* A viewport-height cap would clip everything after the first screen. */
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .notted-shell-offset {
+    padding-left: 0 !important;
+  }
+
+  .notted-page-viewport {
+    /* The scroll viewport becomes plain flow: no cap, no border, no surface. */
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: none !important;
+  }
+
+  .notted-page-scale {
+    /* The pixel box that reserved space for the zoom transform is meaningless. */
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+  }
+
+  .notted-page-paper {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    /* Zoom is a screen affordance; the printed sheet is always 100%. */
+    transform: none !important;
+    width: auto !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    /* `@page` owns the margins; the paper's padding would double them. */
+    padding: 0 !important;
+    box-shadow: none !important;
+    background: none !important;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* 3. Explicit breaks (the `pageBreak` contract node).                     */
+  /* ---------------------------------------------------------------------- */
+  .notted-page-break {
+    display: block;
+    height: 0;
+    margin: 0;
+    border: 0;
+    background: none;
+    break-after: page;
+    /* Retained for engines that still only understand the legacy property. */
+    page-break-after: always;
+  }
+
+  /* The on-screen dashed rule and its caption are editing affordances only. */
+  .notted-page-break::before,
+  .notted-page-break::after {
+    content: none !important;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* 4. Keep common blocks whole where the engine can.                       */
+  /* ---------------------------------------------------------------------- */
+  table,
+  blockquote,
+  pre,
+  figure,
+  img,
+  li[data-checked],
+  .task-item,
+  .notted-editor-content ul[data-type="taskList"] > li {
+    break-inside: avoid;
+  }
+
+  tr,
+  th,
+  td {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    break-inside: avoid;
+    /* A heading stranded at the foot of a page is worse than a short page. */
+    break-after: avoid;
+  }
+
+  p,
+  li {
+    orphans: 2;
+    widows: 2;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* 5. Colour fidelity.                                                     */
+  /* ---------------------------------------------------------------------- */
+  /*
+   * Browsers drop backgrounds when printing unless told otherwise, which would
+   * silently erase every highlight, code-block surface, and table header shade
+   * — the cases where colour carries meaning.
+   */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  a {
+    /* The href is not appended: a printed note is content, not a link dump. */
+    text-decoration: underline;
+  }
+}

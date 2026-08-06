@@ -1,4 +1,9 @@
 @import "tailwindcss";
+/*
+ * Part 38 print rules. Kept in their own plain-CSS file because Part 63 loads it
+ * standalone in Puppeteer; see the header comment in `print.css`.
+ */
+@import "./print.css";
 
 @theme {
   --color-background: #ffffff;
@@ -85,7 +90,8 @@
    *
    * Tailwind's preflight resets headings, lists, and quotes, so the editable
    * surface restores them here. Only layout-neutral typography lives in this
-   * block: page sizing, zoom, and print belong to `PageContainer` (Part 37).
+   * block: page sizing and zoom belong to `PageContainer` (Part 37), and print
+   * belongs to `print.css` (Part 38).
    */
   .notted-editor-content {
     @apply min-h-40 w-full max-w-full break-words text-base leading-7 outline-none;
@@ -361,6 +367,194 @@
    */
   .notted-editor-content .notted-mention--removed {
     @apply bg-muted text-muted-foreground line-through decoration-1;
+  }
+
+  /*
+   * Part 37 page container.
+   *
+   * The sheet is sized in physical CSS units (`210mm`/`297mm`, `8.5in`/`11in`)
+   * published as custom properties by `PageContainer`, never in a pixel
+   * constant, so the on-screen box, the printed sheet, and the `@page` rule
+   * `PagePrintStyle` emits all derive from the same declared size. `page-geometry.ts`
+   * owns the arithmetic and documents the expected measurements.
+   *
+   * `--notted-page-content-width` is a public token: it is the exact width of
+   * the writable column, and later parts (Part 43 image sizing) clamp against
+   * it rather than recomputing page width minus margins.
+   *
+   * Print rules live in `print.css` (imported at the top of this file and kept
+   * standalone for Part 63's exporter). The Part 38 page-break guides drawn into
+   * `.notted-page-breaks` are defined immediately below.
+   */
+  .notted-page-viewport {
+    @apply relative w-full overflow-auto rounded-xl border;
+    /* Must equal `PAGE_VIEWPORT_PADDING_PX`; the fit modes subtract it from the
+       measured `clientWidth`/`clientHeight`, which include padding. */
+    padding: 32px;
+    /* Workspace surface behind the paper (Notted.md: light gray `#f5f5f5`). */
+    background-color: #f5f5f5;
+    min-height: 24rem;
+    max-height: min(80vh, 1400px);
+  }
+
+  /*
+   * `transform: scale()` never changes reserved layout space, so this wrapper
+   * carries the scaled box as explicit pixels. Without it the zoomed sheet
+   * either overflows the scroll extents or leaves dead space below itself.
+   */
+  .notted-page-scale {
+    @apply relative;
+    margin-inline: auto;
+  }
+
+  .notted-page-paper {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: var(--notted-page-width);
+    /*
+     * `min-height`, never `height`: content past one sheet grows the paper
+     * instead of being cut off. Where the printed boundaries fall is a
+     * rendering question for Part 38 and never touches the stored document.
+     */
+    min-height: var(--notted-page-height);
+    padding: var(--notted-page-margin-y) var(--notted-page-margin-x);
+    /* Centred before scaling, then scaled about the same point, so the painted
+       sheet stays aligned with the wrapper that reserves its space. */
+    transform-origin: top center;
+    background-color: #ffffff;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.08);
+    @apply text-slate-950;
+  }
+
+  /*
+   * Part 38 visual pagination.
+   *
+   * The overlay spans exactly the writable column, so a guide's `top` is the
+   * offset `pageBoundaryOffsets` computed from the top of the flowed content.
+   * It is `aria-hidden` and takes no pointer events: every click and caret
+   * position still reaches the editor underneath, and nothing here is content.
+   */
+  .notted-page-breaks {
+    position: absolute;
+    inset: var(--notted-page-margin-y) var(--notted-page-margin-x);
+    pointer-events: none;
+  }
+
+  /* The measured content column. Layout-neutral: the margins stay the paper's
+     padding, and this element exists only so the flowed height can be observed
+     independently of the paper's `min-height`. */
+  .notted-page-content {
+    display: block;
+  }
+
+  .notted-page-break-guide {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 0;
+    /* Notted.md: "visual dashed line indicator when content exceeds one page". */
+    border-top: 1px dashed rgba(15, 23, 42, 0.35);
+  }
+
+  /* An explicit break the writer inserted reads differently from a boundary the
+     content merely ran into, and colour is not the only difference: the guide
+     for an explicit break sits on the node's own labelled rule. */
+  .notted-page-break-guide[data-page-boundary="explicit"] {
+    border-top-color: rgba(37, 99, 235, 0.55);
+  }
+
+  .notted-page-break-guide-label {
+    position: absolute;
+    right: 0;
+    top: 0.25rem;
+    font-size: 0.625rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(15, 23, 42, 0.55);
+  }
+
+  /*
+   * The explicit `pageBreak` node, as it appears while editing.
+   *
+   * Deliberately unlike `hr` (a thin solid border-token rule): this is a dashed
+   * accent rule with a caption, so a break is never mistaken for a divider. The
+   * caption is decorative — the node itself carries `role="separator"` and an
+   * accessible name — and `print.css` removes both the rule and the caption.
+   */
+  .notted-editor-content .notted-page-break {
+    position: relative;
+    display: block;
+    height: 0;
+    margin: 1.75em 0;
+    border-top: 2px dashed var(--color-info);
+  }
+
+  .notted-editor-content .notted-page-break::after {
+    content: "Page break";
+    position: absolute;
+    top: -0.7em;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0 0.5rem;
+    background-color: #ffffff;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    @apply text-info;
+  }
+
+  .notted-editor-content .notted-page-break.ProseMirror-selectednode {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 4px;
+  }
+
+  /*
+   * Part 38 focus mode.
+   *
+   * `data-notted-focus` is written to `document.documentElement` by
+   * `lib/notes/focus-mode.ts`, which is also the only thing that removes it.
+   * Chrome opts in by carrying `data-notted-focus-hide`, so no rule here has to
+   * know a component's Tailwind classes.
+   */
+  :root[data-notted-focus="true"] [data-notted-focus-hide] {
+    display: none !important;
+  }
+
+  /* The shell reserves room for the sidebar it just hid. */
+  :root[data-notted-focus="true"] .notted-shell-offset {
+    padding-left: 0 !important;
+  }
+
+  /*
+   * The floating minimal toolbar. It is the same `EditorToolbar` rendered with a
+   * reduced group table, so it keeps one roving tab index and one set of
+   * dialogs; only its container changes.
+   *
+   * `TiptapEditor` portals this container to `document.body`, because the paper
+   * always carries a transform and a transformed ancestor becomes the containing
+   * block for its `position: fixed` descendants. Rendered in place it would be
+   * pinned to — and scaled with — the sheet instead of the viewport.
+   *
+   * No transition or animation is declared, so there is nothing for
+   * `prefers-reduced-motion` to suppress: entering focus mode is an instant
+   * state change.
+   */
+  .notted-focus-toolbar {
+    position: fixed;
+    left: 50%;
+    bottom: 1.25rem;
+    transform: translateX(-50%);
+    z-index: 50;
+    max-width: min(56rem, calc(100vw - 2rem));
+    @apply rounded-xl border bg-card shadow-lg;
+  }
+
+  .notted-focus-toolbar > [role="toolbar"] {
+    border: 0;
+    background: transparent;
   }
 }
 

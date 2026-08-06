@@ -22,6 +22,7 @@ import { createNoteLowlight } from "./code-block-languages";
 import { FontSize } from "./font-size";
 import { createNoteMention } from "./Mention";
 import { NoteBlockTab } from "./note-block-tab";
+import { createPageBreakExtension } from "./page-break";
 import { createNoteSlashCommand } from "./slash-command";
 
 import type { MentionCandidate, MentionDirectory } from "../mention-members";
@@ -245,6 +246,9 @@ export function createNoteEditorExtensions(options: NoteEditorExtensionOptions =
     // Shift+Tab are owned by `NoteBlockTab`, which outranks this keymap.
     createTaskItemExtension(),
     createTableExtension(),
+    // Part 38's explicit break. A stateless leaf atom, so it adds a node type to
+    // the schema and nothing else; the keymap lives in `EDITOR_SHORTCUTS`.
+    createPageBreakExtension(),
     TableRow.configure({}),
     TableHeader.configure({}),
     TableCell.configure({}),

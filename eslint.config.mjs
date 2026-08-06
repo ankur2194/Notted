@@ -54,6 +54,11 @@ export default tseslint.config(
       "**/.turbo/**",
       "**/node_modules/**",
       "**/coverage/**",
+      // Playwright's local output directories. `.gitignore` already ignores
+      // them; without them here a local e2e run leaves thousands of generated
+      // files for ESLint to parse and `pnpm lint` stops being runnable.
+      "**/playwright-report/**",
+      "**/test-results/**",
       "**/next.config.*",
       "**/postcss.config.*",
     ],

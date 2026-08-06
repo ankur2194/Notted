@@ -313,6 +313,39 @@ separately when needed with `pnpm --filter @notted/web exec playwright install`;
 binaries are not installed by dependency installation and are not committed. The suite
 creates fresh `.test` accounts and never relies on seed credentials.
 
+If Chromium refuses to launch because system libraries are missing and you cannot install
+them (`playwright install-deps` needs `sudo`), run the suite inside the official Playwright
+image instead. It matches the pinned version and ships those libraries, and joining the
+`api` container's network namespace gives the browser the same `localhost:3000` /
+`localhost:3001` origins the application is configured for — `web` shares that namespace
+through `network_mode: "service:api"`:
+
+```bash
+docker run --rm \
+  --network "container:$(docker compose ps -q api)" \
+  -v "$PWD:$PWD" -w "$PWD/apps/web" \
+  --user "$(id -u):$(id -g)" -e HOME=/tmp \
+  -e PLAYWRIGHT_DISPOSABLE_TEST_RUN=true \
+  -e PLAYWRIGHT_REUSE_EXISTING_SERVER=true \
+  -e PLAYWRIGHT_MAILPIT_URL=http://mailpit:8025 \
+  -e DATABASE_URL=postgres://notted:notted_dev_password@postgres:5432/notted_dev \
+  mcr.microsoft.com/playwright:v1.62.0-noble \
+  npx playwright test --project=chromium
+```
+
+Mounting the repository at its own absolute path keeps the pnpm symlinks in `node_modules`
+valid, and matching the host UID keeps report artifacts out of root ownership.
+`PLAYWRIGHT_REUSE_EXISTING_SERVER=true` is required here: a disposable run otherwise
+refuses to attach to servers it did not start, and Compose is already serving them. Leave
+it unset in CI, which owns its own stack.
+
+If the browser suite starts timing out on navigations that clearly succeed, check
+`docker stats` before suspecting the tests. The `web` container runs `next dev`, which
+compiles routes on demand and grows steadily — after a long session it can hold several
+gigabytes and starve the host, at which point page loads and hydration stretch past any
+reasonable timeout. `docker compose restart web` reclaims it and is safe; no data lives in
+that container.
+
 The root `Makefile` is an optional thin alias layer (`make infra-up`, `make test`,
 `make db-migrate`, and so on); pnpm scripts are canonical and cross-platform.
 

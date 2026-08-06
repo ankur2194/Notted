@@ -56,8 +56,9 @@ describe("slash command table", () => {
   });
 
   it("offers exactly the brief's commands that the contract can represent", () => {
-    // `/image` (Part 42) and `/page-break` (Part 38) are deliberately absent:
-    // neither node exists in the shared document contract yet.
+    // `/image` (Part 42) is still deliberately absent: no image node exists in
+    // the shared document contract yet. `/page-break` arrived with Part 38,
+    // which added `pageBreak` to that contract first.
     expect(SLASH_COMMANDS.map((command) => command.id)).toEqual([
       "heading1",
       "heading2",
@@ -70,6 +71,7 @@ describe("slash command table", () => {
       "blockquote",
       "codeBlock",
       "divider",
+      "pageBreak",
     ]);
   });
 

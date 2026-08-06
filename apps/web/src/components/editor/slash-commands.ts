@@ -8,6 +8,7 @@ import {
   Minus,
   Pilcrow,
   Quote,
+  ScissorsLineDashed,
   SquareCode,
   Table2,
 } from "lucide-react";
@@ -15,6 +16,8 @@ import {
 // Side-effect imports: each declares the TipTap command signatures used below.
 import "@tiptap/extension-table";
 import "@tiptap/extension-task-list";
+// Declares `setPageBreak` on the chained-command interface (Part 38).
+import "./extensions/page-break";
 
 import { TABLE_ACTIONS } from "./toolbar-commands";
 
@@ -24,11 +27,12 @@ import type { LucideIcon } from "lucide-react";
 /**
  * Slash menu contents expressed as data.
  *
- * Part 38 (`/page-break`) and Part 42 (`/image`) each append exactly one entry
- * to `SLASH_COMMANDS`; neither node exists in the shared document contract yet,
- * so offering them now would ship a menu item that cannot produce a valid
- * document. Nothing in `SlashCommandMenu.tsx`, the suggestion extension, or the
- * filtering below needs to change when they are added.
+ * Part 38 appended `/page-break` after adding `pageBreak` to the shared document
+ * contract; Part 42 appends `/image` the same way. A menu entry is only ever
+ * added once the contract can represent the node it produces, or the command
+ * would ship a document the API refuses to store. Nothing in
+ * `SlashCommandMenu.tsx`, the suggestion extension, or the filtering below needs
+ * to change when one is added.
  */
 export interface SlashCommand {
   readonly id: string;
@@ -161,6 +165,14 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
     icon: Minus,
     keywords: ["divider", "horizontal-rule", "hr", "separator", "line"],
     run: replaceRange((chain) => chain.setHorizontalRule()),
+  },
+  {
+    id: "pageBreak",
+    label: "Page break",
+    description: "Start the following content on a new printed page",
+    icon: ScissorsLineDashed,
+    keywords: ["page-break", "pagebreak", "new-page", "pagination", "print"],
+    run: replaceRange((chain) => chain.setPageBreak()),
   },
 ]);
 

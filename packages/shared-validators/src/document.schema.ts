@@ -94,6 +94,7 @@ export const NOTE_DOCUMENT_NODE_TYPES = Object.freeze([
   "codeBlock",
   "hardBreak",
   "horizontalRule",
+  "pageBreak",
   "taskList",
   "taskItem",
   "table",
@@ -109,6 +110,18 @@ export const NOTE_DOCUMENT_MENTION_PREFIX = "@" as const;
 
 /** Sole class emitted for a mention; the renderer never copies stored classes. */
 export const NOTE_DOCUMENT_MENTION_CLASS = "notted-mention" as const;
+
+/**
+ * Sole class emitted for an explicit page break (Part 38).
+ *
+ * The editor's own `renderHTML`, the screen stylesheet, `styles/print.css`
+ * (`break-after: page`), and Part 63's server-side Puppeteer template all key
+ * off this one class, so the printed pagination of an exported note matches what
+ * the editor showed. A `div` is used rather than an `hr` because `break-after`
+ * on a block box is unambiguous in every engine, while `hr` carries a separator
+ * semantic the node does not mean.
+ */
+export const NOTE_DOCUMENT_PAGE_BREAK_CLASS = "notted-page-break" as const;
 
 export interface NoteDocumentMentionAttrs {
   /** Stable user id. Display names change; this never does. */
@@ -250,6 +263,7 @@ const BLOCK_NODE_TYPES: ReadonlySet<string> = new Set([
   "blockquote",
   "codeBlock",
   "horizontalRule",
+  "pageBreak",
   "taskList",
   "table",
 ]);
@@ -268,6 +282,9 @@ const NODE_ALLOWED_FIELDS: Readonly<Record<NoteDocumentNodeType, ReadonlySet<str
   codeBlock: new Set(["type", "attrs", "content"]),
   hardBreak: new Set(["type"]),
   horizontalRule: new Set(["type"]),
+  // A leaf atom that carries no state at all: where the break falls is the
+  // node's position, so there is nothing to store and nothing to migrate.
+  pageBreak: new Set(["type"]),
   taskList: new Set(["type", "content"]),
   taskItem: new Set(["type", "attrs", "content"]),
   table: new Set(["type", "content"]),
@@ -291,6 +308,7 @@ const NODE_ALLOWED_ATTRS: Readonly<Record<NoteDocumentNodeType, ReadonlySet<stri
   codeBlock: new Set(["language"]),
   hardBreak: new Set(),
   horizontalRule: new Set(),
+  pageBreak: new Set(),
   taskList: new Set(),
   taskItem: new Set(["checked"]),
   table: new Set(),
@@ -777,6 +795,9 @@ function renderNodeHtml(node: unknown): string {
   }
   if (node.type === "hardBreak") return "<br>";
   if (node.type === "horizontalRule") return "<hr>";
+  // Exactly the markup `styles/print.css` and Part 63's export template style;
+  // the class is the whole contract, so no attribute can be smuggled through.
+  if (node.type === "pageBreak") return `<div class="${NOTE_DOCUMENT_PAGE_BREAK_CLASS}"></div>`;
   if (node.type === "mention") return renderMentionHtml(node);
 
   const children = Array.isArray(node.content) ? node.content.map(renderNodeHtml).join("") : "";
@@ -1140,7 +1161,11 @@ function validateContentStructure(
     return;
   }
   if (
-    (type === "hardBreak" || type === "horizontalRule" || type === "text" || type === "mention") &&
+    (type === "hardBreak" ||
+      type === "horizontalRule" ||
+      type === "pageBreak" ||
+      type === "text" ||
+      type === "mention") &&
     content !== undefined
   ) {
     errors.push(`Document ${type} must be a leaf node`);
@@ -1700,6 +1725,11 @@ function normalizeToBlocks(node: unknown): PlainRecord[] {
   }
   if (node.type === "horizontalRule") {
     return [...paragraphsFromRecoveredText(recoverTextFromNode(node)), { type: "horizontalRule" }];
+  }
+  if (node.type === "pageBreak") {
+    // Identical treatment to `horizontalRule`: any text a malformed historical
+    // node carried is recovered first, then the leaf is re-emitted attribute-free.
+    return [...paragraphsFromRecoveredText(recoverTextFromNode(node)), { type: "pageBreak" }];
   }
   if (node.type === "taskList") {
     const content: PlainRecord[] = [];

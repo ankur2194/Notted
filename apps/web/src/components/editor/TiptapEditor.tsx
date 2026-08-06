@@ -3,6 +3,7 @@
 import { safeParseNoteDocument, type NoteDocument } from "@notted/shared-validators";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { prepareNoteDocumentForEditor } from "./document-contract";
 import { areDocumentsEquivalent } from "./document-sync";
@@ -13,11 +14,14 @@ import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MentionList } from "./MentionList";
 import { SlashCommandMenu } from "./SlashCommandMenu";
 import { openMentionMenuAtCaret, openSlashMenuAtCaret } from "./suggestion-triggers";
+import { FOCUS_TOOLBAR_GROUPS } from "./toolbar-commands";
 import { useSuggestionPopup } from "./useSuggestionPopup";
 
 import type { MentionCandidate, MentionDirectory } from "./mention-members";
 import type { SlashCommand } from "./slash-commands";
 import type { Editor } from "@tiptap/core";
+
+import { toggleFocusMode, useFocusMode } from "@/lib/notes/focus-mode";
 
 const DEFAULT_ARIA_LABEL = "Note content";
 
@@ -31,6 +35,18 @@ export interface TiptapEditorProps {
   readonly readOnlyReason?: string;
   /** Part 39 seam: fires with contract-valid JSON on every change. Nothing is persisted here. */
   readonly onDocumentChange?: (document: NoteDocument) => void;
+  /**
+   * Part 39 seam: reports whether the *last* transaction produced JSON the note
+   * contract rejects. When it does, `onDocumentChange` is deliberately not
+   * called — so without this signal autosave would simply go quiet while the
+   * writer kept typing. It exists so that state can be surfaced, never hidden.
+   * This component still performs no I/O of any kind.
+   *
+   * Supplying it also transfers ownership of the *announcement*: the host is
+   * expected to report the rejection, so this component stops rendering its own
+   * `role="alert"` and one event produces one assertive message.
+   */
+  readonly onDocumentRejected?: (rejected: boolean) => void;
   /** Part 35/39 seam: receives the live instance, and `null` once it is destroyed. */
   readonly onEditorReady?: (editor: Editor | null) => void;
   /**
@@ -98,6 +114,7 @@ export function TiptapEditor({
   ariaLabel,
   readOnlyReason,
   onDocumentChange,
+  onDocumentRejected,
   onEditorReady,
   mentionSearch,
   mentionDirectory,
@@ -124,6 +141,7 @@ export function TiptapEditor({
       ariaLabel={ariaLabel}
       readOnlyReason={readOnlyReason}
       onDocumentChange={onDocumentChange}
+      onDocumentRejected={onDocumentRejected}
       onEditorReady={onEditorReady}
       mentionSearch={mentionSearch}
       mentionDirectory={mentionDirectory}
@@ -140,6 +158,7 @@ interface EditorSurfaceProps {
   readonly ariaLabel?: string;
   readonly readOnlyReason?: string;
   readonly onDocumentChange?: (document: NoteDocument) => void;
+  readonly onDocumentRejected?: (rejected: boolean) => void;
   readonly onEditorReady?: (editor: Editor | null) => void;
   readonly mentionSearch?: (query: string) => Promise<readonly MentionCandidate[]>;
   readonly mentionDirectory?: MentionDirectory | null;
@@ -154,6 +173,7 @@ function EditorSurface({
   ariaLabel,
   readOnlyReason,
   onDocumentChange,
+  onDocumentRejected,
   onEditorReady,
   mentionSearch,
   mentionDirectory,
@@ -164,11 +184,31 @@ function EditorSurface({
   const [outputRejected, setOutputRejected] = useState(false);
   const slashMenu = useSuggestionPopup<SlashCommand>();
   const mentionMenu = useSuggestionPopup<MentionCandidate>();
+  // A page-wide viewing mode shared with `PageContainer`, which owns the toggle
+  // button, the announcement, and clearing the mode on unmount.
+  const focusMode = useFocusMode();
+  /**
+   * The floating toolbar has to leave this subtree.
+   *
+   * `PageContainer`'s paper always carries a transform (`translateX(-50%)`, plus
+   * the zoom scale), and a transformed ancestor becomes the containing block for
+   * every `position: fixed` descendant. A toolbar rendered in place would
+   * therefore be positioned against — and scaled with — the sheet instead of
+   * floating over the viewport. Portalling to `document.body` is the only way
+   * out; the React tree, and so the roving tab index and every dialog, is
+   * unaffected. Resolved after mount so the server render stays identical.
+   */
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setPortalTarget(document.body);
+  }, []);
 
   // Latest values are read through refs so changing a callback or the editable
   // flag never rebuilds the editor and never discards editing history.
   const changeRef = useRef(onDocumentChange);
   changeRef.current = onDocumentChange;
+  const rejectedRef = useRef(onDocumentRejected);
+  rejectedRef.current = onDocumentRejected;
   const readyRef = useRef(onEditorReady);
   readyRef.current = onEditorReady;
   const editableRef = useRef(editable);
@@ -191,6 +231,14 @@ function EditorSurface({
       if (!editableRef.current || instance === null) return false;
       return openMentionMenuAtCaret(instance);
     },
+    insertPageBreak: () => {
+      const instance = editorRef.current;
+      if (!editableRef.current || instance === null) return false;
+      return instance.chain().focus().setPageBreak().run();
+    },
+    // Reading a note in focus mode needs no write permission, so this one is
+    // deliberately not gated on `editable`.
+    toggleFocusMode: () => toggleFocusMode(),
   };
 
   // The document the editor was created with. Later documents arrive through
@@ -228,9 +276,14 @@ function EditorSurface({
     const parsed = safeParseNoteDocument(json);
     if (!parsed.success) {
       setOutputRejected(true);
+      // Reported, never swallowed: `onDocumentChange` is not called for this
+      // transaction, so autosave has to learn that saving has stopped rather
+      // than sit quietly on the previous document (Part 39).
+      rejectedRef.current?.(true);
       return;
     }
     setOutputRejected(false);
+    rejectedRef.current?.(false);
     changeRef.current?.(parsed.doc);
   }, []);
 
@@ -274,28 +327,68 @@ function EditorSurface({
     return () => readyRef.current?.(null);
   }, [editor]);
 
+  // In focus mode the same component renders a reduced group table. It is never
+  // a second toolbar: swapping `groups` keeps one roving tab index, one set of
+  // dialogs, and one source of truth for every command.
+  const floating = focusMode && portalTarget !== null;
+  const toolbar = (
+    <EditorToolbar
+      editor={editor}
+      editable={editable}
+      groups={floating ? FOCUS_TOOLBAR_GROUPS : undefined}
+      onOpenShortcuts={() => setShortcutsOpen(true)}
+      linkDialogOpen={linkDialogOpen}
+      onLinkDialogOpenChange={setLinkDialogOpen}
+    />
+  );
+
   return (
     <div className="notted-editor space-y-3" data-note-id={noteId}>
+      {/*
+       * These notices are application chrome, not note content, so they carry
+       * `data-notted-print-hide`. Without it a read-only note prints "You can
+       * read this note, but you do not have permission to edit it." into the
+       * PDF, which breaks Part 38's "only note content" criterion.
+       */}
       {migrated ? (
-        <p role="status" className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+        <p
+          role="status"
+          data-notted-print-hide
+          className="rounded-md border bg-muted/40 px-3 py-2 text-sm"
+        >
           This note used an older content format and was repaired for editing. Nothing was saved
           automatically.
         </p>
       ) : null}
       {editable ? null : (
-        <p role="note" className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+        <p
+          role="note"
+          data-notted-print-hide
+          className="rounded-md border bg-muted/40 px-3 py-2 text-sm"
+        >
           {readOnlyReason ?? DEFAULT_READ_ONLY_REASON}
         </p>
       )}
-      <EditorToolbar
-        editor={editor}
-        editable={editable}
-        onOpenShortcuts={() => setShortcutsOpen(true)}
-        linkDialogOpen={linkDialogOpen}
-        onLinkDialogOpenChange={setLinkDialogOpen}
-      />
-      {outputRejected ? (
-        <p role="alert" className="rounded-md border border-destructive/40 p-3 text-sm">
+      {focusMode && portalTarget !== null
+        ? createPortal(<div className="notted-focus-toolbar">{toolbar}</div>, portalTarget)
+        : toolbar}
+      {/*
+       * One event, one assertive announcement.
+       *
+       * When a host is listening on `onDocumentRejected` — the note page is,
+       * through `NoteSaveProvider` — it renders the save-scoped alert in
+       * `SaveStatusIndicator`, which states the actionable consequence: nothing
+       * will save until the change is undone. Rendering this one as well would
+       * queue two overlapping assertive messages for the same rejection, so it
+       * is kept only for a standalone editor with no autosave host, where it
+       * would otherwise be the sole report.
+       */}
+      {outputRejected && onDocumentRejected === undefined ? (
+        <p
+          role="alert"
+          data-notted-print-hide
+          className="rounded-md border border-destructive/40 p-3 text-sm"
+        >
           The last change produced content the note contract rejects and was not reported to the
           document. Undo the change and try again.
         </p>

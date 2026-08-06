@@ -1,16 +1,25 @@
+import { safeParseNoteDocument } from "@notted/shared-validators";
 import { screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { EDITOR_SHORTCUTS } from "./keyboard-shortcuts";
 
 import type { Editor } from "@tiptap/core";
 
+import { FOCUS_MODE_ATTRIBUTE, isFocusModeEnabled, setFocusMode } from "@/lib/notes/focus-mode";
 import {
   firstTextMarkNames,
   paragraphDocument,
   renderEditor,
   userEventKeysFor,
 } from "@/test/editor-harness";
+
+// Focus mode is a page-wide viewing mode held in one client-only store, so it
+// has to be returned to its default between tests the way the real page does on
+// unmount.
+afterEach(() => {
+  setFocusMode(false);
+});
 
 interface ShortcutCase {
   /** Runs before the key press; the default selects the word "hello". */
@@ -138,6 +147,32 @@ const EDITOR_CASES: Readonly<Record<string, ShortcutCase>> = {
       // A new block is started so the trigger lands at a valid position.
       expect(editor.state.doc.childCount).toBe(2);
       expect(editor.state.doc.lastChild?.textContent).toBe("/");
+    },
+  },
+  pageBreak: {
+    setup: (editor) => {
+      editor.commands.setTextSelection(6);
+    },
+    assert: (editor) => {
+      const types: string[] = [];
+      editor.state.doc.descendants((node) => {
+        types.push(node.type.name);
+        return true;
+      });
+      expect(types).toContain("pageBreak");
+      // The break splits the block it was inserted into rather than replacing
+      // anything, and the contract accepts the result unchanged.
+      expect(editor.getText().replaceAll("\n", "")).toBe("hello world");
+      expect(safeParseNoteDocument(editor.getJSON()).success).toBe(true);
+    },
+  },
+  focusMode: {
+    assert: () => {
+      // The binding drives a page-wide viewing mode through the same
+      // `resolveHandlers` seam `Mod-k` uses; `PageContainer` owns the toggle
+      // button and the announcement.
+      expect(document.documentElement.getAttribute(FOCUS_MODE_ATTRIBUTE)).toBe("true");
+      expect(isFocusModeEnabled()).toBe(true);
     },
   },
   heading1: { assert: expectActive("heading", { level: 1 }) },
