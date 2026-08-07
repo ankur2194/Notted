@@ -16,6 +16,11 @@
 # internal network with no host binding. Add `docker/compose.debug-ports.yml`
 # when host-side tooling needs a direct connection.
 #
+# The opt-in `e2e` profile (`pnpm e2e:up`) adds a second application stack on
+# 3010/3011 backed by its own disposable database and buckets, so Playwright
+# never writes to `notted_dev`. See the block above `services:` and
+# `docs/standards/testing.md`.
+#
 # Every value below has a default, so no environment file is required. Compose
 # still auto-loads an optional root `.env` (see `.env.example`) for overrides.
 
@@ -134,10 +139,76 @@ x-api-environment: &api-environment
   BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:${NOTTED_WEB_PORT:-3000}
   DATA_ENCRYPTION_KEYS: ${DATA_ENCRYPTION_KEYS:-1:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=}
 
+# ------------------------------------------------------------------ e2e profile
+# The `e2e` profile (services suffixed `-e2e`, started only by
+# `docker compose --profile e2e up`) is a second application stack whose state
+# is disposable. It exists because the Playwright suite used to run against
+# `notted_dev`: every run left users, workspaces, projects and notes behind, and
+# specs that assume a near-empty tenant then failed on the *previous* run's rows.
+# `PLAYWRIGHT_DISPOSABLE_TEST_RUN=true` only gated those specs; it created
+# nothing. This profile is the disposable stack that flag now names.
+#
+# What is duplicated, and why:
+#   * PostgreSQL database  — the accumulating state. Dropped and recreated on
+#     every `pnpm e2e:up`, then migrated and seeded unconditionally.
+#   * MinIO buckets        — attachments are tenant data; a shared bucket would
+#     leak e2e objects into the developer's browser.
+#   * Redis logical DB 1   — Better Auth keeps sessions in Redis under the
+#     fixed `notted:better-auth:` prefix (see
+#     `apps/api/src/auth/better-auth-redis.storage.ts`), so a shared logical
+#     database would let a session minted against one database resolve against
+#     the other. `ioredis` reads the database number from the URL path and
+#     `duplicate()` inherits it, so the BullMQ queues move with it.
+#   * `apps/api/dist` and `apps/web/.next` — each stack runs its own `nest
+#     start --watch` and `next dev`, and two watchers on one output directory
+#     race.
+#
+# What is deliberately shared:
+#   * The PostgreSQL, Redis, MinIO, Meilisearch and Mailpit *servers*, plus
+#     `deps` and `contracts` (installed dependencies and compiled contract
+#     packages). Sharing these costs nothing and avoids a second install.
+#   * Meilisearch. Nothing indexes documents yet — `MeilisearchService` only
+#     performs a health probe — so there is no index to collide over, and the
+#     API exposes no index-prefix setting to isolate one with.
+#   * Mailpit. `clearMailpit()` empties the whole mailbox, so a concurrent
+#     developer-stack email could be deleted mid-run. No spec asserts on the
+#     dev stack's mail, so this is a nuisance, not a correctness problem.
+#
+# `extends:` (not a copied YAML list) is what keeps each `-e2e` service in step
+# with its development counterpart: Compose merges `volumes:` by mount target,
+# so overriding one target leaves the other fifteen inherited from
+# `*workspace-volumes`.
+x-api-e2e-environment: &api-e2e-environment
+  <<: *api-environment
+  API_PORT: "${NOTTED_E2E_API_PORT:-3011}"
+  APP_URL: http://localhost:${NOTTED_E2E_WEB_PORT:-3010}
+  API_URL: http://localhost:${NOTTED_E2E_API_PORT:-3011}
+  WS_URL: ws://localhost:${NOTTED_E2E_API_PORT:-3011}
+  DATABASE_URL: postgres://${POSTGRES_USER:-notted}:${POSTGRES_PASSWORD:-notted_dev_password}@postgres:5432/${POSTGRES_E2E_DB:-notted_e2e_test}
+  # Logical database 1. See the Redis note above.
+  REDIS_URL: redis://redis:6379/1
+  MINIO_BUCKET_ATTACHMENTS: ${MINIO_E2E_BUCKET_ATTACHMENTS:-notted-e2e-attachments}
+  MINIO_BUCKET_EXPORTS: ${MINIO_E2E_BUCKET_EXPORTS:-notted-e2e-exports}
+  BETTER_AUTH_URL: http://localhost:${NOTTED_E2E_API_PORT:-3011}
+  BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:${NOTTED_E2E_WEB_PORT:-3010}
+  # Rate limiting is keyed by client IP. A containerised Playwright joins
+  # `api-e2e`'s network namespace, so a suite that exercises registration,
+  # sign-in, password reset and magic links for dozens of identities arrives
+  # from one address and exhausts the 10-per-minute sensitive bucket partway
+  # through — and *which* spec it stops depends on how long the earlier ones
+  # took, which is nondeterminism this stack exists to remove. The buckets are
+  # in-memory and per API process, so raising them here changes nothing outside
+  # this container and no spec asserts on a 429.
+  RATE_LIMIT_SENSITIVE_PER_MINUTE: "10000"
+  RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE: "100000"
+  RATE_LIMIT_AUTHENTICATED_PER_MINUTE: "1000000"
+
 services:
   # --------------------------------------------------------------- infrastructure
   postgres:
-    image: pgvector/pgvector:0.8.5-pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
+    # Anchored so `db-reset-e2e` reuses the identical pinned digest for its
+    # `psql` client instead of pulling a second, unpinned image.
+    image: &postgres-image pgvector/pgvector:0.8.5-pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-notted}
@@ -155,7 +226,9 @@ services:
     networks: [backend]
 
   redis:
-    image: redis:7.2.14-alpine@sha256:dfa18828cbc07b3ae6a95ec7343f6c214fdee2d836197b4be8e9904420762cd8
+    # Anchored so `redis-reset-e2e` reuses the identical pinned digest for its
+    # `redis-cli` client instead of pulling a second, unpinned image.
+    image: &redis-image redis:7.2.14-alpine@sha256:dfa18828cbc07b3ae6a95ec7343f6c214fdee2d836197b4be8e9904420762cd8
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -443,6 +516,215 @@ services:
       retries: 15
       start_period: 120s
 
+  # ---------------------------------------------------------------- e2e profile
+  # Read the `x-api-e2e-environment` block above for why this stack exists and
+  # what it does and does not duplicate.
+
+  # Drops and recreates the disposable end-to-end database. `WITH (FORCE)`
+  # terminates any connection still holding it, which is what makes the reset
+  # unconditional rather than best-effort. `IF EXISTS` makes the drop idempotent
+  # on a first run, and `docker/init-scripts/init-postgres.sql` cannot help here
+  # at all: it only runs when the `postgres-data` volume is first initialised,
+  # which is long past. Migration `0000_enable_extensions.sql` installs
+  # uuid-ossp and vector into whichever database it is applied to, so a bare
+  # `CREATE DATABASE` is enough.
+  #
+  # The guard exists because this service destroys a database unconditionally.
+  # `POSTGRES_E2E_DB` is an operator-supplied string, so it is validated against
+  # a pattern that a real database can never match: the name must start with
+  # `notted_e2e` and end with `_test`. `notted_dev` — or any production name —
+  # fails that check and the service exits non-zero before issuing any SQL. The
+  # `_test` suffix is also what `assertSafeSeedTarget` in
+  # `apps/api/src/database/seed.ts` requires, so one name satisfies both guards.
+  db-reset-e2e:
+    image: *postgres-image
+    profiles: ["e2e"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-eu", "-c"]
+    command:
+      - |
+        # Two independent gates, because this command destroys a database.
+        # First: the name must contain nothing but lowercase letters, digits and
+        # underscores. The glob below is a *shape* check, not a character check —
+        # a name like `notted_e2e"; DROP DATABASE "notted_dev"; SELECT 1 AS "_test`
+        # satisfies it. That cannot currently escalate (psql runs a multi-statement
+        # -c as one implicit transaction, and PostgreSQL refuses DROP DATABASE
+        # inside a transaction block), but relying on that is relying on a quirk
+        # of an unrelated component. Reject the characters instead.
+        case "$${E2E_DATABASE_NAME}" in
+          *[!abcdefghijklmnopqrstuvwxyz0123456789_]*)
+            echo "Refusing to reset \"$${E2E_DATABASE_NAME}\": the database name may contain only lowercase letters, digits and underscores." >&2
+            exit 1
+            ;;
+        esac
+        # Second: it must be a disposable database. `notted_dev` cannot match,
+        # and the `_test` suffix is also what `assertSafeSeedTarget` accepts, so
+        # one name satisfies both guards.
+        case "$${E2E_DATABASE_NAME}" in
+          notted_e2e*_test) ;;
+          *)
+            echo "Refusing to reset \"$${E2E_DATABASE_NAME}\": the disposable end-to-end database must be named notted_e2e*_test." >&2
+            exit 1
+            ;;
+        esac
+        # `-v name=` + `:"name"` makes psql quote the identifier itself, so the
+        # name is never spliced into SQL text by the shell. Note this must be fed
+        # on stdin via `-f -`: psql does NOT interpolate variables in `-c`, which
+        # fails with `syntax error at or near ":"`.
+        psql --quiet --no-psqlrc --set ON_ERROR_STOP=1 -v name="$${E2E_DATABASE_NAME}" -f - <<'SQL'
+        DROP DATABASE IF EXISTS :"name" WITH (FORCE);
+        SQL
+        psql --quiet --no-psqlrc --set ON_ERROR_STOP=1 -v name="$${E2E_DATABASE_NAME}" -f - <<'SQL'
+        CREATE DATABASE :"name";
+        SQL
+        echo "Disposable end-to-end database recreated."
+    environment:
+      E2E_DATABASE_NAME: ${POSTGRES_E2E_DB:-notted_e2e_test}
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: postgres
+      PGUSER: ${POSTGRES_USER:-notted}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-notted_dev_password}
+    restart: "no"
+    networks: [backend]
+
+  # Empties the end-to-end stack's Redis logical database so Better Auth
+  # sessions and cached lookups cannot outlive the PostgreSQL rows they refer
+  # to. The index is hardcoded rather than derived from an environment value,
+  # because `FLUSHDB` against logical database 0 would destroy the development
+  # stack's sessions: `REDIS_URL` for `api`/`web` carries no path, and `ioredis`
+  # defaults to 0. Only `x-api-e2e-environment` selects 1.
+  redis-reset-e2e:
+    image: *redis-image
+    profiles: ["e2e"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    entrypoint: ["redis-cli", "-h", "redis", "-n", "1", "flushdb"]
+    restart: "no"
+    networks: [backend]
+
+  # Unlike `db-init`, this seeds on every run and keeps no `/state/seeded`
+  # marker. That marker protects a developer's edits to fixture rows; this
+  # database is recreated moments earlier, so there is nothing to protect and a
+  # skipped seed would leave the suite on an empty schema.
+  db-init-e2e:
+    extends:
+      service: db-init
+    profiles: ["e2e"]
+    depends_on: !override
+      deps:
+        condition: service_completed_successfully
+      db-reset-e2e:
+        condition: service_completed_successfully
+    environment: *api-e2e-environment
+    command:
+      - /bin/sh
+      - -eu
+      - -c
+      - |
+        node ./node_modules/drizzle-kit/bin.cjs migrate
+        node --import tsx src/database/seed.ts
+
+  # Buckets only — the MinIO server itself is shared. Objects written by a
+  # previous e2e run survive this (there is no bucket wipe), and that is
+  # deliberate: every attachment row that referenced them was destroyed with the
+  # database, so they are unreachable orphans that no spec can observe. Wiping a
+  # bucket by prefix cannot be made safe against a mistyped bucket name, and the
+  # only real cost of keeping them is disk in a disposable volume.
+  minio-init-e2e:
+    extends:
+      service: minio-init
+    profiles: ["e2e"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-nottedminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-notted-dev-minio-secret}
+      MINIO_BUCKET_ATTACHMENTS: ${MINIO_E2E_BUCKET_ATTACHMENTS:-notted-e2e-attachments}
+      MINIO_BUCKET_EXPORTS: ${MINIO_E2E_BUCKET_EXPORTS:-notted-e2e-exports}
+
+  # Publishes the e2e web port too, for the same reason `api` does: `web-e2e`
+  # shares this container's network namespace.
+  api-e2e:
+    extends:
+      service: api
+    profiles: ["e2e"]
+    depends_on: !override
+      db-init-e2e:
+        condition: service_completed_successfully
+      contracts:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      minio-init-e2e:
+        condition: service_completed_successfully
+      redis-reset-e2e:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+    environment: *api-e2e-environment
+    ports: !override
+      - "127.0.0.1:${NOTTED_E2E_WEB_PORT:-3010}:${NOTTED_E2E_WEB_PORT:-3010}"
+      - "127.0.0.1:${NOTTED_E2E_API_PORT:-3011}:${NOTTED_E2E_API_PORT:-3011}"
+    # Compose merges volumes by mount target, so these two replace their
+    # development counterparts and the other fourteen entries of
+    # `*workspace-volumes` are inherited unchanged.
+    volumes:
+      - type: volume
+        source: api-e2e-dist
+        target: /workspace/apps/api/dist
+      - type: volume
+        source: web-e2e-next
+        target: /workspace/apps/web/.next
+
+  # `web-e2e` listens on NOTTED_E2E_WEB_PORT *inside* the namespace, not on
+  # 3000, and the published mapping is therefore identity. That is not cosmetic:
+  # a containerised Playwright joins this namespace, so the port the browser
+  # dials has to be the same one that appears in NEXT_PUBLIC_APP_URL, the CORS
+  # allow-list and BETTER_AUTH_TRUSTED_ORIGINS. Mapping 3010→3000 would leave
+  # the browser on origin `localhost:3000` — untrusted here, and already owned
+  # by the development stack.
+  web-e2e:
+    extends:
+      service: web
+    profiles: ["e2e"]
+    depends_on: !override
+      api-e2e:
+        condition: service_healthy
+    network_mode: "service:api-e2e"
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_APP_URL: http://localhost:${NOTTED_E2E_WEB_PORT:-3010}
+      NEXT_PUBLIC_API_URL: http://localhost:${NOTTED_E2E_API_PORT:-3011}
+      NEXT_PUBLIC_WS_URL: ws://localhost:${NOTTED_E2E_API_PORT:-3011}
+    command:
+      - /bin/sh
+      - -eu
+      - -c
+      - |
+        pnpm env:validate
+        exec pnpm exec next dev --hostname 0.0.0.0 --port ${NOTTED_E2E_WEB_PORT:-3010}
+    volumes:
+      - type: volume
+        source: api-e2e-dist
+        target: /workspace/apps/api/dist
+      - type: volume
+        source: web-e2e-next
+        target: /workspace/apps/web/.next
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch("http://127.0.0.1:${NOTTED_E2E_WEB_PORT:-3010}").then((r)=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 120s
+
 volumes:
   postgres-data:
   redis-data:
@@ -461,6 +743,10 @@ volumes:
   shared-types-dist:
   shared-validators-dist:
   db-init-state:
+  # Separate build output for the `e2e` profile: `nest start --watch` and
+  # `next dev` each own their output directory exclusively.
+  api-e2e-dist:
+  web-e2e-next:
 
 networks:
   backend:

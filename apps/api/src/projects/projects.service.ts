@@ -40,6 +40,7 @@ import {
   users,
   workspaceMembers,
 } from "../database/schema";
+import { maxTimestamp } from "../database/sql-aggregates";
 import {
   activeWorkspaceId,
   assertWorkspaceInsertValues,
@@ -285,9 +286,15 @@ export class ProjectsService {
         this.loadTaskProjection(input.projectId),
         this.loadProjectMembers(input.projectId),
       ]);
-      const lastActivityAt = [project.updatedAt, noteActivity, taskProjection.lastActivityAt]
-        .filter((value): value is Date => value !== null)
-        .reduce((latest, value) => (value.getTime() > latest.getTime() ? value : latest));
+      // `project.updatedAt` is NOT NULL, so it seeds the fold and the result is
+      // always a `Date`. The note/task aggregates are `null` for a project with
+      // no rows. No type predicate is used here on purpose: the previous
+      // `(value): value is Date => value !== null` asserted a claim it never
+      // checked, so a non-`Date` value would reach `.getTime()` and throw.
+      const lastActivityAt = [noteActivity, taskProjection.lastActivityAt].reduce<Date>(
+        (latest, value) => (value !== null && value.getTime() > latest.getTime() ? value : latest),
+        project.updatedAt,
+      );
       return Object.freeze({
         ...this.toMutationProject(project),
         lastActivityAt: lastActivityAt.toISOString(),
@@ -439,7 +446,7 @@ export class ProjectsService {
 
   private async loadNoteActivity(projectId: string): Promise<Date | null> {
     const [activity] = await this.database.db
-      .select({ lastActivityAt: sql<Date | null>`max(${notes.updatedAt})` })
+      .select({ lastActivityAt: maxTimestamp(notes.updatedAt) })
       .from(notes)
       .where(and(eq(notes.projectId, projectId), whereWorkspace(notes, this.tenantContext)));
     return activity?.lastActivityAt ?? null;
@@ -452,7 +459,7 @@ export class ProjectsService {
   }> {
     const [projection] = await this.database.db
       .select({
-        lastActivityAt: sql<Date | null>`max(${tasks.updatedAt})`,
+        lastActivityAt: maxTimestamp(tasks.updatedAt),
         completed: sql<number>`cast(count(*) filter (where ${tasks.status} = 'done') as integer)`,
         total: sql<number>`cast(count(*) filter (where ${tasks.status} <> 'canceled') as integer)`,
       })

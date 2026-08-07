@@ -5,6 +5,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  E2E_ONE_SHOT_SERVICES,
+  E2E_PERSISTENT_SERVICES,
   ONE_SHOT_SERVICES,
   PERSISTENT_SERVICES,
   assertLocalDockerEndpoint,
@@ -15,6 +17,9 @@ import {
   parseCommandOptions,
   parseComposeProcesses,
   parseEnvironment,
+  playwrightEnvironment,
+  playwrightImageTag,
+  playwrightTestArguments,
 } from "./dev-tooling.mjs";
 
 /**
@@ -164,7 +169,12 @@ test("stack readiness fails fast and names a one-shot service that exited non-ze
 
 test("the readiness service lists cover exactly the services compose.yaml declares", () => {
   const declared = composeServiceNames();
-  const classified = [...ONE_SHOT_SERVICES, ...PERSISTENT_SERVICES];
+  const classified = [
+    ...ONE_SHOT_SERVICES,
+    ...PERSISTENT_SERVICES,
+    ...E2E_ONE_SHOT_SERVICES,
+    ...E2E_PERSISTENT_SERVICES,
+  ];
 
   assert.deepEqual(
     declared.filter((name) => !classified.includes(name)),
@@ -181,4 +191,99 @@ test("the readiness service lists cover exactly the services compose.yaml declar
     [],
     "a service must be classified as either one-shot or persistent, never both",
   );
+});
+
+test("the e2e profile is classified separately so `pnpm infra:up` never waits for it", () => {
+  const development = [...ONE_SHOT_SERVICES, ...PERSISTENT_SERVICES];
+
+  assert.deepEqual(
+    [...E2E_ONE_SHOT_SERVICES, ...E2E_PERSISTENT_SERVICES].filter((name) =>
+      development.includes(name),
+    ),
+    [],
+    "an e2e service in a development list would make `pnpm infra:up` wait for a profile it never started",
+  );
+  assert.deepEqual(evaluateComposeReadiness(readyStackProcesses()), { ready: true, pending: [] });
+});
+
+test("readiness can be evaluated against an explicit service list", () => {
+  assert.deepEqual(
+    evaluateComposeReadiness(
+      [
+        { Service: "db-reset-e2e", State: "exited", ExitCode: 0 },
+        { Service: "api-e2e", State: "running", Health: "healthy" },
+      ],
+      { oneShot: ["db-reset-e2e"], persistent: ["api-e2e"] },
+    ),
+    { ready: true, pending: [] },
+  );
+  assert.throws(
+    () =>
+      evaluateComposeReadiness([{ Service: "db-reset-e2e", State: "exited", ExitCode: 1 }], {
+        oneShot: ["db-reset-e2e"],
+        persistent: [],
+      }),
+    /"db-reset-e2e" exited with code 1/u,
+  );
+});
+
+test("the Playwright image tag follows the pinned runner version", () => {
+  assert.equal(
+    playwrightImageTag({ devDependencies: { "@playwright/test": "1.62.0" } }),
+    "mcr.microsoft.com/playwright:v1.62.0-noble",
+  );
+  assert.throws(
+    () => playwrightImageTag({ devDependencies: { "@playwright/test": "^1.62.0" } }),
+    /exact @playwright\/test version/u,
+  );
+});
+
+test("Playwright inside the api-e2e namespace addresses dependencies by Compose DNS", () => {
+  const environment = playwrightEnvironment({
+    webPort: "3010",
+    apiPort: "3011",
+    databaseName: "notted_e2e_test",
+    postgresUser: "notted",
+    postgresPassword: "secret",
+  });
+
+  assert.equal(environment.PLAYWRIGHT_APP_URL, "http://localhost:3010");
+  assert.equal(environment.PLAYWRIGHT_API_URL, "http://localhost:3011");
+  // 127.0.0.1 is the API container in that namespace, so anything else must be
+  // reached by service name.
+  assert.equal(environment.PLAYWRIGHT_MAILPIT_URL, "http://mailpit:8025");
+  assert.match(environment.DATABASE_URL, /@postgres:5432\/notted_e2e_test$/u);
+  assert.equal(environment.PLAYWRIGHT_DISPOSABLE_TEST_RUN, "true");
+});
+
+test("a Playwright filter narrows the run without widening it to other browsers", () => {
+  // No arguments: the maintained baseline.
+  assert.deepEqual(playwrightTestArguments([]), ["--project=chromium"]);
+  // A filter must not silently add firefox and webkit, which are not part of
+  // that baseline. This is the regression the exported helper exists for.
+  assert.deepEqual(playwrightTestArguments(["--grep", "note"]), [
+    "--project=chromium",
+    "--grep",
+    "note",
+  ]);
+  // An explicit project choice wins, in either spelling.
+  assert.deepEqual(playwrightTestArguments(["--project=firefox"]), ["--project=firefox"]);
+  assert.deepEqual(playwrightTestArguments(["--project", "webkit"]), ["--project", "webkit"]);
+});
+
+test("a leading `--` is dropped, because pnpm forwards it instead of consuming it", () => {
+  // `pnpm e2e:test -- --grep note` would otherwise reach Playwright with `--`
+  // as an end-of-options marker, turning `--grep` and `note` into positional
+  // path filters: the whole suite would run while appearing to be filtered.
+  assert.deepEqual(playwrightTestArguments(["--", "--grep", "note"]), [
+    "--project=chromium",
+    "--grep",
+    "note",
+  ]);
+  // Only a *leading* separator is meaningful; a later one is Playwright's.
+  assert.deepEqual(playwrightTestArguments(["--grep", "--"]), [
+    "--project=chromium",
+    "--grep",
+    "--",
+  ]);
 });

@@ -259,3 +259,5 @@ Before contributing:
 ## License
 
 No project license has been selected yet. Until a license file is added, all rights remain with the project owner. Third-party dependencies retain their respective licenses.
+
+Third-party attribution, the copyleft components in the dependency tree and the obligations they carry, and the command for re-auditing after a dependency change are recorded in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

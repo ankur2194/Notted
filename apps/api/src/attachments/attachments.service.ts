@@ -439,7 +439,10 @@ export class AttachmentsService {
     if (workspace === undefined) return this.notFound();
 
     const [usage] = await tx
-      .select({ used: sql<number>`coalesce(sum(${attachments.sizeBytes}), 0)::bigint` })
+      // `::bigint` (int8) arrives from pg as a *string*, so the expression needs
+      // an explicit decoder; `sql<number>` alone would be a type lie the way a
+      // bare `sql<Date>` timestamp aggregate is (see `database/sql-aggregates`).
+      .select({ used: sql`coalesce(sum(${attachments.sizeBytes}), 0)::bigint`.mapWith(Number) })
       .from(attachments)
       .where(
         and(
@@ -447,7 +450,7 @@ export class AttachmentsService {
           whereWorkspace(attachments, this.tenantContext),
         ),
       );
-    const used = Number(usage?.used ?? 0);
+    const used = usage?.used ?? 0;
     const limit = Math.min(
       workspace.limit ?? this.security.maximumWorkspaceStorageBytes,
       this.security.maximumWorkspaceStorageBytes,

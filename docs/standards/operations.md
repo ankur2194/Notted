@@ -7,3 +7,5 @@
 - Encrypt off-host backups and regularly test database/object restore and search rebuilding.
 - Document rollback, irreversible changes, resource limits, health checks, and incidents.
 - Production commands are explicit; development resets must refuse production targets.
+- A destructive test profile validates its own target name and never shares state with development;
+  see the disposable end-to-end stack in `docs/standards/testing.md`.

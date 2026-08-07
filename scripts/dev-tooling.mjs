@@ -35,6 +35,31 @@ export const PERSISTENT_SERVICES = Object.freeze([
 /** One-shot services that must have exited with code 0. */
 export const ONE_SHOT_SERVICES = Object.freeze(["minio-init", "deps", "db-init"]);
 
+/**
+ * The opt-in `e2e` Compose profile: a second application stack on its own
+ * disposable database and MinIO buckets, so Playwright never writes to
+ * `notted_dev`. These services only exist while the profile is enabled, which
+ * is why they are classified separately from the development lists above.
+ */
+export const E2E_PROFILE = "e2e";
+
+/** Long-running services added by the `e2e` profile. */
+export const E2E_PERSISTENT_SERVICES = Object.freeze(["api-e2e", "web-e2e"]);
+
+/** One-shot services added by the `e2e` profile. */
+export const E2E_ONE_SHOT_SERVICES = Object.freeze([
+  "db-reset-e2e",
+  "redis-reset-e2e",
+  "db-init-e2e",
+  "minio-init-e2e",
+]);
+
+const E2E_SERVICES = Object.freeze([...E2E_ONE_SHOT_SERVICES, ...E2E_PERSISTENT_SERVICES]);
+
+const E2E_WEB_PORT = process.env.NOTTED_E2E_WEB_PORT ?? "3010";
+const E2E_API_PORT = process.env.NOTTED_E2E_API_PORT ?? "3011";
+const E2E_DATABASE = process.env.POSTGRES_E2E_DB ?? "notted_e2e_test";
+
 function run(command, argumentsList, options = {}) {
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(command, argumentsList, {
@@ -87,6 +112,7 @@ function composeArguments(options = {}) {
     ...(options.withServicePorts === true ? ["--file", servicePortsFile] : []),
     "--project-name",
     PROJECT_NAME,
+    ...(options.profile === undefined ? [] : ["--profile", options.profile]),
   ];
 }
 
@@ -169,11 +195,14 @@ export function parseComposeProcesses(output) {
  * become ready, so it throws immediately with the failing service named rather
  * than letting the caller wait out the whole timeout.
  */
-export function evaluateComposeReadiness(processes) {
+export function evaluateComposeReadiness(
+  processes,
+  expected = { oneShot: ONE_SHOT_SERVICES, persistent: PERSISTENT_SERVICES },
+) {
   const byService = new Map(processes.map((entry) => [entry.Service, entry]));
   const pending = [];
 
-  for (const service of ONE_SHOT_SERVICES) {
+  for (const service of expected.oneShot) {
     const entry = byService.get(service);
     if (entry?.State === "exited" && Number(entry.ExitCode) !== 0) {
       throw new Error(`Development stack service "${service}" exited with code ${entry.ExitCode}.`);
@@ -183,7 +212,7 @@ export function evaluateComposeReadiness(processes) {
     }
   }
 
-  for (const service of PERSISTENT_SERVICES) {
+  for (const service of expected.persistent) {
     const entry = byService.get(service);
     if (entry?.State !== "running" || entry.Health !== "healthy") {
       pending.push(service);
@@ -193,7 +222,7 @@ export function evaluateComposeReadiness(processes) {
   return { ready: pending.length === 0, pending };
 }
 
-async function waitForStack(options, timeoutMs = 900_000) {
+async function waitForStack(options, expected, readyMessage, timeoutMs = 900_000) {
   const deadline = Date.now() + timeoutMs;
   let pending = [];
   while (Date.now() < deadline) {
@@ -202,11 +231,9 @@ async function waitForStack(options, timeoutMs = 900_000) {
       [...composeArguments(options), "ps", "--all", "--format", "json"],
       { capture: true },
     );
-    const verdict = evaluateComposeReadiness(parseComposeProcesses(stdout));
+    const verdict = evaluateComposeReadiness(parseComposeProcesses(stdout), expected);
     if (verdict.ready) {
-      console.log(
-        "Development stack is ready: dependencies installed, migrations applied, all services healthy.",
-      );
+      console.log(readyMessage);
       return;
     }
     pending = verdict.pending;
@@ -215,7 +242,7 @@ async function waitForStack(options, timeoutMs = 900_000) {
     });
   }
   throw new Error(
-    `Development stack did not become ready within ${Math.round(timeoutMs / 1_000)} seconds. ` +
+    `Stack did not become ready within ${Math.round(timeoutMs / 1_000)} seconds. ` +
       `Still waiting on: ${pending.join(", ")}. Inspect with \`pnpm infra:logs\`.`,
   );
 }
@@ -313,8 +340,164 @@ async function resetDevelopmentData() {
   await run("docker", [...composeArguments({ context }), "down", "--volumes", "--remove-orphans"]);
 }
 
+/**
+ * Resolves the Playwright container image from the pinned `@playwright/test`
+ * dependency. The browsers baked into the image must match the runner exactly,
+ * so deriving the tag keeps them from drifting apart on an upgrade.
+ */
+export function playwrightImageTag(webPackageJson) {
+  const version = webPackageJson?.devDependencies?.["@playwright/test"];
+  if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/u.test(version)) {
+    throw new Error("apps/web must pin an exact @playwright/test version.");
+  }
+  return `mcr.microsoft.com/playwright:v${version}-noble`;
+}
+
+/**
+ * Environment for a Playwright process that has joined `api-e2e`'s network
+ * namespace.
+ *
+ * Inside that namespace `127.0.0.1` is the API container, so every dependency
+ * that is *not* the application has to be addressed by Compose DNS. The
+ * application itself is reachable on the same ports its public origins name,
+ * because `web-e2e` listens on NOTTED_E2E_WEB_PORT rather than on 3000 — see
+ * the comment on `web-e2e` in compose.yaml.
+ */
+export function playwrightEnvironment({
+  webPort,
+  apiPort,
+  databaseName,
+  postgresUser,
+  postgresPassword,
+}) {
+  return {
+    HOME: "/tmp",
+    PLAYWRIGHT_DISPOSABLE_TEST_RUN: "true",
+    PLAYWRIGHT_REUSE_EXISTING_SERVER: "true",
+    PLAYWRIGHT_APP_URL: `http://localhost:${webPort}`,
+    PLAYWRIGHT_API_URL: `http://localhost:${apiPort}`,
+    PLAYWRIGHT_MAILPIT_URL: "http://mailpit:8025",
+    DATABASE_URL: `postgres://${postgresUser}:${postgresPassword}@postgres:5432/${databaseName}`,
+  };
+}
+
+/**
+ * Build the argument list for `playwright test` inside the e2e container.
+ *
+ * Two behaviours, both there to stop a filter from doing more than it says:
+ *
+ * 1. Chromium is injected unless the caller named projects themselves. Keying
+ *    this off "no arguments at all" instead would mean `e2e:test --grep x`
+ *    silently *widened* the run to firefox and webkit, which are not part of
+ *    the maintained baseline. A filter should narrow a run, never broaden it.
+ * 2. A leading `--` is dropped. pnpm forwards `--` literally into `process.argv`
+ *    rather than consuming it, so the habitual `pnpm e2e:test -- --grep x` would
+ *    otherwise reach Playwright as an end-of-options marker and turn `--grep`
+ *    and its value into positional path filters — running the whole suite while
+ *    looking like it filtered.
+ */
+export function playwrightTestArguments(argumentsList) {
+  const forwarded = argumentsList[0] === "--" ? argumentsList.slice(1) : argumentsList;
+  const chose = forwarded.some((argument) => argument.startsWith("--project"));
+  return chose ? forwarded : ["--project=chromium", ...forwarded];
+}
+
+function e2eComposeOptions(options = {}) {
+  return { ...options, profile: E2E_PROFILE };
+}
+
+/**
+ * Removes the profile's containers so the next `up` re-runs every one-shot.
+ *
+ * Compose restarts an exited one-shot rather than recreating it, and a reset
+ * that only sometimes runs is not a reset. Removing the application containers
+ * first also releases their connections before `DROP DATABASE`.
+ */
+async function removeE2eContainers(options) {
+  await run("docker", [
+    ...composeArguments(e2eComposeOptions(options)),
+    "rm",
+    "--stop",
+    "--force",
+    ...E2E_SERVICES,
+  ]);
+}
+
+async function startE2eStack(options) {
+  await removeE2eContainers(options);
+  await run("docker", [
+    ...composeArguments(e2eComposeOptions(options)),
+    "up",
+    "--detach",
+    "--build",
+  ]);
+  await waitForStack(
+    e2eComposeOptions(options),
+    {
+      oneShot: [...ONE_SHOT_SERVICES, ...E2E_ONE_SHOT_SERVICES],
+      persistent: [...PERSISTENT_SERVICES, ...E2E_PERSISTENT_SERVICES],
+    },
+    `End-to-end stack is ready on http://localhost:${E2E_WEB_PORT} with a freshly reset "${E2E_DATABASE}" database.`,
+  );
+}
+
+/**
+ * Runs Playwright inside the official container, joined to `api-e2e`'s network
+ * namespace. Chromium cannot launch on this host, and the namespace is what
+ * makes the container-internal origins identical to the browser-facing ones.
+ */
+async function runE2eTests(playwrightArguments) {
+  const { stdout } = await run(
+    "docker",
+    [...composeArguments(e2eComposeOptions()), "ps", "--quiet", "api-e2e"],
+    { capture: true },
+  );
+  const containerId = stdout.trim().split(/\r?\n/u).filter(Boolean).at(-1);
+  if (containerId === undefined) {
+    throw new Error("The `e2e` profile is not running. Start it with `pnpm e2e:up`.");
+  }
+
+  const webPackageJson = JSON.parse(
+    await readFile(join(workspace, "apps", "web", "package.json"), "utf8"),
+  );
+  const environment = playwrightEnvironment({
+    webPort: E2E_WEB_PORT,
+    apiPort: E2E_API_PORT,
+    databaseName: E2E_DATABASE,
+    postgresUser: process.env.POSTGRES_USER ?? "notted",
+    postgresPassword: process.env.POSTGRES_PASSWORD ?? "notted_dev_password",
+  });
+
+  await run("docker", [
+    "run",
+    "--rm",
+    "--network",
+    `container:${containerId}`,
+    "--volume",
+    `${workspace}:${workspace}`,
+    "--workdir",
+    join(workspace, "apps", "web"),
+    "--user",
+    `${process.getuid()}:${process.getgid()}`,
+    ...Object.entries(environment).flatMap(([key, value]) => ["--env", `${key}=${value}`]),
+    playwrightImageTag(webPackageJson),
+    "npx",
+    "playwright",
+    "test",
+    ...playwrightTestArguments(playwrightArguments),
+  ]);
+}
+
 export async function main() {
   const command = process.argv[2];
+  if (command === "e2e:test") {
+    // Everything after the command is forwarded to Playwright rather than parsed
+    // here, so `pnpm e2e:test --grep "note"` works without teaching this parser
+    // Playwright's whole option surface. See `playwrightTestArguments` for the
+    // two normalisations applied on the way.
+    await runE2eTests(process.argv.slice(3));
+    return;
+  }
   const options = parseCommandOptions(process.argv.slice(3));
   switch (command) {
     case "env:init":
@@ -326,7 +509,18 @@ export async function main() {
     case "infra:up":
       await warnAboutLegacyVolumes();
       await run("docker", [...composeArguments(options), "up", "--detach", "--build"]);
-      await waitForStack(options);
+      await waitForStack(
+        options,
+        { oneShot: ONE_SHOT_SERVICES, persistent: PERSISTENT_SERVICES },
+        "Development stack is ready: dependencies installed, migrations applied, all services healthy.",
+      );
+      break;
+    case "e2e:up":
+      await startE2eStack(options);
+      break;
+    case "e2e:down":
+      await removeE2eContainers(options);
+      console.log("End-to-end stack removed; the development stack is untouched.");
       break;
     case "infra:project":
       console.log(PROJECT_NAME);

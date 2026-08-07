@@ -25,6 +25,30 @@ if (
   );
 }
 
+/**
+ * Refuse to run the browser suite against the *development* stack.
+ *
+ * Specs register users and create workspaces, notes and projects. Pointed at
+ * `notted_dev` they accumulate that state permanently, and specs that assume a
+ * near-empty tenant then fail on a previous run's rows — nondeterministically,
+ * because which one breaks depends on how much junk has piled up. That is the
+ * exact failure class `pnpm e2e:up` / `pnpm e2e:test` exists to remove, and
+ * `docs/standards/testing.md` states the rule; this is the guard behind it.
+ *
+ * `PLAYWRIGHT_APP_URL` is the discriminator: the disposable runner always sets
+ * it (see `playwrightEnvironment` in `scripts/dev-tooling.mjs`), and CI supplies
+ * its own stack. Bare `playwright test` on a developer machine sets neither and
+ * would silently target `localhost:3000`.
+ */
+if (!process.env.CI && process.env.PLAYWRIGHT_APP_URL === undefined) {
+  throw new Error(
+    "Refusing to run the browser suite against the development stack, which would write test " +
+      "users and notes into notted_dev. Use `pnpm e2e:up` then `pnpm e2e:test`, which runs " +
+      "against a disposable database. To target another stack deliberately, set " +
+      "PLAYWRIGHT_APP_URL (and PLAYWRIGHT_API_URL) explicitly.",
+  );
+}
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,

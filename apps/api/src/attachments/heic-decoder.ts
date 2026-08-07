@@ -15,13 +15,28 @@
 // consults `isHeicDecoderAvailable()`, and an unsupported HEIC upload already
 // returns 415 BEFORE any database row is created.
 //
-// LICENCE FLAG FOR REVIEW: `heic-convert@2.1.0` (ISC) → `heic-decode@2.1.0`
-// (ISC) → **`libheif-js@1.19.8` (LGPL-3.0)**. The API is server-side and is not
-// distributed to users, and the dependency is a separately replaceable
-// `node_modules` package rather than a static link, so the LGPL's relinking
-// obligation is satisfied structurally. This is still the one item in Part 41
-// that needs an explicit human sign-off; it is called out in the completion
-// record.
+// LICENCE — SIGNED OFF 2026-08-07, DECISION: KEEP. The chain is
+// `heic-convert@2.1.0` (ISC) → `heic-decode@2.1.0` (ISC) →
+// **`libheif-js@1.19.8` (LGPL-3.0)**. The project owner reviewed this and chose
+// to keep the dependency, discharging the LGPL obligations through attribution.
+// Rationale in short: LGPL-3.0 triggers on conveying, not on use (it is not
+// AGPL, so serving requests is not distribution); where Notted does convey, the
+// §4 relinking requirement is met structurally because `libheif-js` is
+// `require()`d as a separate, unmodified `node_modules` package into which no
+// Notted code is ever combined; and nothing propagates into `apps/api`, whose
+// only interface here is `heic-convert`'s ISC API.
+//
+// THE AUTHORITATIVE RECORD IS `THIRD-PARTY-NOTICES.md` AT THE REPOSITORY ROOT;
+// ADR 0008 carries the matrix row. Read them before changing anything about how
+// this dependency is packaged. Three standing obligations follow from the
+// sign-off: never modify the package (no patch, no `pnpm.patchedDependencies`,
+// no vendoring), ship the notice and source offer with anything distributed,
+// and keep the package separately replaceable. ⚠️ That last one is the live
+// risk: adopting a bundler for `apps/api` (esbuild, `ncc`, webpack, or any
+// single-file/standalone-binary output) would fuse this package into one
+// artifact and invalidate the relinking analysis — re-analyse before shipping.
+// This is a documented engineering position recorded for traceability, not
+// legal advice.
 //
 // GUARDING IS MANDATORY, NOT OPTIONAL. Processing runs synchronously inside the
 // upload request, and a pure-JS/WASM decoder cannot be interrupted once it

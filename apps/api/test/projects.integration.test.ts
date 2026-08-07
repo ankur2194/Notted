@@ -569,6 +569,119 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 29 project CRUD (live)", () => {
     ).rejects.toBeInstanceOf(RollbackProjectsTest);
   });
 
+  // Regression: `read()` folded `max(notes.updated_at)` / `max(tasks.updated_at)`
+  // with `.getTime()`. Drizzle's node-postgres session returns TIMESTAMPTZ as a
+  // raw string unless the expression carries the column's decoder, so any
+  // project with at least one note or task returned 500 `TypeError`. A project
+  // with zero notes and zero tasks never hit it (`max()` over no rows is NULL),
+  // which is exactly why the existing coverage missed it — and a unit test with
+  // a mocked `Date` cannot catch it, because the mock is the thing that lied.
+  // This case therefore has to run against real PostgreSQL marshalling.
+  it("reads lastActivityAt as a real Date for a project that has notes and tasks", async ({
+    skip,
+  }) => {
+    if (!reachable || db === undefined) {
+      skip("skipped: no reachable PostgreSQL — run dev compose");
+      return;
+    }
+
+    await expect(
+      db.transaction(async (tx) => {
+        await seedDatabase(tx);
+        const tenant = new TenantContextService();
+        const database = {
+          db: tx,
+          transaction: <T>(work: (scope: DatabaseTransaction) => Promise<T>): Promise<T> =>
+            tx.transaction(work),
+        } as unknown as DatabaseService;
+        const entry = new AuthorizationEntryService(
+          new AuthorizationRepository(database, tenant),
+          new AuthorizationPolicyService(),
+          tenant,
+        );
+        const service = new ProjectsService(database, entry, tenant);
+        const owner = principal(SEED_IDS.users.alphaOwner);
+        const scope = { principal: owner, workspaceId: SEED_IDS.workspaces.alpha };
+
+        // Empty project: the path that always worked. `max()` over zero rows is
+        // NULL, so the fold falls back to the project row's own `updated_at`.
+        const empty = await service.create({ ...scope, name: "Activity empty" });
+        const emptyDetail = await service.read({ ...scope, projectId: empty.project.id });
+        expect(emptyDetail.lastActivityAt).toBe(empty.project.updatedAt);
+        expect(emptyDetail.taskProgress).toMatchObject({ completed: 0, total: 0 });
+
+        // Populated project: the path that returned 500.
+        const project = await service.create({ ...scope, name: "Activity populated" });
+        const projectUpdatedAt = Date.parse(project.project.updatedAt);
+        const noteUpdatedAt = new Date(projectUpdatedAt + 5 * 60_000);
+        const taskUpdatedAt = new Date(projectUpdatedAt + 10 * 60_000);
+        await tx.insert(notes).values({
+          id: randomUUID(),
+          workspaceId: SEED_IDS.workspaces.alpha,
+          projectId: project.project.id,
+          title: "Activity note",
+          createdById: SEED_IDS.users.alphaOwner,
+          updatedAt: noteUpdatedAt,
+        });
+        await tx.insert(tasks).values([
+          {
+            id: randomUUID(),
+            workspaceId: SEED_IDS.workspaces.alpha,
+            projectId: project.project.id,
+            title: "Activity task done",
+            status: "done",
+            createdById: SEED_IDS.users.alphaOwner,
+            updatedAt: taskUpdatedAt,
+          },
+          {
+            id: randomUUID(),
+            workspaceId: SEED_IDS.workspaces.alpha,
+            projectId: project.project.id,
+            title: "Activity task open",
+            createdById: SEED_IDS.users.alphaOwner,
+            updatedAt: new Date(projectUpdatedAt + 60_000),
+          },
+        ]);
+
+        // Before the fix this call threw `TypeError: value.getTime is not a
+        // function` and the transport turned it into a 500.
+        const detail = await service.read({ ...scope, projectId: project.project.id });
+        expect(detail.lastActivityAt).toBe(taskUpdatedAt.toISOString());
+        expect(detail.taskProgress).toMatchObject({ completed: 1, total: 2 });
+
+        // The note aggregate must win when it is the newest, proving both
+        // aggregates decode and that the fold really compares instants.
+        const laterNoteUpdatedAt = new Date(projectUpdatedAt + 20 * 60_000);
+        await tx.insert(notes).values({
+          id: randomUUID(),
+          workspaceId: SEED_IDS.workspaces.alpha,
+          projectId: project.project.id,
+          title: "Newest activity note",
+          createdById: SEED_IDS.users.alphaOwner,
+          updatedAt: laterNoteUpdatedAt,
+        });
+        expect(
+          (await service.read({ ...scope, projectId: project.project.id })).lastActivityAt,
+        ).toBe(laterNoteUpdatedAt.toISOString());
+
+        // Notes and tasks in another workspace must not leak into the fold.
+        await tx.insert(notes).values({
+          id: randomUUID(),
+          workspaceId: SEED_IDS.workspaces.beta,
+          projectId: SEED_IDS.projects.betaResearch,
+          title: "Beta note far in the future",
+          createdById: SEED_IDS.users.betaOwner,
+          updatedAt: new Date(projectUpdatedAt + 365 * 24 * 60 * 60_000),
+        });
+        expect(
+          (await service.read({ ...scope, projectId: project.project.id })).lastActivityAt,
+        ).toBe(laterNoteUpdatedAt.toISOString());
+
+        throw new RollbackProjectsTest("rollback project activity fixtures");
+      }),
+    ).rejects.toBeInstanceOf(RollbackProjectsTest);
+  });
+
   it("rolls back project and audit rows when the transactional outbox insert fails", async ({
     skip,
   }) => {

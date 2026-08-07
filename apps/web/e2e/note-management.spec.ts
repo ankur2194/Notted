@@ -134,13 +134,39 @@ test.describe.serial("Part 32 real-stack note management", () => {
       const projectNote = projectNoteResult.note as { id: string };
 
       await owner.goto(`/workspaces/${workspaceId}/notes`);
-      await expect(owner.getByRole("heading", { name: "Notes" })).toBeVisible();
+      await expect(owner.getByRole("heading", { level: 1, name: "Notes" })).toBeVisible();
       const secondCard = owner
         .getByRole("link", { name: "Second standalone" })
         .locator("xpath=ancestor::article");
-      await secondCard.getByRole("button", { name: "Drag Second standalone" }).focus();
+      const secondDragHandle = secondCard.getByRole("button", { name: "Drag Second standalone" });
+      /*
+       * The live region the drag-and-drop layer announces through. Filtering on
+       * its own wording keeps it distinct from any toast that also exposes the
+       * `status` role.
+       */
+      const dragAnnouncements = owner.getByRole("status").filter({ hasText: /draggable item/iu });
+      await secondDragHandle.focus();
       await owner.keyboard.press("Space");
-      await owner.keyboard.press("ArrowUp");
+      /*
+       * Picking an item up and measuring the drop targets are separate render
+       * passes, and an arrow key that lands in between is silently discarded
+       * because no measured target lies in that direction. The first "moved
+       * over" announcement — the item resting over itself — is the point at
+       * which those measurements exist, so wait for it before steering.
+       */
+      await expect(dragAnnouncements).toContainText(
+        `was moved over droppable area ${secondNote.id}`,
+      );
+      /*
+       * The note list is a two-column grid at this project's 1280px viewport, so
+       * the preceding sibling sits to the left rather than above. Keyboard
+       * coordinates are computed from real rects, so ArrowLeft — not ArrowUp —
+       * is what a keyboard user presses here to move ahead of it.
+       */
+      await owner.keyboard.press("ArrowLeft");
+      await expect(dragAnnouncements).toContainText(
+        `was moved over droppable area ${firstNote.id}`,
+      );
       await owner.keyboard.press("Space");
       await expect(owner.getByText("Moved Second standalone.")).toBeVisible();
       await owner.reload();
@@ -150,9 +176,33 @@ test.describe.serial("Part 32 real-stack note management", () => {
       const firstCardForPointer = owner
         .getByRole("link", { name: "First standalone" })
         .locator("xpath=ancestor::article");
-      await firstCardForPointer
-        .getByRole("button", { name: "Drag First standalone" })
-        .dragTo(secondCard);
+      const firstDragHandle = firstCardForPointer.getByRole("button", {
+        name: "Drag First standalone",
+      });
+      /*
+       * `dragTo` presses, moves once and releases. The pointer sensor spends
+       * that single move satisfying its 8px activation distance, so the drag
+       * starts with a zero translation and drops onto itself. A real pointer
+       * drag keeps moving after activation, so drive the mouse directly:
+       * one move to pick the card up, then a stepped move onto the target.
+       * Droppable rects are measured when the drag starts, so the target is
+       * measured beforehand rather than mid-drag while transforms are applied.
+       */
+      const handleBox = (await firstDragHandle.boundingBox())!;
+      const targetBox = (await secondCard.boundingBox())!;
+      await firstDragHandle.hover();
+      await owner.mouse.down();
+      await owner.mouse.move(handleBox.x + handleBox.width / 2 + 24, handleBox.y, { steps: 8 });
+      await expect(firstDragHandle).toHaveAttribute("aria-pressed", "true");
+      await owner.mouse.move(
+        targetBox.x + targetBox.width / 2,
+        targetBox.y + targetBox.height / 2,
+        { steps: 12 },
+      );
+      await expect(dragAnnouncements).toContainText(
+        `was moved over droppable area ${secondNote.id}`,
+      );
+      await owner.mouse.up();
       await expect(owner.getByText("Moved First standalone.")).toBeVisible();
 
       const movePath = `${apiUrl}/api/v1/workspaces/${workspaceId}/notes/${firstNote.id}/move`;
@@ -172,7 +222,9 @@ test.describe.serial("Part 32 real-stack note management", () => {
         .locator("xpath=ancestor::article")
         .getByRole("button", { name: "Move to destination" })
         .click();
-      await expect(owner.getByText(/previous state was restored/u)).toBeVisible();
+      await expect(
+        owner.getByText(/exact previous title, version, location, and order were restored/u),
+      ).toBeVisible();
       expect(
         await owner.getByRole("list", { name: "Notes" }).getByRole("link").allTextContents(),
       ).toEqual(beforeConflict);
@@ -191,15 +243,23 @@ test.describe.serial("Part 32 real-stack note management", () => {
       await createFolderDialog.getByLabel("Name").fill("Journey folder");
       await createFolderDialog.getByRole("button", { name: "Create", exact: true }).click();
       await expect(owner.getByText("Folder created.")).toBeVisible();
-      const folderItem = owner.getByText("Journey folder").locator("xpath=ancestor::li");
+      /*
+       * Every note card offers the new folder as a move destination, so a bare
+       * text lookup for the folder name also lands inside the note list, and the
+       * folder's own list item replaces that name with a form while it is being
+       * renamed. Address the folder region's single list item instead, and assert
+       * the name it carries as its own step.
+       */
+      const folderItem = owner
+        .getByRole("region", { name: "Standalone folders" })
+        .getByRole("listitem");
+      await expect(folderItem).toHaveText(/Journey folder/u);
       await folderItem.getByRole("button", { name: "Rename" }).click();
       await folderItem.getByLabel("New folder name").fill("Renamed journey folder");
       await folderItem.getByRole("button", { name: "Save" }).click();
       await expect(owner.getByText("Folder renamed.")).toBeVisible();
-      const renamedFolderItem = owner
-        .getByText("Renamed journey folder")
-        .locator("xpath=ancestor::li");
-      await renamedFolderItem.getByRole("button", { name: "Delete" }).click();
+      await expect(folderItem).toHaveText(/Renamed journey folder/u);
+      await folderItem.getByRole("button", { name: "Delete" }).click();
       await owner
         .getByRole("dialog", { name: /Delete Renamed journey folder/u })
         .getByRole("button", { name: "Delete folder" })
@@ -207,7 +267,17 @@ test.describe.serial("Part 32 real-stack note management", () => {
       await expect(owner.getByText(/Folder deleted/u)).toBeVisible();
 
       await owner.goto(`/workspaces/${workspaceId}/projects/${project.id}`);
-      await expect(owner.getByRole("link", { name: "Atlas project note" })).toBeVisible();
+      /*
+       * Every note title appears twice on a dashboard page: once in the note
+       * tree of the persistent sidebar and once in the page's own list. Scope
+       * these assertions to the `main` landmark so they check the thing the
+       * page is actually responsible for rendering. `.first()` would hide which
+       * of the two matched and would keep passing if the main region broke —
+       * which is precisely how the project-detail 500 went unnoticed here.
+       */
+      await expect(
+        owner.getByRole("main").getByRole("link", { name: "Atlas project note" }),
+      ).toBeVisible();
       await owner.goto(`/workspaces/${workspaceId}/projects/${project.id}/notes/${projectNote.id}`);
       await expect(owner.getByRole("navigation", { name: "Note breadcrumbs" })).toContainText(
         "Project Atlas",
@@ -228,7 +298,13 @@ test.describe.serial("Part 32 real-stack note management", () => {
       let editorCard = editor
         .getByRole("link", { name: "First standalone" })
         .locator("xpath=ancestor::article");
-      await editorCard.getByRole("button", { name: "Rename" }).click();
+      /*
+       * `exact` matters here. A note card also carries a drag handle named
+       * "Drag <note title>", and `getByRole` name matching is substring based,
+       * so once a note is titled "Editor shared rename" the handle answers to
+       * "Rename" as well. Ask for the button whose whole name is "Rename".
+       */
+      await editorCard.getByRole("button", { name: "Rename", exact: true }).click();
       await editorCard.getByLabel("New note title").fill("View grant cannot edit");
       await editorCard.getByRole("button", { name: "Save" }).click();
       await expect(editor.getByText(/Rename was denied/u)).toBeVisible();
@@ -243,10 +319,12 @@ test.describe.serial("Part 32 real-stack note management", () => {
       editorCard = editor
         .getByRole("link", { name: "First standalone" })
         .locator("xpath=ancestor::article");
-      await editorCard.getByRole("button", { name: "Rename" }).click();
+      await editorCard.getByRole("button", { name: "Rename", exact: true }).click();
       await editorCard.getByLabel("New note title").fill("Editor shared rename");
       await editorCard.getByRole("button", { name: "Save" }).click();
-      await expect(editor.getByRole("link", { name: "Editor shared rename" })).toBeVisible();
+      await expect(
+        editor.getByRole("main").getByRole("link", { name: "Editor shared rename" }),
+      ).toBeVisible();
 
       await owner.reload();
       await owner.getByRole("button", { name: "Share" }).click();
@@ -259,14 +337,16 @@ test.describe.serial("Part 32 real-stack note management", () => {
       editorCard = editor
         .getByRole("link", { name: "Editor shared rename" })
         .locator("xpath=ancestor::article");
-      await editorCard.getByRole("button", { name: "Rename" }).click();
+      await editorCard.getByRole("button", { name: "Rename", exact: true }).click();
       await editorCard.getByLabel("New note title").fill("Revoked edit");
       await editorCard.getByRole("button", { name: "Save" }).click();
       await expect(editor.getByText(/Rename was denied/u)).toBeVisible();
 
       await viewer.goto(`/workspaces/${workspaceId}/notes`);
       await expect(viewer.getByRole("button", { name: "Create note" })).toBeDisabled();
-      await expect(viewer.getByRole("link", { name: "Editor shared rename" })).toBeVisible();
+      await expect(
+        viewer.getByRole("main").getByRole("link", { name: "Editor shared rename" }),
+      ).toBeVisible();
 
       await owner.goto(`/workspaces/${workspaceId}/notes`);
       const trashCard = owner
@@ -296,7 +376,26 @@ test.describe.serial("Part 32 real-stack note management", () => {
       await expect(owner.getByText(/permanently deleted/u)).toBeVisible();
 
       await owner.emulateMedia({ reducedMotion: "reduce" });
+      /*
+       * WCAG 2.2 AA 1.4.10 Reflow is specified as no two-dimensional scrolling
+       * at a viewport width of 320 CSS pixels — the equivalent of 400% zoom on
+       * a 1280px desktop viewport — and `globals.css` implements that floor
+       * with `body { min-width: 320px }`. Resizing the viewport is the faithful
+       * way to exercise it.
+       *
+       * This block used to set `document.documentElement.style.zoom = "2"` at a
+       * 390px viewport instead, which was wrong twice over and had never
+       * actually run, because the project-detail 500 ended the test earlier.
+       * The CSS `zoom` property does not re-evaluate media queries, so at
+       * 640px/200% the page kept its `sm:` layout inside 320 CSS pixels and
+       * reported an overflow the product does not have; and it compared a
+       * zoom-scaled `scrollWidth` against an unzoomed `clientWidth`, which is
+       * not a like-for-like measurement. Real browser zoom re-evaluates media
+       * queries; `style.zoom` does not. Measured on this page, a genuine 320px
+       * viewport reflows exactly to the floor with no horizontal scrolling.
+       */
       for (const viewport of [
+        { width: 320, height: 844 },
         { width: 390, height: 844 },
         { width: 768, height: 1024 },
         { width: 1440, height: 900 },
@@ -306,18 +405,11 @@ test.describe.serial("Part 32 real-stack note management", () => {
         const reflow = await owner.evaluate(() => ({
           scrollWidth: document.documentElement.scrollWidth,
           clientWidth: document.documentElement.clientWidth,
+          contentWidth: document.body.scrollWidth,
         }));
         expect(reflow.scrollWidth).toBeLessThanOrEqual(reflow.clientWidth + 1);
+        expect(reflow.contentWidth).toBeLessThanOrEqual(Math.max(viewport.width, 320));
       }
-      await owner.setViewportSize({ width: 390, height: 844 });
-      await owner.evaluate(() => {
-        document.documentElement.style.zoom = "2";
-      });
-      const dimensions = await owner.evaluate(() => ({
-        scrollWidth: document.documentElement.scrollWidth,
-        clientWidth: document.documentElement.clientWidth,
-      }));
-      expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1);
 
       await register(other, identity("other-tenant"));
       otherWorkspaceName = `Notes Beta ${randomUUID().slice(0, 8)}`;
