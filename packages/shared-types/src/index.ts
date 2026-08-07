@@ -141,6 +141,10 @@ export type { TaskDetail, TaskPriority, TaskRecurrence, TaskStatus, TaskSummary 
 export { MEMBERSHIP_API_PATHS, WORKSPACE_API_PATHS } from "./workspace";
 export type {
   MembershipListQuery,
+  StorageMaintenanceReport,
+  StorageMaintenanceSweepName,
+  StorageMaintenanceSweepReport,
+  WorkspaceStorageUsage,
   WorkspaceInvitationAcceptResult,
   WorkspaceInvitationPage,
   WorkspaceInvitationResendResult,

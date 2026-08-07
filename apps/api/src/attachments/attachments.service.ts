@@ -14,8 +14,13 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
-import { MAX_IMAGE_UPLOAD_BYTES } from "@notted/shared-validators";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import {
+  ATTACHMENT_FILE_MIME_TYPES,
+  ATTACHMENT_TEXT_MIME_TYPE,
+  MAX_ATTACHMENT_UPLOAD_BYTES,
+  MAX_IMAGE_UPLOAD_BYTES,
+} from "@notted/shared-validators";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
@@ -34,7 +39,6 @@ import {
   auditLogs,
   jobOutbox,
   notes,
-  workspaces,
   type AttachmentVariantObject,
   type AttachmentVariantRecord,
   type JobOutboxPayload,
@@ -44,6 +48,7 @@ import {
   ObjectStorageService,
   type ObjectStore,
 } from "../infrastructure/minio/object-storage.service";
+import { StorageQuotaService } from "../storage/storage-quota.service";
 import {
   activeWorkspaceId,
   assertWorkspaceInsertValues,
@@ -51,6 +56,8 @@ import {
   whereWorkspace,
 } from "../tenant";
 
+import { admitUpload } from "./attachment-admission";
+import { attachmentObjectKeys } from "./attachment-object-keys";
 import { attachmentObjectExtension, buildAttachmentObjectKey } from "./attachment-storage-key";
 import {
   ATTACHMENT_AUDIT_ACTIONS,
@@ -64,7 +71,7 @@ import {
   type AttachmentMutation,
   type AttachmentProcessingErrorCode,
 } from "./attachments.constants";
-import { sanitizeAttachmentFilename } from "./filename";
+import { sanitizeAttachmentFilename, sanitizeUploadFilename } from "./filename";
 import { IMAGE_PROCESSOR, ImageProcessingError, type ImageProcessor } from "./image-processing";
 import { IMAGE_SIGNATURE_HEAD_BYTES, sniffImageMediaType } from "./image-signature";
 
@@ -72,6 +79,7 @@ import type {
   AttachmentDeleteResult,
   AttachmentListResult,
   AttachmentMedia,
+  AttachmentMediaType,
   AttachmentServableVariant,
   AttachmentStatus,
   AttachmentUploadResult,
@@ -84,6 +92,18 @@ const ATTACHMENTS_BUCKET = "attachments" as const;
 /** Keys are random and immutable, so a rendition can be cached indefinitely. */
 const CONTENT_CACHE_CONTROL = "private, max-age=31536000, immutable";
 
+/**
+ * The only MIME types a generic-file row may ever be streamed as (Part 44).
+ *
+ * Defence in depth behind the admission gate: a corrupted or hand-edited row
+ * cannot cause the download route to advertise an arbitrary `Content-Type`. The
+ * set is exactly what `admitUpload` can produce for `media_type = 'file'`.
+ */
+const SERVABLE_FILE_MIME_TYPES: ReadonlySet<string> = new Set<string>([
+  ...ATTACHMENT_FILE_MIME_TYPES,
+  ATTACHMENT_TEXT_MIME_TYPE,
+]);
+
 interface ScopedInput {
   readonly principal: AuthenticatedPrincipal;
   readonly workspaceId: string;
@@ -91,6 +111,23 @@ interface ScopedInput {
 }
 
 export interface UploadImageInput extends ScopedInput {
+  readonly noteId: string;
+  readonly buffer: Buffer;
+  /** UNTRUSTED transport hint; never persisted as the type. */
+  readonly declaredMimeType: string;
+  /** UNTRUSTED transport hint; sanitized before it becomes display metadata. */
+  readonly declaredFilename: string;
+  readonly idempotencyKey: string;
+}
+
+/**
+ * Part 44. Structurally identical to {@link UploadImageInput} — one multipart
+ * part, one note, one idempotency key — because the two paths share the whole
+ * ADR 0005 saga and differ only in what happens between "bytes arrived" and
+ * "objects written". Kept as a separate type so a caller cannot accidentally
+ * pass an image input to the file path or vice versa.
+ */
+export interface UploadFileInput extends ScopedInput {
   readonly noteId: string;
   readonly buffer: Buffer;
   /** UNTRUSTED transport hint; never persisted as the type. */
@@ -118,6 +155,13 @@ export interface AttachmentContent {
   readonly contentLength: number;
   readonly etag: string;
   readonly filename: string;
+  /**
+   * Part 44. The transport needs this to choose the content disposition: an
+   * image rendition may be served `inline`, a generic file never may. It is read
+   * from the row rather than inferred from the MIME type, so the decision cannot
+   * be flipped by a crafted type string.
+   */
+  readonly mediaType: AttachmentMediaType;
 }
 
 interface AttachmentRow {
@@ -147,6 +191,10 @@ export class AttachmentsService {
     @Inject(IMAGE_PROCESSOR) private readonly processor: ImageProcessor,
     @Inject(SECURITY_CONFIG) private readonly security: SecurityConfig,
     private readonly logger: StructuredLogger,
+    // Part 45. The quota rules live in one service so the write path here and
+    // the read-only usage endpoint can never disagree about what a workspace is
+    // allowed to store.
+    private readonly quota: StorageQuotaService,
   ) {}
 
   /**
@@ -169,6 +217,34 @@ export class AttachmentsService {
   }
 
   /**
+   * Ceiling for a generic file upload (Part 44).
+   *
+   * `Notted.md` §6 documents 50 MB per file, which is also the default of
+   * `MAX_UPLOAD_SIZE_BYTES`. The same rule as the image ceiling applies and for
+   * the same reason: **an operator may lower the effective bound, never raise
+   * it.** `MAX_UPLOAD_SIZE_BYTES` accepts up to 2 GiB so that other, future
+   * transports can use it; letting that value raise this one would silently
+   * grant a per-request 2 GiB buffer.
+   */
+  get maximumFileUploadBytes(): number {
+    return Math.min(MAX_ATTACHMENT_UPLOAD_BYTES, this.security.maximumUploadBytes);
+  }
+
+  /**
+   * The bound handed to the multipart parser, which must be chosen BEFORE the
+   * body is read and therefore before the media type is known.
+   *
+   * It is the larger of the two, so the pre-transfer `Content-Length` refusal
+   * still fires for a genuinely oversize request. The narrower image bound is
+   * then re-applied inside `uploadImage` once the bytes have identified
+   * themselves — see the guard there. Nothing is buffered that the generic
+   * ceiling did not already permit, so this widens no exposure.
+   */
+  get maximumUploadBytes(): number {
+    return Math.max(this.maximumImageUploadBytes, this.maximumFileUploadBytes);
+  }
+
+  /**
    * ADR 0005 four-step upload. `file.upload` is authorized against the TARGET
    * NOTE, so a viewer or a revoked share can never attach to it.
    */
@@ -188,6 +264,16 @@ export class AttachmentsService {
       throw new ApiHttpException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, {
         code: "UNPROCESSABLE_ENTITY",
         message: "The uploaded file is not a supported image.",
+      });
+    }
+    // Part 44: the parser now runs at the WIDER generic ceiling, because it has
+    // to pick a bound before the media type is known. The image bound is
+    // therefore re-applied here, once the bytes have identified themselves —
+    // otherwise a 40 MiB payload with a PNG header would reach Sharp.
+    if (input.buffer.byteLength > this.maximumImageUploadBytes) {
+      throw new ApiHttpException(HttpStatus.PAYLOAD_TOO_LARGE, {
+        code: "PAYLOAD_TOO_LARGE",
+        message: "The uploaded image is larger than the allowed size.",
       });
     }
     const names = sanitizeAttachmentFilename(input.declaredFilename, sniffed);
@@ -318,6 +404,171 @@ export class AttachmentsService {
   }
 
   /**
+   * ADR 0005 four-step upload for a generic (non-image) file — Part 44.
+   *
+   * Deliberately the SAME saga as `uploadImage`, step for step, using the same
+   * `reserveQuota`, the same `compensate` ordering, the same idempotency record,
+   * and the same audit + outbox intent. Only the middle differs: there is no
+   * decoder, so exactly one object is written (`original`, the sniffed bytes
+   * verbatim), `width`/`height` stay `null`, and no derived variant is produced.
+   *
+   * Bytes are buffered in memory rather than spooled to a temporary file. The
+   * ceiling is `maximumFileUploadBytes` (50 MiB by default), the multipart parser
+   * enforces it before *and* during transfer, and a temp file would add a second
+   * copy on disk plus a new orphan class to reconcile on every failure path.
+   * Streaming straight from the request into `putObject` — the only version
+   * worth the complexity — needs a stream-accepting `ObjectStore.putObject`,
+   * which is a storage-interface change this part deliberately does not make;
+   * see the completion record.
+   */
+  async uploadFile(input: UploadFileInput): Promise<AttachmentUploadResult> {
+    const operation = await this.authorizationEntry.authorizeUser({
+      principal: input.principal,
+      workspaceId: input.workspaceId,
+      action: "file.upload",
+      resource: { kind: "note", id: input.noteId },
+      requestId: input.requestId,
+    });
+
+    // Re-run admission here rather than trusting the transport's routing: a
+    // service method is responsible for its own preconditions, and this is the
+    // only thing standing between a mis-wired controller and an image or an
+    // unrecognised payload being stored as a generic file.
+    const admission = admitUpload(input.buffer, input.declaredFilename);
+    if (!admission.ok || admission.admitted.kind !== "file") {
+      // Refused before any row exists, so a rejected payload never leaves a
+      // `failed` row behind for the sweeper to reconcile.
+      throw new ApiHttpException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, {
+        code: "UNPROCESSABLE_ENTITY",
+        message: "The uploaded file type is not supported.",
+      });
+    }
+    const admitted = admission.admitted;
+    if (input.buffer.byteLength > this.maximumFileUploadBytes) {
+      throw new ApiHttpException(HttpStatus.PAYLOAD_TOO_LARGE, {
+        code: "PAYLOAD_TOO_LARGE",
+        message: "The uploaded file is larger than the allowed size.",
+      });
+    }
+    const names = sanitizeUploadFilename(input.declaredFilename, admitted.extension, "file");
+
+    return this.authorizationEntry.run(operation, async () => {
+      const attachmentId = randomUUID();
+      const originalKey = buildAttachmentObjectKey({
+        workspaceId: input.workspaceId,
+        attachmentId,
+        variant: "original",
+        // Every generic type maps to `.bin`, which keeps the key vocabulary
+        // closed and stops the key hinting at the payload's contents.
+        extension: attachmentObjectExtension(admitted.mimeType),
+      });
+      const idempotency = createApiIdempotencyIdentity({
+        actorUserId: input.principal.userId,
+        operation: `attachment.upload:${input.workspaceId}`,
+        key: input.idempotencyKey,
+        payload: {
+          noteId: input.noteId,
+          sizeBytes: input.buffer.byteLength,
+          contentHash: createHash("sha256").update(input.buffer).digest("hex"),
+        },
+      });
+
+      // --- tx1: durable intent. Commits before a single byte is written. ---
+      const reserved = await this.database.transaction(async (tx) => {
+        await lockApiIdempotency(tx, idempotency);
+        const replay = await loadApiIdempotency(tx, idempotency);
+        if (replay !== null) {
+          assertIdempotencyPayload(replay, idempotency);
+          return { replayOf: replay.resourceId } as const;
+        }
+        await this.readNote(tx, input.noteId);
+        await this.reserveQuota(tx, input.buffer.byteLength);
+        const values = assertWorkspaceInsertValues(
+          {
+            id: attachmentId,
+            noteId: input.noteId,
+            workspaceId: activeWorkspaceId(this.tenantContext),
+            originalName: names.originalName,
+            filename: names.filename,
+            mimeType: admitted.mimeType,
+            sizeBytes: input.buffer.byteLength,
+            storageKey: originalKey,
+            mediaType: "file" as const,
+            processingStatus: "pending" as const,
+            variants: {} satisfies AttachmentVariantRecord,
+            createdById: input.principal.userId,
+          },
+          this.tenantContext,
+          "attachment.upload",
+        );
+        await tx.insert(attachments).values(values);
+        await this.writeAudit(tx, "uploadStarted", attachmentId, input, {
+          sizeBytes: input.buffer.byteLength,
+          mimeType: admitted.mimeType,
+        });
+        await storeApiIdempotency(tx, idempotency, attachmentId);
+        return { replayOf: null } as const;
+      });
+
+      if (reserved.replayOf !== null) {
+        return Object.freeze({ attachment: await this.readMedia(reserved.replayOf) });
+      }
+
+      // --- tx1b: the state becomes observable while bytes are in flight. ---
+      await this.setStatus(attachmentId, "processing");
+
+      const written: string[] = [];
+      try {
+        // --- Step 2: bytes. No transaction is open across this boundary. ---
+        await this.objects.putObject(ATTACHMENTS_BUCKET, originalKey, input.buffer, {
+          contentType: admitted.mimeType,
+          contentLength: input.buffer.byteLength,
+          cacheControl: CONTENT_CACHE_CONTROL,
+        });
+        written.push(originalKey);
+        const record: AttachmentVariantRecord = {
+          original: {
+            key: originalKey,
+            // A generic file has no pixel dimensions. `0` is the record's
+            // "not applicable" value and `toMedia` maps it back to `null`.
+            width: 0,
+            height: 0,
+            bytes: input.buffer.byteLength,
+            mimeType: admitted.mimeType,
+          },
+        };
+
+        // --- tx3: ready + audit + outbox intent, atomically. ---
+        await this.database.transaction(async (tx) => {
+          await tx
+            .update(attachments)
+            .set({ processingStatus: "ready", processingError: null, variants: record })
+            .where(
+              and(
+                eq(attachments.id, attachmentId),
+                whereWorkspace(attachments, this.tenantContext),
+              ),
+            );
+          await this.recordMutation(tx, "created", attachmentId, input, {
+            sizeBytes: input.buffer.byteLength,
+            mimeType: admitted.mimeType,
+          });
+        });
+      } catch (error: unknown) {
+        await this.compensate(
+          attachmentId,
+          input,
+          written,
+          error,
+          "The uploaded file could not be stored.",
+        );
+      }
+
+      return Object.freeze({ attachment: await this.readMedia(attachmentId) });
+    });
+  }
+
+  /**
    * Metadata for every live attachment on a note; object keys are stripped.
    *
    * Authorized as `note.read`, not `file.read`: the central policy's
@@ -365,8 +616,15 @@ export class AttachmentsService {
     return this.authorizationEntry.run(operation, async () => {
       const row = await this.readRow(input.attachmentId);
       if (row.processingStatus !== "ready") return this.notFound();
-      const variant = this.resolveVariant(row.variants, input.variant);
+      const variant = this.resolveVariant(row.variants, input.variant, row.mediaType);
       if (variant === null) return this.notFound();
+      // Part 44 defence in depth: a generic-file row may only ever be streamed
+      // as one of the types admission can produce. A hand-edited or corrupted
+      // `mime_type` therefore cannot make the download route advertise
+      // something the admission gate would never have accepted.
+      if (row.mediaType === "file" && !SERVABLE_FILE_MIME_TYPES.has(variant.mimeType)) {
+        return this.notFound();
+      }
       // Storage being switched off is an OPERATOR condition, not a caller
       // mistake: surface it as a stable 503 rather than letting the raw
       // `ObjectStorageDisabledError` escape as an anonymous 500. The write path
@@ -386,6 +644,7 @@ export class AttachmentsService {
         contentLength: stat.size,
         etag: stat.etag,
         filename: row.filename,
+        mediaType: row.mediaType,
       });
     });
   }
@@ -428,39 +687,16 @@ export class AttachmentsService {
    * derive usage from the attachment rows themselves. `pending`/`processing`
    * rows ARE the reservation, which is why no `storage_used_bytes` column is
    * needed and no reservation can be lost by a crash.
+   *
+   * Part 45 moved the SQL into `StorageQuotaService` so the read-only usage
+   * endpoint computes the SAME number this write path enforces. The locking,
+   * the charged states, and the 413 are unchanged; the only behavioural
+   * difference is that a workspace with `storage_limit_bytes IS NULL` now
+   * resolves its PLAN default instead of falling straight through to
+   * `MAX_WORKSPACE_STORAGE_BYTES` (which remains an absolute ceiling).
    */
-  private async reserveQuota(tx: DatabaseTransaction, additionalBytes: number): Promise<void> {
-    const [workspace] = await tx
-      .select({ limit: workspaces.storageLimitBytes })
-      .from(workspaces)
-      .where(eq(workspaces.id, activeWorkspaceId(this.tenantContext)))
-      .limit(1)
-      .for("update");
-    if (workspace === undefined) return this.notFound();
-
-    const [usage] = await tx
-      // `::bigint` (int8) arrives from pg as a *string*, so the expression needs
-      // an explicit decoder; `sql<number>` alone would be a type lie the way a
-      // bare `sql<Date>` timestamp aggregate is (see `database/sql-aggregates`).
-      .select({ used: sql`coalesce(sum(${attachments.sizeBytes}), 0)::bigint`.mapWith(Number) })
-      .from(attachments)
-      .where(
-        and(
-          inArray(attachments.processingStatus, ["pending", "processing", "ready"]),
-          whereWorkspace(attachments, this.tenantContext),
-        ),
-      );
-    const used = usage?.used ?? 0;
-    const limit = Math.min(
-      workspace.limit ?? this.security.maximumWorkspaceStorageBytes,
-      this.security.maximumWorkspaceStorageBytes,
-    );
-    if (used + additionalBytes > limit) {
-      throw new ApiHttpException(HttpStatus.PAYLOAD_TOO_LARGE, {
-        code: "PAYLOAD_TOO_LARGE",
-        message: "The workspace storage quota is exhausted.",
-      });
-    }
+  private reserveQuota(tx: DatabaseTransaction, additionalBytes: number): Promise<void> {
+    return this.quota.reserve(tx, additionalBytes);
   }
 
   private async readNote(tx: DatabaseTransaction, noteId: string): Promise<void> {
@@ -494,9 +730,12 @@ export class AttachmentsService {
    */
   private async compensate(
     attachmentId: string,
-    input: UploadImageInput,
+    input: ScopedInput,
     written: readonly string[],
     error: unknown,
+    // Part 44: the two upload paths differ only in the wording a caller sees
+    // when an unclassified failure is converted into a stable envelope.
+    fallbackMessage = "The uploaded image could not be processed.",
   ): Promise<never> {
     const code = this.failureCode(error);
     await this.database.transaction(async (tx) => {
@@ -514,7 +753,7 @@ export class AttachmentsService {
       ? error
       : new ApiHttpException(HttpStatus.UNPROCESSABLE_ENTITY, {
           code: "UNPROCESSABLE_ENTITY",
-          message: "The uploaded image could not be processed.",
+          message: fallbackMessage,
         });
   }
 
@@ -523,11 +762,27 @@ export class AttachmentsService {
     return ATTACHMENT_PROCESSING_ERRORS.storageUnavailable;
   }
 
+  /**
+   * Which stored object answers a requested variant.
+   *
+   * An image walks the Part 40 fallback table, so `thumbnail` degrades to
+   * `medium`, then `full`, then `original`.
+   *
+   * A generic file has exactly ONE stored object and no renditions, so it
+   * deliberately does **not** walk that table: only the default `full` request
+   * resolves, and an explicit `medium` or `thumbnail` returns `null` and becomes
+   * the shared not-found shape. Serving a 40 MiB archive in answer to a request
+   * for a thumbnail would be both wasteful and a lie about what came back.
+   */
   private resolveVariant(
     record: AttachmentVariantRecord | null,
     requested: AttachmentServableVariant,
+    mediaType: AttachmentMediaType,
   ): AttachmentVariantObject | null {
     if (record === null) return null;
+    if (mediaType === "file") {
+      return requested === "full" ? (record.original ?? null) : null;
+    }
     for (const name of ATTACHMENT_VARIANT_FALLBACKS[requested]) {
       const candidate = record[name];
       if (candidate !== undefined) return candidate;
@@ -535,14 +790,16 @@ export class AttachmentsService {
     return null;
   }
 
-  /** Every object this row owns, including a Part 44 generic-file preview, so
-   * deletion cleanup never strands bytes. */
+  /**
+   * Every object this row owns, including a Part 44 generic-file preview, so
+   * deletion cleanup never strands bytes.
+   *
+   * Part 45 moved the list itself into `attachment-object-keys.ts` because the
+   * storage-maintenance sweeps must agree with this method exactly; two copies
+   * of the variant-name list would strand bytes the first time they diverged.
+   */
   private variantKeys(record: AttachmentVariantRecord | null): readonly string[] {
-    if (record === null) return [];
-    const names = ["original", "full", "medium", "thumbnail", "preview"] as const;
-    return names
-      .map((name) => record[name]?.key)
-      .filter((key): key is string => typeof key === "string");
+    return attachmentObjectKeys(record);
   }
 
   private async readRow(attachmentId: string, tx?: DatabaseTransaction): Promise<AttachmentRow> {

@@ -7,6 +7,7 @@ import {
   ListOrdered,
   ListTodo,
   Minus,
+  Paperclip,
   Pilcrow,
   Quote,
   ScissorsLineDashed,
@@ -21,6 +22,8 @@ import "@tiptap/extension-task-list";
 import "./extensions/page-break";
 // Declares `nottedRequestImageUpload` on the same interface (Part 42).
 import "./extensions/CustomImage";
+// Declares `nottedRequestAttachmentUpload` on the same interface (Part 44).
+import "./extensions/CustomAttachment";
 
 import { TABLE_ACTIONS } from "./toolbar-commands";
 
@@ -190,6 +193,31 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
      * Nothing temporary is written to the document at any point.
      */
     run: replaceRange((chain) => chain.nottedRequestImageUpload()),
+  },
+  {
+    id: "attachment",
+    label: "File attachment",
+    description: "Attach a document, spreadsheet, archive, or text file",
+    icon: Paperclip,
+    keywords: [
+      "attachment",
+      "file",
+      "attach",
+      "upload",
+      "document",
+      "pdf",
+      "docx",
+      "xlsx",
+      "zip",
+      "archive",
+    ],
+    /*
+     * Like `/image`, it inserts nothing on its own: the typed `/attachment` is
+     * deleted and the host is asked to open the file picker. The card only ever
+     * appears once real bytes have a permanent attachment id, so no temporary
+     * reference is ever written to the document.
+     */
+    run: replaceRange((chain) => chain.nottedRequestAttachmentUpload()),
   },
 ]);
 

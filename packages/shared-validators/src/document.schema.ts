@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { uuidSchema } from "./common.schema";
+import { formatBinaryBytes } from "./format-bytes";
 
 /** JSON values accepted by the framework-neutral document contract. */
 export type NoteDocumentJson =
@@ -84,6 +85,25 @@ export const NOTE_DOCUMENT_SCHEMA_VERSION = 1 as const;
  * the one free-text field an image stores; and `maxImageDimension` bounds the
  * *stored* intrinsic size, which is only ever a layout hint — the authoritative
  * pixel budget is enforced server-side by the Part 41 pipeline.
+ *
+ * Part 43 adds `maxImageCaption`. A caption is the second free-text field an
+ * image stores and, unlike alt, it is *rendered visibly* in the note, in the
+ * print sheet, and in every export — so it is bounded on its own rather than
+ * left to the generic `maxString`. It is set higher than `maxImageAlt` because a
+ * caption is prose meant to be read, while an alternative text is a short
+ * description, but it is still two orders of magnitude below `maxString` so a
+ * hundred captions cannot dominate a note's serialized size.
+ *
+ * Part 44 adds the three `attachment` bounds, shaped exactly like the image
+ * ones. `maxAttachments` bounds how many generic files one note may reference,
+ * for the same reason `maxImages` does — opening a note must never fan out into
+ * an unbounded number of authorized metadata or content requests.
+ * `maxAttachmentName` matches the `attachments.filename` column bound (255) so a
+ * name the API can store is always a name the document can carry.
+ * `maxAttachmentSizeBytes` matches `MAX_UPLOAD_SIZE_BYTES`' own hard maximum
+ * (2 GiB), which is the largest value any operator can configure; the *stored*
+ * number is only a display hint, and the authoritative size is the
+ * `attachments.size_bytes` column the server measured.
  */
 export const NOTE_DOCUMENT_LIMITS = Object.freeze({
   serializedBytes: 512_000,
@@ -105,7 +125,11 @@ export const NOTE_DOCUMENT_LIMITS = Object.freeze({
   maxMentionLabel: 200,
   maxImages: 100,
   maxImageAlt: 500,
+  maxImageCaption: 1_000,
   maxImageDimension: 10_000,
+  maxAttachments: 100,
+  maxAttachmentName: 255,
+  maxAttachmentSizeBytes: 2 * 1_024 * 1_024 * 1_024,
 } as const);
 
 export const NOTE_DOCUMENT_NODE_TYPES = Object.freeze([
@@ -129,6 +153,7 @@ export const NOTE_DOCUMENT_NODE_TYPES = Object.freeze([
   "tableCell",
   "mention",
   "image",
+  "attachment",
 ] as const);
 export type NoteDocumentNodeType = (typeof NOTE_DOCUMENT_NODE_TYPES)[number];
 
@@ -158,6 +183,30 @@ export const NOTE_DOCUMENT_PAGE_BREAK_CLASS = "notted-page-break" as const;
  * `NOTE_DOCUMENT_MENTION_CLASS`. Stored classes are never copied through.
  */
 export const NOTE_DOCUMENT_IMAGE_CLASS = "notted-image" as const;
+
+/**
+ * The figure wrapper and caption emitted around an image (Part 43).
+ *
+ * The wrapper is what carries alignment, wrap mode, and full width, so the same
+ * three data attributes drive the editor's node view, `styles/globals.css`,
+ * `styles/print.css`, and Part 63's standalone export — one markup contract, no
+ * per-surface rules.
+ */
+export const NOTE_DOCUMENT_IMAGE_FIGURE_CLASS = "notted-image-figure" as const;
+export const NOTE_DOCUMENT_IMAGE_CAPTION_CLASS = "notted-image-caption" as const;
+
+/**
+ * The classes emitted for a generic file attachment card (Part 44).
+ *
+ * Same contract shape as the image classes: the editor's node view, the screen
+ * stylesheet, `styles/print.css`, and Part 63's export template all key off
+ * these four and nothing else. No class, style, or attribute stored on the node
+ * is ever copied through to the output.
+ */
+export const NOTE_DOCUMENT_ATTACHMENT_CLASS = "notted-attachment" as const;
+export const NOTE_DOCUMENT_ATTACHMENT_NAME_CLASS = "notted-attachment-name" as const;
+export const NOTE_DOCUMENT_ATTACHMENT_META_CLASS = "notted-attachment-meta" as const;
+export const NOTE_DOCUMENT_ATTACHMENT_SIZE_CLASS = "notted-attachment-size" as const;
 
 export interface NoteDocumentMentionAttrs {
   /** Stable user id. Display names change; this never does. */
@@ -217,8 +266,25 @@ function mentionPlainText(node: PlainRecord): string {
   return cleaned.length === 0 ? "" : `${NOTE_DOCUMENT_MENTION_PREFIX}${cleaned}`;
 }
 
+/** How an image sits in the content column (Part 43). */
+export const NOTE_DOCUMENT_IMAGE_ALIGNMENTS = Object.freeze(["left", "center", "right"] as const);
+export type NoteDocumentImageAlign = (typeof NOTE_DOCUMENT_IMAGE_ALIGNMENTS)[number];
+
 /**
- * The four attributes an embedded image stores (Part 42).
+ * `block` breaks the text around the figure; `inline` floats it so following
+ * text flows beside it (`Notted.md`: "Wrap Text: Inline or break text").
+ */
+export const NOTE_DOCUMENT_IMAGE_WRAP_MODES = Object.freeze(["block", "inline"] as const);
+export type NoteDocumentImageWrap = (typeof NOTE_DOCUMENT_IMAGE_WRAP_MODES)[number];
+
+const IMAGE_ALIGN_VALUES: ReadonlySet<string> = new Set(NOTE_DOCUMENT_IMAGE_ALIGNMENTS);
+const IMAGE_WRAP_VALUES: ReadonlySet<string> = new Set(NOTE_DOCUMENT_IMAGE_WRAP_MODES);
+
+export const NOTE_DOCUMENT_IMAGE_ALIGN_DEFAULT: NoteDocumentImageAlign = "center";
+export const NOTE_DOCUMENT_IMAGE_WRAP_DEFAULT: NoteDocumentImageWrap = "block";
+
+/**
+ * The eight attributes an embedded image stores (Part 42, widened by Part 43).
  *
  * **There is deliberately no `src`, `url`, `previewUrl`, or `dataUri` field, and
  * `NODE_ALLOWED_ATTRS.image` rejects one.** That absence is the structural
@@ -230,10 +296,21 @@ function mentionPlainText(node: PlainRecord): string {
  * workspace membership on every request; the blur placeholder travels in the
  * attachment metadata projection instead, never in the document.
  *
- * `width`/`height` are the intrinsic pixel size recorded at insertion time. They
- * exist only so a renderer can reserve layout space before the bytes arrive;
- * they are advisory, `null` is always allowed, and nothing trusts them for
- * anything but avoiding layout shift.
+ * `width`/`height` are the pixel box the figure occupies. Part 42 recorded the
+ * *intrinsic* size at insertion so a renderer could reserve layout space; Part 43
+ * lets an author resize the figure and stores the result in the same two fields.
+ * That is deliberately **not** a re-typing of a stored attribute (which would
+ * force a schema-version bump, see `NOTE_DOCUMENT_SCHEMA_VERSION`): the accepted
+ * values are unchanged, `null` is still always allowed, and a historical value is
+ * still read as "how wide this figure's box is" — exactly what the Part 42
+ * renderer already used it for. They remain advisory: a renderer clamps them to
+ * the printable column, and nothing trusts them for anything but layout.
+ *
+ * The four Part 43 additions are all *additive with defaults*, so every document
+ * stored before Part 43 is still valid and still means what it meant: an absent
+ * `align` is `center`, an absent `wrap` is `block`, an absent `fullWidth` is
+ * `false`, and an absent `caption` is `""` — which is precisely how a Part 42
+ * image already rendered.
  */
 export interface NoteDocumentImageAttrs {
   /** Stable attachment UUID. The only handle on the bytes. */
@@ -242,6 +319,37 @@ export interface NoteDocumentImageAttrs {
   readonly alt: string;
   readonly width: number | null;
   readonly height: number | null;
+  /** Horizontal placement of the figure inside the content column. */
+  readonly align: NoteDocumentImageAlign;
+  /** `inline` floats the figure so following text wraps around it. */
+  readonly wrap: NoteDocumentImageWrap;
+  /**
+   * Span the whole printable column, ignoring `width`. Mutually exclusive with
+   * `wrap: "inline"` in *rendering* — see `resolveNoteImageWrap`, which is the
+   * single place that conflict is resolved.
+   */
+  readonly fullWidth: boolean;
+  /** Visible caption rendered in a `<figcaption>`. `""` means no caption. */
+  readonly caption: string;
+}
+
+/**
+ * A full-width figure occupies the entire content column, so there is no room
+ * beside it for text to flow: `fullWidth` therefore **wins** over
+ * `wrap: "inline"`, and this function is the one place that rule lives.
+ *
+ * It is resolved at *render* time rather than at validation time on purpose.
+ * Rejecting the combination would let the editor produce a document
+ * `safeParseNoteDocument` refuses — which silently and permanently stops autosave
+ * for that session (Part 39) — and silently rewriting a stored attribute during
+ * validation would make a round trip lossy. Both values are stored verbatim; the
+ * renderer, the print sheet, and `normalizeImageNode` all agree by calling this.
+ */
+export function resolveNoteImageWrap(attrs: {
+  readonly wrap: NoteDocumentImageWrap;
+  readonly fullWidth: boolean;
+}): NoteDocumentImageWrap {
+  return attrs.fullWidth ? "block" : attrs.wrap;
 }
 
 /**
@@ -255,6 +363,41 @@ function isUsableImageAlt(value: unknown): value is string {
   if (value.length > NOTE_DOCUMENT_LIMITS.maxImageAlt) return false;
   CONTROL_CHARACTER_PATTERN.lastIndex = 0;
   return !CONTROL_CHARACTER_PATTERN.test(value);
+}
+
+/**
+ * A caption gets the identical treatment to alt at its own, larger bound. It is
+ * rendered visibly, so escaping at the point of use is still required — this
+ * check only removes the values that have no business being stored at all.
+ */
+function isUsableImageCaption(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (value.length > NOTE_DOCUMENT_LIMITS.maxImageCaption) return false;
+  CONTROL_CHARACTER_PATTERN.lastIndex = 0;
+  return !CONTROL_CHARACTER_PATTERN.test(value);
+}
+
+/** Absent/`undefined` means "use the default"; any other unusable value is invalid. */
+function isImageCaption(value: unknown): value is string | undefined {
+  return value === undefined || isUsableImageCaption(value);
+}
+
+/** Absent/`undefined` means "use the default"; any other non-member is invalid. */
+function isImageAlign(value: unknown): value is NoteDocumentImageAlign | undefined {
+  return value === undefined || (typeof value === "string" && IMAGE_ALIGN_VALUES.has(value));
+}
+
+function isImageWrap(value: unknown): value is NoteDocumentImageWrap | undefined {
+  return value === undefined || (typeof value === "string" && IMAGE_WRAP_VALUES.has(value));
+}
+
+/**
+ * Strictly boolean. `"true"`, `1`, and `null` are all rejected rather than
+ * coerced: a layout flag that quietly accepts truthy values is a flag whose
+ * stored meaning depends on which client wrote it.
+ */
+function isImageFullWidth(value: unknown): value is boolean | undefined {
+  return value === undefined || typeof value === "boolean";
 }
 
 /** `null`, absent, or a positive integer within the stored-dimension bound. */
@@ -273,19 +416,32 @@ function imageDimensionOrNull(value: unknown): number | null {
 }
 
 /**
- * Return the four reviewed image attributes, or `null` when the node does not
- * carry a stable attachment id and a usable alt. Never throws.
+ * Return the reviewed image attributes, or `null` when the node does not carry a
+ * stable attachment id and a usable alt. Never throws.
+ *
+ * The four Part 43 layout attributes are **optional on input and always present
+ * on output**: absent means the documented default. That is what keeps every
+ * document written before Part 43 readable without a migration, and it is why
+ * adding them did not bump `NOTE_DOCUMENT_SCHEMA_VERSION`. A *present but
+ * invalid* value is still rejected, so `"align": "diagonal"` degrades through
+ * `normalizeImageNode` rather than reaching a renderer.
  */
 export function noteDocumentImageAttrs(attrs: unknown): NoteDocumentImageAttrs | null {
   if (!isRecord(attrs)) return null;
-  const { attachmentId, alt, width, height } = attrs;
+  const { attachmentId, alt, width, height, align, wrap, fullWidth, caption } = attrs;
   if (!isUuidValue(attachmentId) || !isUsableImageAlt(alt)) return null;
   if (!isImageDimension(width) || !isImageDimension(height)) return null;
+  if (!isImageAlign(align) || !isImageWrap(wrap)) return null;
+  if (!isImageFullWidth(fullWidth) || !isImageCaption(caption)) return null;
   return {
     attachmentId,
     alt,
     width: imageDimensionOrNull(width),
     height: imageDimensionOrNull(height),
+    align: align ?? NOTE_DOCUMENT_IMAGE_ALIGN_DEFAULT,
+    wrap: wrap ?? NOTE_DOCUMENT_IMAGE_WRAP_DEFAULT,
+    fullWidth: fullWidth ?? false,
+    caption: caption ?? "",
   };
 }
 
@@ -301,6 +457,134 @@ function imagePlainText(node: PlainRecord): string {
     .replace(CONTROL_CHARACTER_PATTERN, " ")
     .trim()
     .slice(0, NOTE_DOCUMENT_LIMITS.maxImageAlt);
+}
+
+/** The same recovery for the visible caption, at its own bound. */
+function imageCaptionPlainText(node: PlainRecord): string {
+  const raw = isRecord(node.attrs) ? node.attrs.caption : undefined;
+  if (typeof raw !== "string") return "";
+  return raw
+    .replace(CONTROL_CHARACTER_PATTERN, " ")
+    .trim()
+    .slice(0, NOTE_DOCUMENT_LIMITS.maxImageCaption);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Generic file attachments (Part 44)                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A conservative MIME grammar: one bounded token, a slash, one bounded token.
+ * Parameters (`; charset=…`) are deliberately rejected — the server stores a
+ * bare type and nothing downstream parses one.
+ */
+const ATTACHMENT_MIME_PATTERN = /^[\w!#$&^.+-]{1,60}\/[\w!#$&^.+-]{1,60}$/u;
+const ATTACHMENT_MIME_MAX_LENGTH = 100;
+
+/**
+ * The four attributes a generic file attachment stores (Part 44).
+ *
+ * **There is deliberately no `src`, `url`, `href`, `downloadUrl`, or `dataUri`
+ * field, and `NODE_ALLOWED_ATTRS.attachment` rejects one** — the identical
+ * structural guarantee the `image` node relies on. A reader resolves bytes by
+ * asking the authorized content endpoint for `attachmentId`, which re-checks
+ * workspace membership on every single request, so a stored document can never
+ * carry a URL that outlives permission.
+ *
+ * The other three are a **cached display projection**, not authority:
+ *
+ * - `name` is the sanitized display filename the server derived at upload time.
+ *   It is echoed to every reader, so it is bounded and stripped of control
+ *   characters here, exactly like a mention's cached label.
+ * - `mimeType` selects an icon and a label. It is validated against a bounded
+ *   *grammar* rather than a closed enumeration — unlike `align` or `wrap` —
+ *   because it crosses the server/client boundary and the server's admitted set
+ *   can legitimately grow. A closed set here would mean that adding one file
+ *   type to the API produces editor output `safeParseNoteDocument` rejects,
+ *   which stops autosave silently for the whole session (Part 39). The value is
+ *   never used to decide how anything is rendered or served, so a bounded
+ *   opaque string costs nothing.
+ * - `sizeBytes` is what the card shows before the metadata request lands. The
+ *   authoritative size is always the `attachments.size_bytes` column.
+ *
+ * A stale `name`/`mimeType`/`sizeBytes` is therefore a cosmetic inaccuracy, never
+ * a security or correctness problem: the attachment directory overrides all
+ * three the moment the authorized listing arrives.
+ */
+export interface NoteDocumentAttachmentAttrs {
+  /** Stable attachment UUID. The only handle on the bytes. */
+  readonly attachmentId: string;
+  /** Sanitized display filename. Untrusted text; bounded and escaped on render. */
+  readonly name: string;
+  /** Stored MIME type, used only to pick an icon and a label. */
+  readonly mimeType: string;
+  /** Cached byte count for the card; the database column is authoritative. */
+  readonly sizeBytes: number;
+}
+
+/**
+ * A filename is untrusted text echoed to every reader, so it is bounded and
+ * required to be free of control characters here — before it can reach the
+ * renderer or the plain-text projection — rather than only escaped at the point
+ * of use. Empty is rejected: a card with no name is not a card, and the server
+ * always produces a non-empty sanitized name.
+ */
+function isUsableAttachmentName(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (value.length === 0 || value.length > NOTE_DOCUMENT_LIMITS.maxAttachmentName) return false;
+  CONTROL_CHARACTER_PATTERN.lastIndex = 0;
+  return !CONTROL_CHARACTER_PATTERN.test(value);
+}
+
+function isUsableAttachmentMimeType(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= ATTACHMENT_MIME_MAX_LENGTH &&
+    ATTACHMENT_MIME_PATTERN.test(value)
+  );
+}
+
+/** A non-negative integer within the stored-size bound. Zero is legal. */
+function isAttachmentSize(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= NOTE_DOCUMENT_LIMITS.maxAttachmentSizeBytes
+  );
+}
+
+/**
+ * Return the four reviewed attachment attributes, or `null` when the node does
+ * not carry a stable attachment id, a usable name, a usable MIME type, and a
+ * bounded size. Never throws.
+ *
+ * Unlike the image node's Part 43 additions, none of these is optional: an
+ * attachment card has nothing to show without them, and the node type is new in
+ * this part so there is no historical document that could omit one.
+ */
+export function noteDocumentAttachmentAttrs(attrs: unknown): NoteDocumentAttachmentAttrs | null {
+  if (!isRecord(attrs)) return null;
+  const { attachmentId, name, mimeType, sizeBytes } = attrs;
+  if (!isUuidValue(attachmentId)) return null;
+  if (!isUsableAttachmentName(name)) return null;
+  if (!isUsableAttachmentMimeType(mimeType)) return null;
+  if (!isAttachmentSize(sizeBytes)) return null;
+  return { attachmentId, name, mimeType, sizeBytes };
+}
+
+/**
+ * Whatever readable filename a node carries, cleaned and bounded. Used by the
+ * plain-text projection and by last-resort migration recovery, so a malformed
+ * historical attachment still contributes its name rather than vanishing.
+ */
+function attachmentPlainText(node: PlainRecord): string {
+  const raw = isRecord(node.attrs) ? node.attrs.name : undefined;
+  if (typeof raw !== "string") return "";
+  return raw
+    .replace(CONTROL_CHARACTER_PATTERN, " ")
+    .trim()
+    .slice(0, NOTE_DOCUMENT_LIMITS.maxAttachmentName);
 }
 
 /**
@@ -396,6 +680,10 @@ const BLOCK_NODE_TYPES: ReadonlySet<string> = new Set([
   // caption all need a block box to lay out; an inline image could carry none
   // of them without a second, incompatible widening later.
   "image",
+  // Block for a simpler reason: an attachment card is a *card*. It carries an
+  // icon, a name, a size, a date, and controls, and none of that can sit inside
+  // a line of prose. `Notted.md` §6 describes it as a card, not a chip.
+  "attachment",
 ]);
 const INLINE_NODE_TYPES: ReadonlySet<string> = new Set(["text", "hardBreak", "mention"]);
 const TABLE_CELL_TYPES: ReadonlySet<string> = new Set(["tableHeader", "tableCell"]);
@@ -427,6 +715,9 @@ const NODE_ALLOWED_FIELDS: Readonly<Record<NoteDocumentNodeType, ReadonlySet<str
   // An atom with no content and — like `mention` — no marks, so an image can
   // never smuggle a link, a colour, or any other mark through the renderer.
   image: new Set(["type", "attrs"]),
+  // Identical treatment for the same reason: a card that could carry a `link`
+  // mark would be a card that could carry an arbitrary href.
+  attachment: new Set(["type", "attrs"]),
 };
 
 const NODE_ALLOWED_ATTRS: Readonly<Record<NoteDocumentNodeType, ReadonlySet<string>>> = {
@@ -451,8 +742,23 @@ const NODE_ALLOWED_ATTRS: Readonly<Record<NoteDocumentNodeType, ReadonlySet<stri
   mention: new Set(["id", "label"]),
   // No `src`. See `NoteDocumentImageAttrs`: the absence is the guarantee that a
   // temporary `blob:`/`data:` URL can never be persisted, and this loop is what
-  // rejects a node that tries to carry one.
-  image: new Set(["attachmentId", "alt", "width", "height"]),
+  // rejects a node that tries to carry one. Part 43 added the four layout
+  // attributes; none of them is URL-shaped and none of them ever will be.
+  image: new Set([
+    "attachmentId",
+    "alt",
+    "width",
+    "height",
+    "align",
+    "wrap",
+    "fullWidth",
+    "caption",
+  ]),
+  // No `src`, no `href`, no `downloadUrl`. See `NoteDocumentAttachmentAttrs`:
+  // the absence of any URL-shaped attribute is what guarantees a stored note can
+  // never carry a link to bytes that outlives the reader's permission, and this
+  // loop is what rejects a node that tries to add one.
+  attachment: new Set(["attachmentId", "name", "mimeType", "sizeBytes"]),
 };
 
 const MARK_ALLOWED_ATTRS: Readonly<Record<NoteDocumentMarkType, ReadonlySet<string>>> = {
@@ -717,12 +1023,32 @@ export function extractNoteContentPlain(document: unknown): string {
       sink.push(collectInline(node));
       return;
     }
-    // An image contributes its alt text so search and exports see the words the
-    // author wrote. A decorative image (`alt: ""`) deliberately contributes
-    // nothing at all rather than an empty line.
+    /*
+     * An image contributes its alt text and then its caption, so search and
+     * exports see every word the author wrote. Alt comes first because it
+     * describes the image itself and a screen reader reaches it first; the
+     * caption follows because it is the visible text printed beneath the figure.
+     * Each is a block of its own, and each is omitted when empty — a decorative
+     * image (`alt: ""`) with no caption still contributes nothing at all rather
+     * than one or two empty lines.
+     */
     if (node.type === "image") {
       const alt = imagePlainText(node);
       if (alt.length > 0) sink.push(alt);
+      const caption = imageCaptionPlainText(node);
+      if (caption.length > 0) sink.push(caption);
+      return;
+    }
+    /*
+     * An attachment contributes its filename and nothing else. The name is the
+     * only human-readable thing the node carries, and it is exactly what a
+     * reader searching for "the quarterly deck" would type — so search, export,
+     * and the plain-text projection all see it. The MIME type and the byte count
+     * are machine values and would be noise in prose.
+     */
+    if (node.type === "attachment") {
+      const name = attachmentPlainText(node);
+      if (name.length > 0) sink.push(name);
       return;
     }
     if (node.type === "tableRow") {
@@ -934,8 +1260,10 @@ function renderMentionHtml(node: PlainRecord): string {
 }
 
 /**
- * An image becomes a fixed `<img>` carrying one allow-listed class, the escaped
- * attachment id, and the escaped alt text — **and deliberately no `src`**.
+ * An image becomes a fixed `<figure>` carrying one allow-listed class, three
+ * enumerated layout data attributes, an `<img>` with the escaped attachment id
+ * and alt text — **and deliberately no `src`** — plus a `<figcaption>` when the
+ * author wrote one.
  *
  * This module knows neither the workspace the note belongs to nor the reader's
  * authorization context, and the bytes are only reachable through an endpoint
@@ -944,17 +1272,70 @@ function renderMentionHtml(node: PlainRecord): string {
  * source (a proxied URL for a preview, an embedded data URI for a self-contained
  * export) is Part 63's job, keyed off `data-attachment-id`.
  *
+ * Every emitted value is either a literal from this module or an escaped,
+ * bounded, control-character-free author string: the classes are constants, the
+ * layout attributes come from closed enumerations, and no class, style, or
+ * attribute stored on the node is ever copied through. `data-wrap` carries the
+ * **resolved** wrap (`resolveNoteImageWrap`), so print and export lay a
+ * full-width figure out exactly the way the editor does.
+ *
  * A node whose attributes do not validate renders as nothing: an image with no
- * resolvable attachment has no bytes and no meaning. Its alt text is still
- * recovered by `extractNoteContentPlain`.
+ * resolvable attachment has no bytes and no meaning. Its alt and caption text
+ * are still recovered by `extractNoteContentPlain`.
  */
 function renderImageHtml(node: PlainRecord): string {
   const attrs = noteDocumentImageAttrs(node.attrs);
   if (attrs === null) return "";
-  return (
+  const image =
     `<img class="${NOTE_DOCUMENT_IMAGE_CLASS}" ` +
     `data-attachment-id="${escapeHtml(attrs.attachmentId)}" ` +
-    `alt="${escapeHtml(attrs.alt)}" loading="lazy" decoding="async">`
+    `alt="${escapeHtml(attrs.alt)}" loading="lazy" decoding="async">`;
+  const caption =
+    attrs.caption.length === 0
+      ? ""
+      : `<figcaption class="${NOTE_DOCUMENT_IMAGE_CAPTION_CLASS}">${escapeHtml(attrs.caption)}</figcaption>`;
+  return (
+    `<figure class="${NOTE_DOCUMENT_IMAGE_FIGURE_CLASS}" data-align="${attrs.align}" ` +
+    `data-wrap="${resolveNoteImageWrap(attrs)}" data-full-width="${attrs.fullWidth ? "true" : "false"}">` +
+    `${image}${caption}</figure>`
+  );
+}
+
+/**
+ * An attachment becomes a fixed `<figure>` carrying one allow-listed class, the
+ * escaped attachment id, the escaped MIME type, the escaped filename, and a
+ * human-readable size — **and deliberately no `href`, no `src`, and no download
+ * control.**
+ *
+ * The reasoning is the same one `renderImageHtml` records: this module knows
+ * neither the workspace the note belongs to nor the reader's authorization
+ * context, and the bytes are only reachable through an endpoint that re-checks
+ * both. Inventing a URL here would either be wrong or would smuggle an
+ * unauthorized guess into an export. Substituting a real target — a proxied URL
+ * for a preview, an embedded copy for a self-contained export — is Part 63's
+ * job, keyed off `data-attachment-id`.
+ *
+ * Every emitted value is either a literal from this module or an escaped,
+ * bounded, control-character-free string: the classes are constants, the size is
+ * produced by `formatBinaryBytes` from a validated integer, and no class, style,
+ * or attribute stored on the node is copied through.
+ *
+ * A node whose attributes do not validate renders as nothing — an attachment
+ * with no resolvable id has no bytes and no meaning. Its filename is still
+ * recovered by `extractNoteContentPlain`.
+ */
+function renderAttachmentHtml(node: PlainRecord): string {
+  const attrs = noteDocumentAttachmentAttrs(node.attrs);
+  if (attrs === null) return "";
+  return (
+    `<figure class="${NOTE_DOCUMENT_ATTACHMENT_CLASS}" ` +
+    `data-attachment-id="${escapeHtml(attrs.attachmentId)}" ` +
+    `data-mime-type="${escapeHtml(attrs.mimeType)}" ` +
+    `data-size-bytes="${attrs.sizeBytes}">` +
+    `<span class="${NOTE_DOCUMENT_ATTACHMENT_NAME_CLASS}">${escapeHtml(attrs.name)}</span>` +
+    `<span class="${NOTE_DOCUMENT_ATTACHMENT_META_CLASS}">` +
+    `<span class="${NOTE_DOCUMENT_ATTACHMENT_SIZE_CLASS}">` +
+    `${escapeHtml(formatBinaryBytes(attrs.sizeBytes))}</span></span></figure>`
   );
 }
 
@@ -970,6 +1351,7 @@ function renderNodeHtml(node: unknown): string {
   if (node.type === "pageBreak") return `<div class="${NOTE_DOCUMENT_PAGE_BREAK_CLASS}"></div>`;
   if (node.type === "mention") return renderMentionHtml(node);
   if (node.type === "image") return renderImageHtml(node);
+  if (node.type === "attachment") return renderAttachmentHtml(node);
 
   const children = Array.isArray(node.content) ? node.content.map(renderNodeHtml).join("") : "";
   switch (node.type) {
@@ -1162,6 +1544,47 @@ function validateNodeAttrs(type: NoteDocumentNodeType, attrs: unknown, errors: s
           `Document image ${key} attribute must be null or an integer 1-${NOTE_DOCUMENT_LIMITS.maxImageDimension}`,
         );
       }
+    }
+    // Part 43. Each is optional — absent means the documented default — so no
+    // document written before Part 43 becomes invalid. `fullWidth` combined with
+    // `wrap: "inline"` is deliberately ACCEPTED and resolved at render time by
+    // `resolveNoteImageWrap`; rejecting it here would let the editor build a
+    // document the API refuses, which stops autosave for the whole session.
+    if (!isImageAlign(attrs.align)) {
+      errors.push(
+        `Document image align attribute must be one of: ${NOTE_DOCUMENT_IMAGE_ALIGNMENTS.join(", ")}`,
+      );
+    }
+    if (!isImageWrap(attrs.wrap)) {
+      errors.push(
+        `Document image wrap attribute must be one of: ${NOTE_DOCUMENT_IMAGE_WRAP_MODES.join(", ")}`,
+      );
+    }
+    if (!isImageFullWidth(attrs.fullWidth)) {
+      errors.push("Document image fullWidth attribute must be a boolean");
+    }
+    if (!isImageCaption(attrs.caption)) {
+      errors.push(
+        `Document image caption attribute must be 0-${NOTE_DOCUMENT_LIMITS.maxImageCaption} characters without control characters`,
+      );
+    }
+  }
+  if (type === "attachment") {
+    if (!isUuidValue(attrs.attachmentId)) {
+      errors.push("Document attachment attachmentId attribute is required and must be a UUID");
+    }
+    if (!isUsableAttachmentName(attrs.name)) {
+      errors.push(
+        `Document attachment name attribute is required and must be 1-${NOTE_DOCUMENT_LIMITS.maxAttachmentName} characters without control characters`,
+      );
+    }
+    if (!isUsableAttachmentMimeType(attrs.mimeType)) {
+      errors.push("Document attachment mimeType attribute is required and must be a MIME type");
+    }
+    if (!isAttachmentSize(attrs.sizeBytes)) {
+      errors.push(
+        `Document attachment sizeBytes attribute must be an integer 0-${NOTE_DOCUMENT_LIMITS.maxAttachmentSizeBytes}`,
+      );
     }
   }
 }
@@ -1356,7 +1779,8 @@ function validateContentStructure(
       type === "pageBreak" ||
       type === "text" ||
       type === "mention" ||
-      type === "image") &&
+      type === "image" ||
+      type === "attachment") &&
     content !== undefined
   ) {
     errors.push(`Document ${type} must be a leaf node`);
@@ -1369,6 +1793,7 @@ interface DocumentCounters {
   tableCells: number;
   mentions: number;
   images: number;
+  attachments: number;
 }
 
 function validateNode(
@@ -1447,6 +1872,16 @@ function validateNode(
     }
   }
 
+  if (type === "attachment") {
+    counters.attachments += 1;
+    if (counters.attachments > NOTE_DOCUMENT_LIMITS.maxAttachments) {
+      // Bounds the authorized metadata and content requests one note can fan
+      // out into, exactly as `maxImages` does.
+      errors.push("Document has too many attachments");
+      return;
+    }
+  }
+
   if (
     (type === "heading" ||
       type === "orderedList" ||
@@ -1454,7 +1889,8 @@ function validateNode(
       type === "tableHeader" ||
       type === "tableCell" ||
       type === "mention" ||
-      type === "image") &&
+      type === "image" ||
+      type === "attachment") &&
     node.attrs === undefined
   ) {
     errors.push(`Document ${type} node attributes are required`);
@@ -1505,7 +1941,12 @@ function validateDocumentContract(value: unknown, errors: string[]): void {
     errors.push('Document root must be { type: "doc" }');
     return;
   }
-  validateNode(value, 0, { nodes: 0, totalText: 0, tableCells: 0, mentions: 0, images: 0 }, errors);
+  validateNode(
+    value,
+    0,
+    { nodes: 0, totalText: 0, tableCells: 0, mentions: 0, images: 0, attachments: 0 },
+    errors,
+  );
 }
 
 /** Validate the complete contract while collecting all independently reachable issues. */
@@ -1628,9 +2069,18 @@ function recoverTextFromNode(node: unknown): string {
   // A mention stores its readable name in an attribute, so the last-resort
   // text-only recovery has to read it explicitly or the name would be lost.
   if (node.type === "mention") recovered += mentionPlainText(node);
-  // Same reasoning for an image: its alt text is the only readable thing it
-  // carries, so text-only recovery has to read the attribute explicitly.
-  if (node.type === "image") recovered += imagePlainText(node);
+  // Same reasoning for an image: its alt text and its caption are the only
+  // readable things it carries, so text-only recovery has to read both
+  // attributes explicitly, in the same order the plain-text projection uses.
+  if (node.type === "image") {
+    recovered += [imagePlainText(node), imageCaptionPlainText(node)]
+      .filter((part) => part.length > 0)
+      .join("\n");
+  }
+  // Same reasoning again: the filename is the only readable thing an attachment
+  // carries, so text-only recovery has to read the attribute explicitly or a
+  // malformed card would vanish without a trace of what it referenced.
+  if (node.type === "attachment") recovered += attachmentPlainText(node);
   if (Array.isArray(node.content)) {
     for (const child of node.content) recovered += recoverTextFromNode(child);
   }
@@ -1756,9 +2206,18 @@ function normalizeMentionNode(node: PlainRecord): PlainRecord[] {
 
 /**
  * Keep an image as an image when it still carries a stable attachment id and a
- * usable alt; otherwise degrade it to its alt text. Attributes are re-emitted in
- * canonical form, so a historical node carrying a stray `src` — the one thing
- * the contract must never store — loses it here instead of failing the note.
+ * usable alt; otherwise degrade it to its alt and caption text. Attributes are
+ * re-emitted in canonical form, so a historical node carrying a stray `src` —
+ * the one thing the contract must never store — loses it here instead of failing
+ * the note, an absent Part 43 attribute gains its documented default, and an
+ * unusable one (`align: "diagonal"`) is replaced rather than propagated.
+ *
+ * Recovery is also the one place the `fullWidth` + `wrap: "inline"` conflict is
+ * *written down* rather than only resolved for rendering: a node being repaired
+ * is being rewritten anyway, so it is stored in the form
+ * `resolveNoteImageWrap` would have produced. A valid document is never touched
+ * — `migrateNoteDocument` short-circuits before reaching here — so this can
+ * never silently rewrite a note that was already fine.
  */
 function normalizeImageNode(node: PlainRecord): PlainRecord[] {
   const attrs = noteDocumentImageAttrs(node.attrs);
@@ -1771,14 +2230,23 @@ function normalizeImageNode(node: PlainRecord): PlainRecord[] {
           alt: attrs.alt,
           width: attrs.width,
           height: attrs.height,
+          align: attrs.align,
+          wrap: resolveNoteImageWrap(attrs),
+          fullWidth: attrs.fullWidth,
+          caption: attrs.caption,
         },
       },
     ];
   }
-  // Salvage what a malformed node can still contribute: a bounded alt, and a
-  // bounded id only when it is genuinely a UUID.
+  // Salvage what a malformed node can still contribute: bounded text, a bounded
+  // id only when it is genuinely a UUID, and defaults for every layout value
+  // that did not survive.
   const raw = isRecord(node.attrs) ? node.attrs : {};
   if (isUuidValue(raw.attachmentId)) {
+    const fullWidth = isImageFullWidth(raw.fullWidth) ? (raw.fullWidth ?? false) : false;
+    const wrap = isImageWrap(raw.wrap)
+      ? (raw.wrap ?? NOTE_DOCUMENT_IMAGE_WRAP_DEFAULT)
+      : NOTE_DOCUMENT_IMAGE_WRAP_DEFAULT;
     return [
       {
         type: "image",
@@ -1787,11 +2255,71 @@ function normalizeImageNode(node: PlainRecord): PlainRecord[] {
           alt: imagePlainText(node),
           width: imageDimensionOrNull(raw.width),
           height: imageDimensionOrNull(raw.height),
+          align: isImageAlign(raw.align)
+            ? (raw.align ?? NOTE_DOCUMENT_IMAGE_ALIGN_DEFAULT)
+            : NOTE_DOCUMENT_IMAGE_ALIGN_DEFAULT,
+          wrap: resolveNoteImageWrap({ wrap, fullWidth }),
+          fullWidth,
+          caption: imageCaptionPlainText(node),
         },
       },
     ];
   }
-  return paragraphsFromRecoveredText(imagePlainText(node));
+  return paragraphsFromRecoveredText(
+    [imagePlainText(node), imageCaptionPlainText(node)]
+      .filter((part) => part.length > 0)
+      .join("\n"),
+  );
+}
+
+/**
+ * Keep an attachment as an attachment when it still carries a stable id and a
+ * usable name; otherwise degrade it to its filename as text. An attachment is
+ * never silently dropped.
+ *
+ * Attributes are re-emitted in canonical form, so a historical node carrying a
+ * stray `href` — the one thing the contract must never store — loses it here
+ * instead of failing the whole note. When only the id survives, the remaining
+ * three are filled with the safest possible stand-ins: the recovered filename
+ * (or a generic one), the generic binary MIME type, and a zero size. All three
+ * are display-only and the attachment directory replaces them the moment the
+ * authorized listing arrives, so the repaired card is accurate as soon as it is
+ * on screen. A valid document is never touched — `migrateNoteDocument`
+ * short-circuits before reaching here.
+ */
+function normalizeAttachmentNode(node: PlainRecord): PlainRecord[] {
+  const attrs = noteDocumentAttachmentAttrs(node.attrs);
+  if (attrs !== null) {
+    return [
+      {
+        type: "attachment",
+        attrs: {
+          attachmentId: attrs.attachmentId,
+          name: attrs.name,
+          mimeType: attrs.mimeType,
+          sizeBytes: attrs.sizeBytes,
+        },
+      },
+    ];
+  }
+  const raw = isRecord(node.attrs) ? node.attrs : {};
+  if (isUuidValue(raw.attachmentId)) {
+    const recovered = attachmentPlainText(node);
+    return [
+      {
+        type: "attachment",
+        attrs: {
+          attachmentId: raw.attachmentId,
+          name: recovered.length > 0 ? recovered : "Attachment",
+          mimeType: isUsableAttachmentMimeType(raw.mimeType)
+            ? raw.mimeType
+            : "application/octet-stream",
+          sizeBytes: isAttachmentSize(raw.sizeBytes) ? raw.sizeBytes : 0,
+        },
+      },
+    ];
+  }
+  return paragraphsFromRecoveredText(attachmentPlainText(node));
 }
 
 function normalizeInlineNode(node: unknown): PlainRecord[] {
@@ -2008,6 +2536,7 @@ function normalizeToBlocks(node: unknown): PlainRecord[] {
     return inline.length === 0 ? [] : [{ type: "paragraph", content: inline }];
   }
   if (node.type === "image") return normalizeImageNode(node);
+  if (node.type === "attachment") return normalizeAttachmentNode(node);
   if (node.type === "hardBreak") {
     return paragraphsFromRecoveredText(recoverTextFromNode(node));
   }

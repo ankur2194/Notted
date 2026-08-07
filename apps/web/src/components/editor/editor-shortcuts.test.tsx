@@ -12,6 +12,7 @@ import {
   paragraphDocument,
   renderEditor,
   userEventKeysFor,
+  type EditorHarness,
 } from "@/test/editor-harness";
 
 // Focus mode is a page-wide viewing mode held in one client-only store, so it
@@ -24,7 +25,53 @@ afterEach(() => {
 interface ShortcutCase {
   /** Runs before the key press; the default selects the word "hello". */
   readonly setup?: (editor: Editor) => void;
+  /**
+   * Overrides how the binding is delivered. Only needed when the shortcut
+   * depends on a `NodeSelection` surviving until the key lands — see
+   * `pressBinding` in the harness for why `userEvent.keyboard` destroys one.
+   */
+  readonly press?: (harness: EditorHarness, binding: string) => void | Promise<void>;
   readonly assert: (editor: Editor) => void | Promise<void>;
+}
+
+const IMAGE_ATTACHMENT_ID = "3f4a1b2c-5d6e-4f70-8a91-b2c3d4e5f607";
+
+/** A note whose second block is a 400x200 image, with that image selected. */
+function selectImage(editor: Editor): void {
+  editor.commands.setContent(
+    {
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "before" }] },
+        {
+          type: "image",
+          attrs: { attachmentId: IMAGE_ATTACHMENT_ID, alt: "Chart", width: 400, height: 200 },
+        },
+      ],
+    },
+    false,
+  );
+  let target = -1;
+  editor.state.doc.descendants((node, pos) => {
+    if (target === -1 && node.type.name === "image") target = pos;
+    return target === -1;
+  });
+  if (target === -1) throw new Error("the image node was not inserted");
+  editor.commands.setNodeSelection(target);
+}
+
+function expectImageSize(width: number, height: number) {
+  return (editor: Editor): void => {
+    const found: Record<string, unknown>[] = [];
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === "image") found.push({ ...node.attrs });
+      return true;
+    });
+    expect(found[0]).toMatchObject({ width, height });
+    // The clamp and the ratio lock must never produce something the contract
+    // refuses, or autosave would stop for the session.
+    expect(safeParseNoteDocument(editor.getJSON()).success).toBe(true);
+  };
 }
 
 function selectHello(editor: Editor): void {
@@ -225,6 +272,25 @@ const EDITOR_CASES: Readonly<Record<string, ShortcutCase>> = {
   alignCenter: { assert: expectActive("paragraph", { textAlign: "center" }) },
   alignRight: { assert: expectActive("paragraph", { textAlign: "right" }) },
   alignJustify: { assert: expectActive("paragraph", { textAlign: "justify" }) },
+  imageWiden: {
+    // The selection is re-asserted inside `press`, after `focusEditor`, because
+    // focusing the surface is itself enough to let jsdom's selection readback
+    // collapse a `NodeSelection`.
+    press: (harness, binding) => {
+      selectImage(harness.editor);
+      harness.pressBinding(binding);
+    },
+    // 400 + 32, with the 2:1 ratio preserved. jsdom has no page paper, so the
+    // clamp falls back to the contract bound and 432 passes it unchanged.
+    assert: expectImageSize(432, 216),
+  },
+  imageNarrow: {
+    press: (harness, binding) => {
+      selectImage(harness.editor);
+      harness.pressBinding(binding);
+    },
+    assert: expectImageSize(368, 184),
+  },
   undo: {
     setup: (editor) => {
       selectHello(editor);
@@ -269,12 +335,14 @@ describe("declared keyboard shortcuts", () => {
       expect(testCase).toBeDefined();
       if (testCase === undefined) return;
 
-      const { editor, user, focusEditor } = await renderEditor();
+      const harness = await renderEditor();
+      const { editor, user, focusEditor } = harness;
       if (testCase.setup === undefined) selectHello(editor);
       else testCase.setup(editor);
 
       focusEditor();
-      await user.keyboard(userEventKeysFor(shortcut.binding));
+      if (testCase.press === undefined) await user.keyboard(userEventKeysFor(shortcut.binding));
+      else await testCase.press(harness, shortcut.binding);
       await testCase.assert(editor);
     });
   }

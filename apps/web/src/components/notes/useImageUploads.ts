@@ -7,6 +7,12 @@ import { useCallback, useEffect, useRef } from "react";
 import type { ImageUploadFileInputHandle } from "./ImageUploadFileInput";
 import type { AttachmentDirectory } from "@/components/editor/attachment-directory";
 import type {
+  AttachmentFilePickerHandler,
+  AttachmentFilePickerRequest,
+  AttachmentUploadHandler,
+  AttachmentUploadRequest,
+} from "@/components/editor/extensions/CustomAttachment";
+import type {
   ImageFilePickerHandler,
   ImageFilePickerRequest,
   ImageUploadHandler,
@@ -16,12 +22,13 @@ import type {
   ImageInsertionController,
   ImagePlaceholderState,
 } from "@/components/editor/extensions/image-upload-placeholder";
-import type { ImageUploadItem, ImageUploadManager } from "@/lib/notes/image-uploads";
+import type { ImageUploadItem, ImageUploadManager, UploadKind } from "@/lib/notes/image-uploads";
 import type { AttachmentListResult, AttachmentMedia } from "@notted/shared-types";
 import type { RefObject } from "react";
 
 import { createObjectUrlRegistry } from "@/components/editor/image-transfer";
 import { attachmentEntry, deleteAttachment } from "@/lib/notes/attachment-requests";
+import { checkUploadFile } from "@/lib/notes/attachment-uploads";
 import { createImageUploadManager, defaultImageAlt } from "@/lib/notes/image-uploads";
 import { noteQueryKeys } from "@/lib/notes/query-keys";
 import { uploadNoteImage } from "@/lib/notes/upload-request";
@@ -43,6 +50,45 @@ export interface ImageUploadsHandle {
   /** Wired to the hidden `<input type="file">`. */
   readonly fileInputRef: RefObject<ImageUploadFileInputHandle | null>;
   readonly handlePickedFiles: (files: readonly File[]) => void;
+  /** Passed to `TiptapEditor` as `uploadAttachments` (paste and drop, Part 44). */
+  readonly uploadAttachments: AttachmentUploadHandler;
+  /** Passed to `TiptapEditor` as `onRequestAttachmentFiles`. */
+  readonly requestAttachmentFiles: AttachmentFilePickerHandler;
+  /**
+   * A **second** hidden `<input type="file">`, not a reconfigured first one.
+   *
+   * `accept` has to be set before the picker opens, and mutating a live input's
+   * `accept` between an image request and a file request is a race the writer
+   * would experience as the wrong dialog filter. Two inputs cost two hidden DOM
+   * nodes and remove the race entirely.
+   */
+  readonly attachmentInputRef: RefObject<ImageUploadFileInputHandle | null>;
+  readonly handlePickedAttachmentFiles: (files: readonly File[]) => void;
+}
+
+/**
+ * A name the shared contract is **guaranteed** to accept.
+ *
+ * This is a correctness guard, not cosmetics. `noteDocumentAttachmentAttrs`
+ * rejects an empty name, a name over `maxAttachmentName`, and a name containing
+ * a control character — and a rejected attachment node makes
+ * `safeParseNoteDocument` reject the whole document, which stops autosave
+ * silently and permanently for that note. The server already sanitizes
+ * `displayName`, so every branch below is defence in depth against a future
+ * server change rather than an expected case, but the cost of being wrong here
+ * is a writer losing work with no visible cause.
+ */
+function attachmentNodeName(attachment: AttachmentMedia, fallback: string): string {
+  for (const candidate of [attachment.displayName, fallback, "Attachment"]) {
+    const cleaned = candidate
+      // eslint-disable-next-line no-control-regex -- stripping control characters is the point.
+      .replace(/[\u0000-\u001f\u007f-\u009f]/gu, " ")
+      .replace(/\s+/gu, " ")
+      .trim()
+      .slice(0, NOTE_DOCUMENT_LIMITS.maxAttachmentName);
+    if (cleaned.length > 0) return cleaned;
+  }
+  return "Attachment";
 }
 
 /** A dimension the shared contract will accept, or `null`. Never a guess. */
@@ -85,6 +131,8 @@ export function useImageUploads({
   const queryClient = useQueryClient();
   const fileInputRef = useRef<ImageUploadFileInputHandle | null>(null);
   const pendingPickRef = useRef<ImageFilePickerRequest | null>(null);
+  const attachmentInputRef = useRef<ImageUploadFileInputHandle | null>(null);
+  const pendingAttachmentPickRef = useRef<AttachmentFilePickerRequest | null>(null);
   const controllersRef = useRef(new Map<string, ImageInsertionController>());
   const previewsRef = useRef(createObjectUrlRegistry());
   const managerRef = useRef<ImageUploadManager | null>(null);
@@ -140,7 +188,13 @@ export function useImageUploads({
 
   if (managerRef.current === null) {
     managerRef.current = createImageUploadManager({
+      // One endpoint serves both kinds: `POST …/notes/:id/attachments` sniffs
+      // the bytes server-side and routes to `uploadImage` or `uploadFile`
+      // itself, so the client never gets to choose which pipeline runs. The
+      // transport is therefore shared verbatim and `call.kind` is carried only
+      // so the queue's own copy and pre-flight can differ.
       upload: (call) => uploadNoteImage(call),
+      check: checkUploadFile,
       onEvent: (event) => {
         const manager = managerRef.current;
         if (manager === null) return;
@@ -171,12 +225,26 @@ export function useImageUploads({
           // the intrinsic size the moment it mounts, and never flashes.
           directoryRef.current.upsert(entry);
           cacheAttachment(event.attachment);
-          controller.complete(event.item.id, {
-            attachmentId: event.attachment.id,
-            alt: defaultImageAlt(event.item.fileName, NOTE_DOCUMENT_LIMITS.maxImageAlt),
-            width: storedDimension(entry.width),
-            height: storedDimension(entry.height),
-          });
+          if (event.item.kind === "file") {
+            // The node caches the **server's** name, type, and size, not the
+            // browser's: the API sanitizes the filename, forces the extension to
+            // the sniffed type, and re-measures the length, so the client's
+            // `File` fields are already known to be the less accurate pair. The
+            // directory overrides all three on the next listing anyway.
+            controller.completeAttachment(event.item.id, {
+              attachmentId: event.attachment.id,
+              name: attachmentNodeName(event.attachment, event.item.fileName),
+              mimeType: event.attachment.mimeType,
+              sizeBytes: event.attachment.sizeBytes,
+            });
+          } else {
+            controller.complete(event.item.id, {
+              attachmentId: event.attachment.id,
+              alt: defaultImageAlt(event.item.fileName, NOTE_DOCUMENT_LIMITS.maxImageAlt),
+              width: storedDimension(entry.width),
+              height: storedDimension(entry.height),
+            });
+          }
           forget(event.item.id);
           return;
         }
@@ -187,14 +255,22 @@ export function useImageUploads({
   }
 
   const startUpload = useCallback(
-    (files: readonly File[], insertAt: number, controller: ImageInsertionController): void => {
+    (
+      files: readonly File[],
+      insertAt: number,
+      controller: ImageInsertionController,
+      kind: UploadKind = "image",
+    ): void => {
       const manager = managerRef.current;
       if (manager === null || !editableRef.current || files.length === 0) return;
-      const items = manager.enqueue(targetRef.current, files);
+      const items = manager.enqueue(targetRef.current, files, kind);
       items.forEach((item, index) => {
         controllersRef.current.set(item.id, controller);
         const file = files[index];
-        if (file !== undefined) previewsRef.current.create(item.id, file);
+        // Only an image gets a `blob:` thumbnail. A PDF or a ZIP has nothing an
+        // `<img>` could render, and minting an object URL for one would be an
+        // allocation whose only visible effect is a broken image icon.
+        if (file !== undefined && kind === "image") previewsRef.current.create(item.id, file);
         // Every placeholder in one batch is anchored at the same position. From
         // here `DecorationSet.map` keeps each one where the writer put it, no
         // matter how much text is typed around them while the transfers run.
@@ -206,7 +282,7 @@ export function useImageUploads({
 
   const uploadImages = useCallback(
     (request: ImageUploadRequest): void => {
-      startUpload(request.files, request.insertAt, request.controller);
+      startUpload(request.files, request.insertAt, request.controller, "image");
     },
     [startUpload],
   );
@@ -224,7 +300,30 @@ export function useImageUploads({
       const pending = pendingPickRef.current;
       pendingPickRef.current = null;
       if (pending === null) return;
-      startUpload(files, pending.insertAt, pending.controller);
+      startUpload(files, pending.insertAt, pending.controller, "image");
+    },
+    [startUpload],
+  );
+
+  const uploadAttachments = useCallback(
+    (request: AttachmentUploadRequest): void => {
+      startUpload(request.files, request.insertAt, request.controller, "file");
+    },
+    [startUpload],
+  );
+
+  const requestAttachmentFiles = useCallback((request: AttachmentFilePickerRequest): void => {
+    if (!editableRef.current) return;
+    pendingAttachmentPickRef.current = request;
+    attachmentInputRef.current?.open();
+  }, []);
+
+  const handlePickedAttachmentFiles = useCallback(
+    (files: readonly File[]): void => {
+      const pending = pendingAttachmentPickRef.current;
+      pendingAttachmentPickRef.current = null;
+      if (pending === null) return;
+      startUpload(files, pending.insertAt, pending.controller, "file");
     },
     [startUpload],
   );
@@ -242,5 +341,14 @@ export function useImageUploads({
     };
   }, []);
 
-  return { uploadImages, requestImageFiles, fileInputRef, handlePickedFiles };
+  return {
+    uploadImages,
+    requestImageFiles,
+    fileInputRef,
+    handlePickedFiles,
+    uploadAttachments,
+    requestAttachmentFiles,
+    attachmentInputRef,
+    handlePickedAttachmentFiles,
+  };
 }

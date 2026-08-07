@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 
 import { AuthModule } from "../auth/auth.module";
 import { AuthorizationModule } from "../authorization/authorization.module";
+import { StorageModule } from "../storage/storage.module";
 
 import { WorkspacesController } from "./workspaces.controller";
 import { WorkspacesService } from "./workspaces.service";
@@ -13,9 +14,16 @@ import { WorkspacesTrpcRouter } from "./workspaces.trpc";
  * notification/shell modules). `AuthModule` provides `AuthService` (trusted
  * origin checks + `AuthGuard`) and `AuthorizationModule` provides the
  * `@RequireAuthorization` guard/interceptors and `AuthorizationEntryService`.
+ *
+ * `StorageModule` (Part 45) supplies `StorageQuotaService` to
+ * `WorkspacesTrpcRouter` so the `workspace.storageUsage` procedure calls the
+ * same service and policy the REST route does. The arrow points one way only:
+ * `StorageModule` imports `AuthModule`, `AuthorizationModule`, and
+ * `MaintenanceModule`, none of which import this module, so no cycle is created
+ * and no `forwardRef` is needed.
  */
 @Module({
-  imports: [AuthModule, AuthorizationModule],
+  imports: [AuthModule, AuthorizationModule, StorageModule],
   controllers: [WorkspacesController],
   providers: [WorkspacesService, WorkspacesTrpcRouter],
   exports: [WorkspacesService, WorkspacesTrpcRouter],

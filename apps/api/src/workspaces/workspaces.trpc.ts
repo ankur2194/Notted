@@ -9,6 +9,7 @@ import {
   workspaceDetailSchema,
   workspaceListQuerySchema,
   workspacePageSchema,
+  workspaceStorageUsageSchema,
   workspaceUpdateResultSchema,
 } from "@notted/shared-validators";
 import { TRPCError } from "@trpc/server";
@@ -16,6 +17,7 @@ import { z } from "zod";
 
 import { AuthService } from "../auth/auth.service";
 import { requireIdempotencyKey } from "../common/idempotency/api-idempotency";
+import { StorageQuotaService } from "../storage/storage-quota.service";
 import { createTrpcContext, type TrpcContext } from "../trpc/trpc.context";
 import { executeTrpc, TRPC_PATH, trpc } from "../trpc/trpc.router";
 
@@ -42,7 +44,21 @@ const workspaceDeleteInputSchema = z
   .object({ workspaceId: uuidSchema, data: workspaceDeleteSchema })
   .strict();
 
-function buildWorkspaceSubrouter(workspaces: WorkspacesService, auth: AuthService) {
+/**
+ * WHAT IS DELIBERATELY ABSENT: storage maintenance.
+ *
+ * `POST /api/v1/workspaces/:workspaceId/storage/maintenance` is REST-only and
+ * stays that way. The sweeps hard-delete note rows and object bytes, so the
+ * action needs the REST surface's explicit, auditable ergonomics — an
+ * `Idempotency-Key`-friendly POST an operator invokes on purpose, documented in
+ * OpenAPI — rather than a procedure the first-party client could call as easily
+ * as it reads a number. Usage READING is safe to expose here; deleting is not.
+ */
+function buildWorkspaceSubrouter(
+  workspaces: WorkspacesService,
+  auth: AuthService,
+  storageQuota: StorageQuotaService,
+) {
   return trpc.router({
     create: authenticatedProcedure
       .input(createWorkspaceSchema)
@@ -85,6 +101,27 @@ function buildWorkspaceSubrouter(workspaces: WorkspacesService, auth: AuthServic
       .query(({ ctx, input }) =>
         executeTrpc(() =>
           workspaces.read({
+            principal: ctx.principal,
+            workspaceId: input.workspaceId,
+            requestId: ctx.requestId,
+          }),
+        ),
+      ),
+    /**
+     * Workspace storage usage for the settings surface.
+     *
+     * Delegates to the SAME `StorageQuotaService.readUsage` the REST route
+     * calls, so both transports share one `settings.read` authorization on the
+     * `settings` resource and one aggregate query (ADR 0002). A query, not a
+     * mutation: it reads a number, takes no lock, and opens no transaction, so
+     * there is no state change for `assertTrustedMutationOrigin` to protect.
+     */
+    storageUsage: authenticatedProcedure
+      .input(workspaceSelectorSchema)
+      .output(workspaceStorageUsageSchema)
+      .query(({ ctx, input }) =>
+        executeTrpc(() =>
+          storageQuota.readUsage({
             principal: ctx.principal,
             workspaceId: input.workspaceId,
             requestId: ctx.requestId,
@@ -144,8 +181,8 @@ export class WorkspacesTrpcRouter {
   readonly workspaceRouter: WorkspaceTrpcSubrouter;
   readonly router: WorkspacesCompatRouter;
 
-  constructor(workspaces: WorkspacesService, auth: AuthService) {
-    this.workspaceRouter = buildWorkspaceSubrouter(workspaces, auth);
+  constructor(workspaces: WorkspacesService, auth: AuthService, storageQuota: StorageQuotaService) {
+    this.workspaceRouter = buildWorkspaceSubrouter(workspaces, auth, storageQuota);
     // Compatibility wrapper for existing Part 26 callers/tests. Runtime uses
     // TrpcRootRouter to compose this subrouter with notes and folders.
     this.router = buildWorkspaceCompatRouter(this.workspaceRouter);

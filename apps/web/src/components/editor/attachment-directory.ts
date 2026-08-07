@@ -14,13 +14,39 @@
  * endpoint re-checks workspace membership on every request.
  */
 
-import type { AttachmentServableVariant, AttachmentStatus } from "@notted/shared-types";
+import type {
+  AttachmentMediaType,
+  AttachmentServableVariant,
+  AttachmentStatus,
+} from "@notted/shared-types";
 
 /** One attachment's renderable projection. Never carries an object key. */
 export interface AttachmentEntry {
   readonly attachmentId: string;
   readonly displayName: string;
   readonly status: AttachmentStatus;
+  /**
+   * Part 44. `image` renders through `CustomImage`; `file` renders a card.
+   * The node type in the document already says which, so this is a consistency
+   * check rather than a router: a card whose metadata says `image` is a document
+   * that disagrees with the database, and the card says so instead of guessing.
+   */
+  readonly mediaType: AttachmentMediaType;
+  /** Authoritative stored type. Overrides the node's cached copy. */
+  readonly mimeType: string;
+  /** Authoritative size in bytes. Overrides the node's cached copy. */
+  readonly sizeBytes: number;
+  /** ISO timestamp the attachment was created. Shown on the card. */
+  readonly createdAt: string;
+  /**
+   * Absolute, authorization-checked API URL for the stored bytes (Part 44).
+   *
+   * It is the `full` content URL, which for a generic file resolves to the one
+   * stored object. It is used as an `<a download href>` target and as the fetch
+   * source for the PDF preview — never persisted into the note document, which
+   * has no attribute that could hold it.
+   */
+  readonly contentUrl: string;
   /** Intrinsic size of the servable rendition, for reserving layout space. */
   readonly width: number | null;
   readonly height: number | null;
@@ -102,9 +128,24 @@ export function createAttachmentDirectory(
  * request, never correctness.
  */
 export function documentHasImage(document: unknown): boolean {
-  if (Array.isArray(document)) return document.some(documentHasImage);
+  return documentHasNodeType(document, "image");
+}
+
+/**
+ * Whether a document contains at least one `attachment` node (Part 44).
+ *
+ * Gates the same metadata fetch `documentHasImage` gates, and for the same
+ * reason. Both feed one directory and one cache entry, so a note holding either
+ * kind issues exactly one listing request on open.
+ */
+export function documentHasAttachment(document: unknown): boolean {
+  return documentHasNodeType(document, "attachment");
+}
+
+function documentHasNodeType(document: unknown, type: string): boolean {
+  if (Array.isArray(document)) return document.some((child) => documentHasNodeType(child, type));
   if (typeof document !== "object" || document === null) return false;
   const node: Record<string, unknown> = document as Record<string, unknown>;
-  if (node.type === "image") return true;
-  return documentHasImage(node.content);
+  if (node.type === type) return true;
+  return documentHasNodeType(node.content, type);
 }

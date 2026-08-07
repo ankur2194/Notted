@@ -101,6 +101,9 @@ function pngBytes(width: number, height: number, rgb: readonly [number, number, 
 }
 
 const RED_PNG = pngBytes(64, 32, [220, 40, 40]);
+// The resize journey needs headroom: a 64 px figure cannot shrink by 120 px,
+// because `IMAGE_MIN_WIDTH_PX` (48) correctly clamps the drag long before that.
+const WIDE_PNG = pngBytes(400, 200, [220, 40, 40]);
 const BLUE_PNG = pngBytes(48, 48, [40, 60, 220]);
 const GREEN_PNG = pngBytes(32, 64, [40, 200, 90]);
 
@@ -497,6 +500,278 @@ test.describe.serial("Part 42 image insertion in a real browser", () => {
           })
           .catch(() => undefined);
       }
+      await context.close();
+    }
+  });
+});
+
+/**
+ * Part 43 browser verification.
+ *
+ * Everything below needs a real layout engine and cannot be proved in jsdom:
+ *
+ * 1. **Resize.** jsdom reports every rect as zero, so a drag has no measurable
+ *    result there. Only a browser can show that the committed width is the width
+ *    the pointer produced, that it is clamped to the printable column, and that
+ *    it survives a reload.
+ * 2. **Keyboard operation of the floating toolbar.** The toolbar is portalled
+ *    past the paper's `transform`, and its roving tab index is only meaningful
+ *    against real focus.
+ * 3. **Print rendering.** `emulateMedia({ media: "print" })` is the only way to
+ *    apply `print.css` and see that alignment, wrap, and the caption survive —
+ *    which is Part 43's explicit acceptance criterion.
+ */
+test.describe.serial("Part 43 image manipulation in a real browser", () => {
+  test.skip(
+    !disposable,
+    "image verification requires PLAYWRIGHT_DISPOSABLE_TEST_RUN=true and disposable PostgreSQL, Redis, MinIO, and Mailpit",
+  );
+
+  const figure = (page: Page) => page.locator(".notted-editor-content .notted-image-figure");
+
+  /** Registers, creates a workspace and note, opens it, and uploads one image. */
+  async function noteWithOneImage(
+    page: Page,
+    role: string,
+    title: string,
+    buffer: Buffer = RED_PNG,
+  ): Promise<{ workspaceId: string; workspaceName: string; noteId: string }> {
+    const workspaceName = `Images ${randomUUID().slice(0, 8)}`;
+    await register(page, identity(role));
+    const workspaceId = await createWorkspace(page, workspaceName);
+    const noteId = await createNote(page, workspaceId, title);
+    await page.goto(`/workspaces/${workspaceId}/notes/${noteId}`);
+
+    const body = page.getByRole("textbox", { name: /Note content/u });
+    await expect(body).toBeVisible({ timeout: ROUTE_COMPILE_MS });
+    await body.click();
+    await page.keyboard.type("Surrounding paragraph.");
+    await pickImages(page, [{ name: "figure.png", mimeType: "image/png", buffer }]);
+    await expect(images(page)).toHaveCount(1, { timeout: UPLOAD_MS });
+    await waitForSaved(page);
+    return { workspaceId, workspaceName, noteId };
+  }
+
+  async function deleteWorkspace(page: Page, workspaceId: string, name: string): Promise<void> {
+    await page.request
+      .delete(`${apiUrl}/api/v1/workspaces/${workspaceId}`, {
+        headers: { Origin: appUrl },
+        data: { confirm: true, expectedName: name },
+      })
+      .catch(() => undefined);
+  }
+
+  /** The stored image node's attributes, read straight from the API. */
+  async function storedImageAttrs(
+    request: APIRequestContext,
+    workspaceId: string,
+    noteId: string,
+  ): Promise<Record<string, unknown>> {
+    const raw = await storedDocument(request, workspaceId, noteId);
+    const parsed = JSON.parse(raw) as { content?: { type?: string; attrs?: unknown }[] };
+    const image = (parsed.content ?? []).find((node) => node.type === "image");
+    expect(image, "the stored document has no image node").toBeTruthy();
+    return (image?.attrs ?? {}) as Record<string, unknown>;
+  }
+
+  test("a resized image keeps its size across a reload", async ({ browser }) => {
+    test.slow();
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    let created: { workspaceId: string; workspaceName: string; noteId: string } | null = null;
+
+    try {
+      created = await noteWithOneImage(page, "resizer", "Resize note", WIDE_PNG);
+
+      // Selecting the figure is what reveals the handles; they are hidden for an
+      // unselected image so an unselected note is never covered in chrome.
+      await images(page).first().click();
+      const handle = page.locator('.notted-image-handle[data-image-handle="se"]');
+      await expect(handle).toBeVisible();
+
+      const before = await figure(page).evaluate(
+        (element) => element.getBoundingClientRect().width,
+      );
+      const box = await handle.boundingBox();
+      expect(box).not.toBeNull();
+      if (box === null) throw new Error("the resize handle has no layout box");
+
+      // Drag the corner 120 px to the left. The deltas and the element's rect are
+      // both in scaled viewport space; nothing is divided by the zoom anywhere.
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width / 2 - 60, box.y + box.height / 2, { steps: 5 });
+      await page.mouse.move(box.x + box.width / 2 - 120, box.y + box.height / 2, { steps: 5 });
+      await page.mouse.up();
+
+      const after = await figure(page).evaluate((element) => element.getBoundingClientRect().width);
+      expect(after).toBeLessThan(before - 50);
+      await waitForSaved(page);
+
+      const attrs = await storedImageAttrs(page.request, created.workspaceId, created.noteId);
+      const storedWidth = attrs.width;
+      expect(typeof storedWidth).toBe("number");
+      expect(storedWidth as number).toBeGreaterThan(0);
+      // The stored value is the layout width, so it must match what is on screen.
+      expect(Math.abs((storedWidth as number) - after)).toBeLessThan(4);
+      // Ratio-locked by default: the height moved with the width.
+      expect(typeof attrs.height).toBe("number");
+
+      // One gesture, one history step: undo restores the original size.
+      //
+      // This has to run *before* the reload. A reloaded editor is constructed
+      // fresh with an empty history stack, so Ctrl+Z there asserts nothing about
+      // how the resize was committed.
+      await page.getByRole("textbox", { name: /Note content/u }).click();
+      await images(page).first().click();
+      await page.keyboard.press("Control+z");
+      await expect
+        .poll(async () => figure(page).evaluate((element) => element.getBoundingClientRect().width))
+        .toBeGreaterThan(after + 50);
+
+      // Redo, so the reload below is checking the resized width that was saved.
+      await page.keyboard.press("Control+Shift+z");
+      await expect
+        .poll(async () => figure(page).evaluate((element) => element.getBoundingClientRect().width))
+        .toBeLessThan(before - 50);
+      // Not `waitForSaved`: undo-then-redo lands on the document that was already
+      // persisted above, so autosave correctly reports no unsaved changes rather
+      // than announcing a second save. Settling back to idle is the real property
+      // — it proves redo restored the saved state exactly, not merely something
+      // narrower than `before`.
+      await expect(page.getByTestId("note-save-status")).toHaveText(/No unsaved changes\./u, {
+        timeout: UPLOAD_MS,
+      });
+
+      // ------------------------------------------------- survives a reload
+      await page.reload();
+      await expect(page.getByRole("textbox", { name: /Note content/u })).toBeVisible({
+        timeout: ROUTE_COMPILE_MS,
+      });
+      await expect(images(page)).toHaveCount(1, { timeout: UPLOAD_MS });
+      const reloaded = await figure(page).evaluate(
+        (element) => element.getBoundingClientRect().width,
+      );
+      expect(Math.abs(reloaded - after)).toBeLessThan(4);
+    } finally {
+      if (created !== null) await deleteWorkspace(page, created.workspaceId, created.workspaceName);
+      await context.close();
+    }
+  });
+
+  test("a keyboard alignment change persists and prints the same way", async ({ browser }) => {
+    test.slow();
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    let created: { workspaceId: string; workspaceName: string; noteId: string } | null = null;
+
+    try {
+      created = await noteWithOneImage(page, "aligner", "Alignment note");
+      await images(page).first().click();
+
+      const toolbar = page.getByRole("toolbar", { name: "Image options" });
+      await expect(toolbar).toBeVisible();
+
+      // Keyboard only from here: focus the first control, walk the roving tab
+      // index with the arrow keys, and activate with Enter.
+      await toolbar.getByRole("button", { name: "Align image left" }).focus();
+      await page.keyboard.press("ArrowRight");
+      await page.keyboard.press("ArrowRight");
+      await expect(toolbar.getByRole("button", { name: "Align image right" })).toBeFocused();
+      await page.keyboard.press("Enter");
+
+      await expect(toolbar.getByRole("button", { name: "Align image right" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await expect(figure(page)).toHaveAttribute("data-align", "right");
+
+      // Wrap the text beside it, still from the keyboard.
+      await toolbar.getByRole("button", { name: "Wrap text beside the image" }).focus();
+      await page.keyboard.press("Enter");
+      await expect(figure(page)).toHaveAttribute("data-wrap", "inline");
+      await waitForSaved(page);
+
+      const attrs = await storedImageAttrs(page.request, created.workspaceId, created.noteId);
+      expect(attrs).toMatchObject({ align: "right", wrap: "inline", fullWidth: false });
+
+      // ------------------------------------------------- survives a reload
+      await page.reload();
+      await expect(page.getByRole("textbox", { name: /Note content/u })).toBeVisible({
+        timeout: ROUTE_COMPILE_MS,
+      });
+      await expect(figure(page)).toHaveAttribute("data-align", "right");
+      await expect(figure(page)).toHaveAttribute("data-wrap", "inline");
+
+      // ------------------------------------------- renders the same in print
+      await page.emulateMedia({ media: "print" });
+      const printed = await figure(page).evaluate((element) => {
+        const style = window.getComputedStyle(element);
+        const handles = element.querySelector(".notted-image-handles");
+        return {
+          float: style.float,
+          handles: handles === null ? "none" : window.getComputedStyle(handles).display,
+        };
+      });
+      expect(printed.float).toBe("right");
+      // Editing chrome never prints.
+      expect(printed.handles).toBe("none");
+      await page.emulateMedia({ media: "screen" });
+    } finally {
+      if (created !== null) await deleteWorkspace(page, created.workspaceId, created.workspaceName);
+      await context.close();
+    }
+  });
+
+  test("a caption survives a reload and prints as text", async ({ browser }) => {
+    test.slow();
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    let created: { workspaceId: string; workspaceName: string; noteId: string } | null = null;
+
+    try {
+      created = await noteWithOneImage(page, "captioner", "Caption note");
+
+      const caption = page.getByRole("textbox", { name: "Image caption" });
+      await expect(caption).toBeVisible();
+      await caption.click();
+      await caption.fill("Figure 1 — quarterly revenue");
+      // Enter commits immediately; the 500 ms debounce is a safety net, not the
+      // only path, and typing must never write once per keystroke.
+      await page.keyboard.press("Enter");
+      await waitForSaved(page);
+
+      const attrs = await storedImageAttrs(page.request, created.workspaceId, created.noteId);
+      expect(attrs.caption).toBe("Figure 1 — quarterly revenue");
+
+      // ------------------------------------------------- survives a reload
+      await page.reload();
+      await expect(page.getByRole("textbox", { name: /Note content/u })).toBeVisible({
+        timeout: ROUTE_COMPILE_MS,
+      });
+      await expect(page.getByRole("textbox", { name: "Image caption" })).toHaveValue(
+        "Figure 1 — quarterly revenue",
+      );
+
+      // ------------------------------------------- renders the same in print
+      await page.emulateMedia({ media: "print" });
+      const printed = await figure(page).evaluate((element) => {
+        const field = element.querySelector(".notted-image-caption__input");
+        const text = element.querySelector(".notted-image-caption__text");
+        return {
+          field: field === null ? "missing" : window.getComputedStyle(field).display,
+          text: text === null ? "missing" : window.getComputedStyle(text).display,
+          content: text?.textContent ?? "",
+        };
+      });
+      // A text field's typed value does not print in any engine, so the caption
+      // is printed from the committed text instead.
+      expect(printed.field).toBe("none");
+      expect(printed.text).not.toBe("none");
+      expect(printed.content).toBe("Figure 1 — quarterly revenue");
+      await page.emulateMedia({ media: "screen" });
+    } finally {
+      if (created !== null) await deleteWorkspace(page, created.workspaceId, created.workspaceName);
       await context.close();
     }
   });

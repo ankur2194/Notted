@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkspaceDetail } from "@notted/shared-types";
+import type { WorkspaceDetail, WorkspaceStorageUsage } from "@notted/shared-types";
 
 const { cookieStore } = vi.hoisted(() => ({
   cookieStore: { getAll: vi.fn<() => { name: string; value: string }[]>(() => []) },
@@ -10,6 +10,7 @@ vi.mock("next/headers", () => ({ cookies: vi.fn(() => Promise.resolve(cookieStor
 import {
   getServerWorkspaceDetail,
   getServerWorkspaceList,
+  getServerWorkspaceStorageUsage,
 } from "@/lib/workspaces/server-workspaces";
 
 const workspaceId = "20000000-0000-4000-8000-000000000001";
@@ -204,5 +205,74 @@ describe("server workspace reads", () => {
     fetchMock.mockRejectedValue(new DOMException("The operation timed out.", "TimeoutError"));
 
     await expect(getServerWorkspaceDetail(workspaceId)).resolves.toEqual({ status: "unavailable" });
+  });
+
+  // Part 45. Storage usage degrades its own card rather than the page, so every
+  // failure mode has to land on a distinct status the overview can render.
+  describe("workspace storage usage", () => {
+    const storageUsage = {
+      workspaceId,
+      plan: "free",
+      usedBytes: 2_048,
+      pendingBytes: 1_024,
+      limitBytes: 1_073_741_824,
+      availableBytes: 1_073_738_752,
+      attachmentCount: 2,
+      limitSource: "plan",
+    } satisfies WorkspaceStorageUsage;
+
+    it("returns the contract-validated aggregate on success", async () => {
+      fetchMock.mockResolvedValue(jsonResponse(storageUsage));
+
+      await expect(getServerWorkspaceStorageUsage(workspaceId)).resolves.toEqual({
+        status: "ready",
+        data: storageUsage,
+      });
+      expect(String(fetchMock.mock.calls[0]![0])).toContain(`/workspaces/${workspaceId}/storage`);
+    });
+
+    it.each([401, 403, 404])(
+      "reports %i as forbidden so a lost membership reads as a permission fact",
+      async (status) => {
+        // 404 included deliberately: the API does not leak the existence of a
+        // workspace the caller may not see, so "not found" here means "not yours".
+        fetchMock.mockResolvedValue(new Response(null, { status }));
+
+        await expect(getServerWorkspaceStorageUsage(workspaceId)).resolves.toEqual({
+          status: "forbidden",
+        });
+      },
+    );
+
+    it("maps any other storage failure to unavailable", async () => {
+      fetchMock.mockResolvedValue(new Response(null, { status: 500 }));
+
+      await expect(getServerWorkspaceStorageUsage(workspaceId)).resolves.toEqual({
+        status: "unavailable",
+      });
+    });
+
+    it("refuses a storage payload that does not match the contract", async () => {
+      fetchMock.mockResolvedValue(jsonResponse({ workspaceId, usedBytes: -1 }));
+
+      await expect(getServerWorkspaceStorageUsage(workspaceId)).resolves.toEqual({
+        status: "unavailable",
+      });
+    });
+
+    it("reports a thrown storage request as unavailable", async () => {
+      fetchMock.mockRejectedValue(new DOMException("The operation timed out.", "TimeoutError"));
+
+      await expect(getServerWorkspaceStorageUsage(workspaceId)).resolves.toEqual({
+        status: "unavailable",
+      });
+    });
+
+    it("never issues a request for a malformed workspace id", async () => {
+      await expect(getServerWorkspaceStorageUsage("not-a-uuid")).resolves.toEqual({
+        status: "unavailable",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 });

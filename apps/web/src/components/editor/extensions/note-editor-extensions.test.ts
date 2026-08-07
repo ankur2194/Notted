@@ -109,6 +109,19 @@ const richDocumentFixture = {
         height: 800,
       },
     },
+    /*
+     * Part 44's generic file card. Block-level and an atom, exactly like the
+     * image; the four attributes are the complete set the contract accepts.
+     */
+    {
+      type: "attachment",
+      attrs: {
+        attachmentId: "3d1a6c88-4a2f-4a1b-9c11-2a5b6d7e8f90",
+        name: "quarterly-report.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 245_760,
+      },
+    },
   ],
 };
 
@@ -209,6 +222,98 @@ describe("note editor extensions", () => {
     expect(json).not.toContain("evil.example");
     expect(json).not.toContain('"image"');
     expect(parsed.textContent).toBe("kept");
+  });
+
+  it("round-trips the Part 43 layout attributes through the clipboard serializer", () => {
+    // The editor's `renderHTML` stays a bare `<img>` carrying `data-*` rather
+    // than the `<figure>` the contract's `renderImageHtml` emits, precisely so
+    // that `parseHTML` can read its own output back: copy and paste inside the
+    // editor must not lose alignment, wrap, full width, or the caption.
+    const original = {
+      type: "doc",
+      content: [
+        {
+          type: "image",
+          attrs: {
+            attachmentId: "8f14e45f-ceea-467a-9a7c-0b3f8f6ee9b1",
+            alt: "Chart",
+            width: 320,
+            height: 240,
+            align: "right",
+            wrap: "inline",
+            fullWidth: false,
+            caption: "Figure 1",
+          },
+        },
+      ],
+    };
+    const html = serializeDocument(original);
+    expect(html).toContain('data-align="right"');
+    expect(html).toContain('data-wrap="inline"');
+    expect(html).toContain('data-full-width="false"');
+    expect(html).toContain('data-caption="Figure 1"');
+    expect(html).not.toContain("src=");
+
+    const schema = getSchema(createNoteEditorExtensions());
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    const reparsed = ProseMirrorDOMParser.fromSchema(schema).parse(container).toJSON();
+    expect(reparsed).toEqual(original);
+    expect(safeParseNoteDocument(reparsed).success).toBe(true);
+  });
+
+  it("round-trips an attachment card through the clipboard serializer without a URL", () => {
+    // Part 44. The same two-projection split the image node uses: the editor's
+    // `renderHTML` emits a marker `div` with `data-*` so `parseHTML` can read
+    // its own output back, while the contract's `renderAttachmentHtml` emits the
+    // semantic `<figure>` for export.
+    const original = {
+      type: "doc",
+      content: [
+        {
+          type: "attachment",
+          attrs: {
+            attachmentId: "3d1a6c88-4a2f-4a1b-9c11-2a5b6d7e8f90",
+            name: "budget.xlsx",
+            mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            sizeBytes: 51_200,
+          },
+        },
+      ],
+    };
+    const html = serializeDocument(original);
+    expect(html).toContain('data-attachment-id="3d1a6c88-4a2f-4a1b-9c11-2a5b6d7e8f90"');
+    expect(html).toContain('data-name="budget.xlsx"');
+    expect(html).toContain('data-size-bytes="51200"');
+    // The invariant of the whole part: the node has no URL-shaped attribute to
+    // emit, so no copied card can carry a link that outlives permission.
+    expect(html).not.toContain("src=");
+    expect(html).not.toContain("href=");
+
+    const schema = getSchema(createNoteEditorExtensions());
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    const reparsed = ProseMirrorDOMParser.fromSchema(schema).parse(container).toJSON();
+    expect(reparsed).toEqual(original);
+    expect(safeParseNoteDocument(reparsed).success).toBe(true);
+  });
+
+  it("adopts no foreign markup as an attachment card", () => {
+    // Only an element carrying this node's own marker is adopted. A pasted
+    // `<figure>` or `<div>` from anywhere else — including one that mimics the
+    // contract's own export markup — matches nothing, so no foreign element can
+    // become a card and no attachment id can be smuggled in by paste.
+    const schema = getSchema(createNoteEditorExtensions());
+    const container = document.createElement("div");
+    container.innerHTML =
+      "<p>kept</p>" +
+      '<figure class="notted-attachment" data-attachment-id="3d1a6c88-4a2f-4a1b-9c11-2a5b6d7e8f90">' +
+      "<span>report.pdf</span></figure>";
+    const parsed = ProseMirrorDOMParser.fromSchema(schema).parse(container);
+    const json = JSON.stringify(parsed.toJSON());
+    expect(json).not.toContain('"attachment"');
+    expect(json).not.toContain("3d1a6c88-4a2f-4a1b-9c11-2a5b6d7e8f90");
+    expect(parsed.textContent).toContain("kept");
   });
 
   it("serializes a font-size-only textStyle with the actual nullable color default", () => {

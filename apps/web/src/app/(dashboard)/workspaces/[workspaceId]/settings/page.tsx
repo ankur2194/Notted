@@ -56,8 +56,8 @@ export default async function WorkspaceSettingsPage({
         </h1>
         <p className="mt-2 text-muted-foreground">
           Manage identity, page defaults, and deletion for{" "}
-          <span className="font-medium">{workspace.name}</span>. Storage limits and billing are
-          read-only here.
+          <span className="font-medium">{workspace.name}</span>. Storage usage is shown here; the
+          storage limit and billing are read-only.
         </p>
       </header>
       <WorkspaceSettings

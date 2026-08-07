@@ -31,9 +31,24 @@ export const AUTOMATIC_RETRY_LIMIT = 1;
 
 export type ImageUploadStatus = "queued" | "uploading" | "error" | "done" | "cancelled";
 
+/**
+ * Which flow a queued transfer belongs to (Part 44).
+ *
+ * The queue is **shared rather than duplicated**: bounded concurrency, one
+ * idempotency key per file reused across retries, the single automatic retry,
+ * cancellation, and orphan cleanup are all identical requirements for an image
+ * and for a PDF, and a second copy of them would be a second set of bugs. The
+ * three things that genuinely differ — which pre-flight bounds apply, which
+ * endpoint the bytes go to, and which node type completion inserts — are
+ * carried by this discriminator and resolved by the caller, not by the queue.
+ */
+export type UploadKind = "image" | "file";
+
 export interface ImageUploadItem {
   /** Temporary id. Identifies the placeholder decoration, never the document. */
   readonly id: string;
+  /** Which flow this transfer belongs to. Chosen at `enqueue`, never changes. */
+  readonly kind: UploadKind;
   readonly fileName: string;
   readonly sizeBytes: number;
   readonly status: ImageUploadStatus;
@@ -70,6 +85,8 @@ export interface ImageUploadTarget {
 
 export interface ImageUploadCall extends ImageUploadTarget {
   readonly file: File;
+  /** Routes the bytes to the image or the generic-file endpoint. */
+  readonly kind: UploadKind;
   readonly idempotencyKey: string;
   readonly onProgress: (progress: UploadProgress) => void;
   readonly signal: AbortSignal;
@@ -81,10 +98,23 @@ export interface ImageUploadManagerOptions {
   readonly concurrency?: number;
   /** Injected so tests get deterministic ids and keys. */
   readonly createId?: () => string;
+  /**
+   * Client pre-flight, injected rather than branched on inside the queue.
+   *
+   * `image-uploads.ts` therefore never imports the attachment bounds, which
+   * keeps the module dependency one-directional (`attachment-uploads` → this
+   * file, never the reverse) and lets a test substitute a check without
+   * fabricating `File` objects that satisfy a real MIME allow-list.
+   */
+  readonly check?: (file: File, kind: UploadKind) => ImageFileCheck;
 }
 
 export interface ImageUploadManager {
-  enqueue(target: ImageUploadTarget, files: readonly File[]): readonly ImageUploadItem[];
+  enqueue(
+    target: ImageUploadTarget,
+    files: readonly File[],
+    kind?: UploadKind,
+  ): readonly ImageUploadItem[];
   retry(id: string): void;
   cancel(id: string): void;
   /** Drop a terminal item (an error the writer has read and accepted). */
@@ -164,13 +194,18 @@ export function defaultImageAlt(fileName: string, maxLength = 500): string {
 }
 
 /** User-facing copy for a failed upload, written from the stable failure kind. */
-export function uploadFailureMessage(fileName: string, failure: NoteRequestFailure): string {
-  const label = fileName.length > 0 ? fileName : "This image";
+export function uploadFailureMessage(
+  fileName: string,
+  failure: NoteRequestFailure,
+  kind: UploadKind = "image",
+): string {
+  const noun = kind === "file" ? "file" : "image";
+  const label = fileName.length > 0 ? fileName : `This ${noun}`;
   switch (failure.kind) {
     case "invalid":
-      return `${label} was rejected as an unsupported or oversized image.`;
+      return `${label} was rejected as an unsupported or oversized ${noun}.`;
     case "forbidden-or-not-found":
-      return `You do not have permission to add images to this note, so ${label} was not uploaded.`;
+      return `You do not have permission to add ${noun}s to this note, so ${label} was not uploaded.`;
     case "version-conflict":
     case "conflict":
       return `${label} could not be added because this note changed elsewhere.`;
@@ -185,6 +220,7 @@ export function uploadFailureMessage(fileName: string, failure: NoteRequestFailu
 interface UploadTask {
   readonly id: string;
   readonly file: File;
+  readonly kind: UploadKind;
   readonly idempotencyKey: string;
   readonly target: ImageUploadTarget;
   item: ImageUploadItem;
@@ -203,6 +239,7 @@ function randomId(): string {
 export function createImageUploadManager(options: ImageUploadManagerOptions): ImageUploadManager {
   const concurrency = Math.max(1, options.concurrency ?? MAX_CONCURRENT_IMAGE_UPLOADS);
   const createId = options.createId ?? randomId;
+  const check = options.check ?? ((file: File): ImageFileCheck => checkImageFile(file));
   const tasks = new Map<string, UploadTask>();
   const order: string[] = [];
   const listeners = new Set<(items: readonly ImageUploadItem[]) => void>();
@@ -287,7 +324,7 @@ export function createImageUploadManager(options: ImageUploadManagerOptions): Im
     const item = patch(task, {
       status: "error",
       progress: null,
-      message: uploadFailureMessage(task.item.fileName, result),
+      message: uploadFailureMessage(task.item.fileName, result, task.kind),
       // A rejected file will be rejected identically forever; only a transient
       // failure is worth offering a Retry button for.
       retryable,
@@ -314,6 +351,7 @@ export function createImageUploadManager(options: ImageUploadManagerOptions): Im
         workspaceId: task.target.workspaceId,
         noteId: task.target.noteId,
         file: task.file,
+        kind: task.kind,
         idempotencyKey: task.idempotencyKey,
         signal: controller.signal,
         onProgress: (progress) => {
@@ -331,18 +369,20 @@ export function createImageUploadManager(options: ImageUploadManagerOptions): Im
   };
 
   return {
-    enqueue: (target, files) => {
+    enqueue: (target, files, kind = "image") => {
       const created: ImageUploadItem[] = [];
       for (const file of files) {
         const id = createId();
-        const check = checkImageFile(file);
+        const verdict = check(file, kind);
         const base: ImageUploadItem = {
           id,
-          fileName: file.name.length > 0 ? file.name : "Untitled image",
+          kind,
+          fileName:
+            file.name.length > 0 ? file.name : kind === "file" ? "Untitled file" : "Untitled image",
           sizeBytes: file.size,
-          status: check.ok ? "queued" : "error",
+          status: verdict.ok ? "queued" : "error",
           progress: null,
-          message: check.ok ? `${file.name} is waiting to upload.` : check.message,
+          message: verdict.ok ? `${file.name} is waiting to upload.` : verdict.message,
           // A file the shared bounds already reject would be rejected
           // identically on every retry, so no Retry is offered for it.
           retryable: false,
@@ -351,6 +391,7 @@ export function createImageUploadManager(options: ImageUploadManagerOptions): Im
         const task: UploadTask = {
           id,
           file,
+          kind,
           // Created once per file and reused by every retry of that file.
           idempotencyKey: createId(),
           target,
@@ -362,7 +403,7 @@ export function createImageUploadManager(options: ImageUploadManagerOptions): Im
         tasks.set(id, task);
         order.push(id);
         created.push(base);
-        emit(check.ok ? { kind: "queued", item: base } : { kind: "failed", item: base });
+        emit(verdict.ok ? { kind: "queued", item: base } : { kind: "failed", item: base });
       }
       pump();
       return created;

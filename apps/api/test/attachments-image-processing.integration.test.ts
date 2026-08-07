@@ -40,10 +40,12 @@ import { AuthorizationPolicyService } from "../src/authorization/authorization-p
 import { AuthorizationRepository } from "../src/authorization/authorization.repository";
 import { parseImageProcessingConfig } from "../src/config/image-processing.config";
 import { parseMinioConfig } from "../src/config/minio.config";
+import { parseStorageConfig } from "../src/config/storage.config";
 import { DatabaseService, type DatabaseTransaction } from "../src/database/database.service";
 import { attachments, auditLogs, schema } from "../src/database/schema";
 import { SEED_IDS, seedDatabase } from "../src/database/seed";
 import { ObjectStorageService } from "../src/infrastructure/minio/object-storage.service";
+import { StorageQuotaService } from "../src/storage/storage-quota.service";
 import { TenantContextService } from "../src/tenant";
 
 import { HEIC_FIXTURE_ENV, heicFixtureFromEnvironment, jpegFixture } from "./image-fixtures";
@@ -58,6 +60,8 @@ import type { StructuredLogger } from "../src/common/logging/structured-logger.s
 import type { SecurityConfig } from "../src/config/security.config";
 import type { AttachmentVariantObject, AttachmentVariantRecord } from "../src/database/schema";
 import type {
+  ListObjectsOptions,
+  ListObjectsResult,
   ObjectStore,
   PutObjectOptions,
   PutObjectResult,
@@ -183,6 +187,24 @@ class PrefixedObjectStore implements ObjectStore {
     );
   }
 
+  /** Prefixed on the way in, stripped on the way out — the mapping stays total. */
+  async listObjects(
+    bucket: StorageBucket,
+    options: ListObjectsOptions,
+  ): Promise<ListObjectsResult> {
+    const page = await this.inner.listObjects(bucket, {
+      ...options,
+      prefix: this.physical(options.prefix),
+    });
+    return {
+      objects: page.objects.map((object) => ({
+        ...object,
+        key: object.key.slice(this.prefix.length),
+      })),
+      truncated: page.truncated,
+    };
+  }
+
   presignedGetUrl(bucket: StorageBucket, key: string, ttlSeconds: number): Promise<string> {
     return this.inner.presignedGetUrl(bucket, this.physical(key), ttlSeconds);
   }
@@ -212,9 +234,20 @@ function buildService(database: DatabaseService, store: ObjectStore): Attachment
     tenant,
   );
   const processor = new ImageProcessingService(parseImageProcessingConfig(process.env));
-  return new AttachmentsService(database, entry, tenant, store, processor, security, {
-    warn: vi.fn(),
-  } as unknown as StructuredLogger);
+  // Real quota service against the real (rolled-back) workspace row. The
+  // fixtures here are far below any plan default, so it admits every upload —
+  // but it is the production code path, not a stub that could hide a regression.
+  const quota = new StorageQuotaService(database, entry, tenant, security, parseStorageConfig({}));
+  return new AttachmentsService(
+    database,
+    entry,
+    tenant,
+    store,
+    processor,
+    security,
+    { warn: vi.fn() } as unknown as StructuredLogger,
+    quota,
+  );
 }
 
 /**

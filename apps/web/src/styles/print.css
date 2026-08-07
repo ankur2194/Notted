@@ -51,6 +51,13 @@
    * printed note can never contain a progress bar.
    */
   .notted-image-upload,
+  /*
+   * Part 44: an attachment CARD is content and prints (see section 4). Its
+   * Download / Preview / Delete buttons are controls, and a control on paper is
+   * noise. They carry `data-notted-print-hide` in the DOM; naming the class is
+   * belt and braces for markup assembled outside the editor, such as an export.
+   */
+  .notted-attachment-actions,
   .skip-link,
   [role="toolbar"],
   [role="dialog"],
@@ -159,6 +166,7 @@
    */
   .notted-image-frame {
     background-image: none !important;
+    width: 100%;
     max-width: 100% !important;
     break-inside: avoid;
   }
@@ -168,6 +176,194 @@
     opacity: 1 !important;
     max-width: 100% !important;
     height: auto !important;
+  }
+
+  /*
+   * Part 43: alignment, wrap, full width, and captions must print exactly as
+   * they read on screen — that is the part's explicit acceptance criterion.
+   *
+   * These rules key off the same three data attributes the editor's node view
+   * and the shared contract's `renderImageHtml` both emit, so this file needs no
+   * knowledge of either. They are written WITHOUT `!important` wherever the
+   * screen rules are not fighting them, because Part 63 loads this stylesheet
+   * standalone against `renderDocumentHtml` output, where `globals.css` is not
+   * present at all and every one of these has to stand on its own.
+   *
+   * The `width` an author chose is an INLINE style on the figure in the editor
+   * and is deliberately left alone: a resized figure prints at the size it was
+   * resized to, bounded by `max-width`.
+   */
+  .notted-image-figure {
+    display: block;
+    max-width: 100%;
+    margin-block: 1rem;
+    margin-inline: 0;
+    break-inside: avoid;
+  }
+
+  .notted-image-figure[data-align="left"] {
+    margin-inline: 0 auto;
+    text-align: left;
+  }
+
+  .notted-image-figure[data-align="center"] {
+    margin-inline: auto;
+    text-align: center;
+  }
+
+  .notted-image-figure[data-align="right"] {
+    margin-inline: auto 0;
+    text-align: right;
+  }
+
+  .notted-image-figure[data-wrap="inline"] {
+    float: left;
+    width: 40%;
+    margin: 0.25rem 1.25rem 0.75rem 0;
+  }
+
+  .notted-image-figure[data-wrap="inline"][data-align="right"] {
+    float: right;
+    margin: 0.25rem 0 0.75rem 1.25rem;
+  }
+
+  .notted-image-figure[data-wrap="inline"][data-image-sized="true"] {
+    width: auto;
+  }
+
+  /*
+   * `data-wrap` already carries the resolved value, so this is belt and braces
+   * for any historical markup that stored the raw pair: a full-width figure is
+   * never a float on paper.
+   */
+  .notted-image-figure[data-full-width="true"] {
+    float: none !important;
+    width: 100% !important;
+    margin-inline: 0 !important;
+  }
+
+  /*
+   * The caption prints from the committed text, never from the editor's input:
+   * a text field's typed value does not appear in print output in any engine,
+   * and the input carries `data-notted-print-hide` for that reason. An empty
+   * span must not reserve a line.
+   */
+  .notted-image-caption {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    text-align: inherit;
+    break-inside: avoid;
+    break-before: avoid;
+  }
+
+  .notted-image-caption__input {
+    display: none !important;
+  }
+
+  .notted-image-caption__text {
+    display: inline;
+  }
+
+  .notted-image-caption__text:empty {
+    display: none !important;
+  }
+
+  /*
+   * An editable note keeps an empty caption FIELD on screen so it can be typed
+   * into; that slot must not become an empty line on paper. The attribute is
+   * written by the node view, so export markup — which simply omits the
+   * `<figcaption>` when there is no caption — is unaffected.
+   */
+  .notted-image-figure[data-has-caption="false"] .notted-image-caption {
+    display: none !important;
+  }
+
+  /* Editing chrome. Both already carry `data-notted-print-hide`; naming them is
+     belt and braces for markup assembled outside the editor. */
+  .notted-image-handles,
+  .notted-image-status {
+    display: none !important;
+  }
+
+  /*
+   * Part 44 attachment cards.
+   *
+   * A card is CONTENT: "this note has the signed contract attached" is part of
+   * what the note says, and a printed copy that silently dropped it would be a
+   * different document. So it prints — as a bordered block naming the file, its
+   * kind, and its size — while its action buttons are dropped in section 1.
+   *
+   * Plain CSS with no Tailwind and no app-shell dependency, because Part 63
+   * loads this stylesheet standalone for server-side export.
+   */
+  .notted-attachment {
+    display: block;
+    break-inside: avoid;
+    margin: 0.75rem 0;
+    padding: 0.5rem 0.75rem;
+    border: 1pt solid #999999;
+    border-radius: 4pt;
+    background: none !important;
+  }
+
+  .notted-attachment-body {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /*
+   * The icon is a decorative glyph that carries no information the adjacent text
+   * does not already state, and it costs toner on every card.
+   */
+  .notted-attachment-icon {
+    display: none !important;
+  }
+
+  /*
+   * On screen the name is truncated to keep a card one line high. On paper there
+   * is no hover and no `title`, so a truncated name would simply be lost: it
+   * wraps instead, and the whole filename is printed.
+   */
+  .notted-attachment-name {
+    display: block;
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+    word-break: break-word;
+    font-weight: 600;
+  }
+
+  .notted-attachment-detail {
+    display: block;
+    overflow: visible;
+    white-space: normal;
+    font-size: 9pt;
+    color: #444444;
+  }
+
+  /*
+   * "This file is unavailable." and "could not be processed" are real facts
+   * about the note and stay. The transient "Loading file details…" is not — it
+   * describes a request in the reader's browser, and printing it would put a
+   * momentary UI state onto a permanent page. The node view leaves the element
+   * empty in every settled, healthy state, so `:empty` covers that case too.
+   */
+  .notted-attachment-status:empty {
+    display: none !important;
+  }
+
+  .notted-attachment[data-attachment-state="unknown"] .notted-attachment-status,
+  .notted-attachment[data-attachment-state="processing"] .notted-attachment-status {
+    display: none !important;
+  }
+
+  .notted-attachment-status {
+    display: block;
+    margin: 0.25rem 0 0;
+    font-size: 9pt;
+    color: #444444;
   }
 
   thead {

@@ -41,6 +41,33 @@ export interface PutObjectResult {
   readonly etag: string;
 }
 
+/** One entry from a bucket listing. Deliberately metadata only — no bytes. */
+export interface StoredObjectSummary {
+  readonly key: string;
+  readonly size: number;
+  readonly lastModified: Date;
+}
+
+export interface ListObjectsOptions {
+  /**
+   * Key prefix to scan. Required and never empty: an unprefixed listing of a
+   * production bucket is not something a caller should be able to ask for by
+   * omission.
+   */
+  readonly prefix: string;
+  /**
+   * Hard ceiling on the number of keys buffered. The listing stops there and
+   * reports `truncated`.
+   */
+  readonly limit: number;
+}
+
+export interface ListObjectsResult {
+  readonly objects: readonly StoredObjectSummary[];
+  /** `true` when the prefix holds more keys than `limit` allowed us to read. */
+  readonly truncated: boolean;
+}
+
 /**
  * The narrow byte-plane contract application services depend on. Tests inject an
  * in-memory double; production injects {@link ObjectStorageService}.
@@ -55,6 +82,11 @@ export interface ObjectStore {
   ): Promise<PutObjectResult>;
   getObjectStream(bucket: StorageBucket, key: string): Promise<Readable>;
   statObject(bucket: StorageBucket, key: string): Promise<StoredObjectStat | null>;
+  /**
+   * Bounded prefix listing. Part 45's reconciliation sweep is the only caller:
+   * a listing answers "which bytes exist", never "who may read them" (ADR 0005).
+   */
+  listObjects(bucket: StorageBucket, options: ListObjectsOptions): Promise<ListObjectsResult>;
   removeObject(bucket: StorageBucket, key: string): Promise<void>;
   removeObjects(bucket: StorageBucket, keys: readonly string[]): Promise<void>;
   presignedGetUrl(
@@ -178,6 +210,63 @@ export class ObjectStorageService implements ObjectStore, OnModuleInit {
       if (isAbsent(error)) return null;
       throw error;
     }
+  }
+
+  /**
+   * Bounded prefix listing for Part 45 reconciliation.
+   *
+   * MinIO exposes listing as an UNBOUNDED object stream, so a bucket holding ten
+   * million keys would be read into memory by a naive `for await`. This wrapper
+   * stops at `options.limit`, destroys the stream, and reports `truncated` so the
+   * caller knows another pass has work left. Memory is therefore capped by the
+   * caller's configured limit rather than by the size of the bucket.
+   *
+   * An empty prefix is refused: a full-bucket scan is never something a caller
+   * should be able to request by forgetting an argument.
+   *
+   * Keys are returned to the caller but are NEVER logged here (ADR 0005 /
+   * `docs/standards/observability.md`).
+   */
+  async listObjects(
+    bucket: StorageBucket,
+    options: ListObjectsOptions,
+  ): Promise<ListObjectsResult> {
+    const client = this.requireClient();
+    if (options.prefix === "") throw new Error("listObjects requires a non-empty prefix");
+    const limit = Math.max(0, Math.floor(options.limit));
+    if (limit === 0) return Object.freeze({ objects: Object.freeze([]), truncated: true });
+
+    const objects: StoredObjectSummary[] = [];
+    let truncated = false;
+    const stream = client.listObjectsV2(this.bucketName(bucket), options.prefix, true);
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: unknown): void => {
+        if (settled) return;
+        settled = true;
+        if (error === undefined) resolve();
+        else reject(error instanceof Error ? error : new Error("object listing failed"));
+      };
+      stream.on("data", (item) => {
+        // A common-prefix ("directory") entry carries `prefix` and no `name`.
+        // The listing above is recursive so none should appear, but skipping
+        // them keeps a non-object entry out of any caller's delete set.
+        if (typeof item.name !== "string" || item.name === "") return;
+        if (objects.length >= limit) {
+          truncated = true;
+          stream.destroy();
+          finish();
+          return;
+        }
+        objects.push(
+          Object.freeze({ key: item.name, size: item.size, lastModified: item.lastModified }),
+        );
+      });
+      stream.on("error", (error: unknown) => finish(error));
+      stream.on("end", () => finish());
+      stream.on("close", () => finish());
+    });
+    return Object.freeze({ objects: Object.freeze([...objects]), truncated });
   }
 
   /** Idempotent: removing an absent object succeeds. */

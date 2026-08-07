@@ -102,6 +102,13 @@ export function attachmentEntry(media: AttachmentMedia): AttachmentEntry {
     attachmentId: media.id,
     displayName: media.displayName,
     status: media.status,
+    // Part 44. Carried straight from the authorized projection so the card shows
+    // what the DATABASE says, not what the document node cached at insertion.
+    mediaType: media.mediaType,
+    mimeType: media.mimeType,
+    sizeBytes: media.sizeBytes,
+    createdAt: media.createdAt,
+    contentUrl: attachmentContentUrl(media.workspaceId, media.id, DEFAULT_IMAGE_VARIANT),
     width: full?.width ?? media.width,
     height: full?.height ?? media.height,
     blurDataUri: blur === undefined ? null : blur.dataUri,

@@ -14,6 +14,21 @@ export interface ImageUploadFileInputProps {
   /** Accessible name, used only by assistive technology reading the input. */
   readonly label?: string;
   readonly disabled?: boolean;
+  /**
+   * The picker's type filter. Defaults to the image list (Part 42); the generic
+   * attachment instance passes `ATTACHMENT_UPLOAD_ACCEPT` (Part 44).
+   *
+   * It is a courtesy filter only. A writer can always defeat it with the
+   * picker's "All files" option, and the server re-derives the type from the
+   * bytes on every upload regardless.
+   */
+  readonly accept?: string;
+  /**
+   * Distinguishes the two mounted instances. Two inputs exist rather than one
+   * with a swapped `accept`, so each needs its own stable hook for tests and
+   * Playwright.
+   */
+  readonly testId?: string;
 }
 
 /**
@@ -34,7 +49,13 @@ export const ImageUploadFileInput = forwardRef<
   ImageUploadFileInputHandle,
   ImageUploadFileInputProps
 >(function ImageUploadFileInput(
-  { onFiles, label = "Choose images to upload", disabled = false },
+  {
+    onFiles,
+    label = "Choose images to upload",
+    disabled = false,
+    accept = IMAGE_UPLOAD_ACCEPT,
+    testId = "note-image-file-input",
+  },
   ref,
 ) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -63,13 +84,13 @@ export const ImageUploadFileInput = forwardRef<
       ref={inputRef}
       type="file"
       multiple
-      accept={IMAGE_UPLOAD_ACCEPT}
+      accept={accept}
       hidden
       tabIndex={-1}
       aria-hidden="true"
       aria-label={label}
       disabled={disabled}
-      data-testid="note-image-file-input"
+      data-testid={testId}
       onChange={handleChange}
     />
   );

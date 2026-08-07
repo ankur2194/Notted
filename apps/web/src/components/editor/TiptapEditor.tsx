@@ -5,11 +5,13 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { AttachmentDialogs } from "./AttachmentDialogs";
 import { prepareNoteDocumentForEditor } from "./document-contract";
 import { areDocumentsEquivalent } from "./document-sync";
 import { EditorToolbar } from "./EditorToolbar";
 import { EditorShortcuts, type EditorShortcutHandlerMap } from "./extensions/editor-shortcuts";
 import { createNoteEditorExtensions } from "./extensions/note-editor-extensions";
+import { ImageToolbar } from "./ImageToolbar";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MentionList } from "./MentionList";
 import { SlashCommandMenu } from "./SlashCommandMenu";
@@ -18,6 +20,10 @@ import { FOCUS_TOOLBAR_GROUPS } from "./toolbar-commands";
 import { useSuggestionPopup } from "./useSuggestionPopup";
 
 import type { AttachmentDirectory } from "./attachment-directory";
+import type {
+  AttachmentFilePickerHandler,
+  AttachmentUploadHandler,
+} from "./extensions/CustomAttachment";
 import type { ImageFilePickerHandler, ImageUploadHandler } from "./extensions/CustomImage";
 import type { MentionCandidate, MentionDirectory } from "./mention-members";
 import type { SlashCommand } from "./slash-commands";
@@ -79,6 +85,23 @@ export interface TiptapEditorProps {
    * a file input is a DOM control with its own lifecycle, not editor state.
    */
   readonly onRequestImageFiles?: ImageFilePickerHandler;
+  /**
+   * Part 44 seams, identical in shape and in reasoning to the image pair above:
+   * this component still performs no I/O, owns no file input, and never learns
+   * what an attachment is. Absent means paste and drop of a non-image file
+   * decline and nothing is inserted.
+   */
+  readonly uploadAttachments?: AttachmentUploadHandler;
+  readonly onRequestAttachmentFiles?: AttachmentFilePickerHandler;
+  /**
+   * The workspace of the note being edited (Part 44).
+   *
+   * Needed only so the attachment dialogs can address the authorized content
+   * and delete endpoints. It is never derived from a node attribute or any other
+   * caller-supplied value, and tenant isolation itself stays server-side.
+   * Absent disables the attachment dialogs rather than guessing a workspace.
+   */
+  readonly workspaceId?: string;
   /** Loaded attachment metadata, used only to render existing images. */
   readonly attachmentDirectory?: AttachmentDirectory | null;
 }
@@ -139,6 +162,9 @@ export function TiptapEditor({
   mentionDirectoryTruncated,
   uploadImages,
   onRequestImageFiles,
+  uploadAttachments,
+  onRequestAttachmentFiles,
+  workspaceId,
   attachmentDirectory,
 }: TiptapEditorProps) {
   const prepared = useMemo(() => prepare(initialDocument), [initialDocument]);
@@ -169,6 +195,9 @@ export function TiptapEditor({
       mentionDirectoryTruncated={mentionDirectoryTruncated}
       uploadImages={uploadImages}
       onRequestImageFiles={onRequestImageFiles}
+      uploadAttachments={uploadAttachments}
+      onRequestAttachmentFiles={onRequestAttachmentFiles}
+      workspaceId={workspaceId}
       attachmentDirectory={attachmentDirectory}
     />
   );
@@ -189,6 +218,9 @@ interface EditorSurfaceProps {
   readonly mentionDirectoryTruncated?: boolean;
   readonly uploadImages?: ImageUploadHandler;
   readonly onRequestImageFiles?: ImageFilePickerHandler;
+  readonly uploadAttachments?: AttachmentUploadHandler;
+  readonly onRequestAttachmentFiles?: AttachmentFilePickerHandler;
+  readonly workspaceId?: string;
   readonly attachmentDirectory?: AttachmentDirectory | null;
 }
 
@@ -207,6 +239,9 @@ function EditorSurface({
   mentionDirectoryTruncated = false,
   uploadImages,
   onRequestImageFiles,
+  uploadAttachments,
+  onRequestAttachmentFiles,
+  workspaceId,
   attachmentDirectory,
 }: EditorSurfaceProps) {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -296,6 +331,11 @@ function EditorSurface({
   uploadImagesRef.current = uploadImages;
   const requestImageFilesRef = useRef(onRequestImageFiles);
   requestImageFilesRef.current = onRequestImageFiles;
+  // Part 44 uses the identical ref discipline, for the identical reason.
+  const uploadAttachmentsRef = useRef(uploadAttachments);
+  uploadAttachmentsRef.current = uploadAttachments;
+  const requestAttachmentFilesRef = useRef(onRequestAttachmentFiles);
+  requestAttachmentFilesRef.current = onRequestAttachmentFiles;
   // A mutable observable, kept for the editor's lifetime for the same reason as
   // the mention directory: swapping it would mean rebuilding the editor.
   const attachmentDirectoryRef = useRef(attachmentDirectory ?? null);
@@ -310,6 +350,8 @@ function EditorSurface({
         attachmentDirectory: attachmentDirectoryRef.current,
         resolveImageUploader: () => uploadImagesRef.current ?? null,
         resolveImageFilePicker: () => requestImageFilesRef.current ?? null,
+        resolveAttachmentUploader: () => uploadAttachmentsRef.current ?? null,
+        resolveAttachmentFilePicker: () => requestAttachmentFilesRef.current ?? null,
       }),
       EditorShortcuts.configure({ resolveHandlers: () => handlersRef.current }),
     ],
@@ -454,6 +496,29 @@ function EditorSurface({
         onActivate={mentionMenu.setActiveIndex}
         onDismiss={mentionMenu.dismiss}
       />
+      {/*
+       * Part 43. Contextual chrome for the selected image. It portals itself to
+       * `document.body` for the same reason the focus-mode toolbar does — the
+       * paper's transform would otherwise become its containing block — and it
+       * renders nothing at all unless a `NodeSelection` is on an image.
+       */}
+      <ImageToolbar editor={editor} editable={editable} portalTarget={portalTarget} />
+      {/*
+       * Part 44. The React owner of the attachment card's two dialogs. It
+       * renders nothing until the card raises `notted:attachment-preview` or
+       * `notted:attachment-remove` on `editor.view.dom`, which is what keeps
+       * every dialog, fetch, and piece of React state out of the editor's own
+       * subtree. Without a workspace it is not rendered at all rather than
+       * guessing which workspace to address.
+       */}
+      {workspaceId === undefined ? null : (
+        <AttachmentDialogs
+          editor={editor}
+          workspaceId={workspaceId}
+          editable={editable}
+          attachmentDirectory={attachmentDirectoryRef.current}
+        />
+      )}
       <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </div>
   );

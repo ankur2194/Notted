@@ -13,6 +13,14 @@ export type WorkspaceSettings = {
 export const WORKSPACE_API_PATHS = Object.freeze({
   collection: "/api/v1/workspaces",
   member: "/api/v1/workspaces/:id",
+  /**
+   * Part 45 storage usage. A SEPARATE route from the workspace detail on
+   * purpose: usage is a `sum()` over the workspace's attachment rows, and every
+   * ordinary workspace read would otherwise pay for it.
+   */
+  storage: "/api/v1/workspaces/:workspaceId/storage",
+  /** Part 45 administrative cleanup. Owner/admin only; supports `dryRun`. */
+  storageMaintenance: "/api/v1/workspaces/:workspaceId/storage/maintenance",
 } as const);
 
 /** REST paths for Part 28 membership and invitation operations. */
@@ -45,6 +53,77 @@ export interface WorkspaceDetail extends WorkspaceSummary {
   storageLimitBytes: number | null;
   createdById: UserId;
   createdAt: IsoTimestamp;
+}
+
+/**
+ * Part 45 — derived workspace storage accounting.
+ *
+ * Every value is computed from the workspace's own `attachments` rows at read
+ * time; there is no stored counter to drift. Field meanings:
+ *
+ * - `usedBytes` — bytes of attachments that finished uploading (`ready`).
+ * - `pendingBytes` — bytes of uploads still in flight (`pending`/`processing`).
+ *   These ARE the quota reservation, so they are already charged against the
+ *   limit even though the content is not usable yet.
+ * - `limitBytes` — the effective quota after the explicit override or the plan
+ *   default is clamped by the deployment ceiling.
+ * - `availableBytes` — `limitBytes - usedBytes - pendingBytes`, floored at zero.
+ * - `attachmentCount` — number of `ready` attachments, i.e. files the workspace
+ *   actually holds.
+ * - `limitSource` — whether the limit came from an explicit per-workspace
+ *   override or from the plan default, so settings can say which one applies.
+ */
+export interface WorkspaceStorageUsage {
+  workspaceId: WorkspaceId;
+  plan: WorkspacePlan;
+  usedBytes: number;
+  pendingBytes: number;
+  limitBytes: number;
+  availableBytes: number;
+  attachmentCount: number;
+  limitSource: "override" | "plan";
+}
+
+/** The four Part 45 sweeps, in the order the plan names them. */
+export type StorageMaintenanceSweepName =
+  "abandonedUploads" | "orphanedObjects" | "expiredExports" | "deletedNoteRetention";
+
+/**
+ * One sweep's outcome. Counts and UUID samples ONLY — never a filename, an
+ * object key, a signed URL, or a byte of document content
+ * (`docs/standards/observability.md`).
+ */
+export interface StorageMaintenanceSweepReport {
+  sweep: StorageMaintenanceSweepName;
+  /** Rows or objects the sweep looked at. */
+  examined: number;
+  /** How many of those met the sweep's deletion/marking predicate. */
+  selected: number;
+  /** Rows hard-deleted. Always `0` when `dryRun` is true. */
+  rowsRemoved: number;
+  /** Rows whose state was changed rather than deleted. `0` when `dryRun`. */
+  rowsMarked: number;
+  /** Objects removed from storage. Always `0` when `dryRun` is true. */
+  objectsRemoved: number;
+  /** `true` when the batch bound was hit and another pass has work left. */
+  truncated: boolean;
+  /** Bounded sample of affected resource UUIDs, for operator follow-up. */
+  sampleIds: readonly string[];
+  /**
+   * Fixed-vocabulary observations (for example `storage_disabled`,
+   * `unreferenced_attachments_detected`). Never free-form text from an error.
+   */
+  notes: readonly string[];
+}
+
+export interface StorageMaintenanceReport {
+  startedAt: IsoTimestamp;
+  finishedAt: IsoTimestamp;
+  /** `true` means nothing was deleted or modified; counts are what WOULD happen. */
+  dryRun: boolean;
+  /** `workspace` for the authorized per-workspace route, `system` for the sweeper. */
+  scope: "workspace" | "system";
+  sweeps: readonly StorageMaintenanceSweepReport[];
 }
 
 /** Query options for listing the authenticated user's workspace memberships. */

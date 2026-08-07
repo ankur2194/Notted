@@ -370,16 +370,82 @@
   }
 
   /*
-   * Part 42 images.
+   * Images (Part 42 rendering, Part 43 sizing / alignment / wrap / caption).
    *
    * The frame reserves the image's aspect ratio before a byte is fetched, so a
    * note with images never reflows as they arrive. The blur placeholder from the
    * Part 41 pipeline is painted as this element's background; the real image
-   * fades in on top of it. Sizing, alignment, wrap, and captions belong to
-   * Part 43 and are deliberately absent here.
+   * fades in on top of it.
+   *
+   * ## The sizing model, in one place
+   *
+   * The FIGURE carries the width and the frame is always `100%` of it. That is
+   * what lets one inline value — written by `CustomImage`'s node view, clamped
+   * to `--notted-page-content-width` — drive the image, the caption, and the
+   * alignment together, and it is why alignment is plain `margin-inline`
+   * (which is meaningless without a definite width). Clearing the inline value
+   * hands sizing back to these rules, so "never resized" and "full width" are
+   * the same case.
+   *
+   * `data-align`, `data-wrap`, and `data-full-width` are the identical three
+   * attributes the shared contract's `renderImageHtml` emits on its `<figure>`,
+   * so these rules, `print.css`, and Part 63's standalone export all key off one
+   * markup contract instead of one selector per surface. `data-wrap` always
+   * carries the RESOLVED value (`resolveNoteImageWrap`), so a full-width figure
+   * is never also a float.
    */
   .notted-editor-content .notted-image-figure {
-    @apply my-4 block;
+    @apply relative my-4 block;
+    width: 100%;
+    max-width: 100%;
+    /* `<figure>` has UA inline margins; alignment owns them from here. */
+    margin-inline: 0;
+  }
+
+  /* Alignment only has room to act once the figure is narrower than the column. */
+  .notted-editor-content .notted-image-figure[data-align="left"] {
+    margin-inline: 0 auto;
+    text-align: left;
+  }
+
+  .notted-editor-content .notted-image-figure[data-align="center"] {
+    margin-inline: auto;
+    text-align: center;
+  }
+
+  .notted-editor-content .notted-image-figure[data-align="right"] {
+    margin-inline: auto 0;
+    text-align: right;
+  }
+
+  /*
+   * Wrap: `inline` floats the figure so following text flows beside it. A float
+   * needs a definite width, so an image that has never been resized gets a
+   * sensible default here rather than collapsing to nothing. `data-align`
+   * chooses the side; `center` has no side to float to, so it resolves to the
+   * start edge — recorded here because it is the one alignment/wrap combination
+   * the contract deliberately leaves to presentation.
+   */
+  .notted-editor-content .notted-image-figure[data-wrap="inline"] {
+    float: left;
+    width: 40%;
+    margin: 0.25rem 1.25rem 0.75rem 0;
+  }
+
+  .notted-editor-content .notted-image-figure[data-wrap="inline"][data-align="right"] {
+    float: right;
+    margin: 0.25rem 0 0.75rem 1.25rem;
+  }
+
+  /* An explicitly sized figure keeps the author's width when floated. */
+  .notted-editor-content .notted-image-figure[data-wrap="inline"][data-image-sized="true"] {
+    width: auto;
+  }
+
+  .notted-editor-content .notted-image-figure[data-full-width="true"] {
+    float: none;
+    width: 100%;
+    margin-inline: 0;
   }
 
   .notted-editor-content .notted-image-figure.ProseMirror-selectednode .notted-image-frame {
@@ -391,6 +457,7 @@
     background-position: center;
     background-repeat: no-repeat;
     background-size: cover;
+    width: 100%;
     max-width: 100%;
   }
 
@@ -416,6 +483,124 @@
 
   .notted-editor-content .notted-image-fallback {
     @apply flex min-h-24 items-center justify-center border border-dashed p-4 text-sm text-muted-foreground;
+  }
+
+  /*
+   * Part 43 resize handles.
+   *
+   * Editing chrome, never content: the container carries
+   * `data-notted-print-hide` so no rule in `print.css` has to name it. It is
+   * deliberately NOT `data-notted-focus-hide` — the handles appear only for an
+   * image the author has selected, so hiding them in focus mode would remove the
+   * ability to edit an image rather than remove a distraction.
+   *
+   * They live INSIDE the frame because the frame clips its overflow (that is what
+   * rounds the image's corners), so a handle hung outside it would be invisible.
+   * They are `aria-hidden` and unfocusable on purpose: four unlabelled tab stops
+   * per image would be noise, and the same capability is reachable from the
+   * keyboard through the declared resize bindings.
+   */
+  .notted-editor-content .notted-image-handles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .notted-editor-content .notted-image-figure:not(.ProseMirror-selectednode) .notted-image-handles,
+  .notted-editor-content .notted-image-figure[data-image-editable="false"] .notted-image-handles {
+    display: none;
+  }
+
+  .notted-editor-content .notted-image-handle {
+    @apply absolute rounded-sm border-2 border-background bg-primary;
+    width: 0.875rem;
+    height: 0.875rem;
+    pointer-events: auto;
+    touch-action: none;
+  }
+
+  .notted-editor-content .notted-image-handle[data-image-handle="nw"] {
+    top: 0.25rem;
+    left: 0.25rem;
+    cursor: nwse-resize;
+  }
+
+  .notted-editor-content .notted-image-handle[data-image-handle="ne"] {
+    top: 0.25rem;
+    right: 0.25rem;
+    cursor: nesw-resize;
+  }
+
+  .notted-editor-content .notted-image-handle[data-image-handle="sw"] {
+    bottom: 0.25rem;
+    left: 0.25rem;
+    cursor: nesw-resize;
+  }
+
+  .notted-editor-content .notted-image-handle[data-image-handle="se"] {
+    bottom: 0.25rem;
+    right: 0.25rem;
+    cursor: nwse-resize;
+  }
+
+  /* A drag is a direct-manipulation gesture; a transition would lag the pointer. */
+  .notted-editor-content .notted-image-figure[data-image-resizing="true"] .notted-image {
+    transition: none;
+  }
+
+  /*
+   * Part 43 caption.
+   *
+   * Two renditions of the same value: an `<input>` while the note is editable,
+   * and a `<span>` carrying the committed text for reading, printing, and
+   * export. Exactly one is ever shown, and the span is what survives into
+   * `print.css` — an input's typed value does not print reliably in any engine.
+   */
+  .notted-editor-content .notted-image-caption {
+    @apply mt-2 text-sm text-muted-foreground;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .notted-editor-content
+    .notted-image-figure[data-image-editable="true"]
+    .notted-image-caption__text {
+    display: none;
+  }
+
+  .notted-editor-content
+    .notted-image-figure[data-image-editable="false"]
+    .notted-image-caption__input {
+    display: none;
+  }
+
+  .notted-editor-content .notted-image-caption__input {
+    @apply w-full rounded-sm border-0 border-b border-dashed border-border bg-transparent px-0 py-1 text-sm text-foreground placeholder:text-muted-foreground;
+    text-align: inherit;
+  }
+
+  .notted-editor-content .notted-image-caption__input:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-1 ring-offset-background;
+  }
+
+  .notted-editor-content .notted-image-caption__input:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
+  /*
+   * The resize announcement. Visually hidden but present for assistive
+   * technology, because a keyboard resize has no visible feedback of its own.
+   */
+  .notted-editor-content .notted-image-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
   }
 
   /*
@@ -477,6 +662,105 @@
 
   /* Dragging image files over the writing surface. */
   .notted-editor-content.notted-image-drop-active {
+    @apply rounded-md outline-dashed outline-2 outline-offset-2 outline-info;
+  }
+
+  /*
+   * Part 44 generic file attachment card.
+   *
+   * Unlike the upload placeholder above, the card **is document content**: it is
+   * a real node, it is exported, and it prints. Only `.notted-attachment-actions`
+   * is chrome, and it carries `data-notted-print-hide` in the DOM rather than
+   * relying on a rule here, so `print.css` and Part 63's exporter both drop it
+   * without either having to know this class exists.
+   */
+  .notted-editor-content .notted-attachment {
+    @apply my-4 flex flex-col gap-2 rounded-lg border bg-muted/30 p-3;
+  }
+
+  .notted-editor-content .notted-attachment.ProseMirror-selectednode {
+    @apply outline outline-2 outline-offset-2 outline-ring;
+  }
+
+  .notted-editor-content .notted-attachment-body {
+    @apply flex min-w-0 items-center gap-3;
+  }
+
+  .notted-editor-content .notted-attachment-icon {
+    @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground;
+  }
+
+  .notted-editor-content .notted-attachment-icon svg {
+    @apply h-5 w-5;
+  }
+
+  .notted-editor-content .notted-attachment-meta {
+    @apply min-w-0 flex-1;
+  }
+
+  /*
+   * A filename can be arbitrarily long and is untrusted text. Truncating keeps
+   * one card one line high; the full name is on `title` for a pointer user and
+   * in the visually hidden sibling for assistive technology, so nothing is only
+   * available to people who can hover.
+   */
+  .notted-editor-content .notted-attachment-name {
+    @apply block truncate font-medium;
+  }
+
+  .notted-editor-content .notted-attachment-detail {
+    @apply truncate text-sm text-muted-foreground;
+  }
+
+  .notted-editor-content .notted-attachment-status {
+    @apply text-sm text-muted-foreground;
+  }
+
+  .notted-editor-content .notted-attachment-status:empty {
+    @apply hidden;
+  }
+
+  .notted-editor-content .notted-attachment[data-attachment-state="missing"],
+  .notted-editor-content .notted-attachment[data-attachment-state="failed"] {
+    @apply border-destructive/40;
+  }
+
+  .notted-editor-content
+    .notted-attachment[data-attachment-state="missing"]
+    .notted-attachment-status,
+  .notted-editor-content
+    .notted-attachment[data-attachment-state="failed"]
+    .notted-attachment-status {
+    @apply text-destructive;
+  }
+
+  .notted-editor-content .notted-attachment-actions {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .notted-editor-content .notted-attachment-actions[hidden] {
+    @apply hidden;
+  }
+
+  .notted-editor-content .notted-attachment-action {
+    @apply cursor-pointer rounded-md border px-2 py-1 text-xs font-medium no-underline hover:bg-accent hover:text-accent-foreground;
+  }
+
+  .notted-editor-content .notted-attachment-action[hidden] {
+    @apply hidden;
+  }
+
+  /*
+   * A download with no bytes behind it. `aria-disabled` plus `tabIndex = -1` is
+   * set by the node view; this only makes the state visible, and pointer events
+   * stay off so a click cannot navigate to a missing resource.
+   */
+  .notted-editor-content .notted-attachment-action[aria-disabled="true"] {
+    @apply pointer-events-none opacity-50;
+  }
+
+  /* Dragging non-image files over the writing surface. */
+  .notted-editor-content.notted-attachment-drop-active {
     @apply rounded-md outline-dashed outline-2 outline-offset-2 outline-info;
   }
 

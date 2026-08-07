@@ -85,7 +85,7 @@ export function EditorToolbar({
     [editable, groups],
   );
   const itemIds = useMemo(() => toolbarItemIds(visibleGroups), [visibleGroups]);
-  const { toolbarRef, tabIndexFor, onItemFocus } = useRovingToolbar(itemIds);
+  const { toolbarRef, tabIndexFor, onItemFocus, onKeyDown } = useRovingToolbar(itemIds);
   const instructionsId = useId();
   const [openColorControl, setOpenColorControl] = useState<"textColor" | "highlightColor" | null>(
     null,
@@ -372,6 +372,7 @@ export function EditorToolbar({
       <div
         ref={toolbarRef}
         role="toolbar"
+        onKeyDown={onKeyDown}
         aria-orientation="horizontal"
         aria-label={editable ? "Note formatting" : "Note editor actions (read only)"}
         aria-describedby={instructionsId}

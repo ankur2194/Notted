@@ -17,7 +17,7 @@ export type EditorShortcutScope = "editor" | "global";
 export type EditorShortcutSource = "tiptap" | "notted";
 
 export type EditorShortcutGroupId =
-  "text" | "blocks" | "lists" | "alignment" | "history" | "view" | "help";
+  "text" | "blocks" | "lists" | "alignment" | "images" | "history" | "view" | "help";
 
 /** Handlers the host component supplies for bindings that drive React UI. */
 export type EditorShortcutHandlerId =
@@ -56,6 +56,7 @@ export const EDITOR_SHORTCUT_GROUPS: readonly EditorShortcutGroup[] = Object.fre
   { id: "blocks", label: "Paragraphs and blocks" },
   { id: "lists", label: "Lists" },
   { id: "alignment", label: "Alignment" },
+  { id: "images", label: "Images" },
   { id: "history", label: "History" },
   { id: "view", label: "View" },
   { id: "help", label: "Help" },
@@ -293,6 +294,37 @@ export const EDITOR_SHORTCUTS: readonly EditorShortcut[] = Object.freeze([
     binding: "Mod-Shift-j",
     scope: "editor",
     source: "tiptap",
+    handler: null,
+  },
+  {
+    /*
+     * Part 43 image resize, and the keyboard equivalent of dragging a corner
+     * handle (WCAG 2.1.1). Both bindings no-op unless an image node is
+     * selected, so the browser's own `Mod-Shift-Arrow` selection behaviour is
+     * untouched everywhere else: ProseMirror's keymap runs the handler, the
+     * handler returns false, and the event is never `preventDefault`ed.
+     *
+     * `Mod-Shift-ArrowLeft`/`Right` are free in this table — the only
+     * `Mod-Shift-*` bindings declared here are s, b, l, e, r, j, z, 7, 8, 9,
+     * and Enter, and no configured extension binds an arrow key through the
+     * keymap (Gapcursor handles arrows through `handleKeyDown`, which sees the
+     * event only after this returns false).
+     */
+    id: "imageWiden",
+    group: "images",
+    description: "Widen the selected image",
+    binding: "Mod-Shift-ArrowRight",
+    scope: "editor",
+    source: "notted",
+    handler: null,
+  },
+  {
+    id: "imageNarrow",
+    group: "images",
+    description: "Narrow the selected image",
+    binding: "Mod-Shift-ArrowLeft",
+    scope: "editor",
+    source: "notted",
     handler: null,
   },
   {

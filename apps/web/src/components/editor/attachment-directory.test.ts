@@ -11,6 +11,13 @@ function entry(overrides: Partial<AttachmentEntry> = {}): AttachmentEntry {
     attachmentId: ATTACHMENT_ID,
     displayName: "chart.png",
     status: "ready",
+    // Part 44 made these five required on `AttachmentEntry`: the card renders a
+    // generic file from the authorized row, not from the document node.
+    mediaType: "image",
+    mimeType: "image/png",
+    sizeBytes: 4096,
+    createdAt: "2026-01-12T00:00:00.000Z",
+    contentUrl: "http://localhost:3001/api/v1/workspaces/w/attachments/a/content?variant=full",
     width: 1200,
     height: 800,
     blurDataUri: "data:image/webp;base64,AAAA",

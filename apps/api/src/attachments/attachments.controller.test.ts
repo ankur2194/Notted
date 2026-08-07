@@ -19,8 +19,38 @@ import {
 } from "./attachments.controller";
 
 import type { AttachmentContent, AttachmentsService } from "./attachments.service";
+import type { ParsedSingleFileUpload } from "./multipart-upload.parser";
 import type { AuthService } from "../auth/auth.service";
 import type { Request, Response } from "express";
+
+/**
+ * Part 44. The upload route now ROUTES on the sniffed bytes, and that decision
+ * is only observable once a body has been parsed — so the busboy parser is
+ * stubbed here with a payload the test chooses. Every pre-parse guard (trusted
+ * origin, idempotency key, the authorization decorator) still runs unmocked and
+ * is still asserted below; only the byte source is replaced.
+ */
+const parserStub = vi.hoisted(() => ({
+  next: null as ParsedSingleFileUpload | null,
+}));
+
+vi.mock("./multipart-upload.parser", () => ({
+  parseSingleFileUpload: vi.fn(() => {
+    if (parserStub.next === null) throw new Error("no multipart payload was staged");
+    return Promise.resolve(parserStub.next);
+  }),
+  MULTIPART_OVERHEAD_BYTES: 16 * 1_024,
+  MULTIPART_TIMEOUT_MS: 30_000,
+}));
+
+function stageUpload(buffer: Buffer, declaredFilename: string, declaredMimeType = ""): void {
+  parserStub.next = Object.freeze({
+    buffer,
+    declaredMimeType,
+    declaredFilename,
+    fields: Object.freeze({}),
+  });
+}
 
 const userId = "20000000-0000-4000-8000-000000000001";
 const workspaceId = "20000000-0000-4000-8100-000000000001";
@@ -78,6 +108,17 @@ function content(overrides: Partial<AttachmentContent> = {}): AttachmentContent 
     contentLength: 5,
     etag: "abc123",
     filename: "holiday photo.jpg",
+    mediaType: "image" as const,
+    ...overrides,
+  });
+}
+
+/** Part 44: a generic-file read result, as the service now reports one. */
+function fileContent(overrides: Partial<AttachmentContent> = {}): AttachmentContent {
+  return content({
+    mimeType: "application/pdf",
+    filename: "Quarterly Report.pdf",
+    mediaType: "file",
     ...overrides,
   });
 }
@@ -168,9 +209,62 @@ describe("AttachmentsController", () => {
     expect(headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
     expect(headers.get("cross-origin-resource-policy")).toBe("same-site");
     expect(headers.get("accept-ranges")).toBe("none");
+    // Part 44 added this to BOTH media types.
+    expect(headers.get("x-content-type-options")).toBe("nosniff");
     // `compression()` skips image/* by default; assert no encoding is negotiated
     // so a future middleware change is caught here.
     expect(headers.get("content-encoding")).toBeUndefined();
+  });
+
+  it("always serves a generic file as an attachment download, never inline", async () => {
+    const cases: readonly (readonly [string, string])[] = [
+      ["application/pdf", "Quarterly Report.pdf"],
+      ["application/zip", "release.zip"],
+      ["application/x-7z-compressed", "backup.7z"],
+      ["application/gzip", "logs.gz"],
+      ["application/rtf", "letter.rtf"],
+      ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "spec.docx"],
+      ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "budget.xlsx"],
+      // The load-bearing case: an uploaded `.html`, stored as inert text.
+      ["text/plain", "payload.html"],
+    ];
+    for (const [mimeType, filename] of cases) {
+      const readContent = vi.fn().mockResolvedValue(fileContent({ mimeType, filename }));
+      const { response, headers } = fakeResponse();
+      await controllers({ readContent }).attachments.content(
+        request({ workspaceId, attachmentId }),
+        response,
+        {},
+      );
+      expect(headers.get("content-type")).toBe(mimeType);
+      expect(headers.get("content-disposition")).toContain("attachment;");
+      expect(headers.get("content-disposition")).not.toContain("inline");
+      // The original filename survives the round trip, in both RFC 6266 forms.
+      expect(headers.get("content-disposition")).toContain(`filename="${filename}"`);
+      expect(headers.get("content-disposition")).toContain(
+        `filename*=UTF-8''${encodeURIComponent(filename)}`,
+      );
+      // Every hardening header still applies to a file download.
+      expect(headers.get("x-content-type-options")).toBe("nosniff");
+      expect(headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
+      expect(headers.get("cross-origin-resource-policy")).toBe("same-site");
+      expect(headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
+    }
+  });
+
+  it("does not apply the image inline allow-list to a generic file", async () => {
+    // `text/plain` is not in `ATTACHMENT_INLINE_MIME_TYPES`. Under Part 40's rule
+    // that would have been a 415; a generic file is instead served as a download,
+    // because the allow-list only governs what may be shown INLINE.
+    const readContent = vi.fn().mockResolvedValue(fileContent({ mimeType: "text/plain" }));
+    const { response, headers, status } = fakeResponse();
+    await controllers({ readContent }).attachments.content(
+      request({ workspaceId, attachmentId }),
+      response,
+      {},
+    );
+    expect(status).toHaveBeenCalledWith(200);
+    expect(headers.get("content-disposition")).toContain("attachment;");
   });
 
   it("defaults to the full variant and rejects an unknown or extra query parameter", async () => {
@@ -283,6 +377,51 @@ describe("AttachmentsController", () => {
     );
   });
 
+  it("routes one upload endpoint to the image or the file path by sniffed bytes", async () => {
+    const uploadImage = vi.fn().mockResolvedValue({ attachment: { id: attachmentId } });
+    const uploadFile = vi.fn().mockResolvedValue({ attachment: { id: attachmentId } });
+    const service = { uploadImage, uploadFile, maximumUploadBytes: 50 * 1_024 * 1_024 };
+
+    // A PNG named `.pdf`: the BYTES decide, so the image path runs.
+    stageUpload(
+      Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        Buffer.alloc(32, 0x11),
+      ]),
+      "invoice.pdf",
+      "application/pdf",
+    );
+    await controllers(service).notes.upload(request({ workspaceId, noteId }, trustedOrigin));
+    expect(uploadImage).toHaveBeenCalledOnce();
+    expect(uploadFile).not.toHaveBeenCalled();
+
+    // A PDF named `.png`: the file path runs.
+    uploadImage.mockClear();
+    stageUpload(Buffer.from("%PDF-1.7\n%%EOF\n", "latin1"), "photo.png", "image/png");
+    await controllers(service).notes.upload(request({ workspaceId, noteId }, trustedOrigin));
+    expect(uploadFile).toHaveBeenCalledOnce();
+    expect(uploadImage).not.toHaveBeenCalled();
+
+    // Allow-listed text also routes to the file path.
+    uploadFile.mockClear();
+    stageUpload(Buffer.from("# notes\n", "utf8"), "notes.md", "text/markdown");
+    await controllers(service).notes.upload(request({ workspaceId, noteId }, trustedOrigin));
+    expect(uploadFile).toHaveBeenCalledOnce();
+  });
+
+  it("refuses an unsupported payload at the transport without calling either service method", async () => {
+    const uploadImage = vi.fn();
+    const uploadFile = vi.fn();
+    stageUpload(Buffer.from([0x4d, 0x5a, 0x90, 0x00]), "setup.exe", "application/octet-stream");
+    await expect(
+      controllers({ uploadImage, uploadFile, maximumUploadBytes: 1_024 }).notes.upload(
+        request({ workspaceId, noteId }, trustedOrigin),
+      ),
+    ).rejects.toMatchObject({ safeResponse: { code: "UNPROCESSABLE_ENTITY" } });
+    expect(uploadImage).not.toHaveBeenCalled();
+    expect(uploadFile).not.toHaveBeenCalled();
+  });
+
   it("rejects a non-UUID route parameter", () => {
     const listForNote = vi.fn();
     expect(() =>
@@ -302,6 +441,17 @@ describe("contentDisposition", () => {
     );
     expect(contentDisposition('quote".png')).toContain('filename="quote_.png"');
     expect(contentDisposition("back\\slash.png")).toContain('filename="back_slash.png"');
+  });
+
+  it("emits an attachment disposition on request while preserving the original name", () => {
+    expect(contentDisposition("Quarterly Report.pdf", "attachment")).toBe(
+      `attachment; filename="Quarterly Report.pdf"; filename*=UTF-8''Quarterly%20Report.pdf`,
+    );
+    expect(contentDisposition("報告書.xlsx", "attachment")).toBe(
+      `attachment; filename="___.xlsx"; filename*=UTF-8''%E5%A0%B1%E5%91%8A%E6%9B%B8.xlsx`,
+    );
+    // The default is still `inline`, so the Part 40 image path is unchanged.
+    expect(contentDisposition("plain.png")).toContain("inline;");
   });
 });
 

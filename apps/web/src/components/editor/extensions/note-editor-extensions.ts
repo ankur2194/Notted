@@ -19,6 +19,7 @@ import { Underline } from "@tiptap/extension-underline";
 import { StarterKit } from "@tiptap/starter-kit";
 
 import { createNoteLowlight } from "./code-block-languages";
+import { createNoteAttachment } from "./CustomAttachment";
 import { createNoteImage } from "./CustomImage";
 import { FontSize } from "./font-size";
 import { createNoteMention } from "./Mention";
@@ -30,6 +31,7 @@ import type { AttachmentDirectory } from "../attachment-directory";
 import type { MentionCandidate, MentionDirectory } from "../mention-members";
 import type { SlashCommand } from "../slash-commands";
 import type { SuggestionSink } from "../suggestion-popup";
+import type { AttachmentFilePickerHandler, AttachmentUploadHandler } from "./CustomAttachment";
 import type { ImageFilePickerHandler, ImageUploadHandler } from "./CustomImage";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
@@ -228,6 +230,13 @@ export interface NoteEditorExtensionOptions {
   readonly attachmentDirectory?: AttachmentDirectory | null;
   readonly resolveImageUploader?: () => ImageUploadHandler | null;
   readonly resolveImageFilePicker?: () => ImageFilePickerHandler | null;
+  /**
+   * Part 44, optional for the same reason: the schema must still contain the
+   * `attachment` node with no upload host attached, and without one paste and
+   * drop of a non-image file simply decline.
+   */
+  readonly resolveAttachmentUploader?: () => AttachmentUploadHandler | null;
+  readonly resolveAttachmentFilePicker?: () => AttachmentFilePickerHandler | null;
 }
 
 /** Build an isolated schema configuration for each editor instance. */
@@ -280,6 +289,25 @@ export function createNoteEditorExtensions(options: NoteEditorExtensionOptions =
       directory: options.attachmentDirectory,
       resolveUploader: options.resolveImageUploader,
       resolveFilePicker: options.resolveImageFilePicker,
+    }),
+    /*
+     * Part 44's generic file card. **Registered after `createNoteImage` on
+     * purpose, and the order is load-bearing.**
+     *
+     * ProseMirror offers a drop or a paste to each plugin's `handleDrop` /
+     * `handlePaste` in registration order and stops at the first that returns
+     * `true`. The image plugin consumes any payload containing an image and
+     * declines otherwise, so this one only ever sees payloads with no images in
+     * them. Reversing the two would let the attachment plugin swallow an image
+     * drop before the image path ever saw it.
+     *
+     * Both share one directory and one upload queue; only the pre-flight
+     * bounds, the completion node type, and the picker's `accept` differ.
+     */
+    createNoteAttachment({
+      directory: options.attachmentDirectory,
+      resolveUploader: options.resolveAttachmentUploader,
+      resolveFilePicker: options.resolveAttachmentFilePicker,
     }),
   ];
 }

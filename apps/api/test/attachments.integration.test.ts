@@ -23,6 +23,7 @@ import { AuthorizationEntryService } from "../src/authorization/authorization-en
 import { AuthorizationPolicyService } from "../src/authorization/authorization-policy.service";
 import { AuthorizationRepository } from "../src/authorization/authorization.repository";
 import { parseMinioConfig } from "../src/config/minio.config";
+import { parseStorageConfig } from "../src/config/storage.config";
 import { DatabaseService, type DatabaseTransaction } from "../src/database/database.service";
 import {
   attachments,
@@ -34,6 +35,7 @@ import {
 } from "../src/database/schema";
 import { SEED_IDS, seedDatabase } from "../src/database/seed";
 import { ObjectStorageService } from "../src/infrastructure/minio/object-storage.service";
+import { StorageQuotaService } from "../src/storage/storage-quota.service";
 import { TenantContextService } from "../src/tenant";
 
 import {
@@ -46,6 +48,7 @@ import {
 import type { StructuredLogger } from "../src/common/logging/structured-logger.service";
 import type { SecurityConfig } from "../src/config/security.config";
 import type {
+  ListObjectsResult,
   ObjectStore,
   StorageBucket,
   StoredObjectStat,
@@ -89,11 +92,139 @@ const PNG = Buffer.concat([
   Buffer.alloc(120, 0x22),
 ]);
 
+/* -------------------------------------------------------------------------- */
+/* Part 44 fixtures — generated here, never committed as binaries               */
+/* -------------------------------------------------------------------------- */
+
+function padded(signature: Buffer, size = 96): Buffer {
+  return Buffer.concat([signature, Buffer.alloc(size, 0x41)]);
+}
+
+function zipContainer(firstEntryName: string): Buffer {
+  const header = Buffer.alloc(30);
+  header.writeUInt32LE(0x04_03_4b_50, 0);
+  header.writeUInt16LE(firstEntryName.length, 26);
+  return Buffer.concat([header, Buffer.from(firstEntryName, "latin1"), Buffer.alloc(64, 0x00)]);
+}
+
+function tarArchive(): Buffer {
+  const block = Buffer.alloc(512, 0x00);
+  block.write("payload.txt", 0, "latin1");
+  Buffer.from([0x75, 0x73, 0x74, 0x61, 0x72, 0x00]).copy(block, 257);
+  return block;
+}
+
+/**
+ * One case per `Notted.md` §6 file category, so the lifecycle is proven for each
+ * rather than for "a file". Every payload is built from its magic bytes at test
+ * time — a committed fixture cannot be reviewed in a diff.
+ */
+const FILE_CATEGORIES: readonly {
+  readonly label: string;
+  readonly bytes: Buffer;
+  readonly filename: string;
+  readonly mimeType: string;
+  readonly displayName: string;
+}[] = Object.freeze([
+  {
+    label: "document (PDF)",
+    bytes: padded(Buffer.from("%PDF-1.7\n%\xe2\xe3\xcf\xd3\n", "latin1")),
+    filename: "Quarterly Report.pdf",
+    mimeType: "application/pdf",
+    displayName: "Quarterly Report.pdf",
+  },
+  {
+    label: "document (RTF)",
+    bytes: padded(Buffer.from("{\\rtf1\\ansi hello}", "latin1")),
+    filename: "letter.rtf",
+    mimeType: "application/rtf",
+    displayName: "letter.rtf",
+  },
+  {
+    label: "document (DOCX, an OOXML ZIP)",
+    bytes: zipContainer("[Content_Types].xml"),
+    filename: "spec.docx",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    displayName: "spec.docx",
+  },
+  {
+    label: "spreadsheet (XLSX, an OOXML ZIP)",
+    bytes: zipContainer("[Content_Types].xml"),
+    filename: "budget.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    displayName: "budget.xlsx",
+  },
+  {
+    label: "spreadsheet (CSV, text)",
+    bytes: Buffer.from("name,size\nreport,12\n", "utf8"),
+    filename: "budget.csv",
+    mimeType: "text/plain",
+    displayName: "budget.csv",
+  },
+  {
+    label: "archive (ZIP)",
+    bytes: zipContainer("photos/holiday.jpg"),
+    filename: "release.zip",
+    mimeType: "application/zip",
+    displayName: "release.zip",
+  },
+  {
+    label: "archive (RAR)",
+    bytes: padded(Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x01, 0x00])),
+    filename: "backup.rar",
+    mimeType: "application/vnd.rar",
+    displayName: "backup.rar",
+  },
+  {
+    label: "archive (7Z)",
+    bytes: padded(Buffer.from([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c])),
+    filename: "backup.7z",
+    mimeType: "application/x-7z-compressed",
+    displayName: "backup.7z",
+  },
+  {
+    label: "archive (TAR)",
+    bytes: tarArchive(),
+    filename: "bundle.tar",
+    mimeType: "application/x-tar",
+    displayName: "bundle.tar",
+  },
+  {
+    label: "archive (GZIP)",
+    bytes: padded(Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03])),
+    filename: "logs.gz",
+    mimeType: "application/gzip",
+    displayName: "logs.gz",
+  },
+  {
+    label: "code (Python, text)",
+    bytes: Buffer.from("def main() -> None:\n    print('hi')\n", "utf8"),
+    filename: "script.py",
+    mimeType: "text/plain",
+    displayName: "script.py",
+  },
+  {
+    label: "code (HTML, stored inert as text)",
+    bytes: Buffer.from("<script>alert(1)</script>\n", "utf8"),
+    filename: "payload.html",
+    mimeType: "text/plain",
+    displayName: "payload.html",
+  },
+]);
+
 const security = {
   maximumUploadBytes: 50 * 1_024 * 1_024,
   maximumWorkspaceStorageBytes: 10 * 1_024 * 1_024 * 1_024,
   signedUrlTtlSeconds: 900,
 } as unknown as SecurityConfig;
+
+/**
+ * The shipped defaults, parsed from an EMPTY environment rather than
+ * `process.env`: hermetic, and it stays correct if a default moves. These tests
+ * set `workspaces.storage_limit_bytes` explicitly anyway, so the plan table only
+ * has to be present and sane.
+ */
+const storageConfig = parseStorageConfig({});
 
 class RollbackAttachmentsTest extends Error {}
 
@@ -180,6 +311,14 @@ class MemoryObjectStore implements ObjectStore {
     return Promise.resolve();
   }
 
+  /**
+   * Part 45's reconciliation sweep is the only `listObjects` caller and never
+   * runs in this suite, so an empty, non-truncated page is the honest answer.
+   */
+  listObjects(): Promise<ListObjectsResult> {
+    return Promise.resolve({ objects: [], truncated: false });
+  }
+
   presignedGetUrl(): Promise<string> {
     return Promise.resolve("https://storage.invalid/signed");
   }
@@ -213,6 +352,13 @@ const twoObjectProcessor: ImageProcessor = {
     }),
 };
 
+/**
+ * The REAL `StorageQuotaService` is wired in, not a double.
+ *
+ * Part 45's "concurrent uploads cannot bypass the quota" criterion is a property
+ * of `SELECT ... FOR UPDATE` on the workspace row against real PostgreSQL. A
+ * stub here would make the concurrency test below assert nothing.
+ */
 function buildService(
   database: DatabaseService,
   store: ObjectStore,
@@ -224,9 +370,17 @@ function buildService(
     new AuthorizationPolicyService(),
     tenant,
   );
-  return new AttachmentsService(database, entry, tenant, store, processor, security, {
-    warn: vi.fn(),
-  } as unknown as StructuredLogger);
+  const quota = new StorageQuotaService(database, entry, tenant, security, storageConfig);
+  return new AttachmentsService(
+    database,
+    entry,
+    tenant,
+    store,
+    processor,
+    security,
+    { warn: vi.fn() } as unknown as StructuredLogger,
+    quota,
+  );
 }
 
 describe.skipIf(!HAS_DATABASE_URL)("Part 40 secure object storage (live PostgreSQL)", () => {
@@ -564,6 +718,37 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 40 secure object storage (live PostgreS
         .from(attachments)
         .where(like(attachments.originalName, `${QUOTA_FIXTURE}%`));
       expect(rows).toHaveLength(1);
+
+      // Part 45: the quota is a HARD ceiling, not an advisory one. Whichever
+      // upload won the race, the workspace's DERIVED usage must still fit inside
+      // the limit that admitted exactly one of them. This is the assertion the
+      // `FOR UPDATE` serialization exists to make true: without the row lock both
+      // transactions read the same pre-race aggregate and both commit, leaving a
+      // charged total of `headroom + PNG.byteLength`.
+      //
+      // The filter mirrors `StorageQuotaService.readAggregate` exactly —
+      // `pending`/`processing` rows ARE the reservation and are charged, `failed`
+      // rows own no committed bytes and are not — so this reads the same number
+      // the next `reserve()` would.
+      const [charged] = await live
+        .select({
+          bytes:
+            sql`coalesce(sum(${attachments.sizeBytes}) filter (where ${attachments.processingStatus} in ('pending', 'processing', 'ready')), 0)::bigint`.mapWith(
+              Number,
+            ),
+        })
+        .from(attachments)
+        .where(eq(attachments.workspaceId, alpha));
+      expect(charged?.bytes ?? 0).toBeLessThanOrEqual(headroom);
+
+      // The single winner is a committed `ready` row of exactly one PNG — the
+      // loser left no half-charged `pending` reservation behind.
+      const [winner] = await live
+        .select({ status: attachments.processingStatus, sizeBytes: attachments.sizeBytes })
+        .from(attachments)
+        .where(like(attachments.originalName, `${QUOTA_FIXTURE}%`));
+      expect(winner?.status).toBe("ready");
+      expect(winner?.sizeBytes).toBe(PNG.byteLength);
     } finally {
       await purgeQuotaFixtureRows(live);
       await live
@@ -571,6 +756,216 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 40 secure object storage (live PostgreS
         .set({ storageLimitBytes: before?.limit ?? null })
         .where(eq(workspaces.id, alpha));
     }
+  });
+
+  /**
+   * Part 44's acceptance criteria, proven against real PostgreSQL inside one
+   * rolled-back transaction: upload, download, and delete for **every** file
+   * category `Notted.md` §6 names; the quota error; cross-workspace denial; a
+   * guessed identifier; and — the criterion stated verbatim in `Plan.md` —
+   * "access is denied after note/workspace permission loss".
+   */
+  it("uploads, downloads, and deletes every documented file category with isolation intact", async ({
+    skip,
+  }) => {
+    if (!reachable || db === undefined) {
+      skip("skipped: no reachable PostgreSQL — run dev compose");
+      return;
+    }
+
+    await expect(
+      db.transaction(async (tx) => {
+        await seedDatabase(tx);
+        const database = {
+          db: tx,
+          transaction: <T>(work: (scope: DatabaseTransaction) => Promise<T>): Promise<T> =>
+            tx.transaction(work),
+        } as unknown as DatabaseService;
+        const store = new MemoryObjectStore();
+        const service = buildService(database, store);
+
+        const owner = principal(SEED_IDS.users.alphaOwner);
+        const editor = principal(SEED_IDS.users.alphaEditor);
+        const betaOwner = principal(SEED_IDS.users.betaOwner);
+        const alpha = SEED_IDS.workspaces.alpha;
+        const noteId = SEED_IDS.notes.alphaProjectOverview;
+        const suffix = randomUUID();
+        const uploadedIds: string[] = [];
+
+        for (const category of FILE_CATEGORIES) {
+          const uploaded = await service.uploadFile({
+            principal: owner,
+            workspaceId: alpha,
+            noteId,
+            buffer: category.bytes,
+            // Deliberately a lie on every single case: the declared type is
+            // never persisted and never routes anything.
+            declaredMimeType: "application/octet-stream",
+            declaredFilename: category.filename,
+            idempotencyKey: `attachment-file-${category.filename}-${suffix}`,
+          });
+          expect(uploaded.attachment.status, category.label).toBe("ready");
+          expect(uploaded.attachment.mediaType, category.label).toBe("file");
+          expect(uploaded.attachment.mimeType, category.label).toBe(category.mimeType);
+          expect(uploaded.attachment.displayName, category.label).toBe(category.displayName);
+          expect(uploaded.attachment.sizeBytes, category.label).toBe(category.bytes.byteLength);
+          expect(JSON.stringify(uploaded), category.label).not.toContain('"key"');
+          uploadedIds.push(uploaded.attachment.id);
+
+          // Download: the single stored object answers `full`, and the original
+          // filename comes back for the content disposition.
+          const read = await service.readContent({
+            principal: owner,
+            workspaceId: alpha,
+            attachmentId: uploaded.attachment.id,
+            variant: "full",
+          });
+          expect(read.mediaType, category.label).toBe("file");
+          expect(read.mimeType, category.label).toBe(category.mimeType);
+          expect(read.filename, category.label).toBe(category.displayName);
+          expect(read.contentLength, category.label).toBe(category.bytes.byteLength);
+          read.stream.destroy();
+
+          // An image rendition of a generic file does not exist and must not be
+          // synthesised from the original.
+          await expect(
+            service.readContent({
+              principal: owner,
+              workspaceId: alpha,
+              attachmentId: uploaded.attachment.id,
+              variant: "thumbnail",
+            }),
+          ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
+        }
+
+        const probe = uploadedIds[0] ?? "";
+
+        // --- Cross-workspace denial, from both directions. ---
+        await expect(
+          service.readContent({
+            principal: betaOwner,
+            workspaceId: alpha,
+            attachmentId: probe,
+            variant: "full",
+          }),
+        ).rejects.toMatchObject({ decision: { allowed: false } });
+        await expect(
+          service.readContent({
+            principal: betaOwner,
+            workspaceId: SEED_IDS.workspaces.beta,
+            attachmentId: probe,
+            variant: "full",
+          }),
+        ).rejects.toMatchObject({ decision: { allowed: false } });
+        await expect(
+          service.uploadFile({
+            principal: betaOwner,
+            workspaceId: alpha,
+            noteId,
+            buffer: FILE_CATEGORIES[0]?.bytes ?? PNG,
+            declaredMimeType: "application/pdf",
+            declaredFilename: "intruder.pdf",
+            idempotencyKey: `attachment-intruder-${suffix}`,
+          }),
+        ).rejects.toMatchObject({ decision: { allowed: false } });
+
+        // --- A guessed identifier discloses nothing, even to a member. ---
+        await expect(
+          service.readContent({
+            principal: owner,
+            workspaceId: alpha,
+            attachmentId: randomUUID(),
+            variant: "full",
+          }),
+        ).rejects.toMatchObject({ decision: { allowed: false } });
+
+        // --- Access is denied after permission loss (Plan.md, verbatim). ---
+        const readable = await service.readContent({
+          principal: editor,
+          workspaceId: alpha,
+          attachmentId: probe,
+          variant: "full",
+        });
+        readable.stream.destroy();
+        await tx
+          .update(projects)
+          .set({ isRestricted: true })
+          .where(eq(projects.id, SEED_IDS.projects.alphaLaunch));
+        await expect(
+          service.readContent({
+            principal: editor,
+            workspaceId: alpha,
+            attachmentId: probe,
+            variant: "full",
+          }),
+        ).rejects.toMatchObject({ decision: { allowed: false } });
+        // Losing note permission also closes the *upload* door immediately.
+        await expect(
+          service.uploadFile({
+            principal: editor,
+            workspaceId: alpha,
+            noteId,
+            buffer: FILE_CATEGORIES[0]?.bytes ?? PNG,
+            declaredMimeType: "application/pdf",
+            declaredFilename: "after-loss.pdf",
+            idempotencyKey: `attachment-after-loss-${suffix}`,
+          }),
+        ).rejects.toMatchObject({ decision: { allowed: false } });
+        await tx
+          .update(projects)
+          .set({ isRestricted: false })
+          .where(eq(projects.id, SEED_IDS.projects.alphaLaunch));
+
+        // --- Quota exhaustion surfaces as a stable 413 and writes nothing. ---
+        const [usage] = await tx
+          .select({ used: sql<string>`coalesce(sum(${attachments.sizeBytes}), 0)::bigint` })
+          .from(attachments)
+          .where(eq(attachments.workspaceId, alpha));
+        await tx
+          .update(workspaces)
+          .set({ storageLimitBytes: Number(usage?.used ?? 0) })
+          .where(eq(workspaces.id, alpha));
+        const rowsBefore = await tx
+          .select({ id: attachments.id })
+          .from(attachments)
+          .where(eq(attachments.workspaceId, alpha));
+        await expect(
+          service.uploadFile({
+            principal: owner,
+            workspaceId: alpha,
+            noteId,
+            buffer: FILE_CATEGORIES[0]?.bytes ?? PNG,
+            declaredMimeType: "application/pdf",
+            declaredFilename: "over-quota.pdf",
+            idempotencyKey: `attachment-over-quota-${suffix}`,
+          }),
+        ).rejects.toMatchObject({ safeResponse: { code: "PAYLOAD_TOO_LARGE" } });
+        const rowsAfter = await tx
+          .select({ id: attachments.id })
+          .from(attachments)
+          .where(eq(attachments.workspaceId, alpha));
+        expect(rowsAfter).toHaveLength(rowsBefore.length);
+
+        // --- Deletion removes the row and, only afterwards, the objects. ---
+        for (const id of uploadedIds) {
+          const removed = await service.delete({
+            principal: owner,
+            workspaceId: alpha,
+            attachmentId: id,
+          });
+          expect(removed).toEqual({ id, deleted: true });
+        }
+        expect(store.objects.size).toBe(0);
+        expect(
+          await tx
+            .select({ id: attachments.id })
+            .from(attachments)
+            .where(eq(attachments.id, probe)),
+        ).toEqual([]);
+
+        throw new RollbackAttachmentsTest("rollback Part 44 fixture");
+      }),
+    ).rejects.toBeInstanceOf(RollbackAttachmentsTest);
   });
 });
 

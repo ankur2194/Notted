@@ -152,6 +152,94 @@ export const workspaceDeleteSchema = z
 export type WorkspaceDeleteInput = z.infer<typeof workspaceDeleteSchema>;
 
 // --------------------------------------------------------------------------- //
+// Part 45 — derived storage usage and administrative cleanup contracts.
+//
+// The Part 26 comment above says the workspace detail exposes "a nullable
+// storage override without inventing quota usage". Part 45 is the part that
+// supplies the usage, and it does so on a SEPARATE route: the numbers are a
+// `sum()` over the workspace's attachment rows, and making every workspace read
+// pay for that aggregate would be a real cost for a value most reads ignore.
+//
+// Byte fields are `nonnegative().safe()` integers. `size_bytes` is a PostgreSQL
+// bigint, but the per-workspace quota ceiling is many orders of magnitude below
+// `Number.MAX_SAFE_INTEGER`, so a JS number is exact for every value this
+// contract can legitimately carry — and `.safe()` refuses rather than silently
+// rounding if that ever stops being true.
+// --------------------------------------------------------------------------- //
+
+const storageByteCountSchema = z.number().int().nonnegative().safe();
+
+export const workspaceStorageUsageSchema = z
+  .object({
+    workspaceId: uuidSchema,
+    plan: workspacePlanSchema,
+    /** Bytes held by attachments that finished uploading. */
+    usedBytes: storageByteCountSchema,
+    /** Bytes reserved by uploads still in flight; already charged to the quota. */
+    pendingBytes: storageByteCountSchema,
+    /** Effective quota: override or plan default, clamped by the deployment cap. */
+    limitBytes: storageByteCountSchema,
+    /** `limitBytes - usedBytes - pendingBytes`, floored at zero. */
+    availableBytes: storageByteCountSchema,
+    /** Number of `ready` attachments. */
+    attachmentCount: z.number().int().nonnegative().safe(),
+    limitSource: z.enum(["override", "plan"]),
+  })
+  .strict();
+export type WorkspaceStorageUsageOutput = z.infer<typeof workspaceStorageUsageSchema>;
+
+export const storageMaintenanceSweepNameSchema = z.enum([
+  "abandonedUploads",
+  "orphanedObjects",
+  "expiredExports",
+  "deletedNoteRetention",
+]);
+
+/**
+ * A sweep result carries counts, a bounded sample of resource UUIDs, and a
+ * fixed vocabulary of note codes. It deliberately cannot carry a filename, an
+ * object key, a signed URL, or document content — `.strict()` plus these field
+ * types are the contract-level half of that guarantee
+ * (`docs/standards/observability.md`).
+ */
+export const storageMaintenanceSweepReportSchema = z
+  .object({
+    sweep: storageMaintenanceSweepNameSchema,
+    examined: z.number().int().nonnegative().safe(),
+    selected: z.number().int().nonnegative().safe(),
+    rowsRemoved: z.number().int().nonnegative().safe(),
+    rowsMarked: z.number().int().nonnegative().safe(),
+    objectsRemoved: z.number().int().nonnegative().safe(),
+    truncated: z.boolean(),
+    sampleIds: z.array(uuidSchema).max(50).readonly(),
+    notes: z
+      .array(z.string().regex(/^[a-z][a-z\d_]{0,63}$/u, "Expected a snake_case note code"))
+      .max(20)
+      .readonly(),
+  })
+  .strict();
+
+export const storageMaintenanceReportSchema = z
+  .object({
+    startedAt: isoTimestampSchema,
+    finishedAt: isoTimestampSchema,
+    dryRun: z.boolean(),
+    scope: z.enum(["workspace", "system"]),
+    sweeps: z.array(storageMaintenanceSweepReportSchema).max(16).readonly(),
+  })
+  .strict();
+
+/**
+ * Cleanup request body. `dryRun` DEFAULTS TO TRUE: an administrative endpoint
+ * that deletes objects must require the caller to say so explicitly, and a
+ * malformed or truncated body then reports instead of destroying.
+ */
+export const storageMaintenanceRequestSchema = z
+  .object({ dryRun: z.boolean().default(true) })
+  .strict();
+export type StorageMaintenanceRequestInput = z.input<typeof storageMaintenanceRequestSchema>;
+
+// --------------------------------------------------------------------------- //
 // Part 28 — membership and invitation contracts.
 // --------------------------------------------------------------------------- //
 

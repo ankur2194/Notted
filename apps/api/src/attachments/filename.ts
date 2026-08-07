@@ -72,6 +72,28 @@ export function canonicalDisplayExtension(sniffed: SniffedImageType): string {
   return DISPLAY_EXTENSION_BY_TYPE[sniffed];
 }
 
+/**
+ * The lowercased, dot-prefixed extension an untrusted filename declares, or `""`.
+ *
+ * Part 44. This is an ADMISSION INPUT, never a type and never part of a key. It
+ * feeds exactly two closed-set lookups: the text allow-list
+ * (`ATTACHMENT_TEXT_EXTENSIONS`) and the DOCX/XLSX-versus-plain-ZIP decision in
+ * `sniffFileMediaType`. Because both consumers compare it against a closed set,
+ * an attacker-chosen value can only ever fail to match — it cannot introduce a
+ * new type, a new extension, or a new path segment.
+ *
+ * Path separators and control/bidi characters are stripped first, for the same
+ * reason `sanitizeAttachmentFilename` strips them: a hidden separator or an
+ * override could otherwise make `evil.exe` present itself as `.txt`. The result
+ * is bounded to a short run of alphanumerics, so `".тхт"` or a 200-character
+ * pseudo-extension simply yields `""`.
+ */
+export function declaredFileExtension(raw: string): string {
+  const cleaned = stripUnsafeCharacters(basename(raw).normalize("NFC")).split(/[/\\]/u).pop() ?? "";
+  const match = /\.([A-Za-z0-9]{1,10})$/u.exec(cleaned);
+  return match?.[1] === undefined ? "" : `.${match[1].toLowerCase()}`;
+}
+
 function basename(raw: string): string {
   const segments = raw.split(/[/\\]/u);
   return segments[segments.length - 1] ?? "";
@@ -117,7 +139,28 @@ export function sanitizeAttachmentFilename(
   raw: string,
   sniffed: SniffedImageType,
 ): SanitizedAttachmentFilename {
-  const canonical = canonicalDisplayExtension(sniffed);
+  return sanitizeUploadFilename(raw, canonicalDisplayExtension(sniffed), "image");
+}
+
+/**
+ * The general form, shared by images (Part 40) and generic files (Part 44).
+ *
+ * `canonicalExtension` is always supplied by the caller from a CLOSED set that
+ * the *bytes* selected — the sniffed image type, the sniffed file type, or (for
+ * text) the allow-listed extension the file already carried. It is never taken
+ * from the user's filename directly. Forcing it is what kills
+ * `invoice.pdf.exe`: the stem is preserved verbatim, but the extension a
+ * download will carry is the one the content actually is.
+ *
+ * `fallbackStem` is used only when sanitization consumes the whole name (`"..."`,
+ * a name made entirely of control characters, an empty part filename).
+ */
+export function sanitizeUploadFilename(
+  raw: string,
+  canonicalExtension: string,
+  fallbackStem: string,
+): SanitizedAttachmentFilename {
+  const canonical = canonicalExtension;
   const cleaned = stripUnsafeCharacters(basename(raw).normalize("NFC"))
     // Re-split after control removal: a stripped control could expose a separator.
     .split(/[/\\]/u)
@@ -134,7 +177,7 @@ export function sanitizeAttachmentFilename(
   const guardedStem = reserved ? `_${stem}` : stem;
 
   return Object.freeze({
-    originalName: boundName(guardedStem, extension === "" ? canonical : extension, "image"),
-    filename: boundName(guardedStem, canonical, "image"),
+    originalName: boundName(guardedStem, extension === "" ? canonical : extension, fallbackStem),
+    filename: boundName(guardedStem, canonical, fallbackStem),
   });
 }

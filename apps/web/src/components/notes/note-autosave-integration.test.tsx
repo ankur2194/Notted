@@ -35,7 +35,7 @@ function updated(version: number, pageSize: PageSize = "a4") {
  * The real note page: a Server-Component-shaped tree where `PageContainer` owns
  * the autosave machine and the editor reaches it only through context.
  */
-async function openNote(): Promise<Editor> {
+async function openNote(initialDocument: unknown = HELLO_DOCUMENT): Promise<Editor> {
   const holder: { editor: Editor | null } = { editor: null };
   render(
     <QueryClientProvider
@@ -51,7 +51,7 @@ async function openNote(): Promise<Editor> {
         <NoteEditorSurface
           workspaceId={WORKSPACE_ID}
           noteId={NOTE_ID}
-          initialDocument={HELLO_DOCUMENT}
+          initialDocument={initialDocument}
           editable
           ariaLabel="Note content"
           onEditorReady={(editor) => {
@@ -143,6 +143,75 @@ describe("note autosave through the real editor", () => {
     });
     expect(mocks.updateNote).not.toHaveBeenCalled();
     expect(screen.getByTestId("note-save-status")).toHaveTextContent("No unsaved changes.");
+  });
+
+  it("opens a Part 42 image note clean, even though Part 43 fills in four defaults", async () => {
+    // The single most dangerous failure mode of the Part 43 widening.
+    //
+    // ProseMirror writes every DECLARED attribute into `getJSON()`, so opening a
+    // document stored before Part 43 produces JSON carrying `align`, `wrap`,
+    // `fullWidth`, and `caption` that the stored document never had. Two things
+    // have to hold, and both are asserted here:
+    //
+    // 1. `safeParseNoteDocument` accepts that output. If it did not,
+    //    `onDocumentChange` would never fire again and autosave would go silent
+    //    for the whole session with nothing on screen to explain it.
+    // 2. The baseline is the editor's OWN serialization, so the added defaults
+    //    are not mistaken for an edit. Otherwise every note containing an image
+    //    would issue a pointless save the instant it was opened.
+    await openNote({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "Figure below." }] },
+        {
+          type: "image",
+          attrs: {
+            attachmentId: "3f4a1b2c-5d6e-4f70-8a91-b2c3d4e5f607",
+            alt: "A chart",
+            width: 1200,
+            height: 800,
+          },
+        },
+      ],
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+    });
+    expect(mocks.updateNote).not.toHaveBeenCalled();
+    expect(screen.getByTestId("note-save-status")).toHaveTextContent("No unsaved changes.");
+  });
+
+  it("saves an image resize through the one existing save call site", async () => {
+    const editor = await openNote({
+      type: "doc",
+      content: [
+        {
+          type: "image",
+          attrs: {
+            attachmentId: "3f4a1b2c-5d6e-4f70-8a91-b2c3d4e5f607",
+            alt: "A chart",
+            width: 400,
+            height: 200,
+          },
+        },
+      ],
+    });
+
+    act(() => {
+      let target = -1;
+      editor.state.doc.descendants((node, pos) => {
+        if (target === -1 && node.type.name === "image") target = pos;
+        return target === -1;
+      });
+      editor.commands.setNodeSelection(target);
+      editor.commands.nottedResizeSelectedImage(32);
+    });
+
+    // No new save call site: a resize is an ordinary transaction that takes the
+    // same route a typed character takes.
+    await waitFor(() => expect(mocks.updateNote).toHaveBeenCalledTimes(1), { timeout: 3_000 });
+    expect(plainText(savedContent())).toContain('"width":432');
   });
 
   it("coalesces a page-size press and pending text into a single request", async () => {

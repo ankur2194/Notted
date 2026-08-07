@@ -58,14 +58,15 @@ describe("slash command table", () => {
   it("offers exactly the brief's commands that the contract can represent", () => {
     // Every entry here can be represented by the shared document contract, and
     // each was added only *after* that contract could represent it: `pageBreak`
-    // in Part 38, and `image` in Part 42, which widened
-    // `NOTE_DOCUMENT_NODE_TYPES` first. The ordering of those two steps is the
-    // rule this list encodes — a menu entry that produces a node the API would
-    // refuse to store is a command that breaks saving the moment it is used.
+    // in Part 38, `image` in Part 42, and `attachment` in Part 44, each of which
+    // widened `NOTE_DOCUMENT_NODE_TYPES` first. The ordering of those two steps
+    // is the rule this list encodes — a menu entry that produces a node the API
+    // would refuse to store is a command that breaks saving the moment it is
+    // used.
     //
-    // `/image` is also the one entry that inserts nothing by itself: it opens
-    // the host's file picker, and a node appears only once real bytes have a
-    // permanent attachment id.
+    // `/image` and `/attachment` are also the two entries that insert nothing by
+    // themselves: each opens the host's file picker, and a node appears only
+    // once real bytes have a permanent attachment id.
     expect(SLASH_COMMANDS.map((command) => command.id)).toEqual([
       "heading1",
       "heading2",
@@ -80,6 +81,7 @@ describe("slash command table", () => {
       "divider",
       "pageBreak",
       "image",
+      "attachment",
     ]);
   });
 

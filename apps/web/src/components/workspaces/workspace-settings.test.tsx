@@ -1,11 +1,16 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { WorkspaceDetail } from "@notted/shared-types";
+import type { WorkspaceDetail, WorkspaceStorageUsage } from "@notted/shared-types";
 
 import { WorkspaceSettings } from "@/components/workspaces/WorkspaceSettings";
-import { deleteWorkspace, updateWorkspace } from "@/lib/workspaces/requests";
+import {
+  deleteWorkspace,
+  requestWorkspaceStorageUsage,
+  updateWorkspace,
+} from "@/lib/workspaces/requests";
 
 const { router } = vi.hoisted(() => ({
   router: { replace: vi.fn(), refresh: vi.fn() },
@@ -15,6 +20,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("@/lib/workspaces/requests", () => ({
   updateWorkspace: vi.fn(),
   deleteWorkspace: vi.fn(),
+  requestWorkspaceStorageUsage: vi.fn(),
 }));
 
 const workspace = {
@@ -33,8 +39,53 @@ const workspace = {
   updatedAt: "2026-08-01T00:00:00.000Z",
 } satisfies WorkspaceDetail;
 
+/**
+ * Part 45 usage fixture. Values are chosen so that none of them formats to
+ * "1 GiB" or "1,073,741,824 bytes" — those strings are asserted with `getByText`
+ * for the Part 26 storage-limit override, and a collision would make those
+ * pre-existing assertions fail on ambiguity rather than on behaviour.
+ */
+const storageUsage = {
+  workspaceId: workspace.id,
+  plan: "pro",
+  usedBytes: 536_870_912, // 512 MiB — 25% of the limit
+  pendingBytes: 0,
+  limitBytes: 2_147_483_648, // 2 GiB
+  availableBytes: 1_610_612_736, // 1.5 GiB
+  attachmentCount: 3,
+  limitSource: "plan",
+} satisfies WorkspaceStorageUsage;
+
+/**
+ * `WorkspaceStorageUsagePanel` reads through TanStack Query, so settings now
+ * needs a client. A fresh `QueryClient` per render keeps tests independent, and
+ * `retry: false` makes a rejected query reach its error state in one tick
+ * instead of waiting out the provider's real retry policy.
+ */
+function renderSettings(props: {
+  readonly workspace: WorkspaceDetail;
+  readonly canManage: boolean;
+  readonly canDelete: boolean;
+}) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <WorkspaceSettings {...props} />
+    </QueryClientProvider>,
+  );
+}
+
 describe("WorkspaceSettings", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // `clearAllMocks` clears calls but keeps implementations, including any
+    // queued `mockResolvedValueOnce`. Reset the request mocks explicitly so a
+    // one-shot queued in one test cannot leak into the next.
+    vi.mocked(updateWorkspace).mockReset();
+    vi.mocked(deleteWorkspace).mockReset();
+    vi.mocked(requestWorkspaceStorageUsage).mockReset();
+    vi.mocked(requestWorkspaceStorageUsage).mockResolvedValue({ ok: true, data: storageUsage });
+  });
 
   it("saves an identity rename and refreshes from the response", async () => {
     const user = userEvent.setup();
@@ -49,7 +100,7 @@ describe("WorkspaceSettings", () => {
         },
       },
     });
-    render(<WorkspaceSettings workspace={workspace} canManage={true} canDelete={true} />);
+    renderSettings({ workspace, canManage: true, canDelete: true });
 
     const nameField = screen.getByLabelText("Workspace name");
     await user.clear(nameField);
@@ -73,7 +124,7 @@ describe("WorkspaceSettings", () => {
   });
 
   it("disables save when there are no changes and keeps the original values", () => {
-    render(<WorkspaceSettings workspace={workspace} canManage={true} canDelete={true} />);
+    renderSettings({ workspace, canManage: true, canDelete: true });
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
     expect(screen.getByLabelText("Slug")).toHaveValue("acme-design");
     expect(screen.getByLabelText("Default page size")).toHaveValue("a4");
@@ -93,7 +144,7 @@ describe("WorkspaceSettings", () => {
         },
       },
     });
-    render(<WorkspaceSettings workspace={workspace} canManage={true} canDelete={true} />);
+    renderSettings({ workspace, canManage: true, canDelete: true });
 
     await user.selectOptions(screen.getByLabelText("Default page size"), "letter");
     await user.click(screen.getByRole("button", { name: "Save page default" }));
@@ -114,7 +165,7 @@ describe("WorkspaceSettings", () => {
       ok: true,
       data: { id: workspace.id, deleted: true },
     });
-    render(<WorkspaceSettings workspace={workspace} canManage={true} canDelete={true} />);
+    renderSettings({ workspace, canManage: true, canDelete: true });
 
     await user.click(screen.getByRole("button", { name: "Delete workspace" }));
     const confirmField = screen.getByLabelText(/Type the workspace name/i);
@@ -142,7 +193,7 @@ describe("WorkspaceSettings", () => {
 
   it("restores focus to the delete trigger after cancellation", async () => {
     const user = userEvent.setup();
-    render(<WorkspaceSettings workspace={workspace} canManage={true} canDelete={true} />);
+    renderSettings({ workspace, canManage: true, canDelete: true });
 
     const trigger = screen.getByRole("button", { name: "Delete workspace" });
     await user.click(trigger);
@@ -155,7 +206,7 @@ describe("WorkspaceSettings", () => {
   it("surfaces a denied delete without redirecting", async () => {
     const user = userEvent.setup();
     vi.mocked(deleteWorkspace).mockResolvedValue({ ok: false, kind: "forbidden" });
-    render(<WorkspaceSettings workspace={workspace} canManage={true} canDelete={true} />);
+    renderSettings({ workspace, canManage: true, canDelete: true });
 
     await user.click(screen.getByRole("button", { name: "Delete workspace" }));
     await user.type(screen.getByLabelText(/Type the workspace name/i), workspace.name);
@@ -166,13 +217,11 @@ describe("WorkspaceSettings", () => {
   });
 
   it("disables editing and delete for a viewer and renders permission notes", () => {
-    render(
-      <WorkspaceSettings
-        workspace={{ ...workspace, currentUserRole: "viewer", storageLimitBytes: null }}
-        canManage={false}
-        canDelete={false}
-      />,
-    );
+    renderSettings({
+      workspace: { ...workspace, currentUserRole: "viewer", storageLimitBytes: null },
+      canManage: false,
+      canDelete: false,
+    });
     expect(screen.getByText(/owner or admin access to edit/i)).toBeVisible();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
     expect(screen.getByText(/Only the workspace owner may delete/i)).toBeVisible();
@@ -185,5 +234,192 @@ describe("WorkspaceSettings", () => {
     expect(screen.getByText(/Default page size is read-only/i)).toBeVisible();
     expect(screen.getByText("Plan-managed limit")).toBeVisible();
     expect(screen.getByRole("button", { name: "Replace logo" })).toBeDisabled();
+  });
+
+  describe("storage usage (Part 45)", () => {
+    it("renders the quota bar in proportion and exposes exact byte counts", async () => {
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      const bar = await screen.findByRole("progressbar", { name: "Storage used" });
+      // The bar is driven by the server's own numbers, never a client estimate.
+      expect(bar).toHaveAttribute("aria-valuemin", "0");
+      expect(bar).toHaveAttribute("aria-valuemax", String(storageUsage.limitBytes));
+      expect(bar).toHaveAttribute("aria-valuenow", String(storageUsage.usedBytes));
+      // `aria-valuetext` overrides the raw number so a reader hears bytes, not
+      // "536870912".
+      expect(bar).toHaveAttribute(
+        "aria-valuetext",
+        "536,870,912 bytes of 2,147,483,648 bytes used.",
+      );
+
+      // 512 MiB of 2 GiB is a quarter of the track; nothing is in flight.
+      expect(screen.getByTestId("storage-used-segment")).toHaveStyle({ width: "25%" });
+      expect(screen.getByTestId("storage-pending-segment")).toHaveStyle({ width: "0%" });
+
+      // Rounded values are hidden; the precise counts stay available to AT.
+      expect(screen.getAllByText("512 MiB")[0]).toHaveAttribute("aria-hidden", "true");
+      expect(screen.getAllByText("536,870,912 bytes")[0]).toHaveClass("sr-only");
+      expect(screen.getByText("2,147,483,648 bytes")).toHaveClass("sr-only");
+      expect(screen.getByText("1,610,612,736 bytes")).toHaveClass("sr-only");
+      expect(screen.getByText("(3 files)")).toBeVisible();
+
+      // No warning wording while there is room left.
+      expect(screen.queryByText(/almost full|Storage full/i)).not.toBeInTheDocument();
+    });
+
+    it("shows in-flight bytes as their own segment and row", async () => {
+      vi.mocked(requestWorkspaceStorageUsage).mockResolvedValue({
+        ok: true,
+        data: {
+          ...storageUsage,
+          pendingBytes: 268_435_456, // 256 MiB — 12.5% of the limit
+          availableBytes: 1_342_177_280,
+        },
+      });
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      expect(await screen.findByText("Uploading now")).toBeVisible();
+      expect(screen.getByTestId("storage-used-segment")).toHaveStyle({ width: "25%" });
+      expect(screen.getByTestId("storage-pending-segment")).toHaveStyle({ width: "12.5%" });
+      // Pending bytes are already charged, so the announced total includes them.
+      expect(screen.getByRole("progressbar")).toHaveAttribute(
+        "aria-valuetext",
+        "805,306,368 bytes of 2,147,483,648 bytes used, including 268,435,456 bytes still uploading.",
+      );
+      expect(screen.getByText("268,435,456 bytes")).toHaveClass("sr-only");
+    });
+
+    it("renders a workspace with no attachments as zero of the limit", async () => {
+      vi.mocked(requestWorkspaceStorageUsage).mockResolvedValue({
+        ok: true,
+        data: {
+          ...storageUsage,
+          usedBytes: 0,
+          pendingBytes: 0,
+          availableBytes: storageUsage.limitBytes,
+          attachmentCount: 0,
+        },
+      });
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      const bar = await screen.findByRole("progressbar");
+      expect(bar).toHaveAttribute("aria-valuenow", "0");
+      // An empty workspace is a real zero, not a missing or broken bar.
+      expect(screen.getByTestId("storage-used-segment")).toHaveStyle({ width: "0%" });
+      expect(screen.getAllByText("0 B")[0]).toBeInTheDocument();
+      expect(screen.getByText("(0 files)")).toBeVisible();
+      expect(screen.queryByText(/almost full|Storage full/i)).not.toBeInTheDocument();
+    });
+
+    it("conveys an exhausted quota with text, not colour alone", async () => {
+      vi.mocked(requestWorkspaceStorageUsage).mockResolvedValue({
+        ok: true,
+        data: {
+          ...storageUsage,
+          usedBytes: storageUsage.limitBytes,
+          availableBytes: 0,
+        },
+      });
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      // The state is spelled out in words for anyone who cannot see the colour
+      // change, and repeated inside the bar's own announcement.
+      expect(
+        await screen.findByText("Storage full. New uploads are rejected until files are removed."),
+      ).toBeVisible();
+      expect(screen.getByRole("progressbar")).toHaveAttribute(
+        "aria-valuetext",
+        "2,147,483,648 bytes of 2,147,483,648 bytes used. Storage full. New uploads are rejected until files are removed.",
+      );
+      expect(screen.getByTestId("storage-used-segment")).toHaveStyle({ width: "100%" });
+    });
+
+    it("warns before the quota is exhausted", async () => {
+      vi.mocked(requestWorkspaceStorageUsage).mockResolvedValue({
+        ok: true,
+        data: {
+          ...storageUsage,
+          // 90% of 2 GiB is 1,932,735,283.2 bytes, so this is the first integer
+          // that actually crosses the threshold rather than sitting just under.
+          usedBytes: 1_932_735_284,
+          availableBytes: 214_748_364,
+        },
+      });
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      expect(await screen.findByText("Storage almost full.")).toBeVisible();
+    });
+
+    it("names the plan default as the limit in force", async () => {
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      expect(await screen.findByText("Limit of 2 GiB from the pro plan default.")).toBeVisible();
+    });
+
+    it("names a per-workspace override as the limit in force", async () => {
+      vi.mocked(requestWorkspaceStorageUsage).mockResolvedValue({
+        ok: true,
+        data: { ...storageUsage, limitSource: "override" },
+      });
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      expect(
+        await screen.findByText(
+          "Limit of 2 GiB set for this workspace, overriding the pro plan default.",
+        ),
+      ).toBeVisible();
+    });
+
+    it("announces a loading state before usage arrives", () => {
+      // Never settles, so the pending branch stays on screen for the assertion.
+      vi.mocked(requestWorkspaceStorageUsage).mockReturnValue(new Promise<never>(() => {}));
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      expect(screen.getByText("Loading storage usage…")).toBeVisible();
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    });
+
+    it("offers a retry after a failed usage load and recovers on success", async () => {
+      const user = userEvent.setup();
+      vi.mocked(requestWorkspaceStorageUsage)
+        .mockResolvedValueOnce({ ok: false, kind: "network" })
+        .mockResolvedValueOnce({ ok: true, data: storageUsage });
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      // A failed read must not resolve to a confident "0 bytes used" bar.
+      expect(await screen.findByText(/Storage usage could not be loaded/i)).toBeVisible();
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Retry" }));
+
+      expect(await screen.findByRole("progressbar", { name: "Storage used" })).toBeVisible();
+      expect(screen.queryByText(/Storage usage could not be loaded/i)).not.toBeInTheDocument();
+    });
+
+    it("renders a permission notice rather than an error when usage is denied", async () => {
+      vi.mocked(requestWorkspaceStorageUsage).mockResolvedValue({ ok: false, kind: "forbidden" });
+      renderSettings({
+        workspace: { ...workspace, currentUserRole: "viewer" },
+        canManage: false,
+        canDelete: false,
+      });
+
+      expect(await screen.findByText(/not available for your access/i)).toBeVisible();
+      // Retrying cannot grant access, so no retry affordance is offered.
+      expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    });
+
+    it("shows usage to a viewer, who can read it but not change the limit", async () => {
+      renderSettings({
+        workspace: { ...workspace, currentUserRole: "viewer" },
+        canManage: false,
+        canDelete: false,
+      });
+
+      // `settings.read` is enough to see usage, so a viewer gets the real bar.
+      expect(await screen.findByRole("progressbar", { name: "Storage used" })).toBeVisible();
+      expect(screen.getByText(/The limit is read-only here/i)).toBeVisible();
+    });
   });
 });

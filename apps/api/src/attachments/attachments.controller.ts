@@ -34,6 +34,7 @@ import { ApiHttpException } from "../common/errors/api-http.exception";
 import { requireIdempotencyKey } from "../common/idempotency/api-idempotency";
 import { getRequestId } from "../common/request/request-context";
 
+import { admitUpload } from "./attachment-admission";
 import { ATTACHMENT_UPLOAD_FILE_FIELD } from "./attachments.constants";
 import { AttachmentsService } from "./attachments.service";
 import { parseSingleFileUpload } from "./multipart-upload.parser";
@@ -86,10 +87,20 @@ const noteAuthorization = (action: "file.upload" | "note.read") => ({
   resource: (request: Request) => ({ kind: "note" as const, id: routeUuid(request, "noteId") }),
 });
 
-/** RFC 6266 / RFC 5987 disposition: ASCII fallback plus a UTF-8 form. */
-export function contentDisposition(filename: string): string {
+/**
+ * RFC 6266 / RFC 5987 disposition: ASCII fallback plus a UTF-8 form.
+ *
+ * Part 44 added the `disposition` parameter. `inline` remains the default so the
+ * Part 40/41 image path is byte-for-byte unchanged; a generic file is always
+ * passed `attachment`, which is what turns "the browser might try to render
+ * this" into "the browser saves it under the name the author uploaded".
+ */
+export function contentDisposition(
+  filename: string,
+  disposition: "inline" | "attachment" = "inline",
+): string {
   const ascii = filename.replace(/[^ -~]/gu, "_").replace(/["\\]/gu, "_");
-  return `inline; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+  return `${disposition}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
 /** Compare a client validator against the stored ETag, tolerating quotes and
@@ -128,14 +139,27 @@ export class AttachmentsController {
       variant: query.data.variant,
       requestId: getRequestId(request) ?? null,
     });
-    if (!INLINE_SERVABLE_MIME_TYPES.has(content.mimeType)) {
+    /*
+     * Part 44. The disposition is chosen from the row's MEDIA TYPE, not from its
+     * MIME type, so a crafted or corrupted type string can never talk this route
+     * into serving a generic file inline.
+     *
+     * - `image` keeps the Part 40 behaviour exactly: inline, and only for the
+     *   browser-safe raster allow-list. Anything else is still refused outright.
+     * - `file` is ALWAYS `attachment`. That is the ADR 0005 rule ("untrusted
+     *   active content is not served inline") and the Part 44 plan's verbatim
+     *   instruction not to embed untrusted active documents. It is what makes an
+     *   uploaded `.html` — stored as `text/plain` — harmless: it downloads.
+     */
+    const inline = content.mediaType === "image";
+    if (inline && !INLINE_SERVABLE_MIME_TYPES.has(content.mimeType)) {
       content.stream.destroy();
       throw new ApiHttpException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, {
         code: "UNPROCESSABLE_ENTITY",
         message: "No servable rendition is available for this attachment.",
       });
     }
-    applyContentHeaders(response, content);
+    applyContentHeaders(response, content, inline ? "inline" : "attachment");
     if (matchesEtag(request.header("if-none-match"), content.etag)) {
       content.stream.destroy();
       response.status(HttpStatus.NOT_MODIFIED).end();
@@ -187,6 +211,34 @@ export class NoteAttachmentsController {
     });
   }
 
+  /**
+   * One endpoint, two media types (Part 44).
+   *
+   * The editor uploads images and generic files through the SAME route, and the
+   * route decides which service method to call by sniffing the bytes — never by
+   * reading the declared `Content-Type` or the filename. That keeps the browser
+   * client simple (one URL, one idempotency contract, one progress source) and
+   * keeps the classification rule in one pure, unit-tested function.
+   *
+   * Ordering that is a security property, not a detail: `@RequireAuthorization`
+   * still evaluates `file.upload` against the target NOTE before
+   * `parseSingleFileUpload` reads a single body byte. Routing happens strictly
+   * after that, on bytes the caller was already permitted to send. Both service
+   * methods additionally re-run admission for themselves, so a mis-wired
+   * transport cannot force a payload down the wrong path.
+   *
+   * ponytail: this route is governed only by the GLOBAL authenticated bucket
+   * (`AUTH_RATE_LIMIT_PER_MINUTE`, 1000/min) even though it is by far the most
+   * expensive endpoint in the API — up to 50 MiB buffered in memory, then
+   * decoded. A single authorized actor can therefore issue ~1000 large uploads a
+   * minute; the workspace quota bounds what is KEPT, not what is buffered.
+   * `RateLimitService` has one bucket and no per-route policy, so tightening
+   * this needs a route-scoped policy decorator, guard metadata resolution, and a
+   * config value — recorded as follow-up in the Part 44 completion record rather
+   * than bolted on here. The concrete mitigations already in place are the
+   * `maxBytes` ceiling (a body is refused before it is fully buffered), the
+   * per-request idempotency key, and `file.upload` authorization on the note.
+   */
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @RequireAuthorization(noteAuthorization("file.upload"))
@@ -194,11 +246,15 @@ export class NoteAttachmentsController {
     this.auth.assertTrustedMutationOrigin(request);
     const idempotencyKey = requireIdempotencyKey(request);
     const upload = await parseSingleFileUpload(request, {
-      maxBytes: this.attachments.maximumImageUploadBytes,
+      // The wider of the two ceilings, because the media type is unknown until
+      // the body has been read. `AttachmentsService` re-applies the narrower
+      // image bound once the bytes identify themselves.
+      maxBytes: this.attachments.maximumUploadBytes,
       fileField: ATTACHMENT_UPLOAD_FILE_FIELD,
       fieldNames: [],
     });
-    return this.attachments.uploadImage({
+
+    const scope = {
       principal: principalOf(request),
       workspaceId: routeUuid(request, "workspaceId"),
       noteId: routeUuid(request, "noteId"),
@@ -207,16 +263,36 @@ export class NoteAttachmentsController {
       declaredFilename: upload.declaredFilename,
       idempotencyKey,
       requestId: getRequestId(request) ?? null,
-    });
+    };
+
+    const admission = admitUpload(upload.buffer, upload.declaredFilename);
+    if (!admission.ok) {
+      throw new ApiHttpException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, {
+        code: "UNPROCESSABLE_ENTITY",
+        message: "The uploaded file type is not supported.",
+      });
+    }
+    return admission.admitted.kind === "image"
+      ? this.attachments.uploadImage(scope)
+      : this.attachments.uploadFile(scope);
   }
 }
 
-function applyContentHeaders(response: Response, content: AttachmentContent): void {
+function applyContentHeaders(
+  response: Response,
+  content: AttachmentContent,
+  disposition: "inline" | "attachment",
+): void {
   response.setHeader("Content-Type", content.mimeType);
   // NOTE: `Content-Length` is deliberately NOT set here. It is a property of the
   // body being sent, and a 304 has no body — RFC 9110 §15.4.5 says a 304 sends
   // only the validating/metadata headers. The caller sets it on the 200 path.
-  response.setHeader("Content-Disposition", contentDisposition(content.filename));
+  response.setHeader("Content-Disposition", contentDisposition(content.filename, disposition));
+  // Part 44, and it applies to BOTH media types. `helmet()` sets this globally
+  // for JSON routes, but this route writes its own header block on a response it
+  // pipes itself, so it is restated here rather than assumed. Without it a
+  // browser may content-sniff a `text/plain` download back into HTML and run it.
+  response.setHeader("X-Content-Type-Options", "nosniff");
   // The key carries a random token and every rendition is immutable, so the
   // response can be cached forever — but only privately: it is principal
   // dependent and must never enter a shared cache.

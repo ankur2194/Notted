@@ -11,6 +11,7 @@ import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
 import { AuthorizationModule } from "../authorization/authorization.module";
 import { MinioModule } from "../infrastructure/minio/minio.module";
+import { StorageModule } from "../storage/storage.module";
 
 import { AttachmentsController, NoteAttachmentsController } from "./attachments.controller";
 import { AttachmentsService } from "./attachments.service";
@@ -18,7 +19,9 @@ import { IMAGE_PROCESSOR } from "./image-processing";
 import { ImageProcessingService } from "./image-processing.service";
 
 @Module({
-  imports: [AuthModule, AuthorizationModule, MinioModule],
+  // Part 45: `StorageModule` supplies `StorageQuotaService`, the single owner of
+  // the quota rules the upload path enforces.
+  imports: [AuthModule, AuthorizationModule, MinioModule, StorageModule],
   controllers: [AttachmentsController, NoteAttachmentsController],
   providers: [
     AttachmentsService,

@@ -1,6 +1,6 @@
 "use client";
 
-import { safeParseNoteDocument } from "@notted/shared-validators";
+import { ATTACHMENT_UPLOAD_ACCEPT, safeParseNoteDocument } from "@notted/shared-validators";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
@@ -12,6 +12,7 @@ import type { Editor } from "@tiptap/core";
 
 import {
   createAttachmentDirectory,
+  documentHasAttachment,
   documentHasImage,
 } from "@/components/editor/attachment-directory";
 import {
@@ -118,7 +119,14 @@ export function NoteEditorSurface({
   // Part 42, gated exactly like the member directory: only a note that already
   // stores an image has anything to resolve on open. A note without one fetches
   // nothing until an upload happens, and that upload seeds the same cache entry.
-  const needsAttachments = useMemo(() => documentHasImage(initialDocument), [initialDocument]);
+  //
+  // Part 44 widens the gate to attachment cards. Both node types resolve through
+  // the same directory and the same cache key, so a note holding either issues
+  // exactly one listing request — never two.
+  const needsAttachments = useMemo(
+    () => documentHasImage(initialDocument) || documentHasAttachment(initialDocument),
+    [initialDocument],
+  );
 
   const attachments = useQuery({
     queryKey: noteQueryKeys.attachments(workspaceId, noteId),
@@ -190,6 +198,9 @@ export function NoteEditorSurface({
         mentionDirectoryTruncated={members.data?.hasMore === true}
         uploadImages={editable ? images.uploadImages : undefined}
         onRequestImageFiles={editable ? images.requestImageFiles : undefined}
+        uploadAttachments={editable ? images.uploadAttachments : undefined}
+        onRequestAttachmentFiles={editable ? images.requestAttachmentFiles : undefined}
+        workspaceId={workspaceId}
         attachmentDirectory={attachmentDirectory}
         onDocumentChange={save.onDocumentChange}
         onDocumentRejected={hasSaveHost ? save.onDocumentRejected : undefined}
@@ -202,7 +213,22 @@ export function NoteEditorSurface({
        * "Insert image" button and the `/image` command.
        */}
       {editable ? (
-        <ImageUploadFileInput ref={images.fileInputRef} onFiles={images.handlePickedFiles} />
+        <>
+          <ImageUploadFileInput ref={images.fileInputRef} onFiles={images.handlePickedFiles} />
+          {/*
+           * A second input rather than one with a swapped `accept` (Part 44):
+           * `accept` must be correct *before* `click()`, and mutating it between
+           * an image request and a file request is a race the writer would
+           * experience as the wrong dialog filter.
+           */}
+          <ImageUploadFileInput
+            ref={images.attachmentInputRef}
+            onFiles={images.handlePickedAttachmentFiles}
+            label="Choose files to attach"
+            accept={ATTACHMENT_UPLOAD_ACCEPT}
+            testId="note-attachment-file-input"
+          />
+        </>
       ) : null}
     </>
   );

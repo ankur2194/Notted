@@ -162,6 +162,7 @@ describe("slash menu filtering", () => {
 interface CommandContext {
   readonly editor: Editor;
   readonly imageFileRequests: readonly { readonly insertAt: number }[];
+  readonly attachmentFileRequests: readonly { readonly insertAt: number }[];
 }
 
 /**
@@ -205,6 +206,22 @@ const COMMAND_EXPECTATIONS: Readonly<Record<string, (context: CommandContext) =>
       content: [{ type: "paragraph", attrs: { textAlign: null } }],
     });
   },
+  attachment: ({ editor, attachmentFileRequests, imageFileRequests }) => {
+    // Part 44, and the same statement of behaviour as `/image`: exactly one
+    // request to open the picker, at the position the trigger text occupied,
+    // and NO node added. A card appears only once real bytes have a permanent
+    // attachment id, which is what keeps a temporary reference out of the saved
+    // document by construction.
+    expect(attachmentFileRequests).toHaveLength(1);
+    expect(attachmentFileRequests[0]?.insertAt).toBe(1);
+    // The two pickers are distinct: `/attachment` must never open the image one.
+    expect(imageFileRequests).toHaveLength(0);
+    expect(nodeTypes(editor)).not.toContain("attachment");
+    expect(editor.state.doc.toJSON()).toEqual({
+      type: "doc",
+      content: [{ type: "paragraph", attrs: { textAlign: null } }],
+    });
+  },
 };
 
 describe("slash menu commands", () => {
@@ -216,14 +233,14 @@ describe("slash menu commands", () => {
 
   for (const command of SLASH_COMMANDS) {
     it(`inserts a contract-valid document for "${command.label}"`, async () => {
-      const { editor, imageFileRequests } = await renderEditor({
+      const { editor, imageFileRequests, attachmentFileRequests } = await renderEditor({
         initialDocument: EMPTY_DOCUMENT,
       });
       await openSlashMenu(editor, 1);
       fireEvent.click(optionLabelled(command.label));
 
       await waitFor(() => expect(slashMenu()).toBeNull());
-      COMMAND_EXPECTATIONS[command.id]?.({ editor, imageFileRequests });
+      COMMAND_EXPECTATIONS[command.id]?.({ editor, imageFileRequests, attachmentFileRequests });
       expect(safeParseNoteDocument(editor.getJSON()).success).toBe(true);
       // The trigger text is always consumed, never left behind as content.
       expect(editor.getText()).not.toContain("/");

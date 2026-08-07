@@ -10,6 +10,7 @@ import { parseMinioConfig } from "./minio.config";
 import { parseRedisConfig } from "./redis.config";
 import { parseSecurityConfig } from "./security.config";
 import { parseSmtpConfig } from "./smtp.config";
+import { parseStorageConfig } from "./storage.config";
 
 import type { Environment } from "./environment-readers";
 
@@ -36,4 +37,8 @@ export function validateApiEnvironment(environment: Environment): void {
   parseSecurityConfig(environment);
   parseImageProcessingConfig(environment);
   parseAiConfig(environment);
+  // Part 45. `parseRetentionConfig` is still deliberately absent (Part 19 owns
+  // that omission); the storage quota/maintenance budget is included because it
+  // is new surface whose defaults decide whether a destructive sweep runs.
+  parseStorageConfig(environment);
 }

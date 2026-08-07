@@ -61,6 +61,10 @@ function fakeController() {
   const begun: Array<{ id: string; pos: number; state: unknown }> = [];
   const updated: Array<{ id: string; state: { phase: string; message: string } }> = [];
   const completed: Array<{ id: string; attrs: Record<string, unknown> }> = [];
+  // Part 44. Kept separate from `completed` on purpose: the whole point of the
+  // second method is that a file and an image must never take one another's
+  // insertion path, and one shared array could not prove that.
+  const completedAttachments: Array<{ id: string; attrs: Record<string, unknown> }> = [];
   const abandoned: string[] = [];
   const controller: ImageInsertionController = {
     begin: (id, pos, state) => {
@@ -75,6 +79,10 @@ function fakeController() {
       completed.push({ id, attrs: { ...attrs } });
       return true;
     },
+    completeAttachment: (id, attrs) => {
+      completedAttachments.push({ id, attrs: { ...attrs } });
+      return true;
+    },
     abandon: (id) => {
       abandoned.push(id);
       return true;
@@ -82,7 +90,7 @@ function fakeController() {
     has: () => true,
     ids: () => [],
   };
-  return { controller, begun, updated, completed, abandoned };
+  return { controller, begun, updated, completed, completedAttachments, abandoned };
 }
 
 /** The hook hands back a `RefObject`, whose `current` React types as readonly. */
@@ -363,5 +371,128 @@ describe("useImageUploads", () => {
 
     unmount();
     expect(signals.every((signal) => signal.aborted)).toBe(true);
+  });
+});
+
+describe("useImageUploads generic file attachments (Part 44)", () => {
+  function pdfFile(name = "report.pdf", type = "application/pdf", size = 4096): File {
+    const file = new File([new Uint8Array([1])], name, { type });
+    Object.defineProperty(file, "size", { value: size });
+    return file;
+  }
+
+  function fileMedia(): AttachmentMedia {
+    return media({
+      displayName: "report.pdf",
+      mediaType: "file",
+      mimeType: "application/pdf",
+      sizeBytes: 4096,
+      width: null,
+      height: null,
+      variants: {},
+    });
+  }
+
+  it("completes a file through completeAttachment, never through complete", async () => {
+    uploadMock.mockResolvedValue({ ok: true, data: fileMedia() });
+    const { result } = setup();
+    const { controller, completed, completedAttachments } = fakeController();
+
+    act(() => {
+      result.current.uploadAttachments({ files: [pdfFile()], insertAt: 5, controller });
+    });
+
+    await waitFor(() => expect(completedAttachments).toHaveLength(1));
+    // The image path must not have run at all: the two node types are different
+    // and a wrong guess here would insert an unrenderable node.
+    expect(completed).toHaveLength(0);
+    expect(completedAttachments[0]?.attrs).toEqual({
+      attachmentId,
+      // The SERVER's sanitized name, type, and size — not the browser's.
+      name: "report.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 4096,
+    });
+  });
+
+  it("routes the upload with the file kind so the queue can bound it correctly", async () => {
+    uploadMock.mockResolvedValue({ ok: true, data: fileMedia() });
+    const { result } = setup();
+    const { controller, completedAttachments } = fakeController();
+
+    act(() => {
+      result.current.uploadAttachments({ files: [pdfFile()], insertAt: 1, controller });
+    });
+
+    await waitFor(() => expect(completedAttachments).toHaveLength(1));
+    expect(uploadMock.mock.calls[0]?.[0]).toMatchObject({ kind: "file" });
+  });
+
+  it("mints no blob preview for a file, which an img could never render", () => {
+    uploadMock.mockReturnValue(new Promise(() => undefined));
+    const { result } = setup();
+    const { controller, begun } = fakeController();
+
+    act(() => {
+      result.current.uploadAttachments({ files: [pdfFile()], insertAt: 1, controller });
+    });
+
+    expect((begun[0]?.state as { previewUrl: string | null }).previewUrl).toBeNull();
+  });
+
+  it("opens its OWN picker and remembers the caret across the dialog", () => {
+    uploadMock.mockReturnValue(new Promise(() => undefined));
+    const { result } = setup();
+    const { controller, begun } = fakeController();
+    const openImage = vi.fn();
+    const openAttachment = vi.fn();
+
+    act(() => {
+      mutableRef(result.current.fileInputRef).current = { open: openImage };
+      mutableRef(result.current.attachmentInputRef).current = { open: openAttachment };
+      result.current.requestAttachmentFiles({ insertAt: 9, controller });
+    });
+
+    // Two inputs, so `accept` is already correct when the dialog opens and the
+    // image picker is never the one shown.
+    expect(openAttachment).toHaveBeenCalledTimes(1);
+    expect(openImage).not.toHaveBeenCalled();
+
+    act(() => result.current.handlePickedAttachmentFiles([pdfFile()]));
+    expect(begun[0]?.pos).toBe(9);
+  });
+
+  it("keeps the two pending picks apart", () => {
+    uploadMock.mockReturnValue(new Promise(() => undefined));
+    const { result } = setup();
+    const { controller, completed, completedAttachments } = fakeController();
+
+    act(() => {
+      mutableRef(result.current.attachmentInputRef).current = { open: vi.fn() };
+      result.current.requestAttachmentFiles({ insertAt: 3, controller });
+      // Files arriving on the IMAGE input with no image request pending are
+      // dropped rather than consuming the attachment request.
+      result.current.handlePickedFiles([pngFile()]);
+    });
+
+    expect(uploadMock).not.toHaveBeenCalled();
+    expect(completed).toHaveLength(0);
+    expect(completedAttachments).toHaveLength(0);
+  });
+
+  it("attaches nothing at all on a read-only note", () => {
+    const { result } = setup(false);
+    const { controller, begun } = fakeController();
+    const open = vi.fn();
+
+    act(() => {
+      mutableRef(result.current.attachmentInputRef).current = { open };
+      result.current.uploadAttachments({ files: [pdfFile()], insertAt: 1, controller });
+      result.current.requestAttachmentFiles({ insertAt: 1, controller });
+    });
+
+    expect(begun).toHaveLength(0);
+    expect(open).not.toHaveBeenCalled();
+    expect(uploadMock).not.toHaveBeenCalled();
   });
 });

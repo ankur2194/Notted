@@ -61,10 +61,23 @@ describe("attachment content URLs", () => {
 describe("attachmentEntry", () => {
   it("projects the metadata the node view needs and nothing else", () => {
     const entry = attachmentEntry(media());
+    // `toEqual`, not `toMatchObject`: this asserts the projection carries these
+    // keys AND NOTHING ELSE, which is what keeps an object key, a storage host,
+    // or an internal id from reaching the client by accident.
     expect(entry).toEqual({
       attachmentId,
       displayName: "chart.png",
       status: "ready",
+      // Part 44 widened the projection: the attachment CARD renders a generic
+      // file from the authorized row rather than from the document node's
+      // insertion-time snapshot, so kind, type, size, and upload date all have
+      // to survive the projection.
+      mediaType: "image",
+      mimeType: "image/png",
+      sizeBytes: 4096,
+      createdAt: "2026-08-06T00:00:00.000Z",
+      // The default (`full`) rendition, addressed through the authorized proxy.
+      contentUrl: attachmentContentUrl(workspaceId, attachmentId, DEFAULT_IMAGE_VARIANT),
       // The `full` rendition's own measurements, not the original upload's.
       width: 2000,
       height: 1333,

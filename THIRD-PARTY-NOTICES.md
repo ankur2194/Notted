@@ -2,7 +2,7 @@
 
 Notted is built on open-source software. This file is the project's attribution artifact: it records the third-party components whose licences impose obligations Notted must actively keep meeting, together with the direct runtime dependencies of the parts that introduced them. **Update it whenever a new runtime dependency enters the tree whose licence is not MIT, ISC, BSD (2- or 3-Clause), or Apache-2.0** — that is, any copyleft or unusual licence — and whenever an existing entry's version changes. The re-audit command in [Re-auditing for new copyleft](#re-auditing-for-new-copyleft) is how you find out.
 
-**Scope.** This file covers (a) every copyleft component reachable from the production dependency graph and (b) the direct runtime dependencies added by Plan parts 40–42. It deliberately does **not** enumerate the full transitive tree, which runs to thousands of packages; that tree is fully reproducible from [`pnpm-lock.yaml`](pnpm-lock.yaml), which is the authoritative record of exactly what is installed.
+**Scope.** This file covers (a) every copyleft component reachable from the production dependency graph and (b) the direct runtime dependencies added by Plan parts 40–44. It deliberately does **not** enumerate the full transitive tree, which runs to thousands of packages; that tree is fully reproducible from [`pnpm-lock.yaml`](pnpm-lock.yaml), which is the authoritative record of exactly what is installed.
 
 **Verification method.** Every package name, version, and licence identifier below was read from the installed package manifests in `node_modules/.pnpm/*/node_modules/*/package.json` on 2026-08-07, not from registry web pages or from memory. Bundled-library inventories were read from the packages' own shipped `README.md`, `LICENSE`, and `versions.json` files.
 
@@ -95,9 +95,9 @@ These are **standing rules, not one-time chores.** They apply to both LGPL compo
 
 ---
 
-## Direct runtime dependencies added by Plan parts 40–42
+## Direct runtime dependencies added by Plan parts 40–44
 
-Versions and licence identifiers below were read from the installed manifests in `node_modules/.pnpm/*/node_modules/*/package.json` on 2026-08-07.
+Versions and licence identifiers below were read from the installed manifests in `node_modules/.pnpm/*/node_modules/*/package.json` on 2026-08-07, and the Part 44 row on 2026-08-08.
 
 | Package | Version | Licence | Relationship |
 |---|---|---|---|
@@ -107,6 +107,7 @@ Versions and licence identifiers below were read from the installed manifests in
 | `heic-decode` | `2.1.0` | ISC | Transitive, via `heic-convert`. |
 | `jpeg-js` | `0.4.4` | BSD-3-Clause | Transitive, via `heic-convert`. |
 | `pngjs` | `6.0.0` | MIT | Transitive, via `heic-convert`. |
+| `pdfjs-dist` | `5.6.205` | Apache-2.0 | Direct dependency of `@notted/web` (Part 44 in-app PDF attachment preview, rendered to `<canvas>`). Loaded only through a dynamic `import()`. **No new copyleft**, and it introduces no obligation beyond Apache-2.0 attribution, which this row discharges. The package ships its own `LICENSE` (the Apache-2.0 text) and **no `NOTICE` file**, so Apache-2.0 §4(d) adds nothing further to reproduce. |
 
 Type-only packages (`@types/busboy`, `@types/heic-convert`) are DefinitelyTyped and MIT-licensed; they are development dependencies and are not present at run time.
 

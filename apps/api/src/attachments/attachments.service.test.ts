@@ -3,8 +3,10 @@ import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiHttpException } from "../common/errors/api-http.exception";
+import { parseStorageConfig } from "../config/storage.config";
 import { attachments, auditLogs, jobOutbox } from "../database/schema";
 import { ObjectStorageDisabledError } from "../infrastructure/minio/object-storage.service";
+import { StorageQuotaService } from "../storage/storage-quota.service";
 import { createTenantContext, TenantContextService } from "../tenant";
 
 import { ATTACHMENT_AUDIT_ACTIONS, ATTACHMENT_DOMAIN_EVENTS } from "./attachments.constants";
@@ -16,6 +18,7 @@ import type { StructuredLogger } from "../common/logging/structured-logger.servi
 import type { SecurityConfig } from "../config/security.config";
 import type { DatabaseService } from "../database/database.service";
 import type {
+  ListObjectsResult,
   ObjectStore,
   PutObjectOptions,
   StorageBucket,
@@ -106,9 +109,35 @@ class MemoryObjectStore implements ObjectStore {
     return Promise.resolve();
   }
 
+  /**
+   * Part 45 added this to `ObjectStore` for the reconciliation sweep. Nothing
+   * on the upload path lists a bucket, so an empty, non-truncated page is the
+   * honest answer here — a suite that needed real listing would use MinIO.
+   */
+  listObjects(): Promise<ListObjectsResult> {
+    return Promise.resolve({ objects: [], truncated: false });
+  }
+
   presignedGetUrl(): Promise<string> {
     return Promise.resolve("https://storage.invalid/signed");
   }
+}
+
+/**
+ * The REAL `StorageQuotaService`, over the same fake database.
+ *
+ * Part 45 moved the quota check out of `AttachmentsService`, and a permissive
+ * stub here would silently gut the "rejects an upload that would exceed the
+ * workspace quota, writing nothing" tests below — they would pass by never
+ * checking anything. The service only needs the two projections
+ * `fakeDatabase.result` answers, so wiring the genuine article costs nothing.
+ */
+function quotaService(
+  database: DatabaseService,
+  entry: AuthorizationEntryService,
+  tenant: TenantContextService,
+): StorageQuotaService {
+  return new StorageQuotaService(database, entry, tenant, security, parseStorageConfig({}));
 }
 
 interface FakeRow {
@@ -167,11 +196,17 @@ function fakeDatabase(options: {
           // made the service's `.toISOString()` throw. Synthesizing the column
           // default here models the real table instead of weakening production
           // code, and a supplied value still wins.
+          // `width`/`height` get the same treatment for the same reason: a
+          // generic-file upload never decodes pixels, so it omits both columns
+          // and the real table stores NULL. A double that left them `undefined`
+          // reported "no such property" where production reports "no value".
           const partial = value as unknown as Partial<FakeRow>;
           rows.push({
             ...(partial as FakeRow),
             createdAt: partial.createdAt ?? new Date(),
             processingError: null,
+            width: partial.width ?? null,
+            height: partial.height ?? null,
           });
           statusHistory.push(String(value.processingStatus));
         }
@@ -207,13 +242,20 @@ function fakeDatabase(options: {
     // No idempotency replay is ever stored by this double, so every upload runs
     // the full lifecycle rather than short-circuiting.
     if (projection !== undefined && "resourceId" in projection) return [];
-    if (projection !== undefined && "limit" in projection) {
+    // Part 45 moved the quota to `StorageQuotaService`, which reads the
+    // workspace row and the usage aggregate with these two projections. They are
+    // answered here rather than stubbed on the service so the quota tests below
+    // exercise the real `fitsWithinQuota` rule.
+    if (projection !== undefined && "overrideBytes" in projection) {
       return options.workspaceExists === false
         ? []
-        : [{ limit: options.storageLimitBytes ?? null }];
+        : [{ plan: "free" as const, overrideBytes: options.storageLimitBytes ?? null }];
     }
-    if (projection !== undefined && "used" in projection) {
-      return [{ used: String(options.usedBytes ?? 0) }];
+    if (projection !== undefined && "readyBytes" in projection) {
+      // Charged as `ready`: the fixtures describe bytes already committed, and
+      // splitting them across `reserved` would only change which term of the
+      // same sum they land in.
+      return [{ readyBytes: options.usedBytes ?? 0, reservedBytes: 0, readyCount: 0 }];
     }
     if (table === attachments) return rows.map((row) => ({ ...row }));
     return options.noteExists === false ? [] : [{ id: noteId }];
@@ -257,6 +299,7 @@ function build(
     new PassthroughImageProcessor(),
     security,
     { warn: vi.fn() } as unknown as StructuredLogger,
+    quotaService(fake.database, auth.entry, tenant),
   );
   return { service, store, ...fake, authorizeUser: auth.authorizeUser };
 }
@@ -370,6 +413,7 @@ describe("AttachmentsService", () => {
       twoObjectProcessor,
       security,
       { warn: vi.fn() } as unknown as StructuredLogger,
+      quotaService(fake.database, auth.entry, tenant),
     );
 
     await expect(service.uploadImage(uploadInput())).rejects.toBeInstanceOf(ApiHttpException);
@@ -588,15 +632,330 @@ describe("AttachmentsService", () => {
   it("bounds the parser to the image ceiling, never above the operator limit", () => {
     expect(build().service.maximumImageUploadBytes).toBe(15 * 1_024 * 1_024);
     const tenant = new TenantContextService();
+    const loweredFake = fakeDatabase({});
+    const loweredAuth = authorization(tenant);
     const lowered = new AttachmentsService(
-      fakeDatabase({}).database,
-      authorization(tenant).entry,
+      loweredFake.database,
+      loweredAuth.entry,
       tenant,
       new MemoryObjectStore(),
       new PassthroughImageProcessor(),
       { ...security, maximumUploadBytes: 1_024 } as unknown as SecurityConfig,
       { warn: vi.fn() } as unknown as StructuredLogger,
+      quotaService(loweredFake.database, loweredAuth.entry, tenant),
     );
     expect(lowered.maximumImageUploadBytes).toBe(1_024);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Part 44 — generic file attachments                                           */
+/* -------------------------------------------------------------------------- */
+
+const PDF = Buffer.concat([Buffer.from("%PDF-1.7\n", "latin1"), Buffer.alloc(200, 0x20)]);
+const SCRIPT = Buffer.from("def main() -> None:\n    print('hi')\n", "utf8");
+
+function fileInput(overrides: Partial<ReturnType<typeof uploadInput>> = {}) {
+  return {
+    ...uploadInput(),
+    buffer: PDF,
+    declaredMimeType: "text/html",
+    declaredFilename: "Quarterly Report.pdf",
+    idempotencyKey: "upload-000000002",
+    ...overrides,
+  };
+}
+
+describe("AttachmentsService.uploadFile", () => {
+  it("walks pending -> processing -> ready and stores exactly one original object", async () => {
+    const context = build();
+    const result = await context.service.uploadFile(fileInput());
+
+    expect(context.statusHistory).toEqual(["pending", "processing", "ready"]);
+    expect(result.attachment.status).toBe("ready");
+    expect(result.attachment.mediaType).toBe("file");
+    expect(result.attachment.mimeType).toBe("application/pdf");
+    expect(result.attachment.displayName).toBe("Quarterly Report.pdf");
+    // No decoder ran, so there are no pixel dimensions and no derived renditions.
+    expect(result.attachment.width).toBeNull();
+    expect(result.attachment.height).toBeNull();
+    expect(Object.keys(result.attachment.variants)).toEqual(["original"]);
+    expect(result.attachment.variants.original?.width).toBeNull();
+    expect(result.attachment.variants.original?.bytes).toBe(PDF.byteLength);
+
+    const store = context.store as MemoryObjectStore;
+    expect(store.objects.size).toBe(1);
+    const [key] = [...store.objects.keys()];
+    // Every generic type maps to `.bin`, so the key never hints at the payload.
+    expect(key).toMatch(/^w\/[\da-f-]{36}\/a\/[\da-f-]{36}\/original\/[\da-f]{32}\.bin$/u);
+  });
+
+  it("never puts an object key on the wire for a generic file either", async () => {
+    const context = build();
+    const result = await context.service.uploadFile(fileInput());
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("/original/");
+    expect(serialized).not.toContain('"key"');
+  });
+
+  it("normalizes an allow-listed text or code upload to text/plain", async () => {
+    const context = build();
+    const result = await context.service.uploadFile(
+      fileInput({
+        buffer: SCRIPT,
+        declaredFilename: "script.py",
+        declaredMimeType: "text/x-python",
+      }),
+    );
+    expect(result.attachment.mimeType).toBe("text/plain");
+    // The extension a reader downloads with is preserved for text: a `.py` that
+    // arrives as `.txt` is useless, and every member of the list is inert.
+    expect(result.attachment.displayName).toBe("script.py");
+  });
+
+  it("stores an uploaded HTML file as inert text, never as text/html", async () => {
+    const context = build();
+    const result = await context.service.uploadFile(
+      fileInput({
+        buffer: Buffer.from("<script>alert(1)</script>", "utf8"),
+        declaredFilename: "payload.html",
+        declaredMimeType: "text/html",
+      }),
+    );
+    expect(result.attachment.mimeType).toBe("text/plain");
+    expect(result.attachment.displayName).toBe("payload.html");
+  });
+
+  it("forces the download extension of the sniffed type, killing a double extension", async () => {
+    const context = build();
+    const result = await context.service.uploadFile(
+      fileInput({ declaredFilename: "invoice.pdf.exe" }),
+    );
+    expect(result.attachment.displayName).toBe("invoice.pdf.pdf");
+    expect(result.attachment.displayName.endsWith(".exe")).toBe(false);
+  });
+
+  it("refuses an unsupported payload before any row or object exists", async () => {
+    const context = build();
+    await expect(
+      context.service.uploadFile(
+        fileInput({ buffer: Buffer.from([0x4d, 0x5a, 0x90, 0x00]), declaredFilename: "setup.exe" }),
+      ),
+    ).rejects.toMatchObject({ safeResponse: { code: "UNPROCESSABLE_ENTITY" } });
+    expect(context.rows).toEqual([]);
+    expect((context.store as MemoryObjectStore).objects.size).toBe(0);
+    expect(context.inserted).toEqual([]);
+  });
+
+  it("refuses a binary wearing a text extension without leaving a failed row", async () => {
+    const context = build();
+    await expect(
+      context.service.uploadFile(
+        fileInput({
+          buffer: Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01]),
+          declaredFilename: "notes.txt",
+        }),
+      ),
+    ).rejects.toMatchObject({ safeResponse: { code: "UNPROCESSABLE_ENTITY" } });
+    expect(context.rows).toEqual([]);
+  });
+
+  it("refuses an image on the file path, so a mis-wired transport cannot cross the streams", async () => {
+    const context = build();
+    await expect(
+      context.service.uploadFile(fileInput({ buffer: PNG, declaredFilename: "photo.png" })),
+    ).rejects.toMatchObject({ safeResponse: { code: "UNPROCESSABLE_ENTITY" } });
+    expect(context.rows).toEqual([]);
+  });
+
+  it("rejects a generic file that would exceed the workspace quota, writing nothing", async () => {
+    const context = build({ usedBytes: 1_000, storageLimitBytes: 1_010 });
+    await expect(context.service.uploadFile(fileInput())).rejects.toMatchObject({
+      safeResponse: { code: "PAYLOAD_TOO_LARGE" },
+    });
+    expect(context.rows).toEqual([]);
+    expect((context.store as MemoryObjectStore).objects.size).toBe(0);
+  });
+
+  it("marks the row failed and removes written objects AFTER that commit", async () => {
+    const store = new MemoryObjectStore();
+    store.failOnPutNumber = 1;
+    const context = build({}, store);
+    await expect(context.service.uploadFile(fileInput())).rejects.toBeInstanceOf(ApiHttpException);
+    expect(context.statusHistory).toEqual(["pending", "processing", "failed"]);
+    expect(context.rows[0]?.processingError).toBe("storage_unavailable");
+    expect(
+      context.inserted.filter((e) => e.table === auditLogs).map((e) => e.value.action),
+    ).toContain(ATTACHMENT_AUDIT_ACTIONS.uploadFailed);
+  });
+
+  it("writes the completion audit and the domain event in the ready transaction", async () => {
+    const context = build();
+    await context.service.uploadFile(fileInput());
+    expect(
+      context.inserted.filter((e) => e.table === auditLogs).map((e) => e.value.action),
+    ).toEqual([ATTACHMENT_AUDIT_ACTIONS.uploadStarted, ATTACHMENT_AUDIT_ACTIONS.uploadCompleted]);
+    expect(context.inserted.find((e) => e.table === jobOutbox)?.value).toMatchObject({
+      jobType: ATTACHMENT_DOMAIN_EVENTS.created,
+      queueName: "attachment-domain-events",
+    });
+  });
+
+  it("authorizes uploads against the target note and stops at the entry when denied", async () => {
+    const context = build();
+    await context.service.uploadFile(fileInput());
+    expect(context.authorizeUser).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "file.upload", resource: { kind: "note", id: noteId } }),
+    );
+
+    const denied = build({}, new MemoryObjectStore(), true);
+    await expect(denied.service.uploadFile(fileInput())).rejects.toThrow("denied");
+    expect(denied.inserted).toEqual([]);
+  });
+
+  it("returns the shared not-found shape for a missing note and a missing workspace", async () => {
+    await expect(
+      build({ noteExists: false }).service.uploadFile(fileInput()),
+    ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
+    await expect(
+      build({ workspaceExists: false }).service.uploadFile(fileInput()),
+    ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
+  });
+
+  it("serves the single stored object for `full` and refuses the image-only renditions", async () => {
+    const context = build();
+    const uploaded = await context.service.uploadFile(fileInput());
+    const read = await context.service.readContent({
+      principal: principal(),
+      workspaceId,
+      attachmentId: uploaded.attachment.id,
+      variant: "full",
+    });
+    expect(read.mimeType).toBe("application/pdf");
+    expect(read.mediaType).toBe("file");
+    expect(read.filename).toBe("Quarterly Report.pdf");
+    expect(read.contentLength).toBe(PDF.byteLength);
+    read.stream.destroy();
+
+    // A generic file has no renditions. Asking for one must fail cleanly rather
+    // than silently returning the whole archive as a "thumbnail".
+    for (const variant of ["medium", "thumbnail"] as const) {
+      await expect(
+        context.service.readContent({
+          principal: principal(),
+          workspaceId,
+          attachmentId: uploaded.attachment.id,
+          variant,
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
+    }
+  });
+
+  it("reports the media type on the read path so the transport can pick a disposition", async () => {
+    const context = build();
+    const image = await context.service.uploadImage(uploadInput());
+    const read = await context.service.readContent({
+      principal: principal(),
+      workspaceId,
+      attachmentId: image.attachment.id,
+      variant: "full",
+    });
+    expect(read.mediaType).toBe("image");
+    read.stream.destroy();
+  });
+
+  it("refuses to stream a generic row whose stored type is outside the admitted set", async () => {
+    const context = build();
+    const uploaded = await context.service.uploadFile(fileInput());
+    // Simulate a corrupted or hand-edited row: the variant record claims a type
+    // admission could never have produced.
+    const variants = context.rows[0]?.variants;
+    const original = variants === null || variants === undefined ? undefined : variants.original;
+    expect(original).toBeDefined();
+    (original as Record<string, unknown>).mimeType = "text/html";
+    await expect(
+      context.service.readContent({
+        principal: principal(),
+        workspaceId,
+        attachmentId: uploaded.attachment.id,
+        variant: "full",
+      }),
+    ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
+  });
+
+  it("lists a generic file alongside images with keys stripped", async () => {
+    const context = build();
+    await context.service.uploadFile(fileInput());
+    const listed = await context.service.listForNote({
+      principal: principal(),
+      workspaceId,
+      noteId,
+    });
+    expect(listed.items).toHaveLength(1);
+    expect(listed.items[0]?.mediaType).toBe("file");
+    expect(JSON.stringify(listed)).not.toContain('"key"');
+  });
+
+  it("deletes a generic file and removes its object only after the commit", async () => {
+    const context = build();
+    const uploaded = await context.service.uploadFile(fileInput());
+    const store = context.store as MemoryObjectStore;
+    const before = store.calls.length;
+    await context.service.delete({
+      principal: principal(),
+      workspaceId,
+      attachmentId: uploaded.attachment.id,
+    });
+    expect(store.objects.size).toBe(0);
+    expect(store.calls.slice(before).some((call) => call.startsWith("removeMany:"))).toBe(true);
+  });
+
+  it("bounds the file ceiling by the operator limit and hands the parser the wider of the two", () => {
+    const context = build();
+    expect(context.service.maximumFileUploadBytes).toBe(50 * 1_024 * 1_024);
+    expect(context.service.maximumUploadBytes).toBe(50 * 1_024 * 1_024);
+
+    const tenant = new TenantContextService();
+    const loweredFake = fakeDatabase({});
+    const loweredAuth = authorization(tenant);
+    const lowered = new AttachmentsService(
+      loweredFake.database,
+      loweredAuth.entry,
+      tenant,
+      new MemoryObjectStore(),
+      new PassthroughImageProcessor(),
+      { ...security, maximumUploadBytes: 4_096 } as unknown as SecurityConfig,
+      { warn: vi.fn() } as unknown as StructuredLogger,
+      quotaService(loweredFake.database, loweredAuth.entry, tenant),
+    );
+    // An operator may only ever LOWER the effective ceiling.
+    expect(lowered.maximumFileUploadBytes).toBe(4_096);
+    expect(lowered.maximumUploadBytes).toBe(4_096);
+  });
+
+  it("re-applies the narrower image ceiling after the wider parser bound let bytes through", async () => {
+    const tenant = new TenantContextService();
+    const fake = fakeDatabase({});
+    const auth = authorization(tenant);
+    const store = new MemoryObjectStore();
+    const service = new AttachmentsService(
+      fake.database,
+      auth.entry,
+      tenant,
+      store,
+      new PassthroughImageProcessor(),
+      { ...security, maximumUploadBytes: 50 * 1_024 * 1_024 } as unknown as SecurityConfig,
+      { warn: vi.fn() } as unknown as StructuredLogger,
+      quotaService(fake.database, auth.entry, tenant),
+    );
+    const oversizeImage = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(service.maximumImageUploadBytes, 0x11),
+    ]);
+    await expect(
+      service.uploadImage({ ...uploadInput(), buffer: oversizeImage }),
+    ).rejects.toMatchObject({ safeResponse: { code: "PAYLOAD_TOO_LARGE" } });
+    expect(fake.rows).toEqual([]);
+    expect(store.objects.size).toBe(0);
   });
 });

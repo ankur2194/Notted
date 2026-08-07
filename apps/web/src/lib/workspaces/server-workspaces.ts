@@ -5,16 +5,19 @@ import {
   type WorkspaceDetail,
   type WorkspaceListQuery,
   type WorkspacePage,
+  type WorkspaceStorageUsage,
 } from "@notted/shared-types";
 import {
   uuidSchema,
   workspaceDetailSchema,
   workspaceListQuerySchema,
   workspacePageSchema,
+  workspaceStorageUsageSchema,
 } from "@notted/shared-validators";
 import { cookies } from "next/headers";
 
 import { publicEnvironment } from "@/config/public-environment";
+import { workspaceStoragePath } from "@/lib/workspaces/paths";
 
 export type ServerWorkspaceListResult =
   | { readonly status: "ready"; readonly data: WorkspacePage }
@@ -25,6 +28,20 @@ export type ServerWorkspaceDetailResult =
   | { readonly status: "ready"; readonly data: WorkspaceDetail }
   | { readonly status: "unauthenticated" }
   | { readonly status: "not-found" }
+  | { readonly status: "unavailable" };
+
+/**
+ * Part 45 storage usage as the Server Component overview sees it.
+ *
+ * `forbidden` is kept distinct from `unavailable`: reading usage needs only
+ * `settings.read`, so a denial is a membership fact worth stating plainly, while
+ * `unavailable` is a fault the reader can do nothing about. Neither is allowed
+ * to take down the page — the overview still renders the workspace it already
+ * loaded and degrades only this one card.
+ */
+export type ServerWorkspaceStorageResult =
+  | { readonly status: "ready"; readonly data: WorkspaceStorageUsage }
+  | { readonly status: "forbidden" }
   | { readonly status: "unavailable" };
 
 function cookieHeader(values: Awaited<ReturnType<typeof cookies>>): string {
@@ -86,6 +103,40 @@ async function requestWorkspaceMember(cookie: string, workspaceId: string): Prom
     headers: cookie.length > 0 ? { cookie } : undefined,
     signal: AbortSignal.timeout(5_000),
   });
+}
+
+async function requestWorkspaceStorage(cookie: string, workspaceId: string): Promise<Response> {
+  const url = new URL(workspaceStoragePath(workspaceId), publicEnvironment.NEXT_PUBLIC_API_URL);
+  return fetch(url, {
+    cache: "no-store",
+    headers: cookie.length > 0 ? { cookie } : undefined,
+    signal: AbortSignal.timeout(5_000),
+  });
+}
+
+/**
+ * Loads the derived storage usage for one workspace. Called only after the
+ * detail read has already proved membership, so this never widens what the page
+ * discloses: a caller that could not see the workspace never reaches here.
+ */
+export async function getServerWorkspaceStorageUsage(
+  workspaceId: string,
+): Promise<ServerWorkspaceStorageResult> {
+  const parsedId = uuidSchema.safeParse(workspaceId);
+  if (!parsedId.success) return { status: "unavailable" };
+  const values = await cookies();
+  const cookie = cookieHeader(values);
+  try {
+    const response = await requestWorkspaceStorage(cookie, parsedId.data);
+    if (response.status === 401 || response.status === 403 || response.status === 404) {
+      return { status: "forbidden" };
+    }
+    if (!response.ok) return { status: "unavailable" };
+    const parsed = workspaceStorageUsageSchema.safeParse(await response.json());
+    return parsed.success ? { status: "ready", data: parsed.data } : { status: "unavailable" };
+  } catch {
+    return { status: "unavailable" };
+  }
 }
 
 /**

@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
+} from "react";
 
 const NAVIGATION_KEYS: ReadonlySet<string> = new Set(["ArrowRight", "ArrowLeft", "Home", "End"]);
 
@@ -8,6 +15,8 @@ export interface RovingToolbar {
   readonly toolbarRef: RefObject<HTMLDivElement | null>;
   readonly tabIndexFor: (id: string) => 0 | -1;
   readonly onItemFocus: (id: string) => void;
+  /** Bind to the `role="toolbar"` element's `onKeyDown`. */
+  readonly onKeyDown: (event: ReactKeyboardEvent<HTMLDivElement>) => void;
 }
 
 /**
@@ -21,6 +30,14 @@ export interface RovingToolbar {
  *
  * Controls opt in by rendering `data-toolbar-item="<id>"`; `itemIds` must be
  * referentially stable (memoize it in the caller).
+ *
+ * `onKeyDown` is returned for the caller to bind on the `role="toolbar"`
+ * element rather than attached natively from an effect. React's synthetic
+ * handler already sees keydown bubbling from the controls, and binding in an
+ * effect silently did nothing for a toolbar that mounts hidden: the first pass
+ * saw a null ref, and the handler's dependency never changed, so the effect
+ * never re-ran once the element appeared. `ImageToolbar` returns `null` until
+ * an image is selected and had no arrow-key navigation at all because of it.
  */
 export function useRovingToolbar(itemIds: readonly string[]): RovingToolbar {
   const toolbarRef = useRef<HTMLDivElement | null>(null);
@@ -30,7 +47,7 @@ export function useRovingToolbar(itemIds: readonly string[]): RovingToolbar {
     setActiveId((current) => (itemIds.includes(current) ? current : (itemIds[0] ?? "")));
   }, [itemIds]);
 
-  const handleKeyDown = useCallback((event: KeyboardEvent): void => {
+  const onKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>): void => {
     if (!NAVIGATION_KEYS.has(event.key)) return;
     const root = toolbarRef.current;
     if (root === null) return;
@@ -62,15 +79,6 @@ export function useRovingToolbar(itemIds: readonly string[]): RovingToolbar {
     next.focus();
   }, []);
 
-  // Bound natively rather than through a JSX handler: the toolbar element is a
-  // container, and the listener must see key events bubbling from its controls.
-  useEffect(() => {
-    const root = toolbarRef.current;
-    if (root === null) return;
-    root.addEventListener("keydown", handleKeyDown);
-    return () => root.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
-
   const tabIndexFor = useCallback(
     (id: string): 0 | -1 => {
       if (activeId === "") return itemIds[0] === id ? 0 : -1;
@@ -81,5 +89,5 @@ export function useRovingToolbar(itemIds: readonly string[]): RovingToolbar {
 
   const onItemFocus = useCallback((id: string): void => setActiveId(id), []);
 
-  return { toolbarRef, tabIndexFor, onItemFocus };
+  return { toolbarRef, tabIndexFor, onItemFocus, onKeyDown };
 }

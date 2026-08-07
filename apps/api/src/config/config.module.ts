@@ -29,6 +29,7 @@ import {
 } from "./retention.config";
 import { SECURITY_CONFIG, SecurityConfigProvider, securityConfigProvider } from "./security.config";
 import { SMTP_CONFIG, SmtpConfigProvider, smtpConfigProvider } from "./smtp.config";
+import { STORAGE_CONFIG, StorageConfigProvider, storageConfigProvider } from "./storage.config";
 
 @Global()
 @Module({
@@ -59,6 +60,8 @@ import { SMTP_CONFIG, SmtpConfigProvider, smtpConfigProvider } from "./smtp.conf
     securityConfigProvider,
     SmtpConfigProvider,
     smtpConfigProvider,
+    StorageConfigProvider,
+    storageConfigProvider,
   ],
   exports: [
     AI_CONFIG,
@@ -74,6 +77,7 @@ import { SMTP_CONFIG, SmtpConfigProvider, smtpConfigProvider } from "./smtp.conf
     RETENTION_CONFIG,
     SECURITY_CONFIG,
     SMTP_CONFIG,
+    STORAGE_CONFIG,
   ],
 })
 export class ConfigModule {}

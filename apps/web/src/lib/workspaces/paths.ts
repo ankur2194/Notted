@@ -7,3 +7,12 @@ import { WORKSPACE_API_PATHS } from "@notted/shared-types";
 export function workspaceMemberPath(workspaceId: string): string {
   return WORKSPACE_API_PATHS.member.replace(":id", encodeURIComponent(workspaceId));
 }
+
+/**
+ * Builds the Part 45 storage-usage path. A SEPARATE route from the workspace
+ * detail (the numbers are an aggregate over the attachment rows), and its
+ * selector is `:workspaceId` rather than the detail route's `:id`.
+ */
+export function workspaceStoragePath(workspaceId: string): string {
+  return WORKSPACE_API_PATHS.storage.replace(":workspaceId", encodeURIComponent(workspaceId));
+}

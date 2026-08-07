@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  NOTE_DOCUMENT_ATTACHMENT_CLASS,
+  NOTE_DOCUMENT_ATTACHMENT_META_CLASS,
+  NOTE_DOCUMENT_ATTACHMENT_NAME_CLASS,
+  NOTE_DOCUMENT_ATTACHMENT_SIZE_CLASS,
   NOTE_DOCUMENT_CODE_LANGUAGES,
+  NOTE_DOCUMENT_IMAGE_CAPTION_CLASS,
   NOTE_DOCUMENT_IMAGE_CLASS,
+  NOTE_DOCUMENT_IMAGE_FIGURE_CLASS,
   NOTE_DOCUMENT_LIMITS,
   NOTE_DOCUMENT_NODE_TYPES,
   NOTE_DOCUMENT_PAGE_BREAK_CLASS,
@@ -10,10 +16,12 @@ import {
   NoteDocumentMigrationError,
   extractNoteContentPlain,
   migrateNoteDocument,
+  noteDocumentAttachmentAttrs,
   noteDocumentImageAttrs,
   noteDocumentSchema,
   normalizeNoteDocumentCodeLanguage,
   renderDocumentHtml,
+  resolveNoteImageWrap,
   safeParseNoteDocument,
   sanitizeDocumentUrl,
 } from "./document.schema";
@@ -1365,13 +1373,16 @@ describe("Part 42 image contract", () => {
     if (!rejected.success) expect(rejected.errors).toContain("Document has too many images");
   });
 
-  it("renders an img with the contract class and no src of any kind", () => {
+  it("renders a figure with the contract classes and no src of any kind", () => {
     expect(NOTE_DOCUMENT_IMAGE_CLASS).toBe("notted-image");
+    expect(NOTE_DOCUMENT_IMAGE_FIGURE_CLASS).toBe("notted-image-figure");
     const html = renderDocumentHtml(imageDocument);
     expect(html).toBe(
-      `<p>Before</p><img class="${NOTE_DOCUMENT_IMAGE_CLASS}" ` +
+      `<p>Before</p><figure class="${NOTE_DOCUMENT_IMAGE_FIGURE_CLASS}" data-align="center" ` +
+        `data-wrap="block" data-full-width="false">` +
+        `<img class="${NOTE_DOCUMENT_IMAGE_CLASS}" ` +
         `data-attachment-id="${ATTACHMENT_ID}" alt="A chart" loading="lazy" decoding="async">` +
-        "<p>After</p>",
+        "</figure><p>After</p>",
     );
     // Part 63's export pipeline substitutes the source; this module has no
     // workspace id and no authorization context, so it never invents one.
@@ -1431,7 +1442,18 @@ describe("Part 42 image contract", () => {
       content: [
         {
           type: "image",
-          attrs: { attachmentId: ATTACHMENT_ID, alt: "Recovered", width: 100, height: 50 },
+          attrs: {
+            attachmentId: ATTACHMENT_ID,
+            alt: "Recovered",
+            width: 100,
+            height: 50,
+            // Recovery re-emits CANONICAL attributes, so a node written before
+            // Part 43 gains the documented defaults rather than a partial set.
+            align: "center",
+            wrap: "block",
+            fullWidth: false,
+            caption: "",
+          },
         },
       ],
     });
@@ -1466,13 +1488,23 @@ describe("Part 42 image contract", () => {
       alt: "A chart",
       width: 800,
       height: 600,
+      align: "center",
+      wrap: "block",
+      fullWidth: false,
+      caption: "",
     });
     expect(noteDocumentImageAttrs({ attachmentId: "nope", alt: "" })).toBeNull();
+    // Absent layout attributes are the Part 42 shape, and they read as the
+    // documented defaults — which is why no migration was needed.
     expect(noteDocumentImageAttrs({ attachmentId: ATTACHMENT_ID, alt: "x" })).toEqual({
       attachmentId: ATTACHMENT_ID,
       alt: "x",
       width: null,
       height: null,
+      align: "center",
+      wrap: "block",
+      fullWidth: false,
+      caption: "",
     });
   });
 
@@ -1482,5 +1514,499 @@ describe("Part 42 image contract", () => {
     // The first incompatible change bumps this and adds the column plus backfill.
     expect(NOTE_DOCUMENT_SCHEMA_VERSION).toBe(1);
     expect(NOTE_DOCUMENT_NODE_TYPES).toContain("image");
+  });
+});
+
+describe("Part 43 image manipulation contract", () => {
+  const ATTACHMENT_ID = "3f4a1b2c-5d6e-4f70-8a91-b2c3d4e5f607";
+
+  const imageNode = (attrs: Record<string, unknown> = {}) => ({
+    type: "image",
+    attrs: {
+      attachmentId: ATTACHMENT_ID,
+      alt: "A chart",
+      width: 800,
+      height: 600,
+      align: "center",
+      wrap: "block",
+      fullWidth: false,
+      caption: "",
+      ...attrs,
+    },
+  });
+
+  const imageDoc = (attrs: Record<string, unknown> = {}) => ({
+    type: "doc",
+    content: [imageNode(attrs)],
+  });
+
+  it("round-trips every layout attribute unchanged", () => {
+    const input = imageDoc({
+      align: "right",
+      wrap: "inline",
+      fullWidth: false,
+      caption: "Figure 1 - quarterly revenue",
+      width: 320,
+      height: 240,
+    });
+    const parsed = safeParseNoteDocument(input);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.doc).toEqual(input);
+    expect(noteDocumentSchema.safeParse(parsed.doc).success).toBe(true);
+  });
+
+  it("accepts a Part 42 document that has none of them", () => {
+    // The compatibility guarantee that made this widening additive: an absent
+    // attribute is the documented default, so nothing stored before Part 43
+    // needs a migration and `NOTE_DOCUMENT_SCHEMA_VERSION` stays at 1.
+    expect(
+      safeParseNoteDocument({
+        type: "doc",
+        content: [
+          {
+            type: "image",
+            attrs: { attachmentId: ATTACHMENT_ID, alt: "", width: null, height: null },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each(["left", "center", "right"])("accepts align=%s", (align) => {
+    expect(safeParseNoteDocument(imageDoc({ align })).success).toBe(true);
+  });
+
+  it.each(["block", "inline"])("accepts wrap=%s", (wrap) => {
+    expect(safeParseNoteDocument(imageDoc({ wrap })).success).toBe(true);
+  });
+
+  it.each([
+    ["an unknown align value", { align: "diagonal" }],
+    ["a justified align value borrowed from paragraphs", { align: "justify" }],
+    ["a null align", { align: null }],
+    ["an unknown wrap value", { wrap: "float" }],
+    ["a null wrap", { wrap: null }],
+    ["a string fullWidth", { fullWidth: "true" }],
+    ["a numeric fullWidth", { fullWidth: 1 }],
+    ["a null fullWidth", { fullWidth: null }],
+    ["a null caption", { caption: null }],
+    ["a numeric caption", { caption: 5 }],
+    ["control characters in the caption", { caption: "line\u0000break" }],
+  ])("rejects %s", (_label, attrs) => {
+    expect(safeParseNoteDocument(imageDoc(attrs)).success).toBe(false);
+  });
+
+  it("bounds the caption at maxImageCaption", () => {
+    expect(NOTE_DOCUMENT_LIMITS.maxImageCaption).toBe(1_000);
+    const atLimit = "c".repeat(NOTE_DOCUMENT_LIMITS.maxImageCaption);
+    expect(safeParseNoteDocument(imageDoc({ caption: atLimit })).success).toBe(true);
+
+    const overLimit = safeParseNoteDocument(imageDoc({ caption: `${atLimit}c` }));
+    expect(overLimit.success).toBe(false);
+    if (!overLimit.success) {
+      expect(overLimit.errors.join("; ")).toContain("caption attribute must be 0-1000");
+    }
+  });
+
+  /**
+   * The Part 42 invariant, re-asserted against the widened attribute set: the
+   * four additions are two enumerations, a boolean, and bounded text, and the
+   * allow-list loop still rejects anything URL-shaped.
+   */
+  it.each(["src", "url", "previewUrl", "dataUri", "href", "srcset", "captionUrl"])(
+    "still rejects an image carrying a %s attribute",
+    (attribute) => {
+      expect(safeParseNoteDocument(imageDoc({ [attribute]: "blob:http://x/abc" })).success).toBe(
+        false,
+      );
+      expect(
+        safeParseNoteDocument(imageDoc({ [attribute]: "data:image/webp;base64,AAAA" })).success,
+      ).toBe(false);
+    },
+  );
+
+  describe("fullWidth versus inline wrap", () => {
+    it("stores both verbatim rather than rejecting the pair", () => {
+      // Rejecting it would let the editor build a document the API refuses,
+      // which silently and permanently stops autosave for that session.
+      const conflicting = imageDoc({ fullWidth: true, wrap: "inline" });
+      const parsed = safeParseNoteDocument(conflicting);
+      expect(parsed.success).toBe(true);
+      if (parsed.success) expect(parsed.doc).toEqual(conflicting);
+    });
+
+    it("resolves the conflict deterministically in favour of fullWidth", () => {
+      // A full-width figure spans the whole column, so there is no room beside
+      // it for text to flow: the float could only be meaningless.
+      expect(resolveNoteImageWrap({ wrap: "inline", fullWidth: true })).toBe("block");
+      expect(resolveNoteImageWrap({ wrap: "inline", fullWidth: false })).toBe("inline");
+      expect(resolveNoteImageWrap({ wrap: "block", fullWidth: true })).toBe("block");
+    });
+
+    it("emits the resolved wrap, so print and export match the editor", () => {
+      const html = renderDocumentHtml(imageDoc({ fullWidth: true, wrap: "inline" }));
+      expect(html).toContain('data-wrap="block"');
+      expect(html).toContain('data-full-width="true"');
+    });
+
+    it("writes the resolved form back during recovery", () => {
+      const recovered = migrateNoteDocument({
+        type: "doc",
+        content: [
+          {
+            type: "image",
+            attrs: {
+              attachmentId: ATTACHMENT_ID,
+              src: "blob:http://localhost:3000/9d1f",
+              alt: "Recovered",
+              wrap: "inline",
+              fullWidth: true,
+            },
+          },
+        ],
+      });
+      expect(recovered.migrated).toBe(true);
+      expect(recovered.doc).toEqual({
+        type: "doc",
+        content: [
+          {
+            type: "image",
+            attrs: {
+              attachmentId: ATTACHMENT_ID,
+              alt: "Recovered",
+              width: null,
+              height: null,
+              align: "center",
+              wrap: "block",
+              fullWidth: true,
+              caption: "",
+            },
+          },
+        ],
+      });
+    });
+
+    it("replaces an unusable layout value during recovery instead of dropping the image", () => {
+      const recovered = migrateNoteDocument({
+        type: "doc",
+        content: [
+          {
+            type: "image",
+            attrs: {
+              attachmentId: ATTACHMENT_ID,
+              alt: "Kept",
+              align: "diagonal",
+              wrap: 7,
+              fullWidth: "yes",
+              caption: "Still here",
+            },
+          },
+        ],
+      });
+      expect(recovered.migrated).toBe(true);
+      expect(recovered.doc).toEqual({
+        type: "doc",
+        content: [
+          {
+            type: "image",
+            attrs: {
+              attachmentId: ATTACHMENT_ID,
+              alt: "Kept",
+              width: null,
+              height: null,
+              align: "center",
+              wrap: "block",
+              fullWidth: false,
+              caption: "Still here",
+            },
+          },
+        ],
+      });
+    });
+  });
+
+  describe("rendering", () => {
+    it("wraps the image in a figure carrying the three layout attributes", () => {
+      const html = renderDocumentHtml(imageDoc({ align: "left", wrap: "inline" }));
+      expect(html).toBe(
+        `<figure class="${NOTE_DOCUMENT_IMAGE_FIGURE_CLASS}" data-align="left" ` +
+          `data-wrap="inline" data-full-width="false">` +
+          `<img class="${NOTE_DOCUMENT_IMAGE_CLASS}" data-attachment-id="${ATTACHMENT_ID}" ` +
+          `alt="A chart" loading="lazy" decoding="async">` +
+          "</figure>",
+      );
+      expect(html).not.toContain("src=");
+    });
+
+    it("emits a figcaption only when the author wrote one", () => {
+      expect(renderDocumentHtml(imageDoc())).not.toContain("figcaption");
+      const html = renderDocumentHtml(imageDoc({ caption: "Figure 1" }));
+      expect(html).toContain(
+        `<figcaption class="${NOTE_DOCUMENT_IMAGE_CAPTION_CLASS}">Figure 1</figcaption>`,
+      );
+    });
+
+    it("escapes caption text rather than trusting it", () => {
+      const html = renderDocumentHtml(imageDoc({ caption: '"><script>alert(1)</script>' }));
+      expect(html).not.toContain("<script>");
+      expect(html).toContain("&lt;script&gt;");
+    });
+
+    it("emits nothing but its own constants — no stored class or style", () => {
+      // The allow-list rejects those attributes outright, so the renderer is not
+      // the only line of defence; it still emits only literals it owns.
+      const html = renderDocumentHtml(imageDoc({ caption: "Plain" }));
+      expect(html).not.toContain("style=");
+      expect(html.match(/class="/gu)).toHaveLength(3);
+    });
+  });
+
+  describe("plain-text projection", () => {
+    it("contributes alt first and caption second", () => {
+      // Alt describes the image and a screen reader reaches it first; the
+      // caption is the visible text printed beneath the figure.
+      expect(
+        extractNoteContentPlain({
+          type: "doc",
+          content: [imageNode({ alt: "Bar chart", caption: "Figure 1" })],
+        }),
+      ).toBe("Bar chart\nFigure 1");
+    });
+
+    it("omits either half when it is empty", () => {
+      expect(
+        extractNoteContentPlain({
+          type: "doc",
+          content: [imageNode({ alt: "", caption: "Only a caption" })],
+        }),
+      ).toBe("Only a caption");
+      expect(
+        extractNoteContentPlain({
+          type: "doc",
+          content: [imageNode({ alt: "Only alt", caption: "" })],
+        }),
+      ).toBe("Only alt");
+      expect(
+        extractNoteContentPlain({ type: "doc", content: [imageNode({ alt: "", caption: "" })] }),
+      ).toBe("");
+    });
+
+    it("recovers a caption from a malformed node during text-only recovery", () => {
+      const recovered = migrateNoteDocument({
+        type: "doc",
+        content: [
+          {
+            type: "image",
+            attrs: { src: "data:image/png;base64,AAA", alt: "Lost chart", caption: "Its caption" },
+          },
+        ],
+      });
+      expect(extractNoteContentPlain(recovered.doc)).toContain("Lost chart");
+      expect(extractNoteContentPlain(recovered.doc)).toContain("Its caption");
+    });
+  });
+
+  it("does not change the contract version for the additive Part 43 widening", () => {
+    // Adding an attribute with a documented default is additive: every stored
+    // v1 document is still valid v1 and still means what it meant. The trigger
+    // for the first bump is removing, narrowing, or re-typing one.
+    expect(NOTE_DOCUMENT_SCHEMA_VERSION).toBe(1);
+  });
+});
+
+describe("Part 44 generic attachment contract", () => {
+  const ATTACHMENT_ID = "9c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
+
+  const attachmentNode = (attrs: Record<string, unknown> = {}) => ({
+    type: "attachment",
+    attrs: {
+      attachmentId: ATTACHMENT_ID,
+      name: "quarterly-report.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 245_760,
+      ...attrs,
+    },
+  });
+
+  const attachmentDocument = {
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "Before" }] },
+      attachmentNode(),
+      { type: "paragraph", content: [{ type: "text", text: "After" }] },
+    ],
+  };
+
+  it("accepts an attachment as a block node and round-trips it unchanged", () => {
+    const parsed = safeParseNoteDocument(attachmentDocument);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.doc).toEqual(attachmentDocument);
+    expect(noteDocumentSchema.safeParse(parsed.doc).success).toBe(true);
+  });
+
+  it("accepts an attachment wherever a block node is allowed", () => {
+    const nested = {
+      type: "doc",
+      content: [
+        { type: "blockquote", content: [attachmentNode()] },
+        {
+          type: "bulletList",
+          content: [{ type: "listItem", content: [{ type: "paragraph" }, attachmentNode()] }],
+        },
+      ],
+    };
+    expect(safeParseNoteDocument(nested).success).toBe(true);
+  });
+
+  /*
+   * The load-bearing invariant of the whole part.
+   *
+   * The node's only handle on the bytes is `attachmentId`, resolved through an
+   * endpoint that re-checks workspace membership on every request. A URL-shaped
+   * attribute would survive a copy, an export, and a share — outliving the
+   * reader's permission and, for a `blob:` or `data:` value, breaking the note
+   * the moment the tab that minted it closed.
+   */
+  it.each(["src", "url", "href", "downloadUrl", "contentUrl", "objectKey"])(
+    "rejects a URL-shaped attribute named %s",
+    (attribute) => {
+      const result = safeParseNoteDocument({
+        type: "doc",
+        content: [attachmentNode({ [attribute]: "https://storage.example/secret.pdf" })],
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.errors.join("; ")).toContain(`not allowed on attachment: ${attribute}`);
+      }
+      // Temporary sources are refused by the same rule, so the saved document
+      // can never depend on a URL that dies with the tab.
+      for (const value of ["blob:https://app.example/1", "data:application/pdf;base64,AAAA"]) {
+        expect(
+          safeParseNoteDocument({
+            type: "doc",
+            content: [attachmentNode({ [attribute]: value })],
+          }).success,
+        ).toBe(false);
+      }
+    },
+  );
+
+  it.each([
+    ["a missing attachmentId", attachmentNode({ attachmentId: undefined })],
+    ["a non-UUID attachmentId", attachmentNode({ attachmentId: "../../etc/passwd" })],
+    ["a missing name", attachmentNode({ name: undefined })],
+    ["an empty name", attachmentNode({ name: "" })],
+    ["control characters in the name", attachmentNode({ name: "report\u0000.pdf" })],
+    [
+      "an oversized name",
+      attachmentNode({ name: `${"a".repeat(NOTE_DOCUMENT_LIMITS.maxAttachmentName)}b` }),
+    ],
+    ["a missing mimeType", attachmentNode({ mimeType: undefined })],
+    ["a malformed mimeType", attachmentNode({ mimeType: "not a mime type" })],
+    ["a negative sizeBytes", attachmentNode({ sizeBytes: -1 })],
+    ["a fractional sizeBytes", attachmentNode({ sizeBytes: 12.5 })],
+    [
+      "an oversized sizeBytes",
+      attachmentNode({ sizeBytes: NOTE_DOCUMENT_LIMITS.maxAttachmentSizeBytes + 1 }),
+    ],
+    ["children", { ...attachmentNode(), content: [{ type: "paragraph" }] }],
+    ["marks", { ...attachmentNode(), marks: [{ type: "link", attrs: SAFE_LINK_ATTRS }] }],
+    ["stray fields", { ...attachmentNode(), text: "x" }],
+  ])("rejects an attachment with %s", (_label, node) => {
+    expect(safeParseNoteDocument({ type: "doc", content: [node] }).success).toBe(false);
+  });
+
+  it("accepts the exact boundary values on every bounded attribute", () => {
+    const atBounds = attachmentNode({
+      name: "a".repeat(NOTE_DOCUMENT_LIMITS.maxAttachmentName),
+      sizeBytes: NOTE_DOCUMENT_LIMITS.maxAttachmentSizeBytes,
+    });
+    expect(safeParseNoteDocument({ type: "doc", content: [atBounds] }).success).toBe(true);
+    // Zero is legal: an empty file is still a file, and the server measured it.
+    expect(
+      safeParseNoteDocument({ type: "doc", content: [attachmentNode({ sizeBytes: 0 })] }).success,
+    ).toBe(true);
+  });
+
+  it("rejects an attachment node with no attrs at all", () => {
+    expect(safeParseNoteDocument({ type: "doc", content: [{ type: "attachment" }] }).success).toBe(
+      false,
+    );
+  });
+
+  it("bounds how many attachments one note may reference", () => {
+    const atLimit = {
+      type: "doc",
+      content: Array.from({ length: NOTE_DOCUMENT_LIMITS.maxAttachments }, () => attachmentNode()),
+    };
+    const overLimit = {
+      type: "doc",
+      content: Array.from({ length: NOTE_DOCUMENT_LIMITS.maxAttachments + 1 }, () =>
+        attachmentNode(),
+      ),
+    };
+    expect(safeParseNoteDocument(atLimit).success).toBe(true);
+    expect(safeParseNoteDocument(overLimit).success).toBe(false);
+  });
+
+  it("returns the four reviewed attributes, or null, and never throws", () => {
+    expect(noteDocumentAttachmentAttrs(attachmentNode().attrs)).toEqual({
+      attachmentId: ATTACHMENT_ID,
+      name: "quarterly-report.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 245_760,
+    });
+    expect(noteDocumentAttachmentAttrs(undefined)).toBeNull();
+    expect(noteDocumentAttachmentAttrs(null)).toBeNull();
+    expect(noteDocumentAttachmentAttrs("nope")).toBeNull();
+    expect(noteDocumentAttachmentAttrs({ attachmentId: "nope" })).toBeNull();
+  });
+
+  it("renders a figure with the contract classes and no link of any kind", () => {
+    expect(NOTE_DOCUMENT_ATTACHMENT_CLASS).toBe("notted-attachment");
+    const html = renderDocumentHtml(attachmentDocument);
+    expect(html).toContain(`<figure class="${NOTE_DOCUMENT_ATTACHMENT_CLASS}"`);
+    expect(html).toContain(`data-attachment-id="${ATTACHMENT_ID}"`);
+    expect(html).toContain(`class="${NOTE_DOCUMENT_ATTACHMENT_NAME_CLASS}"`);
+    expect(html).toContain(`class="${NOTE_DOCUMENT_ATTACHMENT_META_CLASS}"`);
+    expect(html).toContain(`class="${NOTE_DOCUMENT_ATTACHMENT_SIZE_CLASS}"`);
+    // This module knows neither the workspace nor the reader's authorization,
+    // so it never invents a target. Part 63's exporter substitutes one.
+    expect(html).not.toContain("href=");
+    expect(html).not.toContain("src=");
+    expect(html).not.toContain("blob:");
+    expect(html).not.toContain("data:application");
+  });
+
+  it("escapes the filename rather than trusting it", () => {
+    const html = renderDocumentHtml({
+      type: "doc",
+      content: [attachmentNode({ name: '"><script>alert(1)</script>.pdf' })],
+    });
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("renders nothing for an attachment whose attributes do not validate", () => {
+    expect(
+      renderDocumentHtml({
+        type: "doc",
+        content: [attachmentNode({ attachmentId: "not-a-uuid" })],
+      }),
+    ).toBe("");
+  });
+
+  it("contributes the filename to the plain-text projection", () => {
+    expect(extractNoteContentPlain(attachmentDocument)).toBe("Before\nquarterly-report.pdf\nAfter");
+  });
+
+  it("does not change the contract version for the additive Part 44 widening", () => {
+    // Adding a node type is additive: every stored v1 document is still valid
+    // v1 and still means what it meant. The trigger for the first bump is
+    // removing, narrowing, or re-typing something that already exists.
+    expect(NOTE_DOCUMENT_SCHEMA_VERSION).toBe(1);
+    expect(NOTE_DOCUMENT_NODE_TYPES).toContain("attachment");
   });
 });

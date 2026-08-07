@@ -12,6 +12,7 @@ import { WORKSPACE_TRPC_PATH, WorkspacesTrpcRouter } from "./workspaces.trpc";
 
 import type { WorkspacesService } from "./workspaces.service";
 import type { AuthService } from "../auth/auth.service";
+import type { StorageQuotaService } from "../storage/storage-quota.service";
 import type { Request } from "express";
 
 const userId = "20000000-0000-4000-8000-000000000001";
@@ -55,7 +56,48 @@ const workspace = {
   updatedAt: timestamp,
 } as const;
 
+/** Exactly the `.strict()` shape `workspaceStorageUsageSchema` accepts. */
+const usage = {
+  workspaceId,
+  plan: "free",
+  usedBytes: 1_024,
+  pendingBytes: 0,
+  limitBytes: 1_073_741_824,
+  availableBytes: 1_073_740_800,
+  attachmentCount: 1,
+  limitSource: "plan",
+} as const;
+
+/**
+ * Part 45 added `StorageQuotaService` as the router's third dependency. Only the
+ * `storageUsage` procedure touches it, so the lifecycle tests below get a stub
+ * whose single method is never called.
+ */
+function quotaStub(readUsage = vi.fn()): StorageQuotaService {
+  return { readUsage } as unknown as StorageQuotaService;
+}
+
 describe("WorkspacesTrpcRouter", () => {
+  it("delegates storageUsage to the shared quota service without a mutation-origin check", async () => {
+    const readUsage = vi.fn().mockResolvedValue(usage);
+    const assertTrustedMutationOrigin = vi.fn();
+    const transport = new WorkspacesTrpcRouter(
+      {} as unknown as WorkspacesService,
+      { assertTrustedMutationOrigin } as unknown as AuthService,
+      quotaStub(readUsage),
+    );
+
+    await expect(
+      transport.router.createCaller(transport.createContext(request())).workspace.storageUsage({
+        workspaceId,
+      }),
+    ).resolves.toMatchObject({ workspaceId, usedBytes: 1_024 });
+    expect(readUsage).toHaveBeenCalledWith(expect.objectContaining({ workspaceId }));
+    // A read takes no lock and changes nothing, so it is a query — the CSRF
+    // guard that protects mutations must NOT fire here.
+    expect(assertTrustedMutationOrigin).not.toHaveBeenCalled();
+  });
+
   it("mounts at the reviewed path and delegates all lifecycle procedures to one service", async () => {
     const service = {
       create: vi.fn().mockResolvedValue({ workspace, slug: workspace.slug }),
@@ -68,6 +110,7 @@ describe("WorkspacesTrpcRouter", () => {
     const transport = new WorkspacesTrpcRouter(
       service as unknown as WorkspacesService,
       { assertTrustedMutationOrigin } as unknown as AuthService,
+      quotaStub(),
     );
     const caller = transport.router.createCaller(transport.createContext(request()));
 
@@ -106,6 +149,7 @@ describe("WorkspacesTrpcRouter", () => {
     const transport = new WorkspacesTrpcRouter(
       { list } as unknown as WorkspacesService,
       {} as AuthService,
+      quotaStub(),
     );
     const caller = transport.router.createCaller(transport.createContext(request(false)));
     await expect(caller.workspace.list({})).rejects.toMatchObject({ code: "UNAUTHORIZED" });
@@ -117,6 +161,7 @@ describe("WorkspacesTrpcRouter", () => {
     const transport = new WorkspacesTrpcRouter(
       { create } as unknown as WorkspacesService,
       { assertTrustedMutationOrigin: vi.fn() } as unknown as AuthService,
+      quotaStub(),
     );
     const app = express();
     app.use(express.json());
@@ -163,6 +208,7 @@ describe("WorkspacesTrpcRouter", () => {
         ),
       } as unknown as WorkspacesService,
       {} as AuthService,
+      quotaStub(),
     );
     await expect(
       safe.router.createCaller(safe.createContext(request())).workspace.read({ workspaceId }),
@@ -176,6 +222,7 @@ describe("WorkspacesTrpcRouter", () => {
         read: vi.fn().mockRejectedValue(new Error("database secret")),
       } as unknown as WorkspacesService,
       {} as AuthService,
+      quotaStub(),
     );
     const rejection = hidden.router
       .createCaller(hidden.createContext(request()))

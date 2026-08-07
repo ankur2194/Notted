@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorSummary, FormField, FormStatus } from "@/components/ui/form-controls";
 import { WorkspaceAvatar } from "@/components/workspaces/WorkspaceAvatar";
 import { WorkspaceStorageLimit } from "@/components/workspaces/WorkspaceStorageLimit";
+import { WorkspaceStorageUsagePanel } from "@/components/workspaces/WorkspaceStorageUsagePanel";
 import { deleteWorkspace, updateWorkspace } from "@/lib/workspaces/requests";
 
 type View = "edit" | "deleting";
@@ -377,16 +378,30 @@ export function WorkspaceSettings({
             Default page size is read-only for your role. Owners and admins can change it.
           </p>
         ) : null}
-        <div className="rounded-md border bg-muted/20 p-4">
+        <div className="space-y-4 rounded-md border bg-muted/20 p-4">
+          {/*
+           * The storage block sits inside the "Page defaults" section, where
+           * Part 26 put the limit override. It now carries enough content to
+           * need its own heading, so a screen-reader user is not left hearing
+           * quota figures announced under a page-size heading.
+           */}
+          <h3 className="text-sm font-semibold">Storage</h3>
           <dl className="flex flex-wrap items-center justify-between gap-3 text-sm">
             <dt className="text-muted-foreground">Storage limit override</dt>
             <dd className="font-medium">
               <WorkspaceStorageLimit bytes={persisted.storageLimitBytes} />
             </dd>
           </dl>
-          <p className="mt-2 text-sm text-muted-foreground">
-            This value is read-only. Storage usage accounting and quota controls are managed
-            separately.
+          {/*
+           * Part 45. Usage is readable by every role (`settings.read`), so this
+           * renders regardless of `canManage` — a viewer who cannot change the
+           * limit still needs to know how close the workspace is to it. The
+           * limit itself remains read-only here; only the numbers are new.
+           */}
+          <WorkspaceStorageUsagePanel workspaceId={persisted.id} />
+          <p className="text-sm text-muted-foreground">
+            The limit is read-only here. Usage is measured by the server and is never estimated in
+            the browser.
           </p>
         </div>
       </section>

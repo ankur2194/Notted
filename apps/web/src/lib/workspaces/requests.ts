@@ -2,6 +2,7 @@ import {
   WORKSPACE_API_PATHS,
   type WorkspaceCreateResult,
   type WorkspaceDeleteResult,
+  type WorkspaceStorageUsage,
   type WorkspaceUpdateResult,
 } from "@notted/shared-types";
 import {
@@ -14,11 +15,12 @@ import {
   workspaceDeleteResultSchema,
   workspaceDeleteSchema,
   type WorkspaceDeleteInput,
+  workspaceStorageUsageSchema,
   workspaceUpdateResultSchema,
 } from "@notted/shared-validators";
 
 import { publicEnvironment } from "@/config/public-environment";
-import { workspaceMemberPath } from "@/lib/workspaces/paths";
+import { workspaceMemberPath, workspaceStoragePath } from "@/lib/workspaces/paths";
 
 export type WorkspaceRequestResult<T> =
   | { readonly ok: true; readonly data: T }
@@ -117,6 +119,30 @@ export function deleteWorkspace(
       body: JSON.stringify(parsed.data),
     },
     (value) => workspaceDeleteResultSchema.safeParse(value),
+  );
+}
+
+/**
+ * Reads the Part 45 storage usage aggregate for one workspace.
+ *
+ * A GET, unlike the rest of this module, because usage is derived state rather
+ * than a lifecycle mutation — but it reuses `requestJson` so the error union,
+ * the timeout, and the credentialed no-store fetch stay identical.
+ *
+ * Reading requires only `settings.read`, so every role including `viewer` is
+ * authorized; a `forbidden` result therefore means the membership changed
+ * underneath the open page, not that the role is too low. The caller renders it
+ * as a permission notice rather than a failure.
+ */
+export function requestWorkspaceStorageUsage(
+  workspaceId: string,
+): Promise<WorkspaceRequestResult<WorkspaceStorageUsage>> {
+  const parsedId = uuidSchema.safeParse(workspaceId);
+  if (!parsedId.success) return Promise.resolve({ ok: false, kind: "invalid" });
+  return requestJson(
+    new URL(workspaceStoragePath(parsedId.data), publicEnvironment.NEXT_PUBLIC_API_URL),
+    { method: "GET", headers: { Accept: "application/json" } },
+    (value) => workspaceStorageUsageSchema.safeParse(value),
   );
 }
 

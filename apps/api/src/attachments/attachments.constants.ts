@@ -39,6 +39,14 @@ export const ATTACHMENT_PROCESSING_ERRORS = Object.freeze({
   tooManyFrames: "too_many_frames",
   heicTooLarge: "heic_too_large",
   processingTimeout: "processing_timeout",
+  /**
+   * Part 45. Written by the reconciliation sweep when a `ready` row's primary
+   * object is positively absent from storage after the ADR 0005 grace period.
+   * The row keeps its metadata (so the loss is visible and attributable) but
+   * leaves the `ready` state, which also releases the quota it was holding for
+   * bytes that no longer exist.
+   */
+  storageObjectMissing: "storage_object_missing",
 } as const);
 
 export type AttachmentProcessingErrorCode =

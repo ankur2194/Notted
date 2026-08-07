@@ -13,6 +13,7 @@ import {
   ListOrdered,
   ListTodo,
   Minus,
+  Paperclip,
   Quote,
   Redo2,
   SquareCode,
@@ -37,6 +38,8 @@ import "@tiptap/extension-text-align";
 import "@tiptap/extension-underline";
 // Declares `nottedRequestImageUpload` on the chained-command interface (Part 42).
 import "./extensions/CustomImage";
+// Declares `nottedRequestAttachmentUpload` on the same interface (Part 44).
+import "./extensions/CustomAttachment";
 
 import { isAllowedEditorColor } from "./editor-colors";
 import { CODE_BLOCK_LANGUAGE_OPTIONS } from "./extensions/code-block-languages";
@@ -649,6 +652,23 @@ export const EDITOR_TOOLBAR_GROUPS: readonly ToolbarGroup[] = Object.freeze([
         isAvailable: (editor) => editor.isEditable && editor.can().nottedRequestImageUpload(),
         run: (editor) => {
           editor.chain().focus().nottedRequestImageUpload().run();
+        },
+      },
+      {
+        /*
+         * Part 44's sibling of "Insert image", and deliberately its neighbour:
+         * they are the same gesture over different bytes, and a writer looking
+         * for one will look here for the other. No keyboard shortcut is added —
+         * the shortcut surface is a fixed, tested set, and a file attachment is
+         * not frequent enough to justify claiming another chord.
+         */
+        kind: "button",
+        id: "insertAttachment",
+        label: "Attach file",
+        icon: Paperclip,
+        isAvailable: (editor) => editor.isEditable && editor.can().nottedRequestAttachmentUpload(),
+        run: (editor) => {
+          editor.chain().focus().nottedRequestAttachmentUpload().run();
         },
       },
       { kind: "control", id: "link", label: "Link", control: "link", shortcutId: "link" },

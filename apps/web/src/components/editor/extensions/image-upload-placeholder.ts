@@ -34,7 +34,10 @@
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
-import type { NoteDocumentImageAttrs } from "@notted/shared-validators";
+import type {
+  NoteDocumentAttachmentAttrs,
+  NoteDocumentImageAttrs,
+} from "@notted/shared-validators";
 import type { Editor } from "@tiptap/core";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
@@ -397,8 +400,28 @@ export interface ImageInsertionController {
    * takes exactly the route a typed character takes: `onUpdate` →
    * `safeParseNoteDocument` → `onDocumentChange` → the existing debounced PATCH.
    * No new save call site is created anywhere.
+   *
+   * Takes only the four attributes an upload actually determines. Part 43's
+   * presentation attributes (`align`, `wrap`, `fullWidth`, `caption`) come from
+   * the node schema's own defaults, which is the single place that contract is
+   * stated — asking every caller to repeat them would be a second copy free to
+   * drift, and the implementation below never reads them anyway.
    */
-  complete(id: string, attrs: NoteDocumentImageAttrs): boolean;
+  complete(
+    id: string,
+    attrs: Pick<NoteDocumentImageAttrs, "attachmentId" | "alt" | "width" | "height">,
+  ): boolean;
+  /**
+   * The generic-file counterpart of `complete` (Part 44).
+   *
+   * Deliberately a second method rather than a widened `complete`: the two take
+   * different attribute shapes, and a union parameter would push a runtime
+   * discriminator into the one code path that must not guess wrong about which
+   * node type it is inserting. Everything else — the single chained transaction,
+   * `updateSelection: false`, the schema guard, the placeholder removal in the
+   * same step — is identical, and identical for the same reasons.
+   */
+  completeAttachment(id: string, attrs: NoteDocumentAttachmentAttrs): boolean;
   /** Drop a placeholder without touching the document (cancel, dismiss). */
   abandon(id: string): boolean;
   has(id: string): boolean;
@@ -466,6 +489,37 @@ export function createImageInsertionController(editor: Editor): ImageInsertionCo
           },
           // The writer may have kept typing somewhere else entirely; never yank
           // their caret to the image that just finished uploading.
+          { updateSelection: false },
+        )
+        .command(({ tr }) => {
+          tr.setMeta(IMAGE_UPLOAD_PLACEHOLDER_KEY, {
+            type: "remove",
+            id,
+          } satisfies PlaceholderAction);
+          return true;
+        })
+        .run();
+    },
+
+    completeAttachment: (id, attrs) => {
+      const current = view();
+      if (current === null) return false;
+      const pos = imageUploadPosition(current.state, id);
+      if (pos === null) return false;
+      if (current.state.schema.nodes.attachment === undefined) return false;
+      return editor
+        .chain()
+        .insertContentAt(
+          pos,
+          {
+            type: "attachment",
+            attrs: {
+              attachmentId: attrs.attachmentId,
+              name: attrs.name,
+              mimeType: attrs.mimeType,
+              sizeBytes: attrs.sizeBytes,
+            },
+          },
           { updateSelection: false },
         )
         .command(({ tr }) => {

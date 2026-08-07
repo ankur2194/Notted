@@ -4,7 +4,11 @@ import { notFound } from "next/navigation";
 
 import { WorkspaceAvatar } from "@/components/workspaces/WorkspaceAvatar";
 import { WorkspaceStorageLimit } from "@/components/workspaces/WorkspaceStorageLimit";
-import { getServerWorkspaceDetail } from "@/lib/workspaces/server-workspaces";
+import { WorkspaceStorageUsage } from "@/components/workspaces/WorkspaceStorageUsage";
+import {
+  getServerWorkspaceDetail,
+  getServerWorkspaceStorageUsage,
+} from "@/lib/workspaces/server-workspaces";
 
 function formatDate(value: string): string {
   const date = new Date(value);
@@ -38,6 +42,9 @@ export default async function WorkspaceOverviewPage({
 
   const workspace = result.data;
   const canManage = workspace.currentUserRole === "owner" || workspace.currentUserRole === "admin";
+  // Part 45. Fetched only after the detail read proved membership, and allowed
+  // to fail without taking the page with it — the storage card degrades alone.
+  const storage = await getServerWorkspaceStorageUsage(workspace.id);
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
@@ -107,8 +114,8 @@ export default async function WorkspaceOverviewPage({
           </div>
         </dl>
 
-        <div className="space-y-3 rounded-xl border bg-card p-5 shadow-sm">
-          <h3 className="font-semibold">Storage limit</h3>
+        <div className="space-y-4 rounded-xl border bg-card p-5 shadow-sm">
+          <h3 className="font-semibold">Storage</h3>
           <dl className="space-y-2 text-sm">
             <div className="flex items-center justify-between gap-4">
               <dt className="text-muted-foreground">Storage limit override</dt>
@@ -117,9 +124,17 @@ export default async function WorkspaceOverviewPage({
               </dd>
             </div>
           </dl>
-          <p className="text-sm text-muted-foreground">
-            Storage usage is not shown here. Usage accounting is never estimated in the browser.
-          </p>
+          {storage.status === "ready" ? (
+            <WorkspaceStorageUsage usage={storage.data} />
+          ) : storage.status === "forbidden" ? (
+            <p className="text-sm text-muted-foreground" role="note">
+              Storage usage is not available for your access to this workspace.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground" role="note">
+              Storage usage could not be loaded. Open workspace settings to try again.
+            </p>
+          )}
         </div>
       </section>
 
