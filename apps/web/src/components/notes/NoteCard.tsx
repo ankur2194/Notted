@@ -1,7 +1,7 @@
 import { Archive, FileCheck2, FileText, Pin, Trash2 } from "lucide-react";
 import Link from "next/link";
 
-import type { NoteSummary } from "@notted/shared-types";
+import type { NoteSummary, TagSummary } from "@notted/shared-types";
 import type { ReactNode } from "react";
 
 import { noteDetailPath } from "@/lib/notes/paths";
@@ -18,13 +18,23 @@ export function NoteCard({
   projectName,
   excerpt,
   controls,
+  tagsById,
 }: {
   readonly note: NoteSummary;
   readonly folderName?: string;
   readonly projectName?: string;
   readonly excerpt?: string;
   readonly controls?: ReactNode;
+  readonly tagsById?: ReadonlyMap<string, TagSummary>;
 }) {
+  /*
+   * Unresolvable ids are dropped rather than rendered: a raw UUID is not a tag
+   * name, and the caller may legitimately have no tag listing at all.
+   */
+  const tags = note.tagIds.flatMap((tagId) => {
+    const tag = tagsById?.get(tagId);
+    return tag === undefined ? [] : [tag];
+  });
   const location =
     note.projectId !== null
       ? `Project: ${projectName ?? "Project note"}`
@@ -80,6 +90,28 @@ export function NoteCard({
           </span>
         ) : null}
       </div>
+      {/*
+       * The tag colour is a dot, never the chip background: a user-chosen
+       * colour behind the name cannot be held to 4.5:1, and the name itself —
+       * not the colour — is what carries the meaning.
+       */}
+      {tags.length === 0 ? null : (
+        <div className="flex flex-wrap gap-1.5 text-xs" aria-label="Note tags">
+          {tags.map((tag) => (
+            <span
+              key={tag.id}
+              className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-1"
+            >
+              <span
+                aria-hidden="true"
+                className="size-2 shrink-0 rounded-full border border-border"
+                style={{ backgroundColor: tag.color }}
+              />
+              {tag.name}
+            </span>
+          ))}
+        </div>
+      )}
       <p className="text-xs text-muted-foreground">Updated {updatedLabel(note.updatedAt)}</p>
       {controls === undefined ? null : <div className="border-t pt-3">{controls}</div>}
     </article>

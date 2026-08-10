@@ -10,6 +10,7 @@ import {
   getServerNoteDetail,
   getServerNoteNavigation,
 } from "@/lib/notes/server-notes";
+import { getServerTaskList } from "@/lib/tasks/server-tasks";
 import { getServerWorkspaceDetail } from "@/lib/workspaces/server-workspaces";
 
 export default async function StandaloneNotePage({
@@ -63,12 +64,21 @@ export default async function StandaloneNotePage({
     folders.status === "ready" && note.data.folderId !== null
       ? folders.data.items.find((folder) => folder.id === note.data.folderId)?.name
       : undefined;
+  /*
+   * Sequential rather than part of the parallel block above: the note's own
+   * type decides whether a task list exists at all, so fetching it eagerly
+   * would issue a request for every document in the workspace. An unavailable
+   * task page degrades to a client fetch instead of failing the note.
+   */
+  const tasks =
+    note.data.type === "task-list" ? await getServerTaskList(workspaceId, note.data.id) : null;
   return (
     <NoteDetailView
       note={note.data}
       workspaceName={workspace.data.name}
       folderName={folderName}
       ancestors={ancestors}
+      initialTasks={tasks?.status === "ready" ? tasks.data : null}
     />
   );
 }

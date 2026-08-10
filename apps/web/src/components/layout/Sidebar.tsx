@@ -10,16 +10,20 @@ import {
   Clock3,
   Pin,
   LayoutTemplate,
+  Tags,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
 
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 import type { NoteNavigationState } from "@/components/notes/NoteTree";
+import type { TagNavigationState } from "@/components/tags/TagFilterList";
 import type { ShellBootstrap } from "@notted/shared-types";
 
 import { NoteTree } from "@/components/notes/NoteTree";
+import { TagFilterList } from "@/components/tags/TagFilterList";
 import { Button } from "@/components/ui/button";
 
 export function Sidebar({
@@ -28,12 +32,14 @@ export function Sidebar({
   onToggle,
   mobile = false,
   noteNavigation,
+  tagNavigation,
 }: {
   readonly shell: ShellBootstrap;
   readonly collapsed: boolean;
   readonly onToggle?: () => void;
   readonly mobile?: boolean;
   readonly noteNavigation: NoteNavigationState;
+  readonly tagNavigation: TagNavigationState;
 }) {
   const hideLabels = collapsed && !mobile;
   return (
@@ -197,6 +203,55 @@ export function Sidebar({
               workspaceId={shell.currentWorkspace?.workspaceId ?? null}
               state={noteNavigation}
             />
+          </div>
+        )}
+      </section>
+
+      <section
+        aria-labelledby={hideLabels ? undefined : "tag-filter-heading"}
+        className="border-t p-3"
+      >
+        {!hideLabels && (
+          <h2
+            id="tag-filter-heading"
+            className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+          >
+            Tags
+          </h2>
+        )}
+        {hideLabels ? (
+          <span
+            className="flex min-h-11 items-center justify-center text-xs text-muted-foreground"
+            aria-label="Expand sidebar to filter notes by tag"
+          >
+            Tags
+          </span>
+        ) : (
+          <div className="space-y-2">
+            {/*
+             * `TagFilterList` reads the active tag from the live search params,
+             * which Next.js wants behind a boundary so a statically prerendered
+             * route does not opt its whole tree into client rendering.
+             */}
+            <div className="max-h-56 overflow-y-auto">
+              <Suspense
+                fallback={<p className="p-2 text-xs text-muted-foreground">Loading tags…</p>}
+              >
+                <TagFilterList
+                  workspaceId={shell.currentWorkspace?.workspaceId ?? null}
+                  state={tagNavigation}
+                />
+              </Suspense>
+            </div>
+            {shell.currentWorkspace === null ? null : (
+              <Link
+                href={`/workspaces/${shell.currentWorkspace.workspaceId}/tags`}
+                className="flex min-h-11 items-center gap-2 rounded px-2 text-xs font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Tags aria-hidden="true" className="size-3.5 shrink-0" />
+                Manage tags
+              </Link>
+            )}
           </div>
         )}
       </section>

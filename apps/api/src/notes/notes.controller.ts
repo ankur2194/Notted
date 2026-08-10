@@ -11,6 +11,7 @@ import {
   Req,
 } from "@nestjs/common";
 import {
+  copyNoteSchema,
   createFolderSchema,
   createNoteSchema,
   deleteFolderSchema,
@@ -171,6 +172,28 @@ export class NotesController {
     const body = moveNoteSchema.safeParse(rawBody);
     if (!body.success) this.invalid();
     return this.notes.move({ ...this.noteScope(request), ...body.data });
+  }
+
+  // The decorator authorizes `note.read` on the SOURCE note — the resource the
+  // URL names. The destination `note.create` check runs inside the service,
+  // the only place the destination container is known.
+  @Post(":noteId/copy")
+  @HttpCode(HttpStatus.CREATED)
+  @RequireAuthorization(noteAuthorization("note.read"))
+  copy(@Req() request: Request, @Body() rawBody: unknown): Promise<NoteCreateResult> {
+    this.auth.assertTrustedMutationOrigin(request);
+    const body = copyNoteSchema.safeParse(rawBody);
+    if (!body.success) this.invalid();
+    return this.notes.copy({
+      ...this.noteScope(request),
+      asTemplate: body.data.asTemplate,
+      includeTags: body.data.includeTags,
+      title: body.data.title,
+      projectId: body.data.projectId ?? null,
+      folderId: body.data.folderId ?? null,
+      parentId: body.data.parentId ?? null,
+      idempotencyKey: requireIdempotencyKey(request),
+    });
   }
 
   @Post(":noteId/restore")

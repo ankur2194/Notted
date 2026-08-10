@@ -21,7 +21,7 @@ import { useEffect, useState } from "react";
 
 import { NoteCard } from "./NoteCard";
 
-import type { FolderSummary, NoteSummary } from "@notted/shared-types";
+import type { FolderSummary, NoteSummary, TagSummary } from "@notted/shared-types";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ export interface NoteMoveDestination {
 function SortableNote({
   note,
   folderName,
+  tagsById,
   controls,
   pending,
   destinations,
@@ -49,6 +50,7 @@ function SortableNote({
 }: {
   readonly note: NoteSummary;
   readonly folderName?: string;
+  readonly tagsById?: ReadonlyMap<string, TagSummary>;
   readonly controls: ReactNode;
   readonly pending: boolean;
   readonly destinations: readonly {
@@ -95,6 +97,7 @@ function SortableNote({
       <NoteCard
         note={note}
         folderName={folderName}
+        tagsById={tagsById}
         controls={
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
@@ -242,6 +245,7 @@ function SortableNote({
 export function NoteList({
   notes,
   folders,
+  tagsById,
   pendingIds,
   controlsFor,
   onMove,
@@ -251,6 +255,7 @@ export function NoteList({
 }: {
   readonly notes: readonly NoteSummary[];
   readonly folders: readonly FolderSummary[];
+  readonly tagsById?: ReadonlyMap<string, TagSummary>;
   readonly pendingIds: ReadonlySet<string>;
   readonly controlsFor: (note: NoteSummary) => ReactNode;
   readonly onMove: (note: NoteSummary, destination: NoteMoveDestination) => void;
@@ -334,6 +339,7 @@ export function NoteList({
                 key={note.id}
                 note={note}
                 folderName={note.folderId === null ? undefined : folderNames.get(note.folderId)}
+                tagsById={tagsById}
                 controls={controlsFor(note)}
                 pending={pendingIds.has(note.id)}
                 destinations={destinations}

@@ -15,6 +15,34 @@ const workspaceId = "10000000-0000-4000-8000-000000000001";
 const noteId = "10000000-0000-4000-8000-000000000002";
 const userId = "10000000-0000-4000-8000-000000000003";
 
+const noteDetail = Object.freeze({
+  id: noteId,
+  workspaceId,
+  location: "workspace-root",
+  projectId: null,
+  folderId: null,
+  parentId: null,
+  title: "Tasks",
+  type: "task-list",
+  pageSize: "a4",
+  sortOrder: 1,
+  isTemplate: false,
+  isPinned: false,
+  isArchived: false,
+  isDeleted: false,
+  tagIds: [],
+  version: 1,
+  deletedAt: null,
+  createdAt: "2026-08-01T00:00:00.000Z",
+  updatedAt: "2026-08-01T00:00:00.000Z",
+  content: { type: "doc", content: [] },
+  contentPlain: "",
+  createdById: userId,
+  updatedById: userId,
+  currentActorId: userId,
+  capabilities: { canUpdate: true, canDelete: true, canShare: true },
+});
+
 function request(authenticated = true): Request {
   const value = {
     header: (name: string) =>
@@ -36,35 +64,7 @@ function request(authenticated = true): Request {
 
 describe("Part 31 composable note tRPC transport", () => {
   it("composes note/folder procedures and delegates the same strict contracts", async () => {
-    const create = vi.fn().mockResolvedValue({
-      note: {
-        id: noteId,
-        workspaceId,
-        location: "workspace-root",
-        projectId: null,
-        folderId: null,
-        parentId: null,
-        title: "Tasks",
-        type: "task-list",
-        pageSize: "a4",
-        sortOrder: 1,
-        isTemplate: false,
-        isPinned: false,
-        isArchived: false,
-        isDeleted: false,
-        tagIds: [],
-        version: 1,
-        deletedAt: null,
-        createdAt: "2026-08-01T00:00:00.000Z",
-        updatedAt: "2026-08-01T00:00:00.000Z",
-        content: { type: "doc", content: [] },
-        contentPlain: "",
-        createdById: userId,
-        updatedById: userId,
-        currentActorId: userId,
-        capabilities: { canUpdate: true, canDelete: true, canShare: true },
-      },
-    });
+    const create = vi.fn().mockResolvedValue({ note: noteDetail });
     const createFolder = vi.fn().mockResolvedValue({
       folder: {
         id: noteId,
@@ -92,6 +92,37 @@ describe("Part 31 composable note tRPC transport", () => {
     );
     expect(createFolder).toHaveBeenCalledWith(expect.objectContaining({ name: "Folder" }));
     expect(origin).toHaveBeenCalledTimes(2);
+  });
+
+  it("routes note.copy to NotesService.copy with the shared copy contract", async () => {
+    const copy = vi.fn().mockResolvedValue({ note: { ...noteDetail, isTemplate: true } });
+    const origin = vi.fn();
+    const transport = new NotesTrpcRouter(
+      { copy } as unknown as NotesService,
+      {
+        assertTrustedMutationOrigin: origin,
+      } as unknown as AuthService,
+    );
+    const router = trpc.router({ note: transport.noteRouter });
+    const caller = router.createCaller(createTrpcContext(request()));
+    await caller.note.copy({ workspaceId, noteId, data: { asTemplate: true } });
+    expect(origin).toHaveBeenCalledBefore(copy);
+    expect(copy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId,
+        noteId,
+        asTemplate: true,
+        includeTags: true,
+        projectId: null,
+        folderId: null,
+        parentId: null,
+        idempotencyKey: "note-trpc-key-0001",
+      }),
+    );
+    await expect(
+      caller.note.copy({ workspaceId, noteId, data: { asTemplate: "yes" } } as never),
+    ).rejects.toBeInstanceOf(TRPCError);
+    expect(copy).toHaveBeenCalledTimes(1);
   });
 
   it("denies unauthenticated callers before service invocation", async () => {

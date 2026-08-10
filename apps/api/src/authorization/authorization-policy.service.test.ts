@@ -38,6 +38,7 @@ function kindForAction(action: AuthorizationAction): AuthorizationResourceKind {
       "webhook.list",
       "webhook.create",
       "folder.create",
+      "tag.create",
     ].includes(action)
   )
     return "workspace";
@@ -58,6 +59,7 @@ function kindForAction(action: AuthorizationAction): AuthorizationResourceKind {
   if (action.startsWith("file.")) return "file";
   if (action.startsWith("folder.")) return "folder";
   if (action.startsWith("task.")) return "task";
+  if (action.startsWith("tag.")) return "tag";
   return "session";
 }
 
@@ -189,6 +191,11 @@ const EDITOR_ALLOWED = new Set<AuthorizationAction>([
   "task.create",
   "task.update",
   "task.tag",
+  // Editors curate the workspace tag vocabulary but may not delete a tag:
+  // deleting one strips it from every note and task workspace-wide.
+  "tag.read",
+  "tag.create",
+  "tag.update",
   "session.list",
   "session.revoke",
 ]);
@@ -209,6 +216,7 @@ const VIEWER_ALLOWED = new Set<AuthorizationAction>([
   "file.read",
   "folder.read",
   "task.read",
+  "tag.read",
   "session.list",
   "session.revoke",
 ]);
@@ -342,6 +350,88 @@ describe("AuthorizationPolicyService", () => {
       ).toMatchObject({ allowed: false, code: "authorization.recent_authentication_required" });
     },
   );
+
+  it.each([
+    ["editor", "tag.create", true],
+    ["editor", "tag.update", true],
+    ["editor", "tag.delete", false],
+    ["viewer", "tag.read", true],
+    ["viewer", "tag.create", false],
+    ["viewer", "tag.update", false],
+    ["viewer", "tag.delete", false],
+    ["admin", "tag.delete", true],
+  ] as const)("resolves %s %s against the workspace tag vocabulary", (role, action, expected) => {
+    expect(policy.decide(evaluation(role, action), NOW).allowed).toBe(expected);
+  });
+
+  it("denies a tag action pointed at the wrong resource kind", () => {
+    expect(
+      policy.decide(evaluation("owner", "tag.update", resourceFor("note.read")), NOW),
+    ).toMatchObject({
+      allowed: false,
+      audit: { reason: "action_resource_mismatch" },
+    });
+    expect(
+      policy.decide(evaluation("owner", "tag.create", resourceFor("tag.update")), NOW),
+    ).toMatchObject({
+      allowed: false,
+      audit: { reason: "action_resource_mismatch" },
+    });
+  });
+
+  it("conceals a tag from another workspace as 404 rather than 403", () => {
+    const foreign = Object.freeze({
+      ...resourceFor("tag.update"),
+      workspaceId: "other-workspace",
+    });
+    expect(policy.decide(evaluation("owner", "tag.update", foreign), NOW)).toMatchObject({
+      allowed: false,
+      httpStatus: 404,
+    });
+  });
+
+  it.each([
+    ["owner", "task.read", true],
+    ["admin", "task.read", true],
+    ["editor", "task.read", true],
+    ["viewer", "task.read", true],
+    ["editor", "task.create", true],
+    ["editor", "task.update", true],
+    ["editor", "task.tag", true],
+    ["viewer", "task.create", false],
+    ["viewer", "task.update", false],
+    ["viewer", "task.tag", false],
+    ["owner", "task.delete", true],
+    ["admin", "task.delete", true],
+    // Deleting a task hard-deletes its whole subtree, so editors fall through
+    // to the trailing deny exactly like note.delete and tag.delete.
+    ["editor", "task.delete", false],
+    ["viewer", "task.delete", false],
+  ] as const)("resolves %s %s against its canonical task resource", (role, action, expected) => {
+    expect(policy.decide(evaluation(role, action), NOW).allowed).toBe(expected);
+  });
+
+  it("lets an editor reassign a task only to a currently active member", () => {
+    const base = resourceFor("task.assign");
+    const active = Object.freeze({ ...base, targetMemberActive: true });
+    const revoked = Object.freeze({ ...base, targetMemberActive: false });
+    expect(policy.decide(evaluation("editor", "task.assign", active), NOW).allowed).toBe(true);
+    expect(policy.decide(evaluation("editor", "task.assign", revoked), NOW).allowed).toBe(false);
+    // An unloaded target fact is not a permission.
+    expect(policy.decide(evaluation("editor", "task.assign", base), NOW).allowed).toBe(false);
+    expect(policy.decide(evaluation("admin", "task.assign", active), NOW).allowed).toBe(true);
+  });
+
+  it("keeps an editor's task edits to tasks they created inside editable projects", () => {
+    const foreign = Object.freeze({ ...resourceFor("task.update"), creatorId: OTHER_USER_ID });
+    const restricted = Object.freeze({
+      ...resourceFor("task.update"),
+      project: { restricted: true, actorAccess: null },
+    });
+    expect(policy.decide(evaluation("editor", "task.update", foreign), NOW).allowed).toBe(false);
+    expect(policy.decide(evaluation("editor", "task.update", restricted), NOW).allowed).toBe(false);
+    expect(policy.decide(evaluation("admin", "task.update", foreign), NOW).allowed).toBe(true);
+  });
 
   it("ties exports to requester/admin and a currently readable source", () => {
     const sourceLost = Object.freeze({ ...resourceFor("export.download"), sourceReadable: false });

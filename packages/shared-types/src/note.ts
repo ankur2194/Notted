@@ -13,6 +13,8 @@ export const NOTE_API_PATHS = Object.freeze({
   collection: (workspaceId: string) => `/api/v1/workspaces/${workspaceId}/notes`,
   detail: (workspaceId: string, noteId: string) =>
     `/api/v1/workspaces/${workspaceId}/notes/${noteId}`,
+  copy: (workspaceId: string, noteId: string) =>
+    `/api/v1/workspaces/${workspaceId}/notes/${noteId}/copy`,
   move: (workspaceId: string, noteId: string) =>
     `/api/v1/workspaces/${workspaceId}/notes/${noteId}/move`,
   restore: (workspaceId: string, noteId: string) =>

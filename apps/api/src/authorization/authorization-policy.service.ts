@@ -82,6 +82,10 @@ const RESOURCE_KINDS_BY_ACTION: Readonly<Record<AuthorizationAction, readonly st
   "task.delete": ["task"],
   "task.assign": ["task"],
   "task.tag": ["task"],
+  "tag.read": ["workspace", "tag"],
+  "tag.create": ["workspace"],
+  "tag.update": ["tag"],
+  "tag.delete": ["tag"],
   "session.list": ["session"],
   "session.revoke": ["session"],
 };
@@ -486,6 +490,11 @@ export class AuthorizationPolicyService {
     if (action === "task.assign")
       return projectCanEdit(resource) && resource.targetMemberActive === true;
     if (action === "task.tag") return resource.creatorId === actorId && projectCanEdit(resource);
+    // `tag.read` needs no branch: it is caught by the `.read` suffix above.
+    // `tag.delete` deliberately has none — deleting a tag strips it from every
+    // note and task in the workspace, so it falls through to the final deny,
+    // exactly like `note.delete` and `folder.delete`.
+    if (action === "tag.create" || action === "tag.update") return true;
     return false;
   }
 

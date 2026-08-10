@@ -33,6 +33,9 @@ export function noteListHref(workspaceId: string, query: Partial<NoteListQuery> 
   if (query.page !== undefined && query.page !== 1) params.set("page", String(query.page));
   if (query.folderId !== undefined && query.folderId !== null)
     params.set("folderId", query.folderId);
+  // `NoteListQuery["tagId"]` is optional but never null (unlike `folderId`,
+  // whose null means "unfiled"), so an `undefined` check is the whole guard.
+  if (query.tagId !== undefined) params.set("tagId", query.tagId);
   if (query.type !== undefined) params.set("type", query.type);
   if (query.isArchived !== undefined) params.set("isArchived", String(query.isArchived));
   if (query.sortBy !== undefined) params.set("sortBy", query.sortBy);

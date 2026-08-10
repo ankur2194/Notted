@@ -12,6 +12,7 @@ export type NoteId = string;
 export type FolderId = string;
 export type AttachmentId = string;
 export type TaskId = string;
+export type TaskStatusId = string;
 export type TagId = string;
 export type RequestId = string;
 

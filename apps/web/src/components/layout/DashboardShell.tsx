@@ -8,6 +8,7 @@ import { TopBar } from "./TopBar";
 
 import type { BreadcrumbItem } from "./Breadcrumb";
 import type { NoteNavigationState } from "@/components/notes/NoteTree";
+import type { TagNavigationState } from "@/components/tags/TagFilterList";
 import type { ShellBootstrap } from "@notted/shared-types";
 import type { ReactNode } from "react";
 
@@ -81,10 +82,18 @@ export function DashboardShell({
   shell,
   children,
   noteNavigation,
+  tagNavigation,
 }: {
   readonly shell: ShellBootstrap;
   readonly children: ReactNode;
   readonly noteNavigation: NoteNavigationState;
+  /**
+   * Required, like `noteNavigation`: the non-ready branches (`no-workspace`,
+   * `unavailable`) already express every state a caller could mean by omitting
+   * it, so an optional prop would only let a new caller drop the tag section
+   * silently.
+   */
+  readonly tagNavigation: TagNavigationState;
 }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -133,6 +142,7 @@ export function DashboardShell({
             collapsed={collapsed}
             onToggle={toggleSidebar}
             noteNavigation={noteNavigation}
+            tagNavigation={tagNavigation}
           />
         </div>
         <Dialog open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -147,7 +157,13 @@ export function DashboardShell({
             <DialogDescription className="sr-only">
               Navigate Notted and switch your current workspace.
             </DialogDescription>
-            <Sidebar shell={shell} collapsed={false} mobile noteNavigation={noteNavigation} />
+            <Sidebar
+              shell={shell}
+              collapsed={false}
+              mobile
+              noteNavigation={noteNavigation}
+              tagNavigation={tagNavigation}
+            />
           </DialogContent>
         </Dialog>
         <div className={`notted-shell-offset ${collapsed ? "md:pl-20" : "md:pl-72"}`}>

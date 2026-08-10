@@ -20,6 +20,18 @@ export const idempotencyKeySchema = z
   .max(128)
   .regex(/^[A-Za-z0-9._:-]+$/, "Use letters, numbers, dots, underscores, colons, or hyphens");
 
+/**
+ * Shared tag-assignment rule for every tagged entity (`note_tags`,
+ * `task_tags`). Lives here so notes and tasks cannot drift apart on the bound
+ * or the duplicate rule.
+ */
+export const tagIdsSchema = z
+  .array(uuidSchema)
+  .max(50)
+  .refine((items) => new Set(items).size === items.length, {
+    message: "Tag identifiers must be unique",
+  });
+
 export const isoTimestampSchema = z.string().datetime({ offset: true });
 export type IsoTimestampInput = z.input<typeof isoTimestampSchema>;
 

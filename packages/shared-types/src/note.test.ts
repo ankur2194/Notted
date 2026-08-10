@@ -47,6 +47,7 @@ describe("NOTE_API_PATHS", () => {
       NOTE_API_PATHS.folder(workspaceId, folderId),
       NOTE_API_PATHS.shares(workspaceId, noteId),
       NOTE_API_PATHS.share(workspaceId, noteId, userId),
+      NOTE_API_PATHS.copy(workspaceId, noteId),
     ];
 
     expect(built).toHaveLength(Object.keys(NOTE_API_PATHS).length);

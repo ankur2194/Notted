@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import type { NoteNavigationState } from "@/components/notes/NoteTree";
+import type { TagNavigationState } from "@/components/tags/TagFilterList";
 import type { ReactNode } from "react";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -9,6 +10,7 @@ import { loginPathFor } from "@/lib/auth/redirects";
 import { getServerSession } from "@/lib/auth/server-session";
 import { getServerFolders, getServerNoteNavigation } from "@/lib/notes/server-notes";
 import { getServerShell } from "@/lib/shell/server-shell";
+import { getServerTags } from "@/lib/tags/server-tags";
 
 function UnavailableState({
   title,
@@ -60,11 +62,13 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   }
 
   let noteNavigation: NoteNavigationState = { status: "no-workspace" };
+  let tagNavigation: TagNavigationState = { status: "no-workspace" };
   if (shell.data.currentWorkspace !== null) {
     const workspaceId = shell.data.currentWorkspace.workspaceId;
-    const [navigation, folders] = await Promise.all([
+    const [navigation, folders, tags] = await Promise.all([
       getServerNoteNavigation(workspaceId),
       getServerFolders(workspaceId),
+      getServerTags(workspaceId),
     ]);
     noteNavigation =
       navigation.status === "ready" && folders.status === "ready"
@@ -75,9 +79,19 @@ export default async function DashboardLayout({ children }: { children: ReactNod
             foldersTruncated: folders.data.hasMore,
           }
         : { status: "unavailable" };
+    // Tags fail independently of the note tree: an unreadable tag list must
+    // not blank the note navigation next to it, and vice versa.
+    tagNavigation =
+      tags.status === "ready"
+        ? { status: "ready", tags: tags.data.items, truncated: tags.data.hasMore }
+        : { status: "unavailable" };
   }
   return (
-    <DashboardShell shell={shell.data} noteNavigation={noteNavigation}>
+    <DashboardShell
+      shell={shell.data}
+      noteNavigation={noteNavigation}
+      tagNavigation={tagNavigation}
+    >
       {children}
     </DashboardShell>
   );

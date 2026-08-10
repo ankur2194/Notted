@@ -75,19 +75,23 @@ describe("note requests", () => {
   // The fourth column is Part 39's retryability hint. It is deliberately absent
   // for the kinds that describe the request itself: repeating those unchanged
   // would fail identically forever, so autosave must not loop on them.
+  // The trailing `code` is the stable `ApiErrorCode` echoed from the envelope.
+  // It is carried only for a 409, where one `kind` covers conflicts whose
+  // remedies differ (rename vs. delete something first).
   it.each([
-    [400, null, "invalid", undefined],
-    [403, null, "forbidden-or-not-found", undefined],
-    [404, null, "forbidden-or-not-found", undefined],
-    [409, { code: "VERSION_CONFLICT" }, "version-conflict", undefined],
-    [409, { code: "ORDER_CONFLICT" }, "conflict", undefined],
-    [405, null, "unavailable", false],
-    [429, null, "unavailable", true],
-    [500, null, "unavailable", true],
-    [503, null, "unavailable", true],
+    [400, null, "invalid", undefined, undefined],
+    [403, null, "forbidden-or-not-found", undefined, undefined],
+    [404, null, "forbidden-or-not-found", undefined, undefined],
+    [409, { code: "VERSION_CONFLICT" }, "version-conflict", undefined, "VERSION_CONFLICT"],
+    [409, { code: "ORDER_CONFLICT" }, "conflict", undefined, "ORDER_CONFLICT"],
+    [409, null, "conflict", undefined, undefined],
+    [405, null, "unavailable", false, undefined],
+    [429, null, "unavailable", true, undefined],
+    [500, null, "unavailable", true, undefined],
+    [503, null, "unavailable", true, undefined],
   ] as const)(
     "maps %s failures to an exact rollback category",
-    async (status, body, kind, retryable) => {
+    async (status, body, kind, retryable, code) => {
       fetchMock.mockResolvedValue(
         new Response(body === null ? null : JSON.stringify(body), {
           status,
@@ -96,7 +100,7 @@ describe("note requests", () => {
       );
       await expect(
         updateNote(workspaceId, noteId, { expectedVersion: 1, title: "B" }),
-      ).resolves.toEqual({ ok: false, kind, retryable });
+      ).resolves.toEqual({ ok: false, kind, retryable, code });
     },
   );
 
@@ -633,7 +637,7 @@ describe("note sharing requests", () => {
 
     await expect(
       upsertNoteShare(workspaceId, noteId, userId, { permission: "view" }),
-    ).resolves.toEqual({ ok: false, kind: "version-conflict" });
+    ).resolves.toEqual({ ok: false, kind: "version-conflict", code: "VERSION_CONFLICT" });
   });
 
   it("maps a thrown request to unavailable", async () => {

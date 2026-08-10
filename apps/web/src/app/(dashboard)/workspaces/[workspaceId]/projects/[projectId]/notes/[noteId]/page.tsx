@@ -6,6 +6,7 @@ import type { NoteNavigationItem } from "@notted/shared-types";
 import { NoteDetailView } from "@/components/notes/NoteDetailView";
 import { getServerNoteDetail, getServerNoteNavigation } from "@/lib/notes/server-notes";
 import { getServerProjectDetail } from "@/lib/projects/server-projects";
+import { getServerTaskList } from "@/lib/tasks/server-tasks";
 import { getServerWorkspaceDetail } from "@/lib/workspaces/server-workspaces";
 
 export default async function ProjectNotePage({
@@ -66,12 +67,21 @@ export default async function ProjectNotePage({
     ancestors.unshift(parent);
     parentId = parent.parentId;
   }
+  /*
+   * Sequential rather than part of the parallel block above: the note's own
+   * type decides whether a task list exists at all, so fetching it eagerly
+   * would issue a request for every document in the project. An unavailable
+   * task page degrades to a client fetch instead of failing the note.
+   */
+  const tasks =
+    note.data.type === "task-list" ? await getServerTaskList(workspaceId, note.data.id) : null;
   return (
     <NoteDetailView
       note={note.data}
       workspaceName={workspace.data.name}
       projectName={project.data.name}
       ancestors={ancestors}
+      initialTasks={tasks?.status === "ready" ? tasks.data : null}
     />
   );
 }

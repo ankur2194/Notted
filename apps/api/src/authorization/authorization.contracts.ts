@@ -52,6 +52,10 @@ export const AUTHORIZATION_ACTIONS = [
   "task.delete",
   "task.assign",
   "task.tag",
+  "tag.read",
+  "tag.create",
+  "tag.update",
+  "tag.delete",
   "session.list",
   "session.revoke",
 ] as const;
@@ -73,6 +77,7 @@ export const AUTHORIZATION_RESOURCE_KINDS = [
   "file",
   "folder",
   "task",
+  "tag",
   "session",
 ] as const;
 
@@ -215,6 +220,7 @@ export type ResourceLocator =
       readonly kind: "comment" | "export" | "apiKey" | "webhook" | "file" | "folder";
       readonly id: string;
     }
+  | { readonly kind: "tag"; readonly id: string }
   | { readonly kind: "session"; readonly id: string; readonly targetUserId: string };
 
 export interface AuthorizedOperation {

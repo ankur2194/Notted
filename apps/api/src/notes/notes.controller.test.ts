@@ -1,7 +1,12 @@
-import { HttpStatus } from "@nestjs/common";
+import { HttpStatus, RequestMethod } from "@nestjs/common";
+import { HTTP_CODE_METADATA, METHOD_METADATA, PATH_METADATA } from "@nestjs/common/constants";
 import { describe, expect, it, vi } from "vitest";
 
 import { setAuthPrincipal } from "../auth/auth-principal";
+import {
+  AUTHORIZATION_HTTP_SPEC,
+  type HttpAuthorizationSpec,
+} from "../authorization/authorization-http.decorator";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 
 import { FoldersController, NotesController } from "./notes.controller";
@@ -102,6 +107,57 @@ describe("Part 31 thin REST transports", () => {
     expect(move).toHaveBeenCalledWith(
       expect.objectContaining({ noteId, folderId, expectedVersion: 4 }),
     );
+  });
+
+  it("exposes copy as a created POST authorized on the source note", async () => {
+    const copy = vi.fn().mockResolvedValue({ note: {} });
+    const origin = vi.fn();
+    const controller = new NotesController(
+      { copy } as unknown as NotesService,
+      { assertTrustedMutationOrigin: origin } as unknown as AuthService,
+    );
+    const req = request(
+      { workspaceId, noteId },
+      { "idempotency-key": "note-copy-key-0001", origin: "https://app.notted.test" },
+    );
+    await controller.copy(req, { asTemplate: true, includeTags: false, title: "Template" });
+    expect(origin).toHaveBeenCalledBefore(copy);
+    expect(copy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId,
+        noteId,
+        asTemplate: true,
+        includeTags: false,
+        title: "Template",
+        projectId: null,
+        folderId: null,
+        parentId: null,
+        idempotencyKey: "note-copy-key-0001",
+      }),
+    );
+
+    expect(Reflect.getMetadata(PATH_METADATA, NotesController.prototype.copy)).toBe(":noteId/copy");
+    expect(Reflect.getMetadata(METHOD_METADATA, NotesController.prototype.copy)).toBe(
+      RequestMethod.POST,
+    );
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, NotesController.prototype.copy)).toBe(201);
+    // The route authorizes the SOURCE note; the destination `note.create`
+    // check lives in the service, which alone knows the target container.
+    const spec = Reflect.getMetadata(
+      AUTHORIZATION_HTTP_SPEC,
+      NotesController.prototype.copy,
+    ) as HttpAuthorizationSpec;
+    expect(spec.action).toBe("note.read");
+    expect(spec.workspaceId(req)).toBe(workspaceId);
+    expect(spec.resource(req)).toEqual({ kind: "note", id: noteId });
+
+    expect(() => controller.copy(req, { asTemplate: "yes" })).toThrow(
+      expect.objectContaining({ status: HttpStatus.BAD_REQUEST }),
+    );
+    expect(() => controller.copy(request({ workspaceId, noteId }), { asTemplate: true })).toThrow(
+      expect.objectContaining({ status: HttpStatus.BAD_REQUEST }),
+    );
+    expect(copy).toHaveBeenCalledTimes(1);
   });
 
   it("keeps folder deletion confirmed and delegates only identifiers", async () => {

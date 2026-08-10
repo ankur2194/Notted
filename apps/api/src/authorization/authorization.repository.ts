@@ -109,6 +109,8 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
         return this.loadFolder(locator.id);
       case "task":
         return this.loadTask(locator.id, actorUserId, locator.targetUserId, locator.tagId);
+      case "tag":
+        return this.loadTag(locator.id);
       default: {
         const exhaustive: never = locator;
         return exhaustive;
@@ -471,6 +473,28 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       creatorId: row.creatorId,
       loadedAt: nowIso(),
       relationsValid: row.parentId === null || (await this.hasScopedDirect(folders, row.parentId)),
+    });
+  }
+
+  /**
+   * Tags carry no creator column by design (see `database/schema/tags.ts`), so
+   * `creatorId` is null and the policy never grants creator-based authority.
+   * A tag outside the active workspace returns null — concealed as 404, not 403.
+   */
+  private async loadTag(id: string): Promise<AuthorizationResourceFacts | null> {
+    const [row] = await this.database.db
+      .select({ id: tags.id, workspaceId: tags.workspaceId, createdAt: tags.createdAt })
+      .from(tags)
+      .where(and(eq(tags.id, id), whereWorkspace(tags, this.tenantContext)))
+      .limit(1);
+    if (row === undefined) return null;
+    return Object.freeze({
+      kind: "tag",
+      id: row.id,
+      workspaceId: row.workspaceId,
+      creatorId: null,
+      relationsValid: true,
+      loadedAt: nowIso(),
     });
   }
 

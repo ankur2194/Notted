@@ -8,6 +8,10 @@ vi.mock("next/navigation", () => ({
   }),
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
   usePathname: () => "/",
+  // The sidebar mounts `TagFilterList`, which reads the tag filter out of the
+  // query string. Production wraps it in `<Suspense>`; the mock has to supply
+  // the hook regardless or every dashboard-layout case throws on render.
+  useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("@/lib/auth/server-session", () => ({ getServerSession: vi.fn() }));
 vi.mock("@/lib/shell/server-shell", () => ({ getServerShell: vi.fn() }));

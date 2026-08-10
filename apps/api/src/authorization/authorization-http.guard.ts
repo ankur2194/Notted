@@ -11,24 +11,12 @@ import {
   AUTHORIZATION_HTTP_SPEC,
   type HttpAuthorizationSpec,
 } from "./authorization-http.decorator";
-import { AuthorizationDeniedError } from "./authorization.errors";
+import {
+  authorizationDenialToHttpException,
+  AuthorizationDeniedError,
+} from "./authorization.errors";
 
 import type { Request } from "express";
-
-function toHttpException(error: AuthorizationDeniedError): ApiHttpException {
-  const code =
-    error.decision.code === "authorization.unauthenticated"
-      ? "UNAUTHENTICATED"
-      : error.decision.code === "authorization.concealed"
-        ? "NOT_FOUND"
-        : error.decision.code === "authorization.recent_authentication_required"
-          ? "RECENT_AUTHENTICATION_REQUIRED"
-          : "FORBIDDEN";
-  return new ApiHttpException(error.decision.httpStatus, {
-    code,
-    message: error.decision.safeMessage,
-  });
-}
 
 @Injectable()
 export class AuthorizationHttpGuard implements CanActivate {
@@ -90,7 +78,8 @@ export class AuthorizationHttpGuard implements CanActivate {
       setAuthorizedOperation(request, operation);
       return true;
     } catch (error: unknown) {
-      if (error instanceof AuthorizationDeniedError) throw toHttpException(error);
+      if (error instanceof AuthorizationDeniedError)
+        throw authorizationDenialToHttpException(error);
       throw error;
     }
   }

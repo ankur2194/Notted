@@ -1,11 +1,13 @@
 import Link from "next/link";
 
+import { ConvertNoteTypeControl } from "./ConvertNoteTypeControl";
 import { NoteEditorSurface } from "./NoteEditorSurface";
 import { PageContainer } from "./PageContainer";
 import { ShareModal } from "./ShareModal";
 
-import type { NoteDetail, NoteNavigationItem } from "@notted/shared-types";
+import type { NoteDetail, NoteNavigationItem, TaskPage } from "@notted/shared-types";
 
+import { TaskListView } from "@/components/tasks/TaskListView";
 import { noteCollectionPath, noteDetailPath, projectNotePath } from "@/lib/notes/paths";
 
 export function NoteDetailView({
@@ -14,12 +16,15 @@ export function NoteDetailView({
   projectName,
   folderName,
   ancestors = [],
+  initialTasks = null,
 }: {
   readonly note: NoteDetail;
   readonly workspaceName: string;
   readonly projectName?: string;
   readonly folderName?: string;
   readonly ancestors?: readonly NoteNavigationItem[];
+  /** Server-rendered first task page, present only for a task-list note. */
+  readonly initialTasks?: TaskPage | null;
 }) {
   const internalPath =
     note.projectId === null
@@ -102,18 +107,29 @@ export function NoteDetailView({
                 : `Project · ${projectName ?? "Project note"}`}
             </p>
           </div>
-          {note.isDeleted ? null : note.capabilities.canShare ? (
-            <ShareModal
-              workspaceId={note.workspaceId}
-              noteId={note.id}
-              internalPath={internalPath}
-              currentActorId={note.currentActorId}
-            />
-          ) : (
-            <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm" role="note">
-              You can view this note, but you do not have permission to manage sharing.
-            </p>
-          )}
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            {note.isDeleted ? null : note.capabilities.canShare ? (
+              <ShareModal
+                workspaceId={note.workspaceId}
+                noteId={note.id}
+                internalPath={internalPath}
+                currentActorId={note.currentActorId}
+              />
+            ) : (
+              <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm" role="note">
+                You can view this note, but you do not have permission to manage sharing.
+              </p>
+            )}
+            {canEdit ? (
+              <ConvertNoteTypeControl
+                workspaceId={note.workspaceId}
+                noteId={note.id}
+                noteTitle={note.title}
+                type={note.type}
+                version={note.version}
+              />
+            ) : null}
+          </div>
         </div>
         {/*
          * The page-size badge moved into `PageContainer`, which owns the live
@@ -158,6 +174,34 @@ export function NoteDetailView({
           />
         </PageContainer>
       </section>
+      {/*
+       * Deliberate, user-recorded deviation from `Notted.md`.
+       *
+       * The brief specifies a "simplified editor (no rich text, just tasks)"
+       * for a task-list note. The user overrode that: the task list is rendered
+       * BELOW the paper editor, not instead of it, so `PageContainer` and
+       * `NoteEditorSurface` above stay mounted exactly as they are for a
+       * document. That also makes type conversion non-destructive in both
+       * directions — nothing has to be hidden or migrated when a note changes
+       * type, because both halves are always present for a task list.
+       */}
+      {note.type === "task-list" ? (
+        <section aria-labelledby="note-tasks-heading" data-notted-print-hide>
+          <h2 id="note-tasks-heading" className="text-xl font-semibold tracking-tight">
+            Tasks
+          </h2>
+          <p className="mb-4 mt-1 text-sm text-muted-foreground">
+            Tasks belong to this note and are stored separately from the page content above.
+          </p>
+          <TaskListView
+            workspaceId={note.workspaceId}
+            noteId={note.id}
+            projectId={note.projectId}
+            initialTasks={initialTasks}
+            canEdit={canEdit}
+          />
+        </section>
+      ) : null}
     </article>
   );
 }

@@ -65,6 +65,7 @@ export type {
   SortDirection,
   TagId,
   TaskId,
+  TaskStatusId,
   UserId,
   WorkspaceId,
 } from "./common";
@@ -137,7 +138,35 @@ export type {
   SearchResultDetail,
   SearchResultSummary,
 } from "./search";
-export type { TaskDetail, TaskPriority, TaskRecurrence, TaskStatus, TaskSummary } from "./task";
+export { TAG_API_PATHS } from "./tag";
+export type {
+  TagCreateResult,
+  TagDeleteResult,
+  TagListQuery,
+  TagPage,
+  TagSortField,
+  TagSummary,
+  TagUpdateResult,
+} from "./tag";
+export { TASK_API_PATHS } from "./task";
+export type {
+  TaskBulkResult,
+  TaskBulkSkip,
+  TaskBulkSkipReason,
+  TaskCreateResult,
+  TaskDeleteResult,
+  TaskDetail,
+  TaskGrouping,
+  TaskListQuery,
+  TaskPage,
+  TaskPriority,
+  TaskRecurrence,
+  TaskReorderResult,
+  TaskSortField,
+  TaskStatus,
+  TaskSummary,
+  TaskUpdateResult,
+} from "./task";
 export { MEMBERSHIP_API_PATHS, WORKSPACE_API_PATHS } from "./workspace";
 export type {
   MembershipListQuery,

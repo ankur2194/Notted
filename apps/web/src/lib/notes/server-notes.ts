@@ -11,8 +11,8 @@ import {
   uuidSchema,
   workspaceMemberPageSchema,
 } from "@notted/shared-validators";
-import { cookies } from "next/headers";
 
+import type { ServerReadResult } from "@/lib/api/server-read";
 import type {
   FolderPage,
   NoteDetail,
@@ -23,15 +23,13 @@ import type {
   WorkspaceMemberPage,
 } from "@notted/shared-types";
 
-import { publicEnvironment } from "@/config/public-environment";
+import { readJson } from "@/lib/api/server-read";
+
+/** Re-exported so existing page and component imports stay unchanged. */
+export type { ServerReadResult };
 
 type RawSearchValue = string | readonly string[] | undefined;
 export type NoteSearchParams = Readonly<Record<string, RawSearchValue>>;
-export type ServerReadResult<T> =
-  | { readonly status: "ready"; readonly data: T }
-  | { readonly status: "unauthenticated" }
-  | { readonly status: "not-found" }
-  | { readonly status: "unavailable" };
 
 function first(value: RawSearchValue): string | undefined {
   return typeof value === "string" ? value : value?.[0];
@@ -59,6 +57,7 @@ export function parseNoteSearchParams(
     projectId: options.projectId,
     folderId: first(raw.folderId),
     type: first(raw.type),
+    tagId: first(raw.tagId),
     view,
     isArchived: first(raw.isArchived),
     sortBy: first(raw.sortBy) ?? orderByLifecycle,
@@ -66,6 +65,9 @@ export function parseNoteSearchParams(
   };
   const parsed = noteListQuerySchema.safeParse(candidate);
   if (parsed.success) return parsed.data;
+  // Every raw selector is dropped here, `tagId` included: the fallback exists
+  // because one of them failed validation, and carrying a forged one forward
+  // would only fail again. An unfiltered list is the safe degradation.
   return noteListQuerySchema.parse({
     page: 1,
     limit: 50,
@@ -75,35 +77,6 @@ export function parseNoteSearchParams(
     sortBy: orderByLifecycle,
     sortDirection: defaultDirection,
   });
-}
-
-function cookieHeader(values: Awaited<ReturnType<typeof cookies>>): string {
-  return values
-    .getAll()
-    .map(({ name, value }) => `${name}=${value}`)
-    .join("; ");
-}
-
-async function readJson<T>(
-  path: string,
-  parse: (value: unknown) => { success: true; data: T } | { success: false },
-): Promise<ServerReadResult<T>> {
-  const values = await cookies();
-  const cookie = cookieHeader(values);
-  try {
-    const response = await fetch(new URL(path, publicEnvironment.NEXT_PUBLIC_API_URL), {
-      cache: "no-store",
-      headers: cookie.length === 0 ? undefined : { cookie },
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (response.status === 401) return { status: "unauthenticated" };
-    if (response.status === 403 || response.status === 404) return { status: "not-found" };
-    if (!response.ok) return { status: "unavailable" };
-    const parsed = parse(await response.json());
-    return parsed.success ? { status: "ready", data: parsed.data } : { status: "unavailable" };
-  } catch {
-    return { status: "unavailable" };
-  }
 }
 
 function noteSearch(query: NoteListQuery): string {
@@ -119,6 +92,7 @@ function noteSearch(query: NoteListQuery): string {
   if (query.folderId !== undefined && query.folderId !== null)
     params.set("folderId", query.folderId);
   if (query.type !== undefined) params.set("type", query.type);
+  if (query.tagId !== undefined) params.set("tagId", query.tagId);
   if (query.isArchived !== undefined) params.set("isArchived", String(query.isArchived));
   return params.toString();
 }

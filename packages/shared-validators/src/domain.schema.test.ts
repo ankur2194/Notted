@@ -2,19 +2,31 @@ import { describe, expect, it } from "vitest";
 
 import {
   attachmentFilterSchema,
+  bulkTaskSchema,
+  copyNoteSchema,
   createAttachmentIntentSchema,
   createNoteMetadataSchema,
   createProjectSchema,
+  createTagSchema,
   createTaskSchema,
   createUserProfileSchema,
   createWorkspaceSchema,
   noteMetadataFilterSchema,
   projectFilterSchema,
   searchQuerySchema,
-  taskFilterSchema,
+  TAG_DEFAULT_COLOR,
+  tagColorSchema,
+  tagIdsSchema,
+  tagListQuerySchema,
+  tagNameSchema,
+  taskListQuerySchema,
+  taskRecurrenceSchema,
+  taskStatusSchema,
+  taskSummarySchema,
   updateAttachmentIntentSchema,
   updateNoteMetadataSchema,
   updateProjectSchema,
+  updateTagSchema,
   updateTaskSchema,
   updateUserProfileSchema,
   updateWorkspaceSchema,
@@ -27,6 +39,7 @@ const projectId = "d87953d0-d7db-4d69-8f94-dca8bc61ca68";
 const noteId = "4fd034f1-c161-4c52-892b-606456f62390";
 const userId = "e7f9b537-8dd7-4f72-b093-195b79fb57e0";
 const tagId = "0b957ac0-516a-4b39-a4c1-fc67c415488d";
+const taskId = "1f0a3c2e-9b41-4f7c-8f2a-6d5c4b3a2e10";
 
 describe("user profile schemas", () => {
   it("accepts safe profile fields", () => {
@@ -169,6 +182,60 @@ describe("note API schemas", () => {
   });
 });
 
+describe("note copy schema", () => {
+  it("defaults the template flag and tag carry-over, and accepts explicit null placement", () => {
+    expect(copyNoteSchema.parse({})).toEqual({ asTemplate: false, includeTags: true });
+    expect(
+      copyNoteSchema.safeParse({
+        asTemplate: true,
+        title: "Weekly review template",
+        projectId: null,
+        folderId: null,
+        parentId: null,
+        includeTags: false,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects unknown fields such as a forged source link", () => {
+    expect(copyNoteSchema.safeParse({ sourceNoteId: noteId }).success).toBe(false);
+    expect(copyNoteSchema.safeParse({ asTemplate: "true" }).success).toBe(false);
+  });
+});
+
+describe("tag schemas", () => {
+  it("normalizes colors, trims names and applies documented defaults", () => {
+    expect(tagColorSchema.parse("#6b7280")).toBe("#6b7280");
+    expect(tagColorSchema.parse("#FFF000")).toBe("#fff000");
+    expect(tagNameSchema.parse("  Roadmap  ")).toBe("Roadmap");
+    expect(tagNameSchema.safeParse("a".repeat(50)).success).toBe(true);
+    expect(createTagSchema.parse({ name: "Roadmap" })).toEqual({
+      name: "Roadmap",
+      color: TAG_DEFAULT_COLOR,
+    });
+    expect(tagListQuerySchema.parse({ page: "2", limit: "50" })).toMatchObject({
+      page: 2,
+      limit: 50,
+      sortBy: "name",
+      sortDirection: "asc",
+    });
+  });
+
+  it("rejects shorthand colors, empty names, empty updates, unknown fields and duplicate tag ids", () => {
+    expect(tagColorSchema.safeParse("#fff").success).toBe(false);
+    expect(tagColorSchema.safeParse("red").success).toBe(false);
+    expect(tagColorSchema.safeParse("#12345g").success).toBe(false);
+    expect(tagColorSchema.safeParse("").success).toBe(false);
+    expect(tagNameSchema.safeParse("").success).toBe(false);
+    expect(tagNameSchema.safeParse("   ").success).toBe(false);
+    expect(tagNameSchema.safeParse("a".repeat(51)).success).toBe(false);
+    expect(createTagSchema.safeParse({ name: "Roadmap", workspaceId }).success).toBe(false);
+    expect(updateTagSchema.safeParse({}).success).toBe(false);
+    expect(tagIdsSchema.safeParse([tagId]).success).toBe(true);
+    expect(tagIdsSchema.safeParse([tagId, tagId]).success).toBe(false);
+  });
+});
+
 describe("attachment intent schemas", () => {
   it("accepts bounded metadata and supports strict filtering", () => {
     expect(
@@ -268,7 +335,7 @@ describe("search schema", () => {
 });
 
 describe("task schemas", () => {
-  it("accepts standalone task metadata and documented filter coercion", () => {
+  it("accepts standalone task metadata and documented query coercion", () => {
     expect(
       createTaskSchema.safeParse({
         projectId,
@@ -276,15 +343,14 @@ describe("task schemas", () => {
         title: "Review proposal",
         priority: "high",
         assigneeId: userId,
-        dueAt: "2026-08-01T12:00:00Z",
-        position: 0,
+        dueDate: "2026-08-01T12:00:00Z",
+        beforeTaskId: null,
         tagIds: [tagId],
         recurrence: "weekly",
       }).success,
     ).toBe(true);
     expect(
-      taskFilterSchema.parse({
-        workspaceId,
+      taskListQuerySchema.parse({
         isCompleted: "false",
         page: "3",
       }),
@@ -292,29 +358,106 @@ describe("task schemas", () => {
       isCompleted: false,
       page: 3,
       limit: 25,
-      sortBy: "position",
+      grouping: "none",
+      sortBy: "sortOrder",
       sortDirection: "asc",
     });
   });
 
-  it("rejects string body numbers, empty updates, unknown authority and reversed dates", () => {
-    expect(updateTaskSchema.safeParse({}).success).toBe(false);
-    expect(createTaskSchema.safeParse({ title: "Task", position: "0" }).success).toBe(false);
+  it("tracks the database enum spelling and rejects the Part-06 aliases", () => {
+    expect(taskStatusSchema.safeParse("canceled").success).toBe(true);
+    expect(taskStatusSchema.safeParse("cancelled").success).toBe(false);
+    expect(taskRecurrenceSchema.safeParse("none").success).toBe(true);
+    expect(taskRecurrenceSchema.safeParse("custom").success).toBe(true);
+  });
+
+  it("binds custom recurrence to a cron expression in both directions", () => {
+    expect(createTaskSchema.safeParse({ title: "Task", recurrence: "custom" }).success).toBe(false);
     expect(
       createTaskSchema.safeParse({
         title: "Task",
-        position: 0,
-        createdById: userId,
+        recurrence: "custom",
+        recurrenceCron: "0 9 * * 1",
+      }).success,
+    ).toBe(true);
+    expect(
+      updateTaskSchema.safeParse({ recurrence: "weekly", recurrenceCron: "0 9 * * 1" }).success,
+    ).toBe(false);
+    expect(updateTaskSchema.safeParse({ recurrence: "none", recurrenceCron: null }).success).toBe(
+      true,
+    );
+    // A cron with no recurrence would be silently discarded by the service, so
+    // it is rejected at the boundary rather than accepted as a no-op.
+    expect(updateTaskSchema.safeParse({ recurrenceCron: "0 9 * * 1" }).success).toBe(false);
+  });
+
+  it("accepts fractional sort orders from midpoint inserts", () => {
+    expect(
+      taskSummarySchema.safeParse({
+        id: taskId,
+        workspaceId,
+        projectId: null,
+        noteId: null,
+        parentId: null,
+        title: "Task",
+        status: "todo",
+        customStatusId: null,
+        statusLabel: null,
+        priority: "low",
+        assigneeId: null,
+        dueDate: null,
+        completedAt: null,
+        sortOrder: 1.5,
+        recurrence: "none",
+        recurrenceCron: null,
+        tagIds: [],
+        createdAt: "2026-08-01T12:00:00Z",
+        updatedAt: "2026-08-01T12:00:00Z",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects string body numbers, empty updates, unknown authority and reversed dates", () => {
+    expect(updateTaskSchema.safeParse({}).success).toBe(false);
+    // `position` was the Part-06 field name and no longer exists.
+    expect(createTaskSchema.safeParse({ title: "Task", position: 0 }).success).toBe(false);
+    expect(createTaskSchema.safeParse({ title: "Task", createdById: userId }).success).toBe(false);
+    expect(createTaskSchema.safeParse({ workspaceId, title: "Task" }).success).toBe(false);
+    expect(
+      taskListQuerySchema.safeParse({
+        dueFrom: "2026-08-02T00:00:00Z",
+        dueTo: "2026-08-01T00:00:00Z",
       }).success,
     ).toBe(false);
-    expect(createTaskSchema.safeParse({ workspaceId, title: "Task", position: 0 }).success).toBe(
+  });
+
+  it("bounds bulk selections and rejects duplicate identifiers", () => {
+    expect(
+      bulkTaskSchema.safeParse({ taskIds: [taskId], action: { kind: "delete" } }).success,
+    ).toBe(true);
+    expect(
+      bulkTaskSchema.safeParse({ taskIds: [taskId, taskId], action: { kind: "delete" } }).success,
+    ).toBe(false);
+    expect(bulkTaskSchema.safeParse({ taskIds: [], action: { kind: "delete" } }).success).toBe(
       false,
     );
     expect(
-      taskFilterSchema.safeParse({
-        workspaceId,
-        dueFrom: "2026-08-02T00:00:00Z",
-        dueTo: "2026-08-01T00:00:00Z",
+      bulkTaskSchema.safeParse({
+        // Distinct ids, so this exercises the 100-id cap rather than the
+        // duplicate rejection asserted just above. Built as literals because
+        // this package's tsconfig has neither the DOM nor the Node globals.
+        taskIds: Array.from(
+          { length: 101 },
+          (_unused, index) =>
+            `1f0a3c2e-9b41-4f7c-8f2a-6d5c4b3a${index.toString(16).padStart(4, "0")}`,
+        ),
+        action: { kind: "delete" },
+      }).success,
+    ).toBe(false);
+    expect(
+      bulkTaskSchema.safeParse({
+        taskIds: [taskId],
+        action: { kind: "status", status: "cancelled" },
       }).success,
     ).toBe(false);
   });

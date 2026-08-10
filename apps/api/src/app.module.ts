@@ -15,6 +15,8 @@ import { NotificationModule } from "./notifications/notification.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { ShellModule } from "./shell/shell.module";
 import { StorageModule } from "./storage/storage.module";
+import { TagsModule } from "./tags/tags.module";
+import { TasksModule } from "./tasks/tasks.module";
 import { TenantContextModule } from "./tenant/tenant-context.module";
 import { TrpcModule } from "./trpc/trpc.module";
 import { WorkspacesModule } from "./workspaces/workspaces.module";
@@ -38,6 +40,8 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
     NotificationModule,
     NotesModule,
     ProjectsModule,
+    TagsModule,
+    TasksModule,
     TenantContextModule,
     TrpcModule,
     WorkspacesModule,

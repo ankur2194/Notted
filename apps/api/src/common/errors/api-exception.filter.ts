@@ -6,6 +6,10 @@ import {
   type ExceptionFilter,
 } from "@nestjs/common";
 
+import {
+  authorizationDenialToHttpException,
+  AuthorizationDeniedError,
+} from "../../authorization/authorization.errors";
 import { StructuredLogger } from "../logging/structured-logger.service";
 import { getRequestId } from "../request/request-context";
 
@@ -57,7 +61,19 @@ function statusForUnknownException(exception: unknown): number {
 export class ApiExceptionFilter implements ExceptionFilter {
   constructor(private readonly logger: StructuredLogger) {}
 
-  catch(exception: unknown, host: ArgumentsHost): void {
+  catch(rawException: unknown, host: ArgumentsHost): void {
+    /*
+     * A denial raised inside a handler — a service authorizing a nested
+     * resource it only learns about from the request, such as a task list
+     * scoped to a note id — reaches the filter as a plain Error. Translating it
+     * here, with the same function the guard uses, is what keeps it a concealed
+     * 404 instead of a 500 that both leaks "something broke on a resource you
+     * cannot see" and pages an on-call engineer for a working access check.
+     */
+    const exception =
+      rawException instanceof AuthorizationDeniedError
+        ? authorizationDenialToHttpException(rawException)
+        : rawException;
     const context = host.switchToHttp();
     const request = context.getRequest<Request>();
     const response = context.getResponse<Response>();

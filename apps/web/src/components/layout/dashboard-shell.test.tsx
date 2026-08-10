@@ -15,6 +15,8 @@ import {
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  // The sidebar tag filter reads the active tag from the search params.
+  useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("@/lib/shell/requests", () => ({
   loadNotifications: vi.fn().mockResolvedValue({
@@ -49,6 +51,7 @@ const noteNavigation = {
   navigation: { items: [], limit: 500, returned: 0, truncated: false },
   folders: [],
 };
+const tagNavigation = { status: "ready" as const, tags: [], truncated: false };
 
 describe("DashboardShell", () => {
   beforeEach(() => {
@@ -72,6 +75,7 @@ describe("DashboardShell", () => {
       <DashboardShell
         shell={{ ...shell, currentWorkspace: null }}
         noteNavigation={{ status: "no-workspace" }}
+        tagNavigation={{ status: "no-workspace" }}
       >
         <p>Content</p>
       </DashboardShell>,
@@ -82,7 +86,7 @@ describe("DashboardShell", () => {
   it("provides landmarks, permission-aware navigation, placeholders and a mobile focus trap", async () => {
     const user = userEvent.setup();
     render(
-      <DashboardShell shell={shell} noteNavigation={noteNavigation}>
+      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
         <h1>Dashboard content</h1>
       </DashboardShell>,
     );
@@ -108,7 +112,7 @@ describe("DashboardShell", () => {
   it("opens command placeholder with Ctrl+K and closes the user menu with Escape", async () => {
     const user = userEvent.setup();
     render(
-      <DashboardShell shell={shell} noteNavigation={noteNavigation}>
+      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
         <p>Content</p>
       </DashboardShell>,
     );
@@ -153,7 +157,7 @@ describe("DashboardShell", () => {
     });
     const user = userEvent.setup();
     render(
-      <DashboardShell shell={shell} noteNavigation={noteNavigation}>
+      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
         <p>Content</p>
       </DashboardShell>,
     );

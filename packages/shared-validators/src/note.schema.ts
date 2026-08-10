@@ -5,9 +5,13 @@ import {
   isoTimestampSchema,
   paginationQuerySchema,
   sortDirectionSchema,
+  tagIdsSchema,
   uuidSchema,
 } from "./common.schema";
 import { NOTE_DOCUMENT_LIMITS, noteDocumentSchema } from "./document.schema";
+
+// Shared with tasks (Part 47); the rule now lives in `common.schema`.
+export { tagIdsSchema } from "./common.schema";
 
 export {
   NOTE_DOCUMENT_CODE_LANGUAGES,
@@ -55,12 +59,6 @@ export const noteShareMutationPermissionSchema = z.enum(["view", "edit"]);
 const titleSchema = z.string().trim().min(1).max(500);
 const folderNameSchema = z.string().trim().min(1).max(255);
 const versionSchema = z.number().int().min(1).max(2_147_483_647);
-const tagIdsSchema = z
-  .array(uuidSchema)
-  .max(50)
-  .refine((items) => new Set(items).size === items.length, {
-    message: "Tag identifiers must be unique",
-  });
 
 export const createNoteSchema = z
   .object({
@@ -151,6 +149,22 @@ export const moveNoteSchema = z
   })
   .strict();
 export type MoveNoteInput = z.input<typeof moveNoteSchema>;
+
+// One schema serves both directions: `asTemplate: true` is "Save as template",
+// `asTemplate: false` on a template row is "Create from template". There is
+// deliberately no source-link field — the absence of a link is the "no
+// accidental live link between copy and original" guarantee.
+export const copyNoteSchema = z
+  .object({
+    asTemplate: z.boolean().default(false),
+    title: titleSchema.optional(),
+    projectId: uuidSchema.nullable().optional(),
+    folderId: uuidSchema.nullable().optional(),
+    parentId: uuidSchema.nullable().optional(),
+    includeTags: z.boolean().default(true),
+  })
+  .strict();
+export type CopyNoteInput = z.input<typeof copyNoteSchema>;
 
 export const deleteNoteSchema = z.object({ expectedVersion: versionSchema }).strict();
 export const restoreNoteSchema = z.object({ expectedVersion: versionSchema }).strict();

@@ -139,11 +139,22 @@ export function CreateNoteDialog({
               value={type}
               onChange={(event) => setType(event.target.value as NoteType)}
               disabled={pending}
+              aria-describedby="create-note-type-help"
               className="min-h-11 w-full rounded-md border bg-background px-3"
             >
               <option value="document">Document</option>
               <option value="task-list">Task list</option>
             </select>
+            {/*
+             * The type never replaces the editor. Part 47 adds the task list
+             * below the page rather than instead of it, so this help text has
+             * to say "adds", or people will avoid the type expecting to lose
+             * rich text.
+             */}
+            <p id="create-note-type-help" className="text-sm text-muted-foreground">
+              Both types keep the full page editor. A task list adds an ordered task list below the
+              page, and you can switch a note between the two later without losing anything.
+            </p>
           </div>
           <label className="flex min-h-11 items-center gap-2">
             <input

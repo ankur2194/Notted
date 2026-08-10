@@ -83,6 +83,7 @@ export {
   paginationQuerySchema,
   sortDirectionSchema,
   sortSchema,
+  tagIdsSchema,
   uuidSchema,
 } from "./common.schema";
 export type {
@@ -143,6 +144,7 @@ export {
   sanitizeDocumentUrl,
 } from "./document.schema";
 export {
+  copyNoteSchema,
   createFolderSchema,
   createNoteSchema,
   createNoteMetadataSchema,
@@ -188,6 +190,7 @@ export {
   upsertNoteShareSchema,
 } from "./note.schema";
 export type {
+  CopyNoteInput,
   CreateFolderInput,
   CreateNoteInput,
   CreateNoteMetadataInput,
@@ -255,15 +258,54 @@ export type {
   WorkspaceSelectorInput,
 } from "./shell.schema";
 export {
+  createTagSchema,
+  TAG_COLOR_PATTERN,
+  TAG_DEFAULT_COLOR,
+  tagColorSchema,
+  tagCreateResultSchema,
+  tagDeleteResultSchema,
+  tagListQuerySchema,
+  tagNameSchema,
+  tagPageSchema,
+  tagSortFieldSchema,
+  tagSummarySchema,
+  tagUpdateResultSchema,
+  updateTagSchema,
+} from "./tag.schema";
+export type { CreateTagInput, TagListQueryInput, UpdateTagInput } from "./tag.schema";
+export {
+  bulkTaskSchema,
   createTaskSchema,
-  taskFilterSchema,
+  reorderTaskSchema,
+  TASK_BULK_MAX,
+  taskBulkResultSchema,
+  taskCreateResultSchema,
+  taskCronSchema,
+  taskDeleteResultSchema,
+  taskDescriptionSchema,
+  taskDetailSchema,
+  taskGroupingSchema,
+  taskListInputSchema,
+  taskListQuerySchema,
+  taskPageSchema,
   taskPrioritySchema,
   taskRecurrenceSchema,
+  taskReorderResultSchema,
   taskSortFieldSchema,
   taskStatusSchema,
+  taskSummarySchema,
+  taskTitleSchema,
+  taskUpdateResultSchema,
   updateTaskSchema,
 } from "./task.schema";
-export type { CreateTaskInput, TaskFilterInput, UpdateTaskInput } from "./task.schema";
+export type {
+  BulkTaskInput,
+  CreateTaskInput,
+  ReorderTaskInput,
+  TaskListInput,
+  TaskListQueryInput,
+  UpdateTaskInput,
+} from "./task.schema";
 export {
   createWorkspaceSchema,
   acceptWorkspaceInvitationSchema,

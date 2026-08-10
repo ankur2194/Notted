@@ -165,6 +165,13 @@ export interface MoveNoteServiceInput extends NoteSelector, Container {
   readonly beforeNoteId?: string | null;
 }
 
+export interface CopyNoteServiceInput extends NoteSelector, Container {
+  readonly asTemplate: boolean;
+  readonly includeTags: boolean;
+  readonly title?: string;
+  readonly idempotencyKey: string;
+}
+
 export interface VersionedNoteServiceInput extends NoteSelector {
   readonly expectedVersion: number;
 }
@@ -480,6 +487,95 @@ export class NotesService {
       );
       const tagIds = await this.loadTagIds(this.database.db, row.id);
       return Object.freeze({ note: Object.freeze(this.toSummary(row, tagIds)) });
+    });
+  }
+
+  /**
+   * Template copying in both directions: `asTemplate: true` is "Save as
+   * template", `asTemplate: false` on a template row is "Create from
+   * template". The new row copies content by value and stores no reference to
+   * its source — that absence IS the "no accidental live link between copy and
+   * original" guarantee, which is why no source column exists.
+   *
+   * Template permissions and template listings need no new server work:
+   * templates are ordinary notes and reuse the `note.*` actions verbatim, and
+   * `view=templates`, the `isTemplate` filter, and the `tagId` filter already
+   * exist in `listConditions`. The only genuinely new rule — instantiating a
+   * template requires read on the template AND create on the destination — is
+   * exactly what the two authorizations below enforce, so a viewer cannot
+   * instantiate and templates inside restricted projects stay invisible
+   * through the existing `projectVisibility` predicate.
+   */
+  async copy(input: CopyNoteServiceInput): Promise<NoteCreateResult> {
+    await this.authorizeNote(input, "note.read");
+    const operation = await this.authorizeCreateDestination(input, input);
+    return this.authorizationEntry.run(operation, async () => {
+      const noteId = randomUUID();
+      const idempotency = createApiIdempotencyIdentity({
+        actorUserId: input.principal.userId,
+        operation: `note.copy:${input.workspaceId}:${input.noteId}`,
+        key: input.idempotencyKey,
+        payload: {
+          title: input.title ?? null,
+          projectId: input.projectId,
+          folderId: input.folderId,
+          parentId: input.parentId,
+          asTemplate: input.asTemplate,
+          includeTags: input.includeTags,
+        },
+      });
+      const row = await this.database.transaction(
+        async (tx) => {
+          await lockApiIdempotency(tx, idempotency);
+          const replay = await loadApiIdempotency(tx, idempotency);
+          if (replay !== null) {
+            assertIdempotencyPayload(replay, idempotency);
+            return this.readIdempotentNote(tx, replay.resourceId);
+          }
+          const source = await this.readRow(tx, input.noteId);
+          if (source.isDeleted) this.notFound();
+          await this.validateContainer(tx, input, null);
+          await this.lockSiblingGroups(tx, [input]);
+          // Parent placement is rechecked after the sibling-group lock so a
+          // concurrent parent move cannot leave the copy behind.
+          if (input.parentId !== null) await this.validateContainer(tx, input, null);
+          const sortOrder = await this.positionFor(tx, input, null, null);
+          await tx.insert(notes).values(
+            assertWorkspaceInsertValues(
+              {
+                id: noteId,
+                workspaceId: activeWorkspaceId(this.tenantContext),
+                projectId: input.projectId,
+                folderId: input.folderId,
+                parentId: input.parentId,
+                title: input.title ?? source.title,
+                content: source.content as NoteDocument,
+                contentPlain: source.contentPlain ?? "",
+                noteType: source.noteType,
+                isTemplate: input.asTemplate,
+                isPinned: false,
+                isArchived: false,
+                pageSize: source.pageSize,
+                sortOrder,
+                createdById: input.principal.userId,
+                updatedById: input.principal.userId,
+              },
+              this.tenantContext,
+              "note.copy",
+            ),
+          );
+          await this.replaceTags(
+            tx,
+            noteId,
+            input.includeTags ? await this.loadTagIds(tx, input.noteId) : [],
+          );
+          await this.recordMutation(tx, "create", noteId, input);
+          await storeApiIdempotency(tx, idempotency, noteId);
+          return this.readRow(tx, noteId);
+        },
+        { isolationLevel: "read committed" },
+      );
+      return Object.freeze({ note: await this.toDetail(row, { ...input, noteId: row.id }) });
     });
   }
 

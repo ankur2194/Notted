@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import {
+  copyNoteSchema,
   createFolderSchema,
   createNoteSchema,
   deleteFolderSchema,
@@ -125,6 +126,27 @@ function buildNoteSubrouter(notes: NotesService, auth: AuthService) {
             principal: ctx.principal,
             requestId: ctx.requestId,
             ...input.data,
+          });
+        }),
+      ),
+    copy: authenticatedProcedure
+      .input(withData(copyNoteSchema))
+      .output(noteCreateResultSchema)
+      .mutation(({ ctx, input }) =>
+        executeTrpc(async () => {
+          auth.assertTrustedMutationOrigin(ctx.request);
+          return notes.copy({
+            workspaceId: input.workspaceId,
+            noteId: input.noteId,
+            principal: ctx.principal,
+            requestId: ctx.requestId,
+            idempotencyKey: requireIdempotencyKey(ctx.request),
+            asTemplate: input.data.asTemplate,
+            includeTags: input.data.includeTags,
+            title: input.data.title,
+            projectId: input.data.projectId ?? null,
+            folderId: input.data.folderId ?? null,
+            parentId: input.data.parentId ?? null,
           });
         }),
       ),
