@@ -3,8 +3,10 @@ import type {
   IsoTimestamp,
   JsonValue,
   NoteId,
+  Progress,
   ProjectId,
   TagId,
+  TaskStatusId,
   UserId,
   WorkspaceId,
 } from "./common";
@@ -64,6 +66,12 @@ export interface NoteSummary {
   readonly projectId: ProjectId | null;
   readonly folderId: FolderId | null;
   readonly parentId: NoteId | null;
+  /**
+   * Note-board column. The note board reuses `task_statuses` rows as its
+   * column vocabulary, so this is a `TaskStatusId`; `null` is the leading
+   * "No column" bucket.
+   */
+  readonly boardColumnId: TaskStatusId | null;
   readonly title: string;
   readonly type: NoteType;
   readonly pageSize: PageSize;
@@ -73,6 +81,16 @@ export interface NoteSummary {
   readonly isArchived: boolean;
   readonly isDeleted: boolean;
   readonly tagIds: readonly TagId[];
+  /**
+   * Completion in both currencies, never merged: `checklist` counts inline
+   * TipTap `taskItem` nodes (read from the denormalized `notes.checklist_*`
+   * columns), `tasks` counts first-class task rows attached to the note, with
+   * `canceled` tasks excluded from the total exactly as the project rollup does.
+   */
+  readonly progress: {
+    readonly checklist: Progress;
+    readonly tasks: Progress;
+  };
   readonly version: number;
   readonly deletedAt: IsoTimestamp | null;
   readonly createdAt: IsoTimestamp;

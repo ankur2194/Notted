@@ -5,6 +5,7 @@ import type { NoteSummary, TagSummary } from "@notted/shared-types";
 import type { ReactNode } from "react";
 
 import { noteDetailPath } from "@/lib/notes/paths";
+import { combineProgress, progressPercent } from "@/lib/notes/progress";
 
 function updatedLabel(value: string): string {
   const date = new Date(value);
@@ -35,6 +36,12 @@ export function NoteCard({
     const tag = tagsById?.get(tagId);
     return tag === undefined ? [] : [tag];
   });
+  /*
+   * The card shows one number, not two: a reader scanning a grid wants "how
+   * much of this note is left", and the split between an inline checklist item
+   * and a task row is a distinction the note detail header can afford to make.
+   */
+  const progress = combineProgress(note.progress.checklist, note.progress.tasks);
   const location =
     note.projectId !== null
       ? `Project: ${projectName ?? "Project note"}`
@@ -90,6 +97,32 @@ export function NoteCard({
           </span>
         ) : null}
       </div>
+      {/*
+       * A note with nothing to count renders no bar at all. An empty track on
+       * every plain document would read as "0% done" rather than "not
+       * applicable", and would grow every card in the grid for nothing.
+       *
+       * The counts are stated in words beside the bar: the fill is decoration,
+       * and colour alone carries neither the ratio nor anything to a screen
+       * reader (WCAG 1.4.1).
+       */}
+      {progress.total === 0 ? null : (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">
+            {progress.done}/{progress.total} done
+          </p>
+          <div
+            className="h-2 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-label={`Checklist and task progress for ${note.title}`}
+            aria-valuemin={0}
+            aria-valuemax={progress.total}
+            aria-valuenow={progress.done}
+          >
+            <div className="h-full bg-primary" style={{ width: `${progressPercent(progress)}%` }} />
+          </div>
+        </div>
+      )}
       {/*
        * The tag colour is a dot, never the chip background: a user-chosen
        * colour behind the name cannot be held to 4.5:1, and the name itself —

@@ -1069,6 +1069,34 @@ export function extractNoteContentPlain(document: unknown): string {
   return blocks.join("\n");
 }
 
+/**
+ * Count the `taskItem` nodes in a document and how many are checked.
+ *
+ * Inline checklists are validated document nodes, never rows, so this walk is
+ * the only place the numbers can come from. It recurses through every node's
+ * `content`, so a task list nested inside another task item counts too. A
+ * `taskItem` whose `checked` attribute is missing or non-boolean counts toward
+ * `total` and not toward `done` — the same "unchecked unless proven checked"
+ * reading the editor gives it.
+ */
+export function countChecklist(document: unknown): {
+  readonly done: number;
+  readonly total: number;
+} {
+  let done = 0;
+  let total = 0;
+  const visit = (node: unknown): void => {
+    if (!isRecord(node)) return;
+    if (node.type === "taskItem") {
+      total += 1;
+      if (isRecord(node.attrs) && node.attrs.checked === true) done += 1;
+    }
+    if (Array.isArray(node.content)) for (const child of node.content) visit(child);
+  };
+  visit(document);
+  return { done, total };
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")

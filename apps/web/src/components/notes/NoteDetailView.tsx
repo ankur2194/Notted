@@ -5,10 +5,12 @@ import { NoteEditorSurface } from "./NoteEditorSurface";
 import { PageContainer } from "./PageContainer";
 import { ShareModal } from "./ShareModal";
 
+import type { TaskViewer } from "@/components/tasks/TaskListView";
 import type { NoteDetail, NoteNavigationItem, TaskPage } from "@notted/shared-types";
 
 import { TaskListView } from "@/components/tasks/TaskListView";
 import { noteCollectionPath, noteDetailPath, projectNotePath } from "@/lib/notes/paths";
+import { combineProgress, progressPercent } from "@/lib/notes/progress";
 
 export function NoteDetailView({
   note,
@@ -17,6 +19,7 @@ export function NoteDetailView({
   folderName,
   ancestors = [],
   initialTasks = null,
+  viewer = null,
 }: {
   readonly note: NoteDetail;
   readonly workspaceName: string;
@@ -25,6 +28,12 @@ export function NoteDetailView({
   readonly ancestors?: readonly NoteNavigationItem[];
   /** Server-rendered first task page, present only for a task-list note. */
   readonly initialTasks?: TaskPage | null;
+  /**
+   * The current member and their workspace role, forwarded to the task list so
+   * it can hide the controls an editor is always denied (Part 48.6). Omitted
+   * leaves the task rows gated on note-level edit permission alone.
+   */
+  readonly viewer?: TaskViewer | null;
 }) {
   const internalPath =
     note.projectId === null
@@ -36,6 +45,13 @@ export function NoteDetailView({
   const readOnlyReason = note.isDeleted
     ? "This note is in the trash. Restore it before editing."
     : "You can read this note, but you do not have permission to edit it.";
+  /*
+   * Part 48.4. `NoteCard` shows only the combined bar, because a card has room
+   * for one number; the header can afford the split, so it names both halves in
+   * words and keeps one bar over their sum. A note with neither an inline
+   * checklist nor a task row renders nothing rather than an empty 0/0 bar.
+   */
+  const progress = combineProgress(note.progress.checklist, note.progress.tasks);
   return (
     <article className="mx-auto max-w-4xl space-y-6">
       {/*
@@ -136,6 +152,28 @@ export function NoteDetailView({
          * value: this header is server-rendered, so a badge here would still
          * claim the old size after a switch until the page was reloaded.
          */}
+        {progress.total === 0 ? null : (
+          <div className="space-y-1">
+            <p className="text-sm text-muted-foreground">
+              {progress.done}/{progress.total} done · {note.progress.checklist.done}/
+              {note.progress.checklist.total} checklist items · {note.progress.tasks.done}/
+              {note.progress.tasks.total} tasks
+            </p>
+            <div
+              className="h-2 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-label={`Checklist and task progress for ${note.title}`}
+              aria-valuemin={0}
+              aria-valuemax={progress.total}
+              aria-valuenow={progress.done}
+            >
+              <div
+                className="h-full bg-primary"
+                style={{ width: `${progressPercent(progress)}%` }}
+              />
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2 text-xs">
           {note.isPinned ? <span className="rounded-full bg-muted px-2 py-1">Pinned</span> : null}
           {note.isTemplate ? (
@@ -199,6 +237,7 @@ export function NoteDetailView({
             projectId={note.projectId}
             initialTasks={initialTasks}
             canEdit={canEdit}
+            viewer={viewer}
           />
         </section>
       ) : null}

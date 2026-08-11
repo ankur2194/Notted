@@ -45,9 +45,11 @@ describe("note tree helpers", () => {
       ...note("30000000-0000-4000-8000-000000000002", null, 1),
       workspaceId,
       location: "workspace-root" as const,
+      boardColumnId: null,
       pageSize: "a4" as const,
       isDeleted: false,
       tagIds: [],
+      progress: { checklist: { done: 0, total: 0 }, tasks: { done: 0, total: 0 } },
       deletedAt: null,
       createdAt: "2026-08-01T00:00:00.000Z",
     } satisfies NoteSummary;

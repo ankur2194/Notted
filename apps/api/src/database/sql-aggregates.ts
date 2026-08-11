@@ -1,11 +1,16 @@
 import { sql, type Column, type ColumnBaseConfig, type SQL } from "drizzle-orm";
 
+import { tasks } from "./schema";
+
 /**
  * A column whose driver decoder produces a `Date` (`timestamp`, `timestamptz`,
  * and `date` columns in `date` mode). Narrowing the helper below to this type
  * keeps `maxTimestamp(notes.title)` a compile error.
  */
 type DateColumn = Column<ColumnBaseConfig<"date", string>>;
+
+/** Narrows `checklistSum` to integer columns, so summing a title will not compile. */
+type IntegerColumn = Column<ColumnBaseConfig<"number", string>>;
 
 /**
  * `max(column)` over a timestamp column, decoded to a real `Date`.
@@ -29,4 +34,35 @@ type DateColumn = Column<ColumnBaseConfig<"date", string>>;
  */
 export function maxTimestamp(column: DateColumn): SQL<Date | null> {
   return sql`max(${column})`.mapWith(column) as SQL<Date | null>;
+}
+
+/**
+ * The two halves of "task progress", defined ONCE.
+ *
+ * A note's progress bar and a project's rollup have to agree, and the only way
+ * to guarantee that is for both to select the same expressions. `done` counts
+ * the built-in `done` status — a task carrying a custom status keeps its
+ * built-in one, so a board column named "Shipped" never silently redefines
+ * completion. `canceled` tasks leave the denominator entirely: abandoned work
+ * should not make a project look permanently unfinished.
+ *
+ * `cast(... as integer)` because PostgreSQL `count(*)` is `bigint`, which the
+ * driver hands back as a string.
+ */
+export function taskDoneCount(): SQL<number> {
+  return sql<number>`cast(count(*) filter (where ${tasks.status} = 'done') as integer)`;
+}
+
+export function taskOpenTotalCount(): SQL<number> {
+  return sql<number>`cast(count(*) filter (where ${tasks.status} <> 'canceled') as integer)`;
+}
+
+/**
+ * `sum()` over the denormalized inline-checklist counters, restricted to the
+ * rows `filter` accepts. `0` for a project with no matching notes: `sum` of no
+ * rows is NULL, and a NULL progress numerator is a rendering bug waiting to
+ * happen.
+ */
+export function checklistSum(column: IntegerColumn, filter: SQL): SQL<number> {
+  return sql<number>`cast(coalesce(sum(${column}) filter (where ${filter}), 0) as integer)`;
 }

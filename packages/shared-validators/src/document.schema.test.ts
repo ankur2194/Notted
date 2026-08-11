@@ -14,6 +14,7 @@ import {
   NOTE_DOCUMENT_PAGE_BREAK_CLASS,
   NOTE_DOCUMENT_SCHEMA_VERSION,
   NoteDocumentMigrationError,
+  countChecklist,
   extractNoteContentPlain,
   migrateNoteDocument,
   noteDocumentAttachmentAttrs,
@@ -2008,5 +2009,86 @@ describe("Part 44 generic attachment contract", () => {
     // removing, narrowing, or re-typing something that already exists.
     expect(NOTE_DOCUMENT_SCHEMA_VERSION).toBe(1);
     expect(NOTE_DOCUMENT_NODE_TYPES).toContain("attachment");
+  });
+});
+
+describe("Part 48 checklist counting", () => {
+  const taskItem = (checked: unknown, content: readonly unknown[] = []) => ({
+    type: "taskItem",
+    ...(checked === undefined ? {} : { attrs: { checked } }),
+    content: [{ type: "paragraph", content: [{ type: "text", text: "Item" }] }, ...content],
+  });
+
+  it("counts nothing in a document with no task items", () => {
+    expect(countChecklist({ type: "doc", content: [] })).toEqual({ done: 0, total: 0 });
+    expect(
+      countChecklist({
+        type: "doc",
+        content: [
+          {
+            type: "bulletList",
+            content: [{ type: "listItem", content: [{ type: "paragraph" }] }],
+          },
+        ],
+      }),
+    ).toEqual({ done: 0, total: 0 });
+  });
+
+  it("counts checked items against the total", () => {
+    expect(
+      countChecklist({
+        type: "doc",
+        content: [{ type: "taskList", content: [taskItem(true), taskItem(false), taskItem(true)] }],
+      }),
+    ).toEqual({ done: 2, total: 3 });
+  });
+
+  /**
+   * A nested list is the case a flat `content[0].content` scan would silently
+   * under-report, and the editor allows it — a task item may contain another
+   * task list.
+   */
+  it("counts task items nested inside another task item", () => {
+    expect(
+      countChecklist({
+        type: "doc",
+        content: [
+          {
+            type: "taskList",
+            content: [
+              taskItem(false, [{ type: "taskList", content: [taskItem(true), taskItem(false)] }]),
+              taskItem(true),
+            ],
+          },
+        ],
+      }),
+    ).toEqual({ done: 2, total: 4 });
+  });
+
+  it("treats a missing or non-boolean checked attribute as unchecked, not as absent", () => {
+    expect(
+      countChecklist({
+        type: "doc",
+        content: [
+          { type: "taskList", content: [taskItem(undefined), taskItem("true"), taskItem(1)] },
+        ],
+      }),
+    ).toEqual({ done: 0, total: 3 });
+  });
+
+  it("survives values that are not documents at all", () => {
+    for (const value of [null, undefined, 42, "doc", []]) {
+      expect(countChecklist(value)).toEqual({ done: 0, total: 0 });
+    }
+  });
+
+  /** The projection the notes service stores must match the document it stored. */
+  it("agrees with the plain-text projection about which document has a checklist", () => {
+    const document = {
+      type: "doc",
+      content: [{ type: "taskList", content: [taskItem(true), taskItem(false)] }],
+    };
+    expect(extractNoteContentPlain(document)).toBe("Item\nItem");
+    expect(countChecklist(document)).toEqual({ done: 1, total: 2 });
   });
 });

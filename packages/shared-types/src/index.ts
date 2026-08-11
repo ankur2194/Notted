@@ -59,6 +59,7 @@ export type {
   Paginated,
   PaginationMeta,
   PaginationQuery,
+  Progress,
   ProjectId,
   RequestId,
   Sort,
@@ -148,8 +149,10 @@ export type {
   TagSummary,
   TagUpdateResult,
 } from "./tag";
-export { TASK_API_PATHS } from "./task";
+export { TASK_API_PATHS, TASK_STATUS_API_PATHS } from "./task";
 export type {
+  CustomTaskStatus,
+  CustomTaskStatusList,
   TaskBulkResult,
   TaskBulkSkip,
   TaskBulkSkipReason,
@@ -164,6 +167,8 @@ export type {
   TaskReorderResult,
   TaskSortField,
   TaskStatus,
+  TaskStatusDeleteResult,
+  TaskStatusMutationResult,
   TaskSummary,
   TaskUpdateResult,
 } from "./task";

@@ -14,6 +14,10 @@ const mocks = vi.hoisted(() => ({
   reorderTask: vi.fn(),
   deleteTask: vi.fn(),
   bulkUpdateTasks: vi.fn(),
+  requestTaskStatuses: vi.fn(),
+  createTaskStatus: vi.fn(),
+  updateTaskStatus: vi.fn(),
+  deleteTaskStatus: vi.fn(),
   refresh: vi.fn(),
   requestTagPage: vi.fn(),
   fetchWorkspaceMemberDirectory: vi.fn(),
@@ -27,6 +31,10 @@ vi.mock("@/lib/tasks/requests", () => ({
   reorderTask: mocks.reorderTask,
   deleteTask: mocks.deleteTask,
   bulkUpdateTasks: mocks.bulkUpdateTasks,
+  requestTaskStatuses: mocks.requestTaskStatuses,
+  createTaskStatus: mocks.createTaskStatus,
+  updateTaskStatus: mocks.updateTaskStatus,
+  deleteTaskStatus: mocks.deleteTaskStatus,
 }));
 vi.mock("@/lib/tags/requests", () => ({ requestTagPage: mocks.requestTagPage }));
 vi.mock("@/lib/notes/member-directory", () => ({
@@ -34,6 +42,7 @@ vi.mock("@/lib/notes/member-directory", () => ({
 }));
 
 const workspaceId = "40000000-0000-4000-8000-000000000001";
+const creatorId = "40000000-0000-4000-8000-0000000000c1";
 const noteId = "40000000-0000-4000-8000-000000000002";
 
 function task(id: string, title: string, sortOrder: number): TaskSummary {
@@ -55,6 +64,7 @@ function task(id: string, title: string, sortOrder: number): TaskSummary {
     recurrence: "none",
     recurrenceCron: null,
     tagIds: [],
+    createdById: creatorId,
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
   };

@@ -5,10 +5,14 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { CreateTaskForm } from "./CreateTaskForm";
+import { TaskBoard } from "./TaskBoard";
+import { TaskCalendar } from "./TaskCalendar";
 import { TaskRow } from "./TaskRow";
 import { TaskSortableList } from "./TaskSortableList";
 
+import type { TaskMovement } from "./TaskRow";
 import type { ApiRequestFailureKind } from "@/lib/api/request-json";
+import type { TaskViewPreference } from "@/lib/tasks/view-preference";
 import type {
   TagListQuery,
   TagSummary,
@@ -17,8 +21,10 @@ import type {
   TaskPage,
   TaskPriority,
   TaskSummary,
+  WorkspaceRole,
 } from "@notted/shared-types";
 import type { BulkTaskInput, UpdateTaskInput } from "@notted/shared-validators";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +49,7 @@ import {
   requestTaskPage,
   updateTask,
 } from "@/lib/tasks/requests";
+import { readTaskViewPreference, writeTaskViewPreference } from "@/lib/tasks/view-preference";
 
 /**
  * Every selected task plus every descendant of one that is on this page.
@@ -90,6 +97,12 @@ const GROUPINGS: readonly { readonly value: TaskGrouping; readonly label: string
   { value: "dueDate", label: "Due date" },
 ];
 
+const VIEWS: readonly { readonly value: TaskViewPreference; readonly label: string }[] = [
+  { value: "list", label: "List" },
+  { value: "board", label: "Board" },
+  { value: "calendar", label: "Calendar" },
+];
+
 const BULK_PRIORITIES: readonly { readonly value: TaskPriority; readonly label: string }[] = [
   { value: "low", label: "Low" },
   { value: "medium", label: "Medium" },
@@ -127,6 +140,11 @@ function optimisticTask(task: TaskSummary, input: UpdateTaskInput, at: string): 
     ...task,
     title: input.title ?? task.title,
     status: input.status ?? task.status,
+    customStatusId: input.customStatusId === undefined ? task.customStatusId : input.customStatusId,
+    // The board already shows the destination column's own heading, so the row
+    // label is simply dropped until the server answers with the real one rather
+    // than guessed at here.
+    statusLabel: input.customStatusId === undefined ? task.statusLabel : null,
     completedAt:
       input.status === undefined
         ? task.completedAt
@@ -161,15 +179,29 @@ function applyBulk(task: TaskSummary, action: BulkTaskInput["action"], at: strin
   }
 }
 
+/**
+ * Who is looking, for affordance gating only.
+ *
+ * `null` means the surface could not establish a role; the row controls then
+ * fall back to `canEdit` alone and the backend policy refuses whatever it must,
+ * exactly as before this prop existed.
+ */
+export interface TaskViewer {
+  readonly userId: string;
+  readonly role: WorkspaceRole;
+}
+
 export function TaskListView({
   workspaceId,
   noteId,
   projectId,
   initialTasks,
   canEdit,
+  viewer = null,
 }: {
   readonly workspaceId: string;
-  readonly noteId: string;
+  /** The note these tasks belong to, or `null` on the workspace-wide task page. */
+  readonly noteId: string | null;
   /**
    * The note's own project, or `null` at the workspace root. Load-bearing on
    * create: the server requires `note.projectId === task.projectId`, so
@@ -178,10 +210,12 @@ export function TaskListView({
   readonly projectId: string | null;
   readonly initialTasks: TaskPage | null;
   readonly canEdit: boolean;
+  readonly viewer?: TaskViewer | null;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [grouping, setGrouping] = useState<TaskGrouping>("none");
+  const [view, setView] = useState<TaskViewPreference>("list");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
@@ -197,6 +231,18 @@ export function TaskListView({
     return () => clearInterval(timer);
   }, []);
 
+  // Read after mount, never during render: the server has no storage, so a
+  // stored preference used as the initial state would hydrate a different view
+  // than the markup it is replacing.
+  useEffect(() => {
+    setView(readTaskViewPreference(window.localStorage, workspaceId));
+  }, [workspaceId]);
+
+  function selectView(next: TaskViewPreference): void {
+    setView(next);
+    writeTaskViewPreference(window.localStorage, workspaceId, next);
+  }
+
   /*
    * Server grouping stays `none` and the client groups locally: regrouping is a
    * pure repartition of rows already in hand, so making it a query parameter
@@ -206,7 +252,9 @@ export function TaskListView({
     () => ({
       page: 1,
       limit: 100,
-      noteId,
+      // Omitted, never sent empty, on the workspace-wide page: the query
+      // contract accepts a uuid or nothing at all.
+      ...(noteId === null ? {} : { noteId }),
       grouping: "none",
       sortBy: "sortOrder",
       sortDirection: "asc",
@@ -302,6 +350,9 @@ export function TaskListView({
       recurrence: "none",
       recurrenceCron: null,
       tagIds: [],
+      // The creator is whoever is looking; an unknown viewer leaves it empty,
+      // which only ever widens the row gating below to `canEdit` alone.
+      createdById: viewer?.userId ?? "",
       createdAt: at,
       updatedAt: at,
     };
@@ -379,14 +430,21 @@ export function TaskListView({
     task: TaskSummary,
     beforeTaskId: string | null,
     position: number,
+    total?: number,
   ): Promise<void> {
     if (page === undefined || operationPending) return;
     const snapshot = { ...page, items: [...page.items] };
     const others = page.items.filter((item) => item.id !== task.id);
+    // Derived from the anchor rather than from `position`, because a board
+    // column reports a position within its own column while this projection is
+    // the whole page. The anchor is the one value both surfaces agree on.
+    const anchorIndex =
+      beforeTaskId === null ? -1 : others.findIndex((item) => item.id === beforeTaskId);
+    const insertAt = anchorIndex === -1 ? others.length : anchorIndex;
     markPending(task.id, true);
     setPage({
       ...page,
-      items: [...others.slice(0, position - 1), task, ...others.slice(position - 1)],
+      items: [...others.slice(0, insertAt), task, ...others.slice(insertAt)],
     });
     setStatus(`Moving ${task.title}…`);
     // Deliberately no `noteId`/`projectId`/`parentId`: the server reads ANY
@@ -401,7 +459,7 @@ export function TaskListView({
       setStatus(failureMessage("The move", result.kind, "order"));
       return;
     }
-    setStatus(`Moved ${task.title} to position ${position} of ${snapshot.items.length}.`);
+    setStatus(`Moved ${task.title} to position ${position} of ${total ?? snapshot.items.length}.`);
     await reconcile();
   }
 
@@ -487,6 +545,52 @@ export function TaskListView({
   const cascadedCount = deletionScope(page.items, selectedIds).size - selectedCount;
   const orderable = grouping === "none" && page.page === 1 && !page.hasMore;
   const dragDisabled = !canEdit || operationPending || !orderable;
+
+  /*
+   * Part 48.6. These mirror `authorization-policy.service.ts`: an editor may
+   * change only the tasks they created, is denied `task.delete` outright, and
+   * can never clear an assignee because that branch requires an active target.
+   * The server stays authoritative — this only stops offering doomed controls.
+   */
+  const canEditTask = (task: TaskSummary): boolean =>
+    canEdit &&
+    (viewer === null ||
+      (viewer.role !== "viewer" &&
+        (viewer.role !== "editor" || task.createdById === viewer.userId)));
+  const canDeleteTasks =
+    canEdit && (viewer === null || viewer.role === "owner" || viewer.role === "admin");
+  const canUnassign = viewer === null || viewer.role !== "editor";
+
+  function renderTask(task: TaskSummary, movement: TaskMovement): ReactNode {
+    return (
+      <TaskRow
+        task={task}
+        members={members}
+        tags={tags}
+        now={now}
+        pending={pendingIds.has(task.id)}
+        // Every mutation returns early while another is in flight, so leaving
+        // other rows enabled would let a click flip a control and snap back
+        // with nothing requested and nothing announced.
+        disabled={!canEditTask(task) || operationPending}
+        canDelete={canDeleteTasks}
+        canUnassign={canUnassign}
+        selected={selectedIds.has(task.id)}
+        onSelectedChange={(next) =>
+          setSelectedIds((current) => {
+            const updated = new Set(current);
+            if (next) updated.add(task.id);
+            else updated.delete(task.id);
+            return updated;
+          })
+        }
+        onUpdate={(target, input) => void update(target, input)}
+        onDelete={(target) => void remove(target)}
+        movement={movement}
+      />
+    );
+  }
+
   // Only a structural reason is explained. A momentary pending state disables
   // the controls too, but announcing it would be noise on every keystroke.
   const dragDisabledReason = !canEdit
@@ -511,26 +615,56 @@ export function TaskListView({
           until it is available.
         </p>
       ) : null}
+      {/* Stated once for the whole view rather than repeated on every row. */}
+      {canEdit && viewer?.role === "editor" ? (
+        <p className="rounded-md border bg-muted/30 p-3 text-sm" role="note">
+          As an editor you can change only the tasks you created, cannot delete tasks, and cannot
+          return an assigned task to “Unassigned”. Backend authorization remains authoritative.
+        </p>
+      ) : null}
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <label className="text-sm font-medium" htmlFor="task-grouping">
-            Group tasks by
-          </label>
-          <select
-            id="task-grouping"
-            className="min-h-11 rounded-md border bg-background px-3 text-sm"
-            value={grouping}
-            onChange={(event) => setGrouping(event.target.value as TaskGrouping)}
-          >
-            {GROUPINGS.map((entry) => (
-              <option key={entry.value} value={entry.value}>
-                {entry.label}
-              </option>
-            ))}
-          </select>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          {view === "list" ? (
+            <div className="space-y-1">
+              <label className="text-sm font-medium" htmlFor="task-grouping">
+                Group tasks by
+              </label>
+              <select
+                id="task-grouping"
+                className="min-h-11 rounded-md border bg-background px-3 text-sm"
+                value={grouping}
+                onChange={(event) => setGrouping(event.target.value as TaskGrouping)}
+              >
+                {GROUPINGS.map((entry) => (
+                  <option key={entry.value} value={entry.value}>
+                    {entry.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          {canEdit ? <CreateTaskForm disabled={operationPending} onCreate={create} /> : null}
         </div>
-        {canEdit ? <CreateTaskForm disabled={operationPending} onCreate={create} /> : null}
+        {/*
+         * Switching view repartitions rows already in hand: all three read the
+         * one `taskQueryKeys.list` entry above, so no view change costs a
+         * request and every optimistic edit is visible in all of them.
+         */}
+        <div className="flex rounded-md border p-1" role="group" aria-label="Task view">
+          {VIEWS.map((entry) => (
+            <Button
+              key={entry.value}
+              type="button"
+              size="sm"
+              variant={view === entry.value ? "secondary" : "ghost"}
+              aria-pressed={view === entry.value}
+              onClick={() => selectView(entry.value)}
+            >
+              {entry.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {/* One live region for the whole list: every optimistic result, failure
@@ -545,7 +679,7 @@ export function TaskListView({
         {status}
       </p>
 
-      {page.items.length === 0 ? (
+      {page.items.length === 0 && view === "list" ? (
         <section className="rounded-xl border border-dashed p-6 text-center">
           <h3 className="font-semibold">No tasks yet</h3>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -556,7 +690,7 @@ export function TaskListView({
         </section>
       ) : (
         <>
-          {canEdit ? (
+          {canEdit && view !== "calendar" && page.items.length > 0 ? (
             <div className="space-y-2">
               <p className="text-sm">
                 {selectedCount} of {page.items.length} tasks selected
@@ -631,89 +765,101 @@ export function TaskListView({
                 >
                   Apply priority
                 </Button>
-                <Dialog
-                  open={deleteOpen}
-                  onOpenChange={(open) => !operationPending && setDeleteOpen(open)}
-                >
-                  <DialogTrigger asChild>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="destructive"
-                      disabled={operationPending || selectedCount === 0}
-                    >
-                      Delete selected
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>
-                        Delete {selectedCount} selected {selectedCount === 1 ? "task" : "tasks"}?
-                      </DialogTitle>
-                      <DialogDescription>
-                        {cascadedCount === 0
-                          ? "This cannot be undone. Deleted tasks are removed outright; there is no task trash to restore from."
-                          : `This also deletes at least ${cascadedCount} subtask${
-                              cascadedCount === 1 ? "" : "s"
-                            } beneath the selection, for at least ${
-                              selectedCount + cascadedCount
-                            } tasks in total. It cannot be undone, and there is no task trash to restore from.`}
-                      </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                      <DialogClose asChild>
-                        <Button variant="outline" disabled={operationPending}>
-                          Cancel
-                        </Button>
-                      </DialogClose>
+                {/* Editors are denied `task.delete` outright, so the batch
+                    could only ever fail for them. */}
+                {canDeleteTasks ? (
+                  <Dialog
+                    open={deleteOpen}
+                    onOpenChange={(open) => !operationPending && setDeleteOpen(open)}
+                  >
+                    <DialogTrigger asChild>
                       <Button
+                        type="button"
+                        size="sm"
                         variant="destructive"
-                        disabled={operationPending}
-                        onClick={() => {
-                          setDeleteOpen(false);
-                          void bulk({ kind: "delete" }, "Delete selected");
-                        }}
+                        disabled={operationPending || selectedCount === 0}
                       >
-                        Delete
+                        Delete selected
                       </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>
+                          Delete {selectedCount} selected {selectedCount === 1 ? "task" : "tasks"}?
+                        </DialogTitle>
+                        <DialogDescription>
+                          {cascadedCount === 0
+                            ? "This cannot be undone. Deleted tasks are removed outright; there is no task trash to restore from."
+                            : `This also deletes at least ${cascadedCount} subtask${
+                                cascadedCount === 1 ? "" : "s"
+                              } beneath the selection, for at least ${
+                                selectedCount + cascadedCount
+                              } tasks in total. It cannot be undone, and there is no task trash to restore from.`}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <DialogFooter>
+                        <DialogClose asChild>
+                          <Button variant="outline" disabled={operationPending}>
+                            Cancel
+                          </Button>
+                        </DialogClose>
+                        <Button
+                          variant="destructive"
+                          disabled={operationPending}
+                          onClick={() => {
+                            setDeleteOpen(false);
+                            void bulk({ kind: "delete" }, "Delete selected");
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                ) : null}
               </div>
             </div>
           ) : null}
-          <TaskSortableList
-            groups={groups}
-            dragDisabled={dragDisabled}
-            dragDisabledReason={dragDisabledReason}
-            idPrefix="tasks"
-            onReorder={(task, beforeTaskId, position) => void reorder(task, beforeTaskId, position)}
-            renderTask={(task, movement) => (
-              <TaskRow
-                task={task}
-                members={members}
-                tags={tags}
-                now={now}
-                pending={pendingIds.has(task.id)}
-                // Every mutation returns early while another is in flight, so
-                // leaving other rows enabled would let a click flip a control
-                // and snap back with nothing requested and nothing announced.
-                disabled={!canEdit || operationPending}
-                selected={selectedIds.has(task.id)}
-                onSelectedChange={(next) =>
-                  setSelectedIds((current) => {
-                    const updated = new Set(current);
-                    if (next) updated.add(task.id);
-                    else updated.delete(task.id);
-                    return updated;
-                  })
-                }
-                onUpdate={(target, input) => void update(target, input)}
-                onDelete={(target) => void remove(target)}
-                movement={movement}
-              />
-            )}
-          />
+          {view === "list" ? (
+            <TaskSortableList
+              groups={groups}
+              dragDisabled={dragDisabled}
+              dragDisabledReason={dragDisabledReason}
+              idPrefix="tasks"
+              onReorder={(task, beforeTaskId, position) =>
+                void reorder(task, beforeTaskId, position)
+              }
+              renderTask={renderTask}
+            />
+          ) : view === "board" ? (
+            <TaskBoard
+              workspaceId={workspaceId}
+              projectId={projectId}
+              tasks={page.items}
+              canEdit={canEdit}
+              canManageColumns={viewer?.role === "owner" || viewer?.role === "admin"}
+              hasMore={page.hasMore}
+              // Grouping is a list-only control, so the board's guard is the
+              // rest of the same condition: the complete first page in task
+              // order.
+              orderable={page.page === 1 && !page.hasMore}
+              operationPending={operationPending}
+              onUpdate={(target, input) => void update(target, input)}
+              onReorder={(task, beforeTaskId, position, total) =>
+                void reorder(task, beforeTaskId, position, total)
+              }
+              renderTask={renderTask}
+            />
+          ) : (
+            <TaskCalendar
+              workspaceId={workspaceId}
+              noteId={noteId}
+              tasks={page.items}
+              hasMore={page.hasMore}
+              now={now}
+              onNotice={setStatus}
+            />
+          )}
         </>
       )}
     </div>

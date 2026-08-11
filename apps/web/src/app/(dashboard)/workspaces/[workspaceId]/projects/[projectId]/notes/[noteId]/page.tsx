@@ -82,6 +82,7 @@ export default async function ProjectNotePage({
       projectName={project.data.name}
       ancestors={ancestors}
       initialTasks={tasks?.status === "ready" ? tasks.data : null}
+      viewer={{ userId: note.data.currentActorId, role: workspace.data.currentUserRole }}
     />
   );
 }

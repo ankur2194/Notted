@@ -2,12 +2,16 @@ import { FileText, FolderKanban, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 import { NoteBrowser } from "@/components/notes/NoteBrowser";
+import { MyTasksWidget } from "@/components/tasks/MyTasksWidget";
 import { getServerFolders, getServerNoteList } from "@/lib/notes/server-notes";
 import { getServerShell } from "@/lib/shell/server-shell";
 
 export default async function DashboardPage() {
   const shell = await getServerShell();
   const current = shell.status === "ready" ? shell.data.currentWorkspace : null;
+  // Read only once a workspace is actually selected: with no tenant to scope a
+  // task query to there is nobody to be the assignee either.
+  const viewerId = shell.status === "ready" && current !== null ? shell.data.user.id : null;
   const recent =
     current === null ? null : await getServerNoteList(current.workspaceId, {}, { view: "recent" });
   const folders = current === null ? null : await getServerFolders(current.workspaceId);
@@ -26,6 +30,20 @@ export default async function DashboardPage() {
           appear below.
         </p>
       </section>
+
+      {/*
+       * Mounted only once there is a workspace. The widget guards the same
+       * case itself, but a client component still needs the shell's
+       * `ReactQueryProvider` above it to run its hooks at all, so there is no
+       * value in mounting one that can only render nothing.
+       */}
+      {current === null ? null : (
+        <MyTasksWidget
+          workspaceId={current.workspaceId}
+          assigneeId={viewerId}
+          canEdit={current.role !== "viewer"}
+        />
+      )}
 
       <section aria-labelledby="workspace-content-heading">
         <div className="flex items-end justify-between gap-4">

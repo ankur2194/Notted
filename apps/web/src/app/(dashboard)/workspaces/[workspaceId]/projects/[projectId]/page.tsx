@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { NoteBrowser } from "@/components/notes/NoteBrowser";
 import { formatProjectDate } from "@/components/projects/ProjectCard";
 import { ProjectLifecycleActions } from "@/components/projects/ProjectLifecycleActions";
+import { progressPercent } from "@/lib/notes/progress";
 import { getServerFolders, getServerNoteList } from "@/lib/notes/server-notes";
 import { projectCollectionPath, projectDetailPath } from "@/lib/projects/paths";
 import { getServerProjectDetail } from "@/lib/projects/server-projects";
@@ -60,10 +61,16 @@ export default async function ProjectDetailPage({
   const canManage =
     workspaceResult.data.currentUserRole === "owner" ||
     workspaceResult.data.currentUserRole === "admin";
-  const percent =
-    project.taskProgress.total === 0
-      ? 0
-      : Math.round((project.taskProgress.completed / project.taskProgress.total) * 100);
+  /*
+   * The counts arrive already combined by the server rollup, so this only
+   * converts them. It shares `progressPercent` with the note card rather than
+   * rounding inline, so the two surfaces cannot report the same ratio
+   * differently.
+   */
+  const percent = progressPercent({
+    done: project.taskProgress.completed,
+    total: project.taskProgress.total,
+  });
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -132,7 +139,7 @@ export default async function ProjectDetailPage({
           <div
             className="h-2 overflow-hidden rounded-full bg-muted"
             role="progressbar"
-            aria-label="Standalone task progress"
+            aria-label="Task and checklist progress"
             aria-valuemin={0}
             aria-valuemax={project.taskProgress.total}
             aria-valuenow={project.taskProgress.completed}
@@ -140,8 +147,8 @@ export default async function ProjectDetailPage({
             <div className="h-full bg-primary" style={{ width: `${percent}%` }} />
           </div>
           <p className="text-sm text-muted-foreground">
-            Counts non-canceled first-class tasks; only built-in done tasks count as completed.
-            Inline checklist items are not included.
+            Counts non-canceled task rows plus inline checklist items across this project’s notes.
+            Only built-in done tasks and checked checklist items count as completed.
           </p>
         </section>
       </section>
@@ -194,6 +201,14 @@ export default async function ProjectDetailPage({
             description={`Notes organized inside ${project.name}.`}
             embedded
             projectIds={[projectId]}
+            // Board and timeline are offered only from here: they are
+            // projections of one project's columns and dates.
+            project={{
+              id: projectId,
+              name: project.name,
+              createdAt: project.createdAt,
+              dueAt: project.dueAt,
+            }}
           />
         ) : (
           <div role="alert">

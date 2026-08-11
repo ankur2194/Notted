@@ -27,6 +27,30 @@ export const taskSortFieldSchema = z.enum([
 ]);
 export const taskGroupingSchema = z.enum(["none", "status", "priority", "assignee", "dueDate"]);
 
+/**
+ * A custom status may not shadow a built-in one. The reserved set is derived
+ * from the enum above rather than retyped, so adding a built-in status can
+ * never leave a stale copy behind, and the comparison is case-insensitive
+ * because "Done" and "done" render identically on a board.
+ */
+export const TASK_STATUS_RESERVED_NAMES: readonly string[] = taskStatusSchema.options;
+
+/** Matches `varchar(50)` on `task_statuses.name`. */
+export const taskStatusNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(50)
+  .refine(
+    (value) => !TASK_STATUS_RESERVED_NAMES.includes(value.toLowerCase()),
+    "This name is reserved for a built-in status",
+  );
+
+/** Matches `varchar(7)` on `task_statuses.color`. */
+export const taskStatusColorSchema = z
+  .string()
+  .regex(/^#[0-9a-f]{6}$/i, "Expected a six-digit hex color");
+
 /** Matches `varchar(500)` on `tasks.title`. */
 export const taskTitleSchema = z.string().trim().min(1).max(500);
 /** `tasks.description` is `text` and holds plain text, never TipTap JSON. */
@@ -239,6 +263,9 @@ export const taskSummarySchema = z
     recurrence: taskRecurrenceSchema,
     recurrenceCron: taskCronSchema.nullable(),
     tagIds: z.array(uuidSchema).max(50).readonly(),
+    // On the summary, not only the detail: the board needs "created by me" to
+    // decide whether an editor may drag a card without refetching each task.
+    createdById: uuidSchema,
     createdAt: isoTimestampSchema,
     updatedAt: isoTimestampSchema,
   })
@@ -247,7 +274,6 @@ export const taskSummarySchema = z
 export const taskDetailSchema = taskSummarySchema
   .extend({
     description: z.string().max(10_000).nullable(),
-    createdById: uuidSchema,
     updatedById: nullableUuid,
   })
   .strict();
@@ -286,5 +312,86 @@ export const taskBulkResultSchema = z
       .readonly(),
     /** Includes subtasks removed by the `tasks` self-FK cascade on a delete. */
     affected: z.number().int().nonnegative(),
+  })
+  .strict();
+
+// --------------------------------------------------------------------------- //
+// Custom task statuses (board columns)
+// --------------------------------------------------------------------------- //
+// `taskStatusSchema` above is the built-in `task_status` enum and keeps that
+// name. The stored row is a DIFFERENT thing — a workspace- or project-scoped
+// column a workspace owner created — so it is named `customTaskStatus*`.
+
+/** Route-scoped: the workspace comes from the path, never the query string. */
+export const taskStatusListQuerySchema = z.object({ projectId: uuidSchema.optional() }).strict();
+export type TaskStatusListQueryInput = z.input<typeof taskStatusListQuerySchema>;
+
+export const createTaskStatusSchema = z
+  .object({
+    /** `null` (the default) is a workspace-wide status usable by every task. */
+    projectId: uuidSchema.nullable().default(null),
+    name: taskStatusNameSchema,
+    color: taskStatusColorSchema.optional(),
+  })
+  .strict();
+export type CreateTaskStatusInput = z.input<typeof createTaskStatusSchema>;
+
+export const updateTaskStatusSchema = z
+  .object({
+    name: taskStatusNameSchema.optional(),
+    color: taskStatusColorSchema.optional(),
+  })
+  .strict()
+  .refine((value) => value.name !== undefined || value.color !== undefined, {
+    message: "At least one task status field is required",
+  });
+export type UpdateTaskStatusInput = z.input<typeof updateTaskStatusSchema>;
+
+export const customTaskStatusSchema = z
+  .object({
+    id: uuidSchema,
+    workspaceId: uuidSchema,
+    /** `null` = workspace-wide; otherwise the project the column belongs to. */
+    projectId: nullableUuid,
+    name: z.string().trim().min(1).max(50),
+    color: taskStatusColorSchema,
+    // `double precision`, like every other ordering column in the product.
+    sortOrder: z.number().finite(),
+    /** Seeded rows: renaming and deleting them is refused. */
+    isBuiltIn: z.boolean(),
+    createdAt: isoTimestampSchema,
+    updatedAt: isoTimestampSchema,
+  })
+  .strict();
+
+/**
+ * Unpaginated on purpose: a workspace has a handful of board columns, and a
+ * page cursor over a set that small is pure ceremony.
+ */
+export const customTaskStatusListSchema = z
+  .object({ items: z.array(customTaskStatusSchema).max(200).readonly() })
+  .strict();
+
+/** One shape for create and update — both answer with the resulting row. */
+export const taskStatusMutationResultSchema = z.object({ status: customTaskStatusSchema }).strict();
+
+export const taskStatusDeleteResultSchema = z
+  .object({
+    id: uuidSchema,
+    deleted: z.literal(true),
+    /**
+     * Tasks that were pointing at the removed status. They are not deleted and
+     * not reassigned: `tasks.custom_status_id` is `ON DELETE SET NULL`, so each
+     * falls back to the built-in `status` it never lost. The count exists so the
+     * confirmation dialog can say how many cards will move.
+     */
+    affected: z.number().int().nonnegative(),
+    /**
+     * Notes using the removed status as their project-board column. These have
+     * no equivalent fallback — `notes.board_column_id` is `ON DELETE SET NULL`
+     * and nothing else records where the note sat — so the dialog states this
+     * consequence separately rather than folding it into `affected`.
+     */
+    affectedNotes: z.number().int().nonnegative(),
   })
   .strict();

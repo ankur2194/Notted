@@ -148,7 +148,7 @@ describe("ProjectsController", () => {
       name: "Alpha",
       lastActivityAt: "2026-08-03T00:00:00.000Z",
       members: [],
-      taskProgress: { coverage: "standalone-tasks", completed: 1, total: 2 },
+      taskProgress: { coverage: "tasks-and-checklists", completed: 1, total: 2 },
     };
     const read = vi.fn().mockResolvedValue(detail);
     await expect(controller({ read }).read(request({ workspaceId, projectId }))).resolves.toBe(

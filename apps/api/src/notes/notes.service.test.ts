@@ -1,10 +1,16 @@
+import { eq, sql, type SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
+
+import { ApiHttpException } from "../common/errors/api-http.exception";
+import { notes, taskStatuses } from "../database/schema";
+import { createTenantContext, TenantContextService } from "../tenant";
 
 import { NotesService } from "./notes.service";
 
 import type { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import type { DatabaseService } from "../database/database.service";
-import type { TenantContextService } from "../tenant";
+import type { NoteDocument } from "@notted/shared-types";
 
 const principal = Object.freeze({
   userId: "10000000-0000-4000-8000-000000000001",
@@ -19,6 +25,9 @@ const workspaceId = "10000000-0000-4000-8000-000000000002";
 const noteId = "10000000-0000-4000-8000-000000000003";
 const projectId = "10000000-0000-4000-8000-000000000004";
 const parentId = "10000000-0000-4000-8000-000000000005";
+const otherProjectId = "10000000-0000-4000-8000-000000000007";
+const columnId = "10000000-0000-4000-8000-000000000008";
+const descendantId = "10000000-0000-4000-8000-000000000009";
 
 /** Database that fails loudly on any access, proving authorization ran first. */
 function forbiddenDatabase(): unknown {
@@ -162,6 +171,8 @@ describe("NotesService policy and safe behavior", () => {
       title: "Weekly review",
       content: { type: "doc", content: [{ type: "paragraph" }] },
       contentPlain: "Weekly review body",
+      checklistDone: 2,
+      checklistTotal: 5,
       noteType: "document",
       isTemplate: false,
       isPinned: true,
@@ -220,6 +231,10 @@ describe("NotesService policy and safe behavior", () => {
       title: "Weekly review template",
       content: source.content,
       contentPlain: source.contentPlain,
+      // Carried across, not recomputed: the copy holds the same document, so a
+      // second derivation could only ever disagree with the original.
+      checklistDone: 2,
+      checklistTotal: 5,
       noteType: "document",
       pageSize: "letter",
       isTemplate: true,
@@ -233,6 +248,8 @@ describe("NotesService policy and safe behavior", () => {
     // The exact key set is the evidence: no source/template-origin column
     // exists, so a copy can never stay live-linked to its original.
     expect(Object.keys(values).sort()).toEqual([
+      "checklistDone",
+      "checklistTotal",
       "content",
       "contentPlain",
       "createdById",
@@ -285,5 +302,518 @@ describe("NotesService policy and safe behavior", () => {
         expect(JSON.stringify(error)).not.toContain("document body");
       }
     }
+  });
+});
+
+describe("NotesService checklist projection and progress", () => {
+  const taskItem = (checked: boolean, text: string) => ({
+    type: "taskItem",
+    attrs: { checked },
+    content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+  });
+  const checklistDocument: NoteDocument = {
+    type: "doc",
+    content: [{ type: "taskList", content: [taskItem(true, "A"), taskItem(false, "B")] }],
+  };
+
+  function bareService(): NotesService {
+    return new NotesService(
+      {} as DatabaseService,
+      {} as AuthorizationEntryService,
+      {} as TenantContextService,
+    );
+  }
+
+  /**
+   * One projection, so `content_plain` and the two counters can only be written
+   * together. A writer that computed the plain text by hand would be the drift
+   * this test exists to prevent.
+   */
+  it("derives the plain text and both checklist counters from one call", () => {
+    expect(bareService()["contentProjection"](checklistDocument)).toEqual({
+      contentPlain: "A\nB",
+      checklistDone: 1,
+      checklistTotal: 2,
+    });
+  });
+
+  it("reports zero counters for a document with no checklist", () => {
+    expect(
+      bareService()["contentProjection"]({
+        type: "doc",
+        content: [{ type: "paragraph", content: [{ type: "text", text: "Plain" }] }],
+      } as NoteDocument),
+    ).toEqual({ contentPlain: "Plain", checklistDone: 0, checklistTotal: 0 });
+  });
+
+  /** Two currencies, never merged: an inline checkbox is not a task row. */
+  it("splits summary progress into stored checklist counters and queried task counts", () => {
+    const summary = bareService()["toSummary"](
+      {
+        id: noteId,
+        workspaceId,
+        projectId: null,
+        folderId: null,
+        parentId: null,
+        boardColumnId: null,
+        title: "Weekly review",
+        content: checklistDocument,
+        contentPlain: "A\nB",
+        checklistDone: 1,
+        checklistTotal: 2,
+        noteType: "document" as const,
+        isTemplate: false,
+        isPinned: false,
+        isArchived: false,
+        isDeleted: false,
+        deletedAt: null,
+        deletionBatchId: null,
+        version: 1,
+        pageSize: "a4",
+        sortOrder: 1,
+        createdById: principal.userId,
+        updatedById: null,
+        createdAt: new Date("2026-08-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-08-01T00:00:00.000Z"),
+      },
+      [],
+      { done: 3, total: 4 },
+    );
+    expect(summary.progress).toEqual({
+      checklist: { done: 1, total: 2 },
+      tasks: { done: 3, total: 4 },
+    });
+  });
+
+  it("writes the counters alongside content_plain when a note is created", async () => {
+    const inserts: { values: Record<string, unknown> }[] = [];
+    const tx = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: () => {
+        const builder = {
+          from: () => builder,
+          where: () => builder,
+          limit: () => Promise.resolve([]),
+        };
+        return builder;
+      },
+      insert: () => ({
+        values: (values: Record<string, unknown>) => {
+          inserts.push({ values });
+          return Promise.resolve();
+        },
+      }),
+    };
+    const service = new NotesService(
+      {
+        transaction: (run: (value: unknown) => Promise<unknown>) => run(tx),
+      } as unknown as DatabaseService,
+      {
+        authorizeUser: vi.fn().mockResolvedValue({ workspaceId, userId: principal.userId }),
+        run: (_operation: unknown, run: () => Promise<unknown>) => run(),
+      } as unknown as AuthorizationEntryService,
+      { get: () => ({ workspaceId }) } as unknown as TenantContextService,
+    );
+    Object.assign(service, {
+      validateContainer: vi.fn().mockResolvedValue(undefined),
+      assertTags: vi.fn().mockResolvedValue(undefined),
+      lockSiblingGroups: vi.fn().mockResolvedValue(undefined),
+      positionFor: vi.fn().mockResolvedValue(1),
+      replaceTags: vi.fn().mockResolvedValue(undefined),
+      recordMutation: vi.fn().mockResolvedValue(undefined),
+      readRow: vi.fn().mockResolvedValue({ id: "row" }),
+      toDetail: vi.fn().mockResolvedValue({ id: "row" }),
+    });
+
+    await service.create({
+      principal,
+      workspaceId,
+      projectId: null,
+      folderId: null,
+      parentId: null,
+      title: "Weekly review",
+      type: "document",
+      pageSize: "a4",
+      isTemplate: false,
+      isPinned: false,
+      isArchived: false,
+      tagIds: [],
+      content: checklistDocument,
+      idempotencyKey: "note-create-key-0001",
+    });
+
+    expect(inserts[0]?.values).toMatchObject({
+      contentPlain: "A\nB",
+      checklistDone: 1,
+      checklistTotal: 2,
+    });
+  });
+
+  it("rewrites the counters whenever an update replaces the content", async () => {
+    const changeSets: Record<string, unknown>[] = [];
+    const tx = {
+      update: () => ({
+        set: (values: Record<string, unknown>) => {
+          changeSets.push(values);
+          const node = {
+            where: () => node,
+            returning: () => Promise.resolve([{ id: noteId }]),
+          };
+          return node;
+        },
+      }),
+    };
+    const service = new NotesService(
+      {
+        transaction: (run: (value: unknown) => Promise<unknown>) => run(tx),
+      } as unknown as DatabaseService,
+      {
+        authorizeUser: vi.fn().mockResolvedValue({ workspaceId, userId: principal.userId }),
+        run: (_operation: unknown, run: () => Promise<unknown>) => run(),
+      } as unknown as AuthorizationEntryService,
+      { get: () => ({ workspaceId }) } as unknown as TenantContextService,
+    );
+    Object.assign(service, {
+      readRow: vi.fn().mockResolvedValue({ id: noteId, isDeleted: false }),
+      recordMutation: vi.fn().mockResolvedValue(undefined),
+      toDetail: vi.fn().mockResolvedValue({ id: noteId }),
+    });
+
+    await service.update({
+      principal,
+      workspaceId,
+      noteId,
+      expectedVersion: 1,
+      content: checklistDocument,
+    });
+
+    expect(changeSets[0]).toMatchObject({
+      contentPlain: "A\nB",
+      checklistDone: 1,
+      checklistTotal: 2,
+    });
+  });
+
+  it("leaves the counters untouched when an update does not carry content", async () => {
+    const changeSets: Record<string, unknown>[] = [];
+    const tx = {
+      update: () => ({
+        set: (values: Record<string, unknown>) => {
+          changeSets.push(values);
+          const node = {
+            where: () => node,
+            returning: () => Promise.resolve([{ id: noteId }]),
+          };
+          return node;
+        },
+      }),
+    };
+    const service = new NotesService(
+      {
+        transaction: (run: (value: unknown) => Promise<unknown>) => run(tx),
+      } as unknown as DatabaseService,
+      {
+        authorizeUser: vi.fn().mockResolvedValue({ workspaceId, userId: principal.userId }),
+        run: (_operation: unknown, run: () => Promise<unknown>) => run(),
+      } as unknown as AuthorizationEntryService,
+      { get: () => ({ workspaceId }) } as unknown as TenantContextService,
+    );
+    Object.assign(service, {
+      readRow: vi.fn().mockResolvedValue({ id: noteId, isDeleted: false }),
+      recordMutation: vi.fn().mockResolvedValue(undefined),
+      toDetail: vi.fn().mockResolvedValue({ id: noteId }),
+    });
+
+    await service.update({ principal, workspaceId, noteId, expectedVersion: 1, title: "Renamed" });
+
+    expect(changeSets[0]).not.toHaveProperty("checklistDone");
+    expect(changeSets[0]).not.toHaveProperty("contentPlain");
+  });
+});
+
+// --------------------------------------------------------------------------- //
+// Part 49.1 — note board column on move
+// --------------------------------------------------------------------------- //
+
+const dialect = new PgDialect();
+
+/**
+ * True when a captured predicate really constrains `table` to the active
+ * workspace. The fake database enforces nothing, so this is the only thing
+ * standing between the suite and a silent tenant-isolation regression:
+ * dropping `whereWorkspace(taskStatuses, …)` from the board-column lookup
+ * would otherwise leave every test green while another tenant's column became
+ * assignable to this workspace's notes. Rendering the SQL asserts the
+ * predicate itself, not merely that one exists.
+ */
+function scopesToWorkspace(predicate: unknown, table: { readonly workspaceId: unknown }): boolean {
+  if (predicate === undefined || predicate === null) return false;
+  const column = dialect.sqlToQuery(sql`${table.workspaceId}`).sql;
+  const rendered = dialect.sqlToQuery(predicate as SQL);
+  return rendered.sql.includes(`${column} =`) && rendered.params.includes(workspaceId);
+}
+
+interface Statement {
+  readonly table: unknown;
+  readonly values?: Record<string, unknown>;
+  predicate?: unknown;
+}
+
+const baseNoteRow = Object.freeze({
+  id: noteId,
+  workspaceId,
+  projectId: null as string | null,
+  folderId: null as string | null,
+  parentId: null as string | null,
+  boardColumnId: null as string | null,
+  title: "Weekly review",
+  content: { type: "doc", content: [] },
+  contentPlain: "",
+  checklistDone: 0,
+  checklistTotal: 0,
+  noteType: "document" as const,
+  isTemplate: false,
+  isPinned: false,
+  isArchived: false,
+  isDeleted: false,
+  deletedAt: null,
+  deletionBatchId: null,
+  version: 4,
+  pageSize: "a4",
+  sortOrder: 1,
+  createdById: principal.userId,
+  updatedById: null,
+  createdAt: new Date("2026-08-01T00:00:00.000Z"),
+  updatedAt: new Date("2026-08-01T00:00:00.000Z"),
+});
+
+interface MoveFixture {
+  /** Overrides on the row `readRow` returns for the note being moved. */
+  readonly source?: Partial<typeof baseNoteRow>;
+  /** What the workspace-scoped `task_statuses` lookup finds, if anything. */
+  readonly column?: { readonly projectId: string | null };
+  /** Descendants `noteSubtreeIds` reports below the moved note. */
+  readonly descendantIds?: readonly string[];
+}
+
+/**
+ * Hand-rolled chainable fake keyed by table identity, recording every `where`
+ * predicate. Only the code under test stays real — the surrounding placement
+ * helpers have their own coverage and would otherwise need the whole query
+ * builder faked.
+ */
+function moveService(fixture: MoveFixture = {}) {
+  const tenant = new TenantContextService();
+  const source = { ...baseNoteRow, ...fixture.source };
+  const columnRows = fixture.column === undefined ? [] : [fixture.column];
+  const reads: Statement[] = [];
+  const updates: Statement[] = [];
+
+  const tx = {
+    select: () => ({
+      from: (table: unknown) => {
+        const node: Record<string, unknown> = {
+          where: (predicate: unknown) => {
+            reads.push({ table, predicate });
+            return node;
+          },
+          limit: () => Promise.resolve(table === taskStatuses ? [...columnRows] : []),
+        };
+        return node;
+      },
+    }),
+    update: (table: unknown) => ({
+      set: (values: Record<string, unknown>) => {
+        const record: Statement = { table, values };
+        updates.push(record);
+        const node: Record<string, unknown> = {
+          where: (predicate: unknown) => {
+            record.predicate = predicate;
+            return node;
+          },
+          // The row PostgreSQL would return: the fake applies the change set,
+          // and `version` is the one column the database computes itself.
+          returning: () => Promise.resolve([{ ...source, ...values, version: source.version + 1 }]),
+          // The descendant update is awaited on `where` and never returns rows.
+          then: (onFulfilled: (value: unknown) => unknown) =>
+            Promise.resolve(undefined).then(onFulfilled),
+        };
+        return node;
+      },
+    }),
+  };
+
+  const authorizeUser = vi.fn().mockResolvedValue({ workspaceId, userId: principal.userId });
+  const positionFor = vi.fn().mockResolvedValue(5);
+  const service = new NotesService(
+    {
+      db: {},
+      transaction: (work: (value: unknown) => Promise<unknown>) => work(tx),
+    } as unknown as DatabaseService,
+    {
+      authorizeUser,
+      run: <T>(operation: { workspaceId: string; userId: string | null }, work: () => T): T =>
+        tenant.run(
+          createTenantContext({ workspaceId: operation.workspaceId, userId: operation.userId }),
+          work,
+        ),
+    } as unknown as AuthorizationEntryService,
+    tenant,
+  );
+  Object.assign(service, {
+    readRow: vi.fn().mockResolvedValue(source),
+    validateContainer: vi.fn().mockResolvedValue(undefined),
+    assertNoNoteCycle: vi.fn().mockResolvedValue(undefined),
+    lockSiblingGroups: vi.fn().mockResolvedValue(undefined),
+    noteSubtreeIds: vi.fn().mockResolvedValue([noteId, ...(fixture.descendantIds ?? [])]),
+    positionFor,
+    recordMutation: vi.fn().mockResolvedValue(undefined),
+    loadTagIds: vi.fn().mockResolvedValue([]),
+    loadTaskProgress: vi.fn().mockResolvedValue({ done: 0, total: 0 }),
+  });
+  return { service, source, reads, updates, authorizeUser, positionFor };
+}
+
+function moveInput(overrides: Record<string, unknown> = {}) {
+  return {
+    principal,
+    workspaceId,
+    noteId,
+    expectedVersion: baseNoteRow.version,
+    projectId: null,
+    folderId: null,
+    parentId: null,
+    ...overrides,
+  } as Parameters<NotesService["move"]>[0];
+}
+
+async function apiRejection(promise: Promise<unknown>): Promise<ApiHttpException> {
+  try {
+    await promise;
+  } catch (error: unknown) {
+    if (error instanceof ApiHttpException) return error;
+    throw error;
+  }
+  throw new Error("expected the call to reject");
+}
+
+describe("NotesService.move board column", () => {
+  it("accepts a workspace-wide column for any destination", async () => {
+    const { service, updates } = moveService({ column: { projectId: null } });
+    const result = await service.move(moveInput({ projectId, boardColumnId: columnId }));
+    expect(result.note.boardColumnId).toBe(columnId);
+    expect(updates[0]?.values).toMatchObject({ boardColumnId: columnId });
+  });
+
+  it("accepts a project-scoped column for its own project", async () => {
+    const { service } = moveService({ column: { projectId } });
+    const result = await service.move(moveInput({ projectId, boardColumnId: columnId }));
+    expect(result.note.boardColumnId).toBe(columnId);
+  });
+
+  const foreignColumnCases: readonly [string, MoveFixture["column"]][] = [
+    ["a column scoped to a different project", { projectId: otherProjectId }],
+    ["an unknown or other-tenant column", undefined],
+  ];
+
+  /**
+   * 404, never 403: the workspace-scoped read finds nothing for a foreign
+   * tenant's column and a mismatched project answers identically, so the move
+   * endpoint cannot be used as an existence oracle for either.
+   */
+  it.each(foreignColumnCases)("answers %s with 404 and writes nothing", async (_name, column) => {
+    const { service, updates } = moveService({ column });
+    const error = await apiRejection(
+      service.move(moveInput({ projectId, boardColumnId: columnId })),
+    );
+    expect(error.getStatus()).toBe(404);
+    expect(error.getStatus()).not.toBe(403);
+    expect(error.safeResponse.code).toBe("NOT_FOUND");
+    expect(JSON.stringify(error.safeResponse)).not.toContain(columnId);
+    expect(updates).toHaveLength(0);
+  });
+
+  /**
+   * A hierarchy change must never fail because of an orthogonal axis: the note
+   * moves and its stranded project-scoped column clears to "No column", which
+   * the returned summary states so the UI can announce it.
+   */
+  it("clears a stranded project-scoped column on a cross-project move instead of failing", async () => {
+    const { service, updates } = moveService({
+      source: { projectId, boardColumnId: columnId },
+      column: { projectId },
+    });
+    const result = await service.move(moveInput({ projectId: otherProjectId }));
+    expect(result.note.boardColumnId).toBeNull();
+    expect(updates[0]?.values).toMatchObject({ boardColumnId: null });
+  });
+
+  it("keeps a workspace-wide column across a cross-project move", async () => {
+    const { service } = moveService({
+      source: { projectId, boardColumnId: columnId },
+      column: { projectId: null },
+    });
+    const result = await service.move(moveInput({ projectId: otherProjectId }));
+    expect(result.note.boardColumnId).toBe(columnId);
+  });
+
+  it("keeps the current column when the field is omitted and the project is unchanged", async () => {
+    const { service, reads } = moveService({
+      source: { projectId, boardColumnId: columnId },
+    });
+    const result = await service.move(moveInput({ projectId }));
+    expect(result.note.boardColumnId).toBe(columnId);
+    // No lookup at all: nothing can strand a column that is not moving project.
+    expect(reads.filter((entry) => entry.table === taskStatuses)).toHaveLength(0);
+  });
+
+  /**
+   * The board column is not inherited, so a column-only change touches exactly
+   * one row: no descendant UPDATE and no descendant re-authorization. Widening
+   * `containerChanges` to include it would silently bump a whole subtree.
+   */
+  it("bumps only the moved row by one version for a column-only change", async () => {
+    const { service, updates, authorizeUser } = moveService({
+      source: { projectId, boardColumnId: null },
+      column: { projectId: null },
+      descendantIds: [descendantId],
+    });
+    const result = await service.move(moveInput({ projectId, boardColumnId: columnId }));
+    expect(updates).toHaveLength(1);
+    expect(updates[0]?.table).toBe(notes);
+    expect(dialect.sqlToQuery(updates[0]?.values?.version as SQL).sql).toContain("+ 1");
+    expect(result.note.version).toBe(baseNoteRow.version + 1);
+    // Source edit and destination create only — no descendant `note.update`.
+    expect(authorizeUser).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves beforeNoteId anchoring untouched when a column is supplied", async () => {
+    const { service, positionFor } = moveService({ column: { projectId: null } });
+    const beforeNoteId = parentId;
+    await service.move(moveInput({ projectId, boardColumnId: columnId, beforeNoteId }));
+    expect(positionFor).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ beforeNoteId }),
+      beforeNoteId,
+      noteId,
+    );
+  });
+
+  it("scopes every board-column lookup to the active workspace", async () => {
+    const { service, reads } = moveService({ column: { projectId: null } });
+    await service.move(moveInput({ projectId, boardColumnId: columnId }));
+    const columnReads = reads.filter((entry) => entry.table === taskStatuses);
+    expect(columnReads.length).toBeGreaterThan(0);
+    for (const entry of columnReads)
+      expect(scopesToWorkspace(entry.predicate, taskStatuses)).toBe(true);
+  });
+
+  /**
+   * Negative control. Without it `scopesToWorkspace` could be trivially true
+   * and the assertion above would be worthless.
+   */
+  it("rejects a predicate that names only the column identifier", () => {
+    expect(scopesToWorkspace(eq(taskStatuses.id, columnId), taskStatuses)).toBe(false);
+    expect(scopesToWorkspace(undefined, taskStatuses)).toBe(false);
   });
 });

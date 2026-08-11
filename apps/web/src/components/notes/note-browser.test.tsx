@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,10 +20,14 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
 }));
 const tagMocks = vi.hoisted(() => ({ requestTagPage: vi.fn() }));
+const taskMocks = vi.hoisted(() => ({ requestTaskPage: vi.fn(), requestTaskStatuses: vi.fn() }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
 vi.mock("@/lib/notes/requests", () => ({ ...mocks }));
 vi.mock("@/lib/tags/requests", () => ({ ...tagMocks }));
+vi.mock("@/lib/tasks/requests", () => ({ ...taskMocks }));
+// The timeline owns its own suite; here it only has to mount without fetching.
+vi.mock("./NoteTimeline", () => ({ NoteTimeline: () => <p>Timeline</p> }));
 
 const workspaceId = "30000000-0000-4000-8000-000000000001";
 const base = (id: string, title: string, sortOrder: number): NoteSummary => ({
@@ -33,6 +37,7 @@ const base = (id: string, title: string, sortOrder: number): NoteSummary => ({
   projectId: null,
   folderId: null,
   parentId: null,
+  boardColumnId: null,
   title,
   type: "document",
   pageSize: "a4",
@@ -42,6 +47,7 @@ const base = (id: string, title: string, sortOrder: number): NoteSummary => ({
   isArchived: false,
   isDeleted: false,
   tagIds: [],
+  progress: { checklist: { done: 0, total: 0 }, tasks: { done: 0, total: 0 } },
   version: 2,
   deletedAt: null,
   createdAt: "2026-08-01T00:00:00.000Z",
@@ -59,7 +65,14 @@ const query = {
   sortDirection: "asc" as const,
 };
 
-function view(initialPage: NotePage = page) {
+const projectDescriptor = {
+  id: "30000000-0000-4000-8000-0000000000d1",
+  name: "Launch",
+  createdAt: "2026-07-01T00:00:00.000Z",
+  dueAt: "2026-09-01T00:00:00.000Z",
+};
+
+function view(initialPage: NotePage = page, project?: typeof projectDescriptor) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -71,6 +84,8 @@ function view(initialPage: NotePage = page) {
         canCreate
         title="Notes"
         description="Browse"
+        projectIds={project === undefined ? [] : [project.id]}
+        project={project}
       />
     </QueryClientProvider>,
   );
@@ -88,6 +103,25 @@ describe("NoteBrowser optimistic behavior", () => {
       ok: true,
       data: { items: [], page: 1, limit: 100, hasMore: false },
     });
+    taskMocks.requestTaskStatuses.mockResolvedValue({ ok: true, data: { items: [] } });
+    taskMocks.requestTaskPage.mockResolvedValue({
+      ok: true,
+      data: { items: [], page: 1, limit: 100, hasMore: false },
+    });
+    window.localStorage.clear();
+  });
+
+  it("projects all four views from one cached page without re-requesting notes", async () => {
+    const user = userEvent.setup();
+    view(page, projectDescriptor);
+    // The mount refetch is the only note request this component is allowed to
+    // make; a view is a projection of that one cache entry, never a fetch.
+    await waitFor(() => expect(mocks.requestNotePage).toHaveBeenCalledTimes(1));
+    for (const label of ["Grid", "List", "Board", "Timeline"]) {
+      await user.click(screen.getByRole("button", { name: label }));
+      expect(screen.getByRole("button", { name: label })).toHaveAttribute("aria-pressed", "true");
+    }
+    expect(mocks.requestNotePage).toHaveBeenCalledTimes(1);
   });
 
   it("inserts an accessible temporary create and restores the exact prior list on network failure", async () => {

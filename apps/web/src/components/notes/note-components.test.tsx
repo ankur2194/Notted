@@ -25,6 +25,7 @@ const note: NoteSummary = {
   projectId: null,
   folderId: null,
   parentId: null,
+  boardColumnId: null,
   title: "Quarterly notes",
   type: "document",
   pageSize: "a4",
@@ -34,6 +35,7 @@ const note: NoteSummary = {
   isArchived: false,
   isDeleted: false,
   tagIds: [],
+  progress: { checklist: { done: 0, total: 0 }, tasks: { done: 0, total: 0 } },
   version: 3,
   deletedAt: null,
   createdAt: "2026-08-01T00:00:00.000Z",
@@ -62,6 +64,56 @@ describe("note components", () => {
     expect(screen.getByText(/Standalone · Unfiled/u)).toBeInTheDocument();
     expect(screen.getByText(/<script>/u)).toBeInTheDocument();
     expect(document.querySelector("script")).toBeNull();
+    // Nothing to count means no bar at all: an empty track would read as "0%
+    // done" on every plain document rather than "not applicable".
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("states combined checklist and task progress in words as well as a bar", () => {
+    render(
+      <NoteCard
+        note={{
+          ...note,
+          progress: { checklist: { done: 1, total: 3 }, tasks: { done: 2, total: 4 } },
+        }}
+      />,
+    );
+    const bar = screen.getByRole("progressbar", {
+      name: `Checklist and task progress for ${note.title}`,
+    });
+    expect(bar).toHaveAttribute("aria-valuenow", "3");
+    expect(bar).toHaveAttribute("aria-valuemax", "7");
+    expect(bar).toHaveAttribute("aria-valuemin", "0");
+    expect(screen.getByText("3/7 done")).toBeVisible();
+  });
+
+  it("splits checklist and task progress in the note detail header", () => {
+    // The card shows one combined number because it has room for one; the
+    // header can afford to name both halves, so a reader can tell an unchecked
+    // inline box from an open task row instead of guessing at a single ratio.
+    render(
+      providers(
+        <NoteDetailView
+          note={{
+            ...note,
+            progress: { checklist: { done: 1, total: 3 }, tasks: { done: 2, total: 4 } },
+            content: { type: "doc", content: [] },
+            contentPlain: "",
+            createdById: note.id,
+            updatedById: null,
+            currentActorId: note.id,
+            capabilities: { canUpdate: false, canDelete: false, canShare: false },
+          }}
+          workspaceName="Alpha"
+        />,
+      ),
+    );
+    const bar = screen.getByRole("progressbar", {
+      name: `Checklist and task progress for ${note.title}`,
+    });
+    expect(bar).toHaveAttribute("aria-valuenow", "3");
+    expect(bar).toHaveAttribute("aria-valuemax", "7");
+    expect(screen.getByText(/3\/7 done · 1\/3 checklist items · 2\/4 tasks/u)).toBeVisible();
   });
 
   it("renders deep-link breadcrumbs and persisted content without interpreting it as HTML", async () => {

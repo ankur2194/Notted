@@ -4,6 +4,7 @@ import {
   explicitBooleanQuerySchema,
   isoTimestampSchema,
   paginationQuerySchema,
+  progressSchema,
   sortDirectionSchema,
   tagIdsSchema,
   uuidSchema,
@@ -145,6 +146,23 @@ export const moveNoteSchema = z
     projectId: uuidSchema.nullable(),
     folderId: uuidSchema.nullable(),
     parentId: uuidSchema.nullable(),
+    /**
+     * Note-board column, deliberately OPTIONAL where its three neighbours are
+     * required — and the asymmetry is the point.
+     *
+     * `projectId`/`folderId`/`parentId` are required and absolute because they
+     * are one coupled hierarchy decision: a caller that changes the project
+     * must state the folder and the parent the note lands in, or the server
+     * would be guessing at a container.
+     *
+     * The board column is an orthogonal axis, so `boardColumnId` means
+     * "omitted keeps the current column". Forcing every existing caller
+     * (`NoteBrowser`, `NoteList`, the e2e specs, the unit fixtures) to echo a
+     * value it never read would be a lost-update hazard, not a safety feature:
+     * a stale echo would silently drag the note back to the column it sat in
+     * when the page loaded. `null` is still an explicit, honoured "No column".
+     */
+    boardColumnId: uuidSchema.nullable().optional(),
     beforeNoteId: uuidSchema.nullable().optional(),
   })
   .strict();
@@ -233,6 +251,12 @@ export const noteSummarySchema = z
     projectId: nullableUuid,
     folderId: nullableUuid,
     parentId: nullableUuid,
+    /**
+     * Note-board column, a `task_statuses` row shared with the task board.
+     * `null` is the leading "No column" bucket — the same fallback the task
+     * board already uses for a card with no custom status.
+     */
+    boardColumnId: nullableUuid,
     title: titleSchema,
     type: noteTypeSchema,
     pageSize: pageSizeSchema,
@@ -242,6 +266,17 @@ export const noteSummarySchema = z
     isArchived: z.boolean(),
     isDeleted: z.boolean(),
     tagIds: z.array(uuidSchema).max(50).readonly(),
+    /**
+     * Both halves of a note's completion, never merged into one ratio: an
+     * inline checkbox and a first-class task row are different objects and a
+     * combined number would hide which one is behind.
+     *
+     * `checklist` is read from the denormalized `notes.checklist_done` /
+     * `checklist_total` columns, written wherever `content_plain` is written.
+     * `tasks` counts task rows attached to the note — `done` over everything
+     * not `canceled`, matching the project rollup exactly.
+     */
+    progress: z.object({ checklist: progressSchema, tasks: progressSchema }).strict(),
     version: versionSchema,
     deletedAt: timestampSchema.nullable(),
     createdAt: timestampSchema,

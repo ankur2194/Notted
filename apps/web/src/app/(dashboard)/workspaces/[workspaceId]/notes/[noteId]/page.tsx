@@ -79,6 +79,7 @@ export default async function StandaloneNotePage({
       folderName={folderName}
       ancestors={ancestors}
       initialTasks={tasks?.status === "ready" ? tasks.data : null}
+      viewer={{ userId: note.data.currentActorId, role: workspace.data.currentUserRole }}
     />
   );
 }

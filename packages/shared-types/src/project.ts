@@ -45,8 +45,12 @@ export interface ProjectMember {
 }
 
 export interface ProjectTaskProgress {
-  /** Part 30 deliberately counts first-class task rows, not inline TipTap checklists. */
-  readonly coverage: "standalone-tasks";
+  /**
+   * Part 48 widened the rollup: task rows PLUS inline TipTap checklist items
+   * across the project's non-deleted notes. `canceled` tasks are excluded from
+   * the total, matching `NoteSummary.progress.tasks` so the two never disagree.
+   */
+  readonly coverage: "tasks-and-checklists";
   readonly completed: number;
   readonly total: number;
 }

@@ -411,6 +411,7 @@ describe("task schemas", () => {
         recurrence: "none",
         recurrenceCron: null,
         tagIds: [],
+        createdById: userId,
         createdAt: "2026-08-01T12:00:00Z",
         updatedAt: "2026-08-01T12:00:00Z",
       }).success,

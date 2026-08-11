@@ -31,6 +31,8 @@ export interface NoteMoveDestination {
   readonly folderId: string | null;
   readonly parentId: string | null;
   readonly beforeNoteId?: string | null;
+  /** Omitted means keep the current column; `null` clears it. */
+  readonly boardColumnId?: string | null;
 }
 
 function SortableNote({
@@ -323,7 +325,16 @@ export function NoteList({
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}>
+    // The explicit `id` is not decorative: without it dnd-kit derives its
+    // `DndDescribedBy-*` ids from `useId`, whose counter depends on how many
+    // hooks ran first, and server and client then disagree. See
+    // `TaskSortableList.tsx` for the same fix.
+    <DndContext
+      id="note-list-dnd"
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={dragEnd}
+    >
       <SortableContext items={notes.map((note) => note.id)} strategy={verticalListSortingStrategy}>
         <ul className="grid gap-4 lg:grid-cols-2" aria-label="Notes">
           {notes.map((note) => {

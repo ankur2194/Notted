@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TaskListView } from "./TaskListView";
 
+import type { TaskViewer } from "./TaskListView";
 import type { TaskPage, TaskSummary } from "@notted/shared-types";
 
 const mocks = vi.hoisted(() => ({
@@ -14,6 +15,10 @@ const mocks = vi.hoisted(() => ({
   reorderTask: vi.fn(),
   deleteTask: vi.fn(),
   bulkUpdateTasks: vi.fn(),
+  requestTaskStatuses: vi.fn(),
+  createTaskStatus: vi.fn(),
+  updateTaskStatus: vi.fn(),
+  deleteTaskStatus: vi.fn(),
   refresh: vi.fn(),
   requestTagPage: vi.fn(),
   fetchWorkspaceMemberDirectory: vi.fn(),
@@ -27,6 +32,10 @@ vi.mock("@/lib/tasks/requests", () => ({
   reorderTask: mocks.reorderTask,
   deleteTask: mocks.deleteTask,
   bulkUpdateTasks: mocks.bulkUpdateTasks,
+  requestTaskStatuses: mocks.requestTaskStatuses,
+  createTaskStatus: mocks.createTaskStatus,
+  updateTaskStatus: mocks.updateTaskStatus,
+  deleteTaskStatus: mocks.deleteTaskStatus,
 }));
 vi.mock("@/lib/tags/requests", () => ({ requestTagPage: mocks.requestTagPage }));
 vi.mock("@/lib/notes/member-directory", () => ({
@@ -34,6 +43,7 @@ vi.mock("@/lib/notes/member-directory", () => ({
 }));
 
 const workspaceId = "40000000-0000-4000-8000-000000000001";
+const creatorId = "40000000-0000-4000-8000-0000000000c1";
 const noteId = "40000000-0000-4000-8000-000000000002";
 
 function task(id: string, title: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
@@ -55,6 +65,7 @@ function task(id: string, title: string, overrides: Partial<TaskSummary> = {}): 
     recurrence: "none",
     recurrenceCron: null,
     tagIds: [],
+    createdById: creatorId,
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
     ...overrides,
@@ -77,7 +88,7 @@ const gamma = task("40000000-0000-4000-8000-00000000000c", "Gamma", {
 });
 const page: TaskPage = { items: [alpha, beta, gamma], page: 1, limit: 100, hasMore: false };
 
-function view(initial: TaskPage = page, canEdit = true) {
+function view(initial: TaskPage = page, canEdit = true, viewer: TaskViewer | null = null) {
   const client = new QueryClient({
     // `initialData` plus an infinite stale time keeps the mount refetch from
     // racing the optimistic writes each test is asserting on.
@@ -91,6 +102,7 @@ function view(initial: TaskPage = page, canEdit = true) {
         projectId={null}
         initialTasks={initial}
         canEdit={canEdit}
+        viewer={viewer}
       />
     </QueryClientProvider>,
   );
@@ -99,6 +111,11 @@ function view(initial: TaskPage = page, canEdit = true) {
 describe("TaskListView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // The view switcher persists to `localStorage`, which jsdom shares across
+    // the tests in this file; without this every test after the first would
+    // open in whichever view the previous one selected.
+    window.localStorage.clear();
+    mocks.requestTaskStatuses.mockResolvedValue({ ok: true, data: { items: [] } });
     mocks.requestTaskPage.mockResolvedValue({ ok: true, data: page });
     mocks.requestTagPage.mockResolvedValue({
       ok: true,
@@ -304,5 +321,101 @@ describe("TaskListView", () => {
     settle({ ok: false, kind: "unavailable" });
     expect(await screen.findByText(/previous list was restored/iu)).toBeVisible();
     expect(screen.queryByLabelText("Title for Delta")).not.toBeInTheDocument();
+  });
+
+  /**
+   * All three views read one `taskQueryKeys.list` entry. That is what makes a
+   * view switch free and, more importantly, what keeps a change made in one
+   * view visible in the others without any cross-view plumbing.
+   */
+  it("switches between all three views on a single task request", async () => {
+    const user = userEvent.setup();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <TaskListView
+          workspaceId={workspaceId}
+          noteId={noteId}
+          projectId={null}
+          initialTasks={page}
+          canEdit
+          viewer={{ userId: creatorId, role: "owner" }}
+        />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(mocks.requestTaskPage).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: "Board" }));
+    expect(await screen.findByRole("heading", { level: 3, name: "To do (1)" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Calendar" }));
+    expect(screen.getByRole("list", { name: "No due date (2)" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "List" }));
+
+    expect(mocks.requestTaskPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a change made on the board in the list after switching back", async () => {
+    const user = userEvent.setup();
+    // Left in flight on purpose: the assertion is that the optimistic write
+    // landed in the shared cache entry, not that the server agreed.
+    mocks.updateTask.mockReturnValue(new Promise(() => undefined));
+    view();
+
+    await user.click(screen.getByRole("button", { name: "Board" }));
+    const selector = await screen.findByLabelText("Column for Alpha");
+    await user.selectOptions(selector, within(selector).getByRole("option", { name: "Done" }));
+    await user.click(screen.getByRole("button", { name: "Move to column for Alpha" }));
+    expect(mocks.updateTask).toHaveBeenCalledWith(workspaceId, alpha.id, {
+      status: "done",
+      customStatusId: null,
+    });
+
+    await user.click(screen.getByRole("button", { name: "List" }));
+    expect(screen.getByRole("checkbox", { name: "Complete Alpha" })).toBeChecked();
+  });
+
+  /*
+   * Part 48.6. The policy restricts an editor to the tasks they created and
+   * denies `task.delete` outright, so those controls are not offered. The
+   * backend remains authoritative either way.
+   */
+  it("offers an editor no delete control and no edit controls on another member's task", () => {
+    const otherId = "40000000-0000-4000-8000-0000000000c2";
+    const theirs = task("40000000-0000-4000-8000-00000000000f", "Theirs", {
+      createdById: otherId,
+      sortOrder: 4,
+    });
+    view({ items: [alpha, theirs], page: 1, limit: 100, hasMore: false }, true, {
+      userId: creatorId,
+      role: "editor",
+    });
+
+    expect(screen.queryByRole("button", { name: /^Delete Alpha/u })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete selected" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Title for Alpha")).toBeEnabled();
+    expect(screen.getByLabelText("Title for Theirs")).toBeDisabled();
+    expect(screen.getByRole("note")).toHaveTextContent(/only the tasks you created/iu);
+  });
+
+  it("offers an owner the delete controls the editor is denied", () => {
+    view(page, true, { userId: creatorId, role: "owner" });
+
+    expect(screen.getByRole("button", { name: "Delete Alpha" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Delete selected" })).toBeVisible();
+  });
+
+  it("hides Unassigned from an editor once a task has an assignee", () => {
+    const assigneeId = "40000000-0000-4000-8000-0000000000aa";
+    const assigned = task("40000000-0000-4000-8000-000000000010", "Assigned", { assigneeId });
+    view({ items: [alpha, assigned], page: 1, limit: 100, hasMore: false }, true, {
+      userId: creatorId,
+      role: "editor",
+    });
+
+    const unassignedTask = screen.getByLabelText("Assignee for Alpha");
+    const assignedTask = screen.getByLabelText("Assignee for Assigned");
+    // Still offered where it is the current value; never offered as a change.
+    expect(within(unassignedTask).getByRole("option", { name: "Unassigned" })).toBeInTheDocument();
+    expect(within(assignedTask).queryByRole("option", { name: "Unassigned" })).toBeNull();
   });
 });

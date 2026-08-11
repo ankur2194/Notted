@@ -61,6 +61,19 @@ export const explicitBooleanQuerySchema = z
   .transform((value) => value === "true");
 export type ExplicitBooleanQueryInput = z.input<typeof explicitBooleanQuerySchema>;
 
+/**
+ * A completed-out-of-total counter. One shape for every progress reading in the
+ * product (inline checklists, task rows) so two surfaces can never disagree on
+ * the field names or on whether the numbers may be fractional.
+ */
+export const progressSchema = z
+  .object({
+    done: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ProgressInput = z.input<typeof progressSchema>;
+
 export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
     z.string(),

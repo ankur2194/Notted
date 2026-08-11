@@ -103,7 +103,7 @@ describe("project schemas", () => {
           accessSource: "project",
         },
       ],
-      taskProgress: { coverage: "standalone-tasks", completed: 2, total: 3 },
+      taskProgress: { coverage: "tasks-and-checklists", completed: 2, total: 3 },
     };
     expect(projectDetailSchema.safeParse(detail).success).toBe(true);
     expect(projectDetailSchema.safeParse({ ...detail, dueDate: timestamp }).success).toBe(false);
@@ -172,7 +172,7 @@ describe("project schemas", () => {
       updatedAt: timestamp,
       lastActivityAt: timestamp,
       members: [],
-      taskProgress: { coverage: "standalone-tasks", completed: 0, total: 0 },
+      taskProgress: { coverage: "tasks-and-checklists", completed: 0, total: 0 },
     };
     expect(projectDetailSchema.safeParse(base).success).toBe(true);
     expect(

@@ -19,6 +19,7 @@ const workspaceId = "10000000-0000-4000-8000-000000000001";
 const noteId = "10000000-0000-4000-8000-000000000002";
 const folderId = "10000000-0000-4000-8000-000000000003";
 const userId = "10000000-0000-4000-8000-000000000004";
+const columnId = "10000000-0000-4000-8000-000000000005";
 
 function request(params: Record<string, string>, headers: Record<string, string> = {}): Request {
   const value = {
@@ -97,7 +98,8 @@ describe("Part 31 thin REST transports", () => {
       { move } as unknown as NotesService,
       { assertTrustedMutationOrigin: vi.fn() } as unknown as AuthService,
     );
-    await controller.move(request({ workspaceId, noteId }), {
+    const req = request({ workspaceId, noteId });
+    await controller.move(req, {
       expectedVersion: 4,
       projectId: null,
       folderId,
@@ -107,6 +109,48 @@ describe("Part 31 thin REST transports", () => {
     expect(move).toHaveBeenCalledWith(
       expect.objectContaining({ noteId, folderId, expectedVersion: 4 }),
     );
+    // Omitted stays omitted at the transport: "keep the current column" is a
+    // service decision, and a transport-supplied default would erase it.
+    expect(move.mock.calls[0]?.[0]).not.toHaveProperty("boardColumnId");
+
+    // Part 49 adds a board column to the SAME route rather than a new one, so
+    // the recorded action must still be `note.update` and nothing else.
+    const spec = Reflect.getMetadata(
+      AUTHORIZATION_HTTP_SPEC,
+      NotesController.prototype.move,
+    ) as HttpAuthorizationSpec;
+    expect(spec.action).toBe("note.update");
+    expect(spec.workspaceId(req)).toBe(workspaceId);
+    expect(spec.resource(req)).toEqual({ kind: "note", id: noteId });
+    expect(Reflect.getMetadata(PATH_METADATA, NotesController.prototype.move)).toBe(":noteId/move");
+    expect(Reflect.getMetadata(METHOD_METADATA, NotesController.prototype.move)).toBe(
+      RequestMethod.POST,
+    );
+  });
+
+  it("passes an explicit board column through to the service verbatim", async () => {
+    const move = vi.fn().mockResolvedValue({ note: {} });
+    const controller = new NotesController(
+      { move } as unknown as NotesService,
+      { assertTrustedMutationOrigin: vi.fn() } as unknown as AuthService,
+    );
+    await controller.move(request({ workspaceId, noteId }), {
+      expectedVersion: 4,
+      projectId: null,
+      folderId: null,
+      parentId: null,
+      boardColumnId: columnId,
+    });
+    expect(move).toHaveBeenCalledWith(expect.objectContaining({ boardColumnId: columnId }));
+    expect(() =>
+      controller.move(request({ workspaceId, noteId }), {
+        expectedVersion: 4,
+        projectId: null,
+        folderId: null,
+        parentId: null,
+        boardColumnId: "not-a-uuid",
+      }),
+    ).toThrow(expect.objectContaining({ status: HttpStatus.BAD_REQUEST }));
   });
 
   it("exposes copy as a created POST authorized on the source note", async () => {

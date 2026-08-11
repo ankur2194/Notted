@@ -417,6 +417,11 @@ export async function seedDatabase(db: SeedDatabaseClient): Promise<SeedResult> 
         title: "Launch overview",
         content: RICH_TIPTAP_DOCUMENT,
         contentPlain: RICH_CONTENT_PLAIN,
+        // Literal like `contentPlain`, and for the same reason: the seed states
+        // the projection instead of deriving it, so a fixture that drifts from
+        // its document is a visible diff rather than a silent one.
+        checklistDone: 1,
+        checklistTotal: 2,
         noteType: "document",
         isTemplate: false,
         isPinned: false,
@@ -509,6 +514,8 @@ export async function seedDatabase(db: SeedDatabaseClient): Promise<SeedResult> 
         title: "Launch task list",
         content: TASK_TIPTAP_DOCUMENT,
         contentPlain: TASK_CONTENT_PLAIN,
+        checklistDone: 0,
+        checklistTotal: 1,
         noteType: "task",
         isTemplate: false,
         isPinned: true,

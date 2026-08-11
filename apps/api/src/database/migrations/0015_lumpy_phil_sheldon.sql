@@ -1,0 +1,3 @@
+ALTER TABLE "notes" ADD COLUMN "board_column_id" uuid;--> statement-breakpoint
+ALTER TABLE "notes" ADD CONSTRAINT "notes_board_column_id_task_statuses_id_fk" FOREIGN KEY ("board_column_id") REFERENCES "public"."task_statuses"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "notes_workspace_board_column_idx" ON "notes" USING btree ("workspace_id","board_column_id");

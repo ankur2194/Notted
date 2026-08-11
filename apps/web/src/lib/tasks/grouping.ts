@@ -34,7 +34,7 @@ export function isOverdue(task: TaskSummary, now: Date): boolean {
 }
 
 /** Local calendar day of an instant, as a sortable `YYYY-MM-DD` key. */
-function localDayKey(at: Date): string {
+export function localDayKey(at: Date): string {
   const pad = (value: number): string => String(value).padStart(2, "0");
   return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
 }
@@ -192,6 +192,48 @@ export function composeDueDate(date: string, time: string): string | null {
   if (![year, month, day, hours, minutes].every((part) => Number.isFinite(part))) return null;
   const at = new Date(year, month - 1, day, hours, minutes, 0, 0);
   return Number.isNaN(at.getTime()) ? null : at.toISOString();
+}
+
+/**
+ * The 42 local day keys of a month view: six Sunday-first weeks, so every month
+ * lays out in the same fixed grid and no row appears or disappears on
+ * navigation.
+ *
+ * `month` is 0-based, exactly like the `Date` constructor it is passed to. Each
+ * cell is built by `new Date(year, month, 1 - offset + i)`, which normalizes
+ * through the local calendar — the reason no cell can drift on a daylight-saving
+ * boundary the way adding 86_400_000 ms would.
+ *
+ * ponytail: week always starts Sunday; read the locale's first day if a
+ * Monday-first workspace ever asks for it.
+ */
+export function monthGrid(year: number, month: number): readonly string[] {
+  const offset = new Date(year, month, 1).getDay();
+  return Array.from({ length: 42 }, (_, index) =>
+    localDayKey(new Date(year, month, 1 - offset + index)),
+  );
+}
+
+/**
+ * Tasks indexed by the local calendar day they are due on.
+ *
+ * Uses the same `localDayKey(new Date(task.dueDate))` conversion the `dueDate`
+ * grouping uses, so a task cannot land on one day in the list and another on the
+ * calendar. Undated and unparseable due dates are omitted rather than bucketed:
+ * the calendar lists them separately instead of inventing a cell for them.
+ */
+export function bucketByDay(tasks: readonly TaskSummary[]): Map<string, TaskSummary[]> {
+  const byDay = new Map<string, TaskSummary[]>();
+  for (const task of tasks) {
+    if (task.dueDate === null) continue;
+    const at = new Date(task.dueDate);
+    if (Number.isNaN(at.getTime())) continue;
+    const key = localDayKey(at);
+    const bucket = byDay.get(key);
+    if (bucket === undefined) byDay.set(key, [task]);
+    else bucket.push(task);
+  }
+  return byDay;
 }
 
 /** The zone every due date on this page is composed and rendered in. */

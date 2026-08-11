@@ -103,6 +103,27 @@ describe("Part 31 note validators with the Part 33 document contract", () => {
     ).toBe(true);
   });
 
+  /**
+   * The asymmetry is deliberate: the three container fields are one coupled
+   * decision and stay required, while `boardColumnId` is an orthogonal axis
+   * where "omitted" must mean "keep" — a required echo of a value the caller
+   * never read would be a lost-update hazard.
+   */
+  it("treats the board column as optional-means-keep while containers stay required", () => {
+    const destination = {
+      expectedVersion: 1,
+      projectId: null,
+      folderId: null,
+      parentId: null,
+    } as const;
+    expect(moveNoteSchema.safeParse(destination).success).toBe(true);
+    expect(moveNoteSchema.safeParse({ ...destination, boardColumnId: null }).success).toBe(true);
+    expect(moveNoteSchema.safeParse({ ...destination, boardColumnId: id("3") }).success).toBe(true);
+    expect(moveNoteSchema.safeParse({ ...destination, boardColumnId: "not-a-uuid" }).success).toBe(
+      false,
+    );
+  });
+
   it("requires explicit confirmation for destructive folder and permanent note deletion", () => {
     expect(
       permanentDeleteNoteSchema.safeParse({
@@ -155,6 +176,7 @@ describe("Part 31 note validators with the Part 33 document contract", () => {
       projectId: null,
       folderId: null,
       parentId: null,
+      boardColumnId: null,
       title: "A",
       type: "task-list",
       pageSize: "a4",
@@ -164,6 +186,7 @@ describe("Part 31 note validators with the Part 33 document contract", () => {
       isArchived: false,
       isDeleted: false,
       tagIds: [id("3")],
+      progress: { checklist: { done: 1, total: 2 }, tasks: { done: 0, total: 0 } },
       version: 2,
       deletedAt: null,
       createdAt: "2026-08-01T00:00:00.000Z",

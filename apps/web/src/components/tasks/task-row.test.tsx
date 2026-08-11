@@ -7,6 +7,7 @@ import { TaskRow, type TaskMovement } from "./TaskRow";
 import type { TagSummary, TaskSummary, WorkspaceMemberSummary } from "@notted/shared-types";
 
 const workspaceId = "40000000-0000-4000-8000-000000000001";
+const creatorId = "40000000-0000-4000-8000-0000000000c1";
 const taskId = "40000000-0000-4000-8000-000000000002";
 const adaId = "40000000-0000-4000-8000-0000000000aa";
 const tagId = "40000000-0000-4000-8000-0000000000bb";
@@ -29,6 +30,7 @@ const task: TaskSummary = {
   recurrence: "none",
   recurrenceCron: null,
   tagIds: [],
+  createdById: creatorId,
   createdAt: "2026-08-01T00:00:00.000Z",
   updatedAt: "2026-08-01T00:00:00.000Z",
 };

@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { composeDueDate, dueLabel, groupTasks, isOverdue, splitDueDate } from "./grouping";
+import {
+  bucketByDay,
+  composeDueDate,
+  dueLabel,
+  groupTasks,
+  isOverdue,
+  monthGrid,
+  splitDueDate,
+} from "./grouping";
 
 import type { TaskSummary } from "@notted/shared-types";
 
 const workspaceId = "40000000-0000-4000-8000-000000000001";
+const creatorId = "40000000-0000-4000-8000-0000000000c1";
 
 function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
   return {
@@ -25,6 +34,7 @@ function task(id: string, overrides: Partial<TaskSummary> = {}): TaskSummary {
     recurrence: "none",
     recurrenceCron: null,
     tagIds: [],
+    createdById: creatorId,
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
     ...overrides,
@@ -140,6 +150,66 @@ describe("dueLabel", () => {
     expect(dueLabel(task("a", { dueDate: local(2026, 12, 25) }), now, "en-US")).toBe(
       "Dec 25, 2026",
     );
+  });
+});
+
+describe("monthGrid", () => {
+  it("covers six Sunday-first weeks with distinct days around the month", () => {
+    const grid = monthGrid(2026, 7); // August 2026, which starts on a Saturday.
+    expect(grid).toHaveLength(42);
+    expect(new Set(grid).size).toBe(42);
+    expect(grid[0]).toBe("2026-07-26");
+    expect(grid[6]).toBe("2026-08-01");
+    expect(grid[41]).toBe("2026-09-05");
+  });
+
+  /*
+   * The DST months are the whole reason the grid is built from
+   * `new Date(year, month, day)` rather than by adding 86_400_000 ms: a
+   * 23-hour or 25-hour day would otherwise slide a cell onto the wrong date
+   * for the rest of the month.
+   */
+  it("keeps 42 distinct consecutive days across a spring-forward month", () => {
+    const grid = monthGrid(2026, 2); // March 2026.
+    expect(new Set(grid).size).toBe(42);
+    expect(grid).toContain("2026-03-08");
+    expect(grid[grid.indexOf("2026-03-08") + 1]).toBe("2026-03-09");
+  });
+
+  it("keeps 42 distinct consecutive days across a fall-back month", () => {
+    const grid = monthGrid(2026, 10); // November 2026.
+    expect(new Set(grid).size).toBe(42);
+    expect(grid).toContain("2026-11-01");
+    expect(grid[grid.indexOf("2026-11-01") + 1]).toBe("2026-11-02");
+  });
+
+  it("rolls into the next year from December", () => {
+    expect(monthGrid(2026, 11)).toContain("2027-01-01");
+  });
+});
+
+describe("bucketByDay", () => {
+  it("indexes tasks by the local day of their due instant", () => {
+    // 07:00 UTC, expressed as the equivalent local wall clock so the assertion
+    // holds in whichever zone the runner uses.
+    const at = new Date(Date.UTC(2026, 7, 20, 7, 0, 0));
+    const morning = task("a", { dueDate: at.toISOString() });
+    const undated = task("b");
+    const buckets = bucketByDay([morning, undated]);
+    const key = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(
+      at.getDate(),
+    ).padStart(2, "0")}`;
+    expect(buckets.get(key)).toEqual([morning]);
+    expect([...buckets.values()].flat()).toHaveLength(1);
+  });
+
+  it("keeps several tasks on one day and skips unparseable due dates", () => {
+    const first = task("a", { dueDate: local(2026, 8, 20, 9) });
+    const second = task("b", { dueDate: local(2026, 8, 20, 17) });
+    const broken = task("c", { dueDate: "not-an-instant" });
+    const buckets = bucketByDay([first, second, broken]);
+    expect(buckets.get("2026-08-20")).toEqual([first, second]);
+    expect(buckets.size).toBe(1);
   });
 });
 

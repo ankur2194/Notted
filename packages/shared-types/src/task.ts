@@ -19,6 +19,17 @@ export const TASK_API_PATHS = Object.freeze({
 } as const);
 
 /**
+ * Custom statuses are a REST-only surface, deliberately: they are a
+ * low-frequency owner/admin settings path, and `projects` — the closest
+ * precedent — publishes no tRPC subrouter either.
+ */
+export const TASK_STATUS_API_PATHS = Object.freeze({
+  collection: (workspaceId: string) => `/api/v1/workspaces/${workspaceId}/task-statuses`,
+  detail: (workspaceId: string, statusId: string) =>
+    `/api/v1/workspaces/${workspaceId}/task-statuses/${statusId}`,
+} as const);
+
+/**
  * Mirrors the `task_status` PostgreSQL enum in
  * `apps/api/src/database/schema/tasks.ts`. The database spelling is
  * `canceled` (one `l`); the wire contract matches it exactly so no translation
@@ -65,6 +76,12 @@ export interface TaskSummary {
   /** Five-field cron expression, UTC fields. Non-null only for `custom`. */
   readonly recurrenceCron: string | null;
   readonly tagIds: readonly TagId[];
+  /**
+   * On the summary, not only the detail: a board renders many cards at once and
+   * needs "did I create this" to decide whether an editor may drag one, without
+   * a detail fetch per card.
+   */
+  readonly createdById: UserId;
   readonly createdAt: IsoTimestamp;
   readonly updatedAt: IsoTimestamp;
 }
@@ -72,7 +89,6 @@ export interface TaskSummary {
 export interface TaskDetail extends TaskSummary {
   /** Plain text, never TipTap JSON — the column is `text`. */
   readonly description: string | null;
-  readonly createdById: UserId;
   readonly updatedById: UserId | null;
 }
 
@@ -152,4 +168,49 @@ export interface TaskBulkResult {
    * from live authorization rather than replayed from a stored snapshot.
    */
   readonly affected: number;
+}
+
+/**
+ * A stored custom status — a board column. Distinct from `TaskStatus`, which is
+ * the built-in lifecycle enum; a task carrying a custom status keeps its
+ * built-in one, so the two spaces never merge.
+ */
+export interface CustomTaskStatus {
+  readonly id: TaskStatusId;
+  readonly workspaceId: WorkspaceId;
+  /** `null` = workspace-wide, usable by every task in the workspace. */
+  readonly projectId: ProjectId | null;
+  readonly name: string;
+  /** `#rrggbb`. */
+  readonly color: string;
+  readonly sortOrder: number;
+  /** Seeded rows: renaming and deleting them is refused. */
+  readonly isBuiltIn: boolean;
+  readonly createdAt: IsoTimestamp;
+  readonly updatedAt: IsoTimestamp;
+}
+
+export interface CustomTaskStatusList {
+  readonly items: readonly CustomTaskStatus[];
+}
+
+export interface TaskStatusMutationResult {
+  readonly status: CustomTaskStatus;
+}
+
+export interface TaskStatusDeleteResult {
+  readonly id: TaskStatusId;
+  readonly deleted: true;
+  /**
+   * Tasks that pointed at the removed status. Nothing is deleted or reassigned:
+   * `tasks.custom_status_id` is `ON DELETE SET NULL`, so each affected task
+   * falls back to the built-in status it never lost.
+   */
+  readonly affected: number;
+  /**
+   * Notes that used the removed status as their project-board column. Unlike a
+   * task, a note has NO fallback placement: `notes.board_column_id` is
+   * `ON DELETE SET NULL`, so each one silently leaves the board.
+   */
+  readonly affectedNotes: number;
 }

@@ -254,6 +254,9 @@ describe("projects, notes, hierarchy, and ordering schema (unit)", () => {
     expect(noteFks.get("notes_parent_id_notes_id_fk")).toBe("cascade");
     expect(noteFks.get("notes_created_by_id_users_id_fk")).toBe("restrict");
     expect(noteFks.get("notes_updated_by_id_users_id_fk")).toBe("set null");
+    // Part 49: deleting a board column drops its notes into "No column". SET
+    // NULL IS the whole reassignment rule, so this FK is the contract.
+    expect(noteFks.get("notes_board_column_id_task_statuses_id_fk")).toBe("set null");
     // Composite cross-tenant FKs use NO ACTION (service-mediated nullification
     // on project/folder delete).
     expect(noteFks.get("notes_workspace_project_fk")).toBe("no action");

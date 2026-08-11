@@ -74,6 +74,7 @@ import {
 
 import { folders } from "./folders";
 import { projects } from "./projects";
+import { taskStatuses } from "./tasks";
 import { users } from "./users";
 import { workspaces } from "./workspaces";
 
@@ -114,6 +115,20 @@ export const notes = pgTable(
     parentId: uuid("parent_id").references((): AnyPgColumn => notes.id, {
       onDelete: "cascade",
     }),
+    // Note-board column (Part 49). The note board reuses `task_statuses` as
+    // its column vocabulary rather than owning a second columns table, so a
+    // workspace configures one column list in one place (accepted
+    // consequence: renaming a column renames it on both boards).
+    // NULL = the leading "No column" bucket, which is why no backfill exists
+    // and why ON DELETE SET NULL is the whole reassignment rule: deleting a
+    // column drops its notes back into "No column" and loses nothing. Whether
+    // a project-scoped column may hold a given note is a service invariant
+    // (`NotesService.assertBoardColumn`), not a DB constraint — the column's
+    // `project_id` and the note's must agree, and no composite FK can express
+    // "or the column is workspace-wide".
+    boardColumnId: uuid("board_column_id").references(() => taskStatuses.id, {
+      onDelete: "set null",
+    }),
     title: varchar("title", { length: 500 }).notNull(),
     // TipTap JSON projection (ADR 0004). Default empty document. The Yjs
     // binary state is persisted separately (Part 58); this column is the
@@ -123,6 +138,14 @@ export const notes = pgTable(
     // Extracted plain text for search indexing and list previews. Updated
     // by the projection pipeline; empty string by default.
     contentPlain: text("content_plain").default(""),
+    // Denormalized inline-checklist counters (Part 48). Inline checkboxes are
+    // TipTap `taskItem` nodes inside `content`, never rows, so listing notes
+    // with a progress bar would otherwise mean parsing every document per
+    // request. Written by the same service code path that writes
+    // `content_plain`, from `countChecklist(content)`, so the three can only
+    // drift if that one write is bypassed.
+    checklistDone: integer("checklist_done").default(0).notNull(),
+    checklistTotal: integer("checklist_total").default(0).notNull(),
     noteType: noteTypeEnum("note_type").default("document").notNull(),
     isTemplate: boolean("is_template").default(false).notNull(),
     isPinned: boolean("is_pinned").default(false).notNull(),
@@ -211,6 +234,10 @@ export const notes = pgTable(
       .where(sql`notes.is_deleted = false`),
     // "Notes created by user" admin/authoring view.
     index("notes_created_by_id_idx").on(t.createdById),
+    // Note-board column partition (Part 49). The board reads one workspace's
+    // notes grouped by column; the workspace_id prefix keeps the scan tenant-
+    // bounded exactly like every other note index here.
+    index("notes_workspace_board_column_idx").on(t.workspaceId, t.boardColumnId),
     // Cross-tenant composite FKs (see module comment). `onDelete("no action")`
     // is chained explicitly because the `foreignKey({...})` config does not
     // accept `onDelete` directly; `no action` is also the Drizzle default, but

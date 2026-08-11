@@ -5,6 +5,7 @@ import {
   FolderKanban,
   FileText,
   Home,
+  ListChecks,
   LockKeyhole,
   Settings,
   Clock3,
@@ -116,6 +117,25 @@ export function Sidebar({
           >
             <FolderKanban aria-hidden="true" className="size-5 shrink-0" />
             {!hideLabels && "Projects"}
+          </Link>
+        )}
+        {shell.currentWorkspace === null ? (
+          <span
+            className="flex min-h-11 cursor-not-allowed items-center gap-3 rounded-md px-3 text-sm text-muted-foreground"
+            aria-disabled="true"
+            title="Choose or create a workspace to view tasks"
+          >
+            <ListChecks aria-hidden="true" className="size-5 shrink-0" />
+            {!hideLabels && "Tasks"}
+          </span>
+        ) : (
+          <Link
+            href={`/workspaces/${shell.currentWorkspace.workspaceId}/tasks`}
+            className="flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium hover:bg-accent"
+            aria-label={hideLabels ? "Tasks" : undefined}
+          >
+            <ListChecks aria-hidden="true" className="size-5 shrink-0" />
+            {!hideLabels && "Tasks"}
           </Link>
         )}
         {shell.currentWorkspace !== null && !hideLabels ? (

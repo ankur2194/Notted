@@ -35,6 +35,7 @@ const summary = Object.freeze({
   recurrence: "none",
   recurrenceCron: null,
   tagIds: [],
+  createdById: userId,
   createdAt: "2026-03-01T00:00:00.000Z",
   updatedAt: "2026-03-01T00:00:00.000Z",
 });
@@ -42,7 +43,6 @@ const summary = Object.freeze({
 const detail = Object.freeze({
   ...summary,
   description: null,
-  createdById: userId,
   updatedById: userId,
 });
 

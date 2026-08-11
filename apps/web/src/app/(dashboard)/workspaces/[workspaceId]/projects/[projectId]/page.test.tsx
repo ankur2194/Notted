@@ -18,7 +18,22 @@ vi.mock("@/lib/notes/server-notes", () => ({
   getServerNoteList: vi.fn(),
   getServerFolders: vi.fn(),
 }));
-vi.mock("@/components/notes/NoteBrowser", () => ({ NoteBrowser: () => <h2>Project notes</h2> }));
+// The board and timeline views are offered only when the page hands the browser
+// its `project` descriptor, so the stub reports what it received.
+vi.mock("@/components/notes/NoteBrowser", () => ({
+  NoteBrowser: (props: {
+    readonly project?: {
+      readonly id: string;
+      readonly name: string;
+      readonly dueAt: string | null;
+    };
+  }) => (
+    <>
+      <h2>Project notes</h2>
+      <p>{`project prop: ${props.project?.name ?? "none"} / ${props.project?.dueAt ?? "none"}`}</p>
+    </>
+  ),
+}));
 vi.mock("@/lib/projects/requests", () => ({
   updateProject: vi.fn(),
   transitionProject: vi.fn(),
@@ -57,7 +72,7 @@ const project = {
       accessSource: "workspace-admin",
     },
   ],
-  taskProgress: { coverage: "standalone-tasks", completed: 2, total: 3 },
+  taskProgress: { coverage: "tasks-and-checklists", completed: 2, total: 3 },
 } satisfies ProjectDetail;
 const workspace = {
   id: workspaceId,
@@ -109,7 +124,7 @@ describe("project detail route", () => {
     expect(screen.getByText(/Cover attached/)).toBeVisible();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Project notes" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Project notes" })).toBeVisible();
+    expect(screen.getByText("project prop: Launch / 2026-08-10T00:00:00.000Z")).toBeVisible();
   });
 
   it("maps concealed detail to not-found and unavailable to a retry state", async () => {

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { HttpStatus, Injectable } from "@nestjs/common";
-import { extractNoteContentPlain } from "@notted/shared-validators";
+import { countChecklist, extractNoteContentPlain } from "@notted/shared-validators";
 import { and, asc, desc, eq, exists, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
@@ -25,8 +25,11 @@ import {
   projectAccess,
   projects,
   tags,
+  tasks,
+  taskStatuses,
   workspaceMembers,
 } from "../database/schema";
+import { taskDoneCount, taskOpenTotalCount } from "../database/sql-aggregates";
 import {
   activeWorkspaceId,
   assertWorkspaceInsertValues,
@@ -68,7 +71,11 @@ import type {
   NoteType,
   NoteUpdateResult,
   PageSize,
+  Progress,
 } from "@notted/shared-types";
+
+/** A note with no task rows attached. Shared so the zero is written once. */
+const NO_PROGRESS: Progress = Object.freeze({ done: 0, total: 0 });
 
 interface ScopedInput {
   readonly principal: AuthenticatedPrincipal;
@@ -89,9 +96,14 @@ interface Container {
 interface NoteRow extends Container {
   readonly id: string;
   readonly workspaceId: string;
+  // Deliberately NOT on `Container`: the board column is an orthogonal axis,
+  // not part of the coupled project/folder/parent placement decision.
+  readonly boardColumnId: string | null;
   readonly title: string;
   readonly content: unknown;
   readonly contentPlain: string | null;
+  readonly checklistDone: number;
+  readonly checklistTotal: number;
   readonly noteType: "document" | "task";
   readonly isTemplate: boolean;
   readonly isPinned: boolean;
@@ -162,6 +174,8 @@ export interface UpdateNoteServiceInput extends NoteSelector {
 
 export interface MoveNoteServiceInput extends NoteSelector, Container {
   readonly expectedVersion: number;
+  /** Omitted keeps the current column; `null` is an explicit "No column". */
+  readonly boardColumnId?: string | null;
   readonly beforeNoteId?: string | null;
 }
 
@@ -264,7 +278,7 @@ export class NotesService {
                 parentId: input.parentId,
                 title: input.title,
                 content,
-                contentPlain: extractNoteContentPlain(content),
+                ...this.contentProjection(content),
                 noteType: this.toDatabaseType(input.type),
                 isTemplate: input.isTemplate,
                 isPinned: input.isPinned,
@@ -330,13 +344,21 @@ export class NotesService {
         .limit(input.limit + 1)
         .offset((input.page - 1) * input.limit);
       const visible = rows.slice(0, input.limit);
-      const tagsByNote = await this.loadTagMap(
-        this.database.db,
-        visible.map((row) => row.id),
-      );
+      const visibleIds = visible.map((row) => row.id);
+      // Two batched lookups for the whole page, never one per row.
+      const [tagsByNote, taskProgressByNote] = await Promise.all([
+        this.loadTagMap(this.database.db, visibleIds),
+        this.loadTaskProgressMap(this.database.db, visibleIds),
+      ]);
       return Object.freeze({
         items: Object.freeze(
-          visible.map((row) => this.toSummary(row, tagsByNote.get(row.id) ?? [])),
+          visible.map((row) =>
+            this.toSummary(
+              row,
+              tagsByNote.get(row.id) ?? [],
+              taskProgressByNote.get(row.id) ?? NO_PROGRESS,
+            ),
+          ),
         ),
         page: input.page,
         limit: input.limit,
@@ -373,10 +395,7 @@ export class NotesService {
             ...(input.isArchived === undefined ? {} : { isArchived: input.isArchived }),
             ...(input.content === undefined
               ? {}
-              : {
-                  content: input.content,
-                  contentPlain: extractNoteContentPlain(input.content),
-                }),
+              : { content: input.content, ...this.contentProjection(input.content) }),
           };
           const [updated] = await tx
             .update(notes)
@@ -445,6 +464,10 @@ export class NotesService {
             input.beforeNoteId ?? null,
             input.noteId,
           );
+          // Resolved OUTSIDE `containerChanges` on purpose: the board column is
+          // not inherited, so changing it touches exactly this one row and must
+          // never trigger the descendant re-authorization/bump above.
+          const boardColumnId = await this.resolveBoardColumn(tx, input, source);
           const descendantIds = subtreeIds.filter((id) => id !== input.noteId);
           if (descendantIds.length > 0 && containerChanges) {
             await tx
@@ -466,6 +489,7 @@ export class NotesService {
               projectId: input.projectId,
               folderId: input.folderId,
               parentId: input.parentId,
+              boardColumnId,
               sortOrder,
               version: sql`${notes.version} + 1`,
               updatedAt: new Date(),
@@ -485,8 +509,11 @@ export class NotesService {
         },
         { isolationLevel: "read committed" },
       );
-      const tagIds = await this.loadTagIds(this.database.db, row.id);
-      return Object.freeze({ note: Object.freeze(this.toSummary(row, tagIds)) });
+      const [tagIds, taskProgress] = await Promise.all([
+        this.loadTagIds(this.database.db, row.id),
+        this.loadTaskProgress(this.database.db, row.id),
+      ]);
+      return Object.freeze({ note: Object.freeze(this.toSummary(row, tagIds, taskProgress)) });
     });
   }
 
@@ -550,7 +577,12 @@ export class NotesService {
                 parentId: input.parentId,
                 title: input.title ?? source.title,
                 content: source.content as NoteDocument,
+                // Carried across rather than recomputed, exactly like
+                // `contentPlain`: the copy holds the same document, so a second
+                // derivation could only ever disagree with the original.
                 contentPlain: source.contentPlain ?? "",
+                checklistDone: source.checklistDone,
+                checklistTotal: source.checklistTotal,
                 noteType: source.noteType,
                 isTemplate: input.asTemplate,
                 isPinned: false,
@@ -1074,6 +1106,70 @@ export class NotesService {
     }
   }
 
+  /**
+   * "Omitted means keep", with exactly one exception.
+   *
+   * A cross-project move that would strand a project-scoped column CLEARS the
+   * column instead of failing: the board column is an orthogonal axis and must
+   * never be the reason a hierarchy change is rejected. The returned summary
+   * then carries `boardColumnId: null`, so the UI can announce the move to
+   * "No column" rather than silently disagreeing with the server.
+   *
+   * An explicitly NAMED incompatible column is still a 404 — the caller asked
+   * for a column that does not exist in the destination, which is a mistake to
+   * report, not one to paper over.
+   */
+  private async resolveBoardColumn(
+    tx: DatabaseTransaction,
+    input: MoveNoteServiceInput,
+    source: NoteRow,
+  ): Promise<string | null> {
+    if (input.boardColumnId !== undefined) {
+      await this.assertBoardColumn(tx, input.boardColumnId, input.projectId);
+      return input.boardColumnId;
+    }
+    if (source.boardColumnId === null || input.projectId === source.projectId)
+      return source.boardColumnId;
+    const column = await this.readBoardColumn(tx, source.boardColumnId);
+    return column?.projectId === null ? source.boardColumnId : null;
+  }
+
+  /**
+   * Mirrors `TasksService.assertCustomStatus`: the note board and the task
+   * board share one column vocabulary, so they must share one fitting rule. A
+   * workspace-wide column (`project_id IS NULL`) fits any note; a
+   * project-scoped one fits only notes in that project.
+   *
+   * A foreign, other-tenant, or unknown id is a 404, never a 403: the
+   * workspace-scoped read simply finds nothing, which is exactly how another
+   * tenant's column looks from inside this workspace, so the endpoint cannot
+   * be used as a cross-tenant existence oracle.
+   */
+  private async assertBoardColumn(
+    tx: DatabaseTransaction,
+    boardColumnId: string | null,
+    projectId: string | null,
+  ): Promise<void> {
+    if (boardColumnId === null) return;
+    const column = await this.readBoardColumn(tx, boardColumnId);
+    if (column === undefined) this.notFound();
+    if (column.projectId !== null && column.projectId !== projectId) this.notFound();
+  }
+
+  private async readBoardColumn(
+    tx: DatabaseTransaction,
+    boardColumnId: string,
+  ): Promise<{ readonly projectId: string | null } | undefined> {
+    const [column] = await tx
+      .select({ projectId: taskStatuses.projectId })
+      .from(taskStatuses)
+      .where(
+        and(eq(taskStatuses.id, boardColumnId), whereWorkspace(taskStatuses, this.tenantContext)),
+      )
+      .limit(1);
+    return column;
+  }
+
   private async assertTags(tx: DatabaseTransaction, tagIds: readonly string[]): Promise<void> {
     if (tagIds.length === 0) return;
     const rows = await tx
@@ -1423,6 +1519,58 @@ export class NotesService {
     return map.get(noteId) ?? [];
   }
 
+  /**
+   * Everything derived from a note's document, computed in ONE place.
+   *
+   * `content_plain` and the two checklist counters are all projections of the
+   * same jsonb, and every writer of `content` must write all three or the list
+   * view starts reporting a progress bar for a document that no longer has one.
+   * Returning them together makes forgetting one a type error.
+   */
+  private contentProjection(content: NoteDocument): {
+    readonly contentPlain: string;
+    readonly checklistDone: number;
+    readonly checklistTotal: number;
+  } {
+    const checklist = countChecklist(content);
+    return {
+      contentPlain: extractNoteContentPlain(content),
+      checklistDone: checklist.done,
+      checklistTotal: checklist.total,
+    };
+  }
+
+  /**
+   * Task counts for many notes in ONE grouped query, mirroring `loadTagMap`.
+   * A per-row count would make a 25-note page 25 extra round trips.
+   *
+   * The aggregates come from `sql-aggregates` so a note's progress and a
+   * project's rollup cannot disagree about what "done" means.
+   */
+  private async loadTaskProgressMap(
+    db: DatabaseService["db"] | DatabaseTransaction,
+    noteIds: readonly string[],
+  ): Promise<Map<string, Progress>> {
+    const result = new Map<string, Progress>();
+    if (noteIds.length === 0) return result;
+    const rows = await db
+      .select({ noteId: tasks.noteId, done: taskDoneCount(), total: taskOpenTotalCount() })
+      .from(tasks)
+      .where(and(inArray(tasks.noteId, [...noteIds]), whereWorkspace(tasks, this.tenantContext)))
+      .groupBy(tasks.noteId);
+    for (const row of rows) {
+      if (row.noteId !== null) result.set(row.noteId, { done: row.done, total: row.total });
+    }
+    return result;
+  }
+
+  private async loadTaskProgress(
+    db: DatabaseService["db"] | DatabaseTransaction,
+    noteId: string,
+  ): Promise<Progress> {
+    return (await this.loadTaskProgressMap(db, [noteId])).get(noteId) ?? NO_PROGRESS;
+  }
+
   private async loadTagMap(
     db: DatabaseService["db"] | DatabaseTransaction,
     noteIds: readonly string[],
@@ -1444,13 +1592,14 @@ export class NotesService {
   }
 
   private async toDetail(row: NoteRow, input: NoteSelector): Promise<NoteDetail> {
-    const tagIds = await this.loadTagIds(this.database.db, row.id);
-    const [canUpdate, canDelete] = await Promise.all([
+    const [tagIds, taskProgress, canUpdate, canDelete] = await Promise.all([
+      this.loadTagIds(this.database.db, row.id),
+      this.loadTaskProgress(this.database.db, row.id),
       this.can(input, "note.update"),
       this.can(input, "note.delete"),
     ]);
     return Object.freeze({
-      ...this.toSummary(row, tagIds),
+      ...this.toSummary(row, tagIds, taskProgress),
       content: row.content as NoteDocument,
       contentPlain: row.contentPlain ?? "",
       createdById: row.createdById,
@@ -1460,7 +1609,7 @@ export class NotesService {
     });
   }
 
-  private toSummary(row: NoteRow, tagIds: readonly string[]): NoteSummary {
+  private toSummary(row: NoteRow, tagIds: readonly string[], taskProgress: Progress): NoteSummary {
     return {
       id: row.id,
       workspaceId: row.workspaceId,
@@ -1468,6 +1617,7 @@ export class NotesService {
       projectId: row.projectId,
       folderId: row.folderId,
       parentId: row.parentId,
+      boardColumnId: row.boardColumnId,
       title: row.title,
       type: this.fromDatabaseType(row.noteType),
       pageSize: row.pageSize === "letter" ? "letter" : "a4",
@@ -1477,6 +1627,10 @@ export class NotesService {
       isArchived: row.isArchived,
       isDeleted: row.isDeleted,
       tagIds: Object.freeze([...tagIds]),
+      progress: Object.freeze({
+        checklist: Object.freeze({ done: row.checklistDone, total: row.checklistTotal }),
+        tasks: Object.freeze({ done: taskProgress.done, total: taskProgress.total }),
+      }),
       version: row.version,
       deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
@@ -1502,9 +1656,12 @@ export class NotesService {
       projectId: notes.projectId,
       folderId: notes.folderId,
       parentId: notes.parentId,
+      boardColumnId: notes.boardColumnId,
       title: notes.title,
       content: notes.content,
       contentPlain: notes.contentPlain,
+      checklistDone: notes.checklistDone,
+      checklistTotal: notes.checklistTotal,
       noteType: notes.noteType,
       isTemplate: notes.isTemplate,
       isPinned: notes.isPinned,

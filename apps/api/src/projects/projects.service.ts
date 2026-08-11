@@ -40,7 +40,12 @@ import {
   users,
   workspaceMembers,
 } from "../database/schema";
-import { maxTimestamp } from "../database/sql-aggregates";
+import {
+  checklistSum,
+  maxTimestamp,
+  taskDoneCount,
+  taskOpenTotalCount,
+} from "../database/sql-aggregates";
 import {
   activeWorkspaceId,
   assertWorkspaceInsertValues,
@@ -281,8 +286,8 @@ export class ProjectsService {
     const operation = await this.authorizeProject(input, "project.read");
     return this.authorizationEntry.run(operation, async () => {
       const project = await this.readDatabaseRow(input.projectId);
-      const [noteActivity, taskProjection, members] = await Promise.all([
-        this.loadNoteActivity(input.projectId),
+      const [noteProjection, taskProjection, members] = await Promise.all([
+        this.loadNoteProjection(input.projectId),
         this.loadTaskProjection(input.projectId),
         this.loadProjectMembers(input.projectId),
       ]);
@@ -291,7 +296,10 @@ export class ProjectsService {
       // no rows. No type predicate is used here on purpose: the previous
       // `(value): value is Date => value !== null` asserted a claim it never
       // checked, so a non-`Date` value would reach `.getTime()` and throw.
-      const lastActivityAt = [noteActivity, taskProjection.lastActivityAt].reduce<Date>(
+      const lastActivityAt = [
+        noteProjection.lastActivityAt,
+        taskProjection.lastActivityAt,
+      ].reduce<Date>(
         (latest, value) => (value !== null && value.getTime() > latest.getTime() ? value : latest),
         project.updatedAt,
       );
@@ -299,10 +307,13 @@ export class ProjectsService {
         ...this.toMutationProject(project),
         lastActivityAt: lastActivityAt.toISOString(),
         members: Object.freeze(members),
+        // Task rows AND inline checklist items, summed into one bar. Both halves
+        // use the shared aggregates, so this can never disagree with the
+        // per-note `progress` the notes list reports.
         taskProgress: Object.freeze({
-          coverage: "standalone-tasks" as const,
-          completed: taskProjection.completed,
-          total: taskProjection.total,
+          coverage: "tasks-and-checklists" as const,
+          completed: taskProjection.completed + noteProjection.checklistDone,
+          total: taskProjection.total + noteProjection.checklistTotal,
         }),
       });
     });
@@ -444,12 +455,32 @@ export class ProjectsService {
     return row;
   }
 
-  private async loadNoteActivity(projectId: string): Promise<Date | null> {
-    const [activity] = await this.database.db
-      .select({ lastActivityAt: maxTimestamp(notes.updatedAt) })
+  /**
+   * Activity and inline-checklist totals in one pass over the project's notes.
+   *
+   * The checklist sums are filtered to live notes — a trashed note should not
+   * hold a project permanently short of 100% — while `lastActivityAt` keeps
+   * counting every note, including a deletion, because that IS activity.
+   */
+  private async loadNoteProjection(projectId: string): Promise<{
+    readonly lastActivityAt: Date | null;
+    readonly checklistDone: number;
+    readonly checklistTotal: number;
+  }> {
+    const live = sql`${notes.isDeleted} = false`;
+    const [projection] = await this.database.db
+      .select({
+        lastActivityAt: maxTimestamp(notes.updatedAt),
+        checklistDone: checklistSum(notes.checklistDone, live),
+        checklistTotal: checklistSum(notes.checklistTotal, live),
+      })
       .from(notes)
       .where(and(eq(notes.projectId, projectId), whereWorkspace(notes, this.tenantContext)));
-    return activity?.lastActivityAt ?? null;
+    return {
+      lastActivityAt: projection?.lastActivityAt ?? null,
+      checklistDone: projection?.checklistDone ?? 0,
+      checklistTotal: projection?.checklistTotal ?? 0,
+    };
   }
 
   private async loadTaskProjection(projectId: string): Promise<{
@@ -460,8 +491,8 @@ export class ProjectsService {
     const [projection] = await this.database.db
       .select({
         lastActivityAt: maxTimestamp(tasks.updatedAt),
-        completed: sql<number>`cast(count(*) filter (where ${tasks.status} = 'done') as integer)`,
-        total: sql<number>`cast(count(*) filter (where ${tasks.status} <> 'canceled') as integer)`,
+        completed: taskDoneCount(),
+        total: taskOpenTotalCount(),
       })
       .from(tasks)
       .where(and(eq(tasks.projectId, projectId), whereWorkspace(tasks, this.tenantContext)));

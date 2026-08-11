@@ -3,12 +3,15 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { CreateNoteDialog } from "./CreateNoteDialog";
 import { FolderControls } from "./FolderControls";
+import { NoteBoard } from "./NoteBoard";
+import { NoteGrid } from "./NoteGrid";
 import { NoteLifecycleActions } from "./NoteLifecycleActions";
 import { NoteList, type NoteMoveDestination } from "./NoteList";
+import { NoteTimeline } from "./NoteTimeline";
 import { RenameNoteControl } from "./RenameNoteControl";
 
 import type {
@@ -24,7 +27,7 @@ import type { CreateNoteInput } from "@notted/shared-validators";
 import { TagPicker } from "@/components/tags/TagPicker";
 import { Button } from "@/components/ui/button";
 import { noteListHref, noteViewPath } from "@/lib/notes/paths";
-import { noteQueryKeys, tagQueryKeys } from "@/lib/notes/query-keys";
+import { noteQueryKeys, tagQueryKeys, taskQueryKeys } from "@/lib/notes/query-keys";
 import {
   copyNote,
   createNote,
@@ -38,7 +41,13 @@ import {
   type NoteRequestFailureKind,
 } from "@/lib/notes/requests";
 import { cloneNotePageItems, optimisticMove } from "@/lib/notes/tree";
+import {
+  readNoteViewPreference,
+  writeNoteViewPreference,
+  type NoteViewMode,
+} from "@/lib/notes/view-preference";
 import { requestTagPage } from "@/lib/tags/requests";
+import { requestTaskStatuses } from "@/lib/tasks/requests";
 
 /**
  * The whole workspace tag listing, which `tagPageSchema` caps at 100. Frozen
@@ -51,6 +60,13 @@ const TAG_LIST_QUERY = {
   sortBy: "name",
   sortDirection: "asc",
 } as const satisfies TagListQuery;
+
+const VIEW_MODES: readonly { readonly value: NoteViewMode; readonly label: string }[] = [
+  { value: "grid", label: "Grid" },
+  { value: "list", label: "List" },
+  { value: "board", label: "Board" },
+  { value: "timeline", label: "Timeline" },
+];
 
 function failureMessage(
   action: string,
@@ -79,6 +95,7 @@ export function NoteBrowser({
   description,
   embedded = false,
   projectIds = [],
+  project,
 }: {
   readonly workspaceId: string;
   readonly initialPage: NotePage;
@@ -90,13 +107,44 @@ export function NoteBrowser({
   readonly description: string;
   readonly embedded?: boolean;
   readonly projectIds?: readonly string[];
+  /**
+   * Present only on the project detail mount. Board and timeline are projections
+   * of one project's columns and dates, so they are offered only here.
+   */
+  readonly project?: {
+    readonly id: string;
+    readonly name: string;
+    readonly createdAt: string;
+    readonly dueAt: string | null;
+  };
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
   const [status, setStatus] = useState("");
   const [hasVersionConflict, setHasVersionConflict] = useState(false);
+  const [view, setView] = useState<NoteViewMode>("list");
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const projectId = project?.id ?? null;
+  // Board and timeline need exactly one project's columns and dates. Anywhere
+  // else — the workspace root, a multi-project listing — they are not offered
+  // at all, and a persisted preference naming one falls back to the list.
+  const projectScoped = project !== undefined && projectIds.length === 1;
+
+  /*
+   * Read after mount, never as the initial state: the server has no access to
+   * `localStorage`, so seeding state from it would render one view on the
+   * server and another on the client and produce a hydration mismatch.
+   */
+  useEffect(() => {
+    const stored = readNoteViewPreference(window.localStorage, workspaceId, projectId);
+    setView(!projectScoped && (stored === "board" || stored === "timeline") ? "list" : stored);
+  }, [workspaceId, projectId, projectScoped]);
+
+  function selectView(next: NoteViewMode): void {
+    setView(next);
+    writeNoteViewPreference(window.localStorage, workspaceId, projectId, next);
+  }
 
   const notesQuery = useQuery({
     queryKey: noteQueryKeys.list(workspaceId, query),
@@ -131,6 +179,24 @@ export function NoteBrowser({
       return result.ok ? result.data.items : [];
     },
   });
+  /*
+   * The board's columns, fetched once here rather than inside a view: the board
+   * and the timeline are two projections of one column list, and a second cache
+   * entry is exactly how two views start disagreeing after a mutation.
+   */
+  const statusesQuery = useQuery({
+    queryKey: taskQueryKeys.statuses(workspaceId, projectId),
+    queryFn: async () => {
+      const result = await requestTaskStatuses(
+        workspaceId,
+        projectId === null ? {} : { projectId },
+      );
+      if (!result.ok) throw new Error(result.kind);
+      return result.data.items;
+    },
+    enabled: project !== undefined,
+    retry: false,
+  });
   const tagOptions: readonly TagSummary[] = tagsQuery.data ?? [];
   const tagsById: ReadonlyMap<string, TagSummary> = new Map(tagOptions.map((tag) => [tag.id, tag]));
   const activeTag = query.tagId === undefined ? undefined : tagsById.get(query.tagId);
@@ -144,6 +210,8 @@ export function NoteBrowser({
     page.page === 1 &&
     !page.hasMore;
   const disabledIds = operationPending ? new Set(page.items.map((note) => note.id)) : pendingIds;
+  const activeView: NoteViewMode =
+    !projectScoped && (view === "board" || view === "timeline") ? "list" : view;
   const destination = {
     projectId: query.scope === "project" ? (query.projectId ?? null) : null,
     folderId: query.folderId ?? null,
@@ -180,6 +248,7 @@ export function NoteBrowser({
       projectId: input.projectId ?? null,
       folderId: input.folderId ?? null,
       parentId: input.parentId ?? null,
+      boardColumnId: null,
       title: input.title,
       type: input.type ?? "document",
       pageSize: input.pageSize ?? "a4",
@@ -189,6 +258,7 @@ export function NoteBrowser({
       isArchived: input.isArchived ?? false,
       isDeleted: false,
       tagIds: input.tagIds ?? [],
+      progress: { checklist: { done: 0, total: 0 }, tasks: { done: 0, total: 0 } },
       version: 1,
       deletedAt: null,
       createdAt: now,
@@ -230,6 +300,9 @@ export function NoteBrowser({
       isPinned: false,
       isArchived: false,
       isDeleted: false,
+      // A copy carries the source document, so `notes.checklist_*` is copied
+      // with it; task rows stay attached to the source note and are not.
+      progress: { checklist: note.progress.checklist, tasks: { done: 0, total: 0 } },
       sortOrder: page.items.length + 1,
       version: 1,
       deletedAt: null,
@@ -367,15 +440,25 @@ export function NoteBrowser({
   async function move(note: NoteSummary, moveDestination: NoteMoveDestination): Promise<void> {
     if (query.view === "trash" || operationPending) return;
     const snapshot = { ...page, items: cloneNotePageItems(page.items) };
+    // Hoisted so the narrowing survives into the closure below. `undefined`
+    // means "keep the current column" and must never be sent as `null`, which
+    // would clear the column on an ordinary reorder.
+    const nextColumn = moveDestination.boardColumnId;
     markPending(note.id, true);
+    const moved = optimisticMove(
+      page.items,
+      note.id,
+      moveDestination,
+      moveDestination.beforeNoteId ?? null,
+    );
     setPage({
       ...page,
-      items: optimisticMove(
-        page.items,
-        note.id,
-        moveDestination,
-        moveDestination.beforeNoteId ?? null,
-      ),
+      items:
+        nextColumn === undefined
+          ? moved
+          : moved.map((item) =>
+              item.id === note.id ? { ...item, boardColumnId: nextColumn } : item,
+            ),
     });
     setStatus(`Moving ${note.title}…`);
     const result = await moveNote(workspaceId, note.id, {
@@ -384,6 +467,7 @@ export function NoteBrowser({
       folderId: moveDestination.folderId,
       parentId: moveDestination.parentId,
       beforeNoteId: moveDestination.beforeNoteId ?? null,
+      ...(nextColumn === undefined ? {} : { boardColumnId: nextColumn }),
     });
     markPending(note.id, false);
     if (!result.ok) {
@@ -392,7 +476,16 @@ export function NoteBrowser({
       setStatus(failureMessage("Move", result.kind));
       return;
     }
-    setStatus(`Moved ${note.title}. Order is being reconciled.`);
+    setHasVersionConflict(false);
+    // A project-scoped column cannot survive a move into another project, so the
+    // server clears it rather than refusing the move. Say so once, here.
+    const columnCleared =
+      nextColumn !== undefined && nextColumn !== null && result.data.note.boardColumnId === null;
+    setStatus(
+      columnCleared
+        ? `Moved ${note.title}. Its board column was cleared because that column belongs to another project.`
+        : `Moved ${note.title}. Order is being reconciled.`,
+    );
     await reconcile();
   }
 
@@ -601,13 +694,67 @@ export function NoteBrowser({
           </Button>
         ) : null}
       </div>
-      {page.items.length === 0 ? (
+      {/*
+       * Switching view repartitions rows already in hand: all four read the one
+       * `noteQueryKeys.list` entry above, so no view change costs a request and
+       * every optimistic edit is visible in all of them.
+       */}
+      <div className="flex w-fit rounded-md border p-1" role="group" aria-label="Note view">
+        {VIEW_MODES.filter(
+          (entry) => projectScoped || (entry.value !== "board" && entry.value !== "timeline"),
+        ).map((entry) => (
+          <Button
+            key={entry.value}
+            type="button"
+            size="sm"
+            variant={activeView === entry.value ? "secondary" : "ghost"}
+            aria-pressed={activeView === entry.value}
+            onClick={() => selectView(entry.value)}
+          >
+            {entry.label}
+          </Button>
+        ))}
+      </div>
+      {/*
+       * The card views have nothing to draw without notes. The board and the
+       * timeline do: the board still owes the reader its columns, and the
+       * timeline still frames the project and its tasks. Blanking those two on
+       * an empty note page would hide records that exist.
+       */}
+      {page.items.length === 0 && activeView !== "board" && activeView !== "timeline" ? (
         <section className="rounded-xl border border-dashed p-8 text-center">
           <h2 className="font-semibold">No notes in this view</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             Try another note view or create a note if your role allows it.
           </p>
         </section>
+      ) : activeView === "grid" ? (
+        <NoteGrid notes={page.items} tagsById={tagsById} controlsFor={controls} />
+      ) : activeView === "board" && project !== undefined ? (
+        <NoteBoard
+          notes={page.items}
+          columns={statusesQuery.data ?? []}
+          projectDueAt={project.dueAt}
+          canEdit={canCreate && query.view !== "trash"}
+          pendingIds={disabledIds}
+          onMove={move}
+          controlsFor={controls}
+          tagsById={tagsById}
+          hasMore={page.hasMore}
+          orderingDisabled={!hasCompleteSiblingProjection}
+          columnsLoading={statusesQuery.isPending}
+          columnsUnavailable={statusesQuery.isError}
+        />
+      ) : activeView === "timeline" && project !== undefined ? (
+        <NoteTimeline
+          workspaceId={workspaceId}
+          projectId={project.id}
+          projectName={project.name}
+          projectCreatedAt={project.createdAt}
+          projectDueAt={project.dueAt}
+          notes={page.items}
+          notesHasMore={page.hasMore}
+        />
       ) : (
         <NoteList
           notes={page.items}

@@ -198,7 +198,7 @@ describe("ProjectsService (unit)", () => {
     expect(select).not.toHaveBeenCalled();
   });
 
-  it("projects scoped activity, standalone task progress, and only authorized active members", async () => {
+  it("projects scoped activity, combined task and checklist progress, and only authorized active members", async () => {
     const tenant = new TenantContextService();
     const authorized = entry(tenant);
     const noteUpdated = new Date("2026-08-02T00:00:00Z");
@@ -212,7 +212,12 @@ describe("ProjectsService (unit)", () => {
             return { where: () => ({ limit: () => Promise.resolve([row()]) }) };
           }
           if (table === notes) {
-            return { where: () => Promise.resolve([{ lastActivityAt: noteUpdated }]) };
+            return {
+              where: () =>
+                Promise.resolve([
+                  { lastActivityAt: noteUpdated, checklistDone: 1, checklistTotal: 4 },
+                ]),
+            };
           }
           if (table === tasks) {
             return {
@@ -260,10 +265,13 @@ describe("ProjectsService (unit)", () => {
     const detail = await service.read({ principal: principal(), workspaceId, projectId });
 
     expect(detail.lastActivityAt).toBe(taskUpdated.toISOString());
+    // Task rows (2 of 3) plus inline checklist items (1 of 4) in one bar. The
+    // two halves come from the shared aggregates in `sql-aggregates`, so this
+    // rollup cannot define "done" differently from a note's own progress.
     expect(detail.taskProgress).toEqual({
-      coverage: "standalone-tasks",
-      completed: 2,
-      total: 3,
+      coverage: "tasks-and-checklists",
+      completed: 3,
+      total: 7,
     });
     expect(detail.members).toEqual([
       expect.objectContaining({

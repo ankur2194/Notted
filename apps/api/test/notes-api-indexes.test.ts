@@ -14,6 +14,10 @@ const correctionMigrationPath = resolve(
   process.cwd(),
   "src/database/migrations/0013_free_lockheed.sql",
 );
+const boardColumnMigrationPath = resolve(
+  process.cwd(),
+  "src/database/migrations/0015_lumpy_phil_sheldon.sql",
+);
 const journalPath = resolve(process.cwd(), "src/database/migrations/meta/_journal.json");
 const expected = [
   "notes_workspace_project_parent_order_idx",
@@ -22,6 +26,9 @@ const expected = [
   "notes_workspace_pinned_archive_updated_idx",
   "notes_workspace_template_updated_idx",
   "notes_workspace_archive_updated_idx",
+  // Part 49: the note-board column partition. Appended, so the `slice(0, 4)`
+  // assertion below still names exactly the four indexes 0012 created.
+  "notes_workspace_board_column_idx",
 ] as const;
 
 describe("Part 31 note indexes and forward migration artifacts", () => {
@@ -37,7 +44,31 @@ describe("Part 31 note indexes and forward migration artifacts", () => {
     const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
       entries: Array<{ idx: number; tag: string }>;
     };
-    expect(journal.entries.at(-1)).toMatchObject({ idx: 13, tag: "0013_free_lockheed" });
+    // Pinned by index, not by "last entry": the point is that 0013 was APPENDED
+    // in order and nothing renumbered the chain behind it. Asserting the tail
+    // would make every future migration fail this test for no reason.
+    expect(journal.entries[13]).toMatchObject({ idx: 13, tag: "0013_free_lockheed" });
+    expect(journal.entries[15]).toMatchObject({ idx: 15, tag: "0015_lumpy_phil_sheldon" });
+    expect(journal.entries.map((entry) => entry.idx)).toEqual(
+      journal.entries.map((_entry, index) => index),
+    );
+  });
+
+  /**
+   * The note board reuses `task_statuses`, so the only schema this part adds
+   * is one nullable FK column plus its index. NULL is the correct value for
+   * every existing row — it is the leading "No column" bucket — which is why
+   * this migration carries no backfill and no `UPDATE`.
+   */
+  it("adds the board column as a nullable SET NULL reference with no backfill", () => {
+    const sql = readFileSync(boardColumnMigrationPath, "utf8");
+    expect(sql).toContain('ALTER TABLE "notes" ADD COLUMN "board_column_id" uuid');
+    expect(sql).toContain('REFERENCES "public"."task_statuses"("id") ON DELETE set null');
+    expect(sql).toContain('CREATE INDEX "notes_workspace_board_column_idx"');
+    // No backfill, no rewrite: `ON UPDATE`/`ON DELETE` inside the constraint
+    // are the only occurrences, so the statement forms are what is asserted.
+    expect(sql).not.toMatch(/UPDATE\s+"notes"|DELETE\s+FROM|DROP\s|TRUNCATE/i);
+    expect(sql).not.toContain("NOT NULL");
   });
 
   it("keeps the forward correction ordered and includes the durable restriction backfill", () => {

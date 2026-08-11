@@ -159,7 +159,9 @@ export const projectMemberSchema = z
 
 export const projectTaskProgressSchema = z
   .object({
-    coverage: z.literal("standalone-tasks"),
+    // A literal, not a union: there is one coverage rule and the field exists
+    // so a client can name it, not so a caller can choose between rules.
+    coverage: z.literal("tasks-and-checklists"),
     completed: z.number().int().nonnegative(),
     total: z.number().int().nonnegative(),
   })

@@ -16,6 +16,15 @@ export type TaskStatusId = string;
 export type TagId = string;
 export type RequestId = string;
 
+/**
+ * A completed-out-of-total counter, shared by every progress reading in the
+ * product. Runtime validation is `progressSchema` in shared-validators.
+ */
+export interface Progress {
+  readonly done: number;
+  readonly total: number;
+}
+
 export type SortDirection = "asc" | "desc";
 
 export interface Sort<F extends string = string> {

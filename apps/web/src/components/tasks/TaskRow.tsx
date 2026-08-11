@@ -74,6 +74,8 @@ export function TaskRow({
   now,
   pending,
   disabled,
+  canDelete = true,
+  canUnassign = true,
   selected,
   onSelectedChange,
   onUpdate,
@@ -87,6 +89,19 @@ export function TaskRow({
   readonly pending: boolean;
   /** True when the viewer may read but not change tasks. */
   readonly disabled: boolean;
+  /**
+   * False hides the delete control outright rather than disabling it: an editor
+   * is denied `task.delete` on every row, so the button could never succeed.
+   * Defaults to the permissive value — the backend policy stays authoritative
+   * and this only stops offering doomed affordances.
+   */
+  readonly canDelete?: boolean;
+  /**
+   * False drops the "Unassigned" option once the task has an assignee. The
+   * editor branch of `task.assign` requires an active target, so clearing an
+   * assignee is always refused for them.
+   */
+  readonly canUnassign?: boolean;
   readonly selected: boolean;
   readonly onSelectedChange: (next: boolean) => void;
   readonly onUpdate: (task: TaskSummary, input: UpdateTaskInput) => void;
@@ -208,17 +223,19 @@ export function TaskRow({
             }}
           />
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={locked}
-          onClick={() => onDelete(task)}
-        >
-          <Trash2 aria-hidden="true" className="size-4" />
-          Delete
-          <span className="sr-only"> {task.title}</span>
-        </Button>
+        {canDelete ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={locked}
+            onClick={() => onDelete(task)}
+          >
+            <Trash2 aria-hidden="true" className="size-4" />
+            Delete
+            <span className="sr-only"> {task.title}</span>
+          </Button>
+        ) : null}
       </div>
 
       {/*
@@ -282,7 +299,7 @@ export function TaskRow({
               })
             }
           >
-            <option value="">Unassigned</option>
+            {canUnassign || task.assigneeId === null ? <option value="">Unassigned</option> : null}
             {members.map((member) => (
               <option key={member.userId} value={member.userId}>
                 {member.name}

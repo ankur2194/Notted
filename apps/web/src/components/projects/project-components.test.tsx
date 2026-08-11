@@ -34,7 +34,7 @@ const project = {
   updatedAt: "2026-08-02T00:00:00.000Z",
   lastActivityAt: "2026-08-03T00:00:00.000Z",
   members: [],
-  taskProgress: { coverage: "standalone-tasks", completed: 1, total: 2 },
+  taskProgress: { coverage: "tasks-and-checklists", completed: 1, total: 2 },
 } satisfies ProjectDetail;
 
 describe("project components", () => {

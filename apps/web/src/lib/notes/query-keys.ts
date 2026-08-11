@@ -40,4 +40,11 @@ export const taskQueryKeys = Object.freeze({
   all: (workspaceId: string) => ["tasks", workspaceId] as const,
   list: (workspaceId: string, query: TaskListQuery) =>
     ["tasks", workspaceId, "list", query] as const,
+  /**
+   * The board's custom columns (Part 48). Deliberately under the same `all`
+   * prefix as the rows: renaming a column changes the `statusLabel` carried on
+   * every card, so one `invalidateQueries(all(...))` has to reach both.
+   */
+  statuses: (workspaceId: string, projectId: string | null) =>
+    ["tasks", workspaceId, "statuses", projectId] as const,
 });

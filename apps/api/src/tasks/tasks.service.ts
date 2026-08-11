@@ -1360,7 +1360,6 @@ export class TasksService {
     return Object.freeze({
       ...this.toSummary(row, tagIds, this.labelFor(row, labels)),
       description: row.description,
-      createdById: row.createdById,
       updatedById: row.updatedById,
     });
   }
@@ -1388,6 +1387,7 @@ export class TasksService {
       recurrence: row.recurrence,
       recurrenceCron: row.recurrenceCron,
       tagIds: Object.freeze([...tagIds]),
+      createdById: row.createdById,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     });
