@@ -31,6 +31,9 @@ import {
   WORKSPACE_DELETED_JOB_TYPE,
   WORKSPACE_DELETED_PAYLOAD_VERSION,
   WORKSPACE_DELETED_QUEUE_NAME,
+  WORKSPACE_SEARCH_PURGE_IDEMPOTENCY_PREFIX,
+  WORKSPACE_SEARCH_PURGE_JOB_TYPE,
+  WORKSPACE_SEARCH_PURGE_QUEUE_NAME,
   WORKSPACE_MAX_SLUG_ATTEMPTS,
 } from "./workspaces.constants";
 
@@ -537,7 +540,16 @@ export class WorkspacesService {
         // Durable cleanup intent FIRST, while the workspace row still exists so
         // the SET NULL cascade has a value to clear. The intent survives the
         // workspace deletion; the Part 40/51 workers consume it later.
+        //
+        // Preserve the generic completed-cleanup concern, then add the
+        // dedicated search purge intent below. Both commit or roll back with
+        // the workspace deletion, so neither concern consumes the other.
         await this.scheduleWorkspaceCleanup(tx, {
+          workspaceId: existing.id,
+          actorId: input.principal.userId,
+          requestId: input.requestId,
+        });
+        await this.scheduleWorkspaceSearchPurge(tx, {
           workspaceId: existing.id,
           actorId: input.principal.userId,
           requestId: input.requestId,
@@ -632,6 +644,35 @@ export class WorkspacesService {
       payload,
       payloadHash,
       idempotencyKey: `${WORKSPACE_DELETED_IDEMPOTENCY_PREFIX}${input.workspaceId}`,
+      correlationId: input.requestId ?? null,
+    });
+  }
+
+  private async scheduleWorkspaceSearchPurge(
+    tx: DatabaseTransaction,
+    input: {
+      readonly workspaceId: string;
+      readonly actorId: string;
+      readonly requestId?: string | null;
+    },
+  ): Promise<void> {
+    const outboxId = randomUUID();
+    const payload: JobOutboxPayload = Object.freeze({
+      action: WORKSPACE_SEARCH_PURGE_JOB_TYPE,
+      intentId: outboxId,
+      workspaceId: input.workspaceId,
+      resourceIds: Object.freeze([input.workspaceId]),
+      actorId: input.actorId,
+    });
+    await tx.insert(jobOutbox).values({
+      id: outboxId,
+      workspaceId: input.workspaceId,
+      queueName: WORKSPACE_SEARCH_PURGE_QUEUE_NAME,
+      jobType: WORKSPACE_SEARCH_PURGE_JOB_TYPE,
+      payloadVersion: 1,
+      payload,
+      payloadHash: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
+      idempotencyKey: `${WORKSPACE_SEARCH_PURGE_IDEMPOTENCY_PREFIX}${input.workspaceId}`,
       correlationId: input.requestId ?? null,
     });
   }

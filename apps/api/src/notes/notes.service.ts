@@ -30,6 +30,7 @@ import {
   workspaceMembers,
 } from "../database/schema";
 import { taskDoneCount, taskOpenTotalCount } from "../database/sql-aggregates";
+import { NoteSearchIndexProducer } from "../search/note-search-index-producer";
 import {
   activeWorkspaceId,
   assertWorkspaceInsertValues,
@@ -228,6 +229,10 @@ export class NotesService {
     private readonly database: DatabaseService,
     private readonly authorizationEntry: AuthorizationEntryService,
     private readonly tenantContext: TenantContextService,
+    // Part 51.3 — emits `note.search.sync` intents inside the same
+    // transaction as each note mutation so the Meilisearch handler can
+    // re-read authoritative PostgreSQL and converge the index.
+    private readonly searchIndexProducer: NoteSearchIndexProducer,
   ) {}
 
   async create(input: CreateNoteServiceInput): Promise<NoteCreateResult> {
@@ -294,6 +299,14 @@ export class NotesService {
           );
           await this.replaceTags(tx, noteId, input.tagIds);
           await this.recordMutation(tx, "create", noteId, input);
+          // Part 51.3: schedule search-index sync for the newly created note
+          // in the same transaction. The handler re-reads authoritative state
+          // so an out-of-order delivery still converges to "indexed".
+          await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, [noteId], {
+            mutation: NOTE_DOMAIN_EVENTS.create,
+            correlationId: input.requestId,
+            actorId: input.principal.userId,
+          });
           await storeApiIdempotency(tx, idempotency, noteId);
           return this.readRow(tx, noteId);
         },
@@ -411,6 +424,14 @@ export class NotesService {
           if (updated === undefined) return this.versionConflictOrNotFound(tx, input.noteId);
           if (input.tagIds !== undefined) await this.replaceTags(tx, input.noteId, input.tagIds);
           await this.recordMutation(tx, "update", input.noteId, input);
+          // Part 51.3: title/content/tag-affecting update — re-sync this note.
+          // Tag replacement changes the index's `tags` field even when the
+          // note's own row is untouched by the update statement.
+          await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, [input.noteId], {
+            mutation: NOTE_DOMAIN_EVENTS.update,
+            correlationId: input.requestId,
+            actorId: input.principal.userId,
+          });
           return updated;
         },
         { isolationLevel: "serializable" },
@@ -505,6 +526,16 @@ export class NotesService {
             .returning(this.noteSelection());
           if (updated === undefined) this.versionConflict();
           await this.recordMutation(tx, "move", input.noteId, input);
+          // Part 51.3: re-sync the moved root and every descendant whose
+          // project/folder is inherited from the root. `subtreeIds` was
+          // captured BEFORE the move so the descendant IDs are still valid
+          // even when the move nullifies a parent linkage. The producer
+          // chunks to ≤8 per outbox row.
+          await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, subtreeIds, {
+            mutation: NOTE_DOMAIN_EVENTS.move,
+            correlationId: input.requestId,
+            actorId: input.principal.userId,
+          });
           return updated;
         },
         { isolationLevel: "read committed" },
@@ -602,6 +633,13 @@ export class NotesService {
             input.includeTags ? await this.loadTagIds(tx, input.noteId) : [],
           );
           await this.recordMutation(tx, "create", noteId, input);
+          // Part 51.3: copy-as-create produces a brand new note row that the
+          // index has never seen. Sync it so it appears in search results.
+          await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, [noteId], {
+            mutation: NOTE_DOMAIN_EVENTS.create,
+            correlationId: input.requestId,
+            actorId: input.principal.userId,
+          });
           await storeApiIdempotency(tx, idempotency, noteId);
           return this.readRow(tx, noteId);
         },
@@ -633,6 +671,21 @@ export class NotesService {
           const subtree = await this.noteSubtreeRows(tx, input.noteId, true);
           if (subtree.some((descendant) => !descendant.isDeleted)) this.activeSubtreeConflict();
           await this.recordMutation(tx, "permanentDelete", input.noteId, input);
+          // Part 51.3: capture every descendant ID BEFORE the cascade. The
+          // simple self-FK ON DELETE CASCADE will remove every descendant row
+          // in the next statement, after which they cannot be re-read. The
+          // handler re-reads authoritative state per ID and deletes the
+          // Meilisearch document for IDs that are now gone.
+          await this.searchIndexProducer.scheduleSearchSync(
+            tx,
+            input.workspaceId,
+            subtree.map((row) => row.id),
+            {
+              mutation: NOTE_DOMAIN_EVENTS.permanentDelete,
+              correlationId: input.requestId,
+              actorId: input.principal.userId,
+            },
+          );
           const deleted = await tx
             .delete(notes)
             .where(and(eq(notes.id, input.noteId), whereWorkspace(notes, this.tenantContext)))
@@ -846,6 +899,22 @@ export class NotesService {
             .where(and(inArray(notes.folderId, ids), whereWorkspace(notes, this.tenantContext)))
             .returning({ id: notes.id });
           await this.recordMutation(tx, "folderDelete", input.folderId, input);
+          // Part 51.3: folder deletion unfiles notes. The index observes
+          // `folderId` (and `updatedAt`) so each affected note must re-sync.
+          // The `.returning()` call captured every affected ID; the rows
+          // still exist (only `folderId` was nulled), so the IDs are valid.
+          if (unfiled.length > 0) {
+            await this.searchIndexProducer.scheduleSearchSync(
+              tx,
+              input.workspaceId,
+              unfiled.map((row) => row.id),
+              {
+                mutation: NOTE_DOMAIN_EVENTS.folderDelete,
+                correlationId: input.requestId,
+                actorId: input.principal.userId,
+              },
+            );
+          }
           const deleted = await tx
             .delete(folders)
             .where(and(eq(folders.id, input.folderId), whereWorkspace(folders, this.tenantContext)))
@@ -939,6 +1008,17 @@ export class NotesService {
           const updatedRoot = updated.find((row) => row.id === input.noteId);
           if (updatedRoot === undefined) this.versionConflict();
           await this.recordMutation(tx, deleted ? "delete" : "restore", input.noteId, input);
+          // Part 51.3: re-sync every affected note in the subtree. `ids` was
+          // computed BEFORE the update from the subtree rows; the IDs are
+          // still valid (soft delete/restore only flips flags). For soft
+          // delete the handler's authoritative read finds the rows marked
+          // isDeleted=true and removes them from the index; for restore the
+          // read finds live rows and re-upserts them.
+          await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, ids, {
+            mutation: NOTE_DOMAIN_EVENTS[deleted ? "delete" : "restore"],
+            correlationId: input.requestId,
+            actorId: input.principal.userId,
+          });
           return { affected: updated.length, version: updatedRoot.version };
         },
         { isolationLevel: "serializable" },

@@ -23,6 +23,7 @@ import type {
   PutObjectOptions,
   StorageBucket,
 } from "../infrastructure/minio/object-storage.service";
+import type { NoteSearchIndexProducer } from "../search/note-search-index-producer";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 
 const userId = "20000000-0000-4000-8000-000000000001";
@@ -33,6 +34,12 @@ const PNG = Buffer.concat([
   Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
   Buffer.alloc(56, 0x11),
 ]);
+
+function searchIndexProducer(): NoteSearchIndexProducer {
+  return {
+    scheduleSearchSync: vi.fn().mockResolvedValue(undefined),
+  } as unknown as NoteSearchIndexProducer;
+}
 
 const security = {
   maximumUploadBytes: 50 * 1_024 * 1_024,
@@ -291,6 +298,7 @@ function build(
   const tenant = new TenantContextService();
   const fake = fakeDatabase(databaseOptions);
   const auth = authorization(tenant, denied);
+  const producer = searchIndexProducer();
   const service = new AttachmentsService(
     fake.database,
     auth.entry,
@@ -300,8 +308,9 @@ function build(
     security,
     { warn: vi.fn() } as unknown as StructuredLogger,
     quotaService(fake.database, auth.entry, tenant),
+    producer,
   );
-  return { service, store, ...fake, authorizeUser: auth.authorizeUser };
+  return { service, store, producer, ...fake, authorizeUser: auth.authorizeUser };
 }
 
 function uploadInput() {
@@ -318,6 +327,29 @@ function uploadInput() {
 }
 
 describe("AttachmentsService", () => {
+  it("adds search intents when an attachment becomes ready and before it is deleted", async () => {
+    const context = build();
+    const uploaded = await context.service.uploadImage(uploadInput());
+    expect(context.producer.scheduleSearchSync).toHaveBeenCalledWith(
+      expect.anything(),
+      workspaceId,
+      [noteId],
+      expect.objectContaining({ mutation: ATTACHMENT_DOMAIN_EVENTS.created }),
+    );
+
+    await context.service.delete({
+      principal: principal(),
+      workspaceId,
+      attachmentId: uploaded.attachment.id,
+    });
+    expect(context.producer.scheduleSearchSync).toHaveBeenLastCalledWith(
+      expect.anything(),
+      workspaceId,
+      [noteId],
+      expect.objectContaining({ mutation: ATTACHMENT_DOMAIN_EVENTS.deleted }),
+    );
+  });
+
   it("walks pending -> processing -> ready and persists the sniffed type, not the declared one", async () => {
     const context = build();
     const result = await context.service.uploadImage(uploadInput());
@@ -414,6 +446,7 @@ describe("AttachmentsService", () => {
       security,
       { warn: vi.fn() } as unknown as StructuredLogger,
       quotaService(fake.database, auth.entry, tenant),
+      searchIndexProducer(),
     );
 
     await expect(service.uploadImage(uploadInput())).rejects.toBeInstanceOf(ApiHttpException);
@@ -643,6 +676,7 @@ describe("AttachmentsService", () => {
       { ...security, maximumUploadBytes: 1_024 } as unknown as SecurityConfig,
       { warn: vi.fn() } as unknown as StructuredLogger,
       quotaService(loweredFake.database, loweredAuth.entry, tenant),
+      searchIndexProducer(),
     );
     expect(lowered.maximumImageUploadBytes).toBe(1_024);
   });
@@ -927,6 +961,7 @@ describe("AttachmentsService.uploadFile", () => {
       { ...security, maximumUploadBytes: 4_096 } as unknown as SecurityConfig,
       { warn: vi.fn() } as unknown as StructuredLogger,
       quotaService(loweredFake.database, loweredAuth.entry, tenant),
+      searchIndexProducer(),
     );
     // An operator may only ever LOWER the effective ceiling.
     expect(lowered.maximumFileUploadBytes).toBe(4_096);
@@ -947,6 +982,7 @@ describe("AttachmentsService.uploadFile", () => {
       { ...security, maximumUploadBytes: 50 * 1_024 * 1_024 } as unknown as SecurityConfig,
       { warn: vi.fn() } as unknown as StructuredLogger,
       quotaService(fake.database, auth.entry, tenant),
+      searchIndexProducer(),
     );
     const oversizeImage = Buffer.concat([
       Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),

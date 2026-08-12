@@ -265,6 +265,7 @@ describe("WorkspacesService (unit)", () => {
     // then the cascade delete.
     expect(operations).toEqual([
       `outbox:${WORKSPACE_DELETED_JOB_TYPE}`,
+      "outbox:workspace.search.purge",
       `audit:${WORKSPACE_AUDIT_ACTIONS.delete}`,
       "tombstone:workspace",
       "delete:workspaces",
@@ -558,11 +559,22 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 26 workspace lifecycle (live)", () => {
           .from(jobOutbox)
           .where(eq(jobOutbox.jobType, WORKSPACE_DELETED_JOB_TYPE));
         const intent = outboxRows.find((row) => row.payload.workspaceId === createdId);
+        expect(outboxRows.filter((row) => row.payload.workspaceId === createdId)).toHaveLength(1);
         expect(intent).toBeDefined();
         expect(intent?.idempotencyKey).toBe(`workspace-deleted:${createdId}`);
         expect(intent?.workspaceId).toBeNull();
         expect(intent?.queueName).toBe("workspace-cleanup");
         expect(intent?.payload.action).toBe(WORKSPACE_DELETED_JOB_TYPE);
+        const searchRows = await tx
+          .select()
+          .from(jobOutbox)
+          .where(eq(jobOutbox.jobType, "workspace.search.purge"));
+        const searchIntent = searchRows.find((row) => row.payload.workspaceId === createdId);
+        expect(searchIntent).toMatchObject({
+          workspaceId: null,
+          queueName: "workspace-search-purge",
+          idempotencyKey: `workspace-search-purge:${createdId}`,
+        });
 
         const [deletionAudit] = await tx
           .select()

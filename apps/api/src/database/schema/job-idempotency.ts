@@ -67,7 +67,13 @@ import {
 // Idempotency record status. `pending` = intent recorded/dispatched, outcome
 // not yet known; `completed` = side effect recorded (result set); `failed` =
 // permanent failure (error_message set).
-export const jobStatusEnum = pgEnum("job_status", ["pending", "completed", "failed"]);
+export const jobStatusEnum = pgEnum("job_status", [
+  "pending",
+  "processing",
+  "completed",
+  "failed",
+  "reconciliation_required",
+]);
 
 // --------------------------------------------------------------------------- //
 // job_idempotency
@@ -98,6 +104,7 @@ export const jobIdempotency = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     // updated_at tracks status transitions (pending → completed/failed).
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
   },
   (t) => [
     // UNIQUE key: dedup + single-row lookup. The lookup path uses this.

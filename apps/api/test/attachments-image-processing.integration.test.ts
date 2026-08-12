@@ -68,6 +68,7 @@ import type {
   StorageBucket,
   StoredObjectStat,
 } from "../src/infrastructure/minio/object-storage.service";
+import type { NoteSearchIndexProducer } from "../src/search/note-search-index-producer";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 import type { Readable } from "node:stream";
 
@@ -247,6 +248,7 @@ function buildService(database: DatabaseService, store: ObjectStore): Attachment
     security,
     { warn: vi.fn() } as unknown as StructuredLogger,
     quota,
+    { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
   );
 }
 

@@ -1,8 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { DatabaseService } from "../database/database.service";
 
-import { AuthEmailDispatcherService } from "./auth-email-dispatcher.service";
 import { AuthEmailEncryptionService } from "./auth-email-encryption.service";
 import { AuthEmailProducerService } from "./auth-email-producer.service";
 
@@ -32,11 +31,9 @@ describe("AuthEmailProducerService", () => {
         authenticationTag: "dGFn",
       }),
     };
-    const dispatcher = { kick: vi.fn(() => events.push("dispatch")) };
     const producer = new AuthEmailProducerService(
       database as unknown as DatabaseService,
       encryption as unknown as AuthEmailEncryptionService,
-      dispatcher as unknown as AuthEmailDispatcherService,
     );
     await producer.queue({
       recipient: "USER@example.test",
@@ -45,7 +42,7 @@ describe("AuthEmailProducerService", () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
 
-    expect(events).toEqual(["commit", "dispatch"]);
+    expect(events).toEqual(["commit"]);
     expect(JSON.stringify(values)).not.toContain("plaintext");
     const outbox = values.at(-1) as { payload: Record<string, unknown> };
     expect(Object.keys(outbox.payload).sort()).toEqual(["action", "intentId"]);

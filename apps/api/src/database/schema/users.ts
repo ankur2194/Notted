@@ -40,6 +40,10 @@ export const users = pgTable(
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
     // Required by the Better Auth `twoFactor` plugin (see `auth.ts`).
     twoFactorEnabled: boolean("two_factor_enabled").default(false).notNull(),
+    // Platform authority is independent of every workspace role. Better Auth
+    // treats this as a non-input, non-returned field; only trusted database
+    // administration can grant it.
+    isPlatformOperator: boolean("is_platform_operator").default(false).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },

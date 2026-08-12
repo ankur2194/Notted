@@ -23,7 +23,7 @@ An opt-in Compose profile, `e2e`, holding a second application stack whose state
 | PostgreSQL      | `notted_dev`          | `notted_e2e_test`                | The accumulating state. Dropped, recreated, migrated and seeded on every `e2e:up`. |
 | MinIO buckets   | `notted-attachments`  | `notted-e2e-attachments`         | Attachments are tenant data; a shared bucket leaks e2e objects into the browser.   |
 | Redis           | logical db 0          | logical db 1, flushed on reset   | See below — this one was not optional.                                             |
-| Meilisearch     | shared                | shared                           | Safe **only** because nothing indexes documents yet. Expiry condition recorded.    |
+| Meilisearch     | shared server / dev prefix | shared server / e2e prefix  | Part 51 added logical index isolation before indexing documents.                    |
 | Mailpit         | shared                | shared                           | `clearMailpit()` empties the whole mailbox. Nuisance, not correctness.             |
 
 ```bash
@@ -91,7 +91,7 @@ The 9 skips are pre-existing opt-in fixtures: 8 `dashboard-shell` tests require 
 
 ## Known gaps and follow-up
 
-- **Meilisearch sharing expires the moment search indexing lands.** That part must give the e2e stack its own index prefix or instance in the same change. Recorded in `docs/standards/testing.md` and in `compose.yaml`.
+- **Resolved by Part 51:** the shared Meilisearch server now uses distinct development and e2e index prefixes, as required by `docs/standards/testing.md` and `compose.yaml`.
 - **`pnpm build` is not claimed green here.** It fails on this host at `apps/web`'s `env:validate --production` because no root `.env` exists and the `NEXT_PUBLIC_*` URLs are `http://`. Pre-existing and unrelated: `pnpm --filter @notted/api build` passes, and the web build completes when given production-shaped URLs.
 - **Firefox and WebKit were not investigated.** The maintained baseline is chromium.
 - **`workspace-management.spec.ts:248`** flaked once early on and did not reproduce in five serial attempts; a trace measured the step at 838 ms against a 5 s budget, which contradicts a "timeout too tight" reading. Deliberately left unchanged. If it recurs, assert the component's own submitting state between the click and the URL so the failure distinguishes "the click never reached hydrated React" from "the request failed".

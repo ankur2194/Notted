@@ -26,6 +26,7 @@ import { NOTE_DOMAIN_EVENT_QUEUE } from "../src/notes/notes.constants";
 import { NotesService } from "../src/notes/notes.service";
 import { TenantContextService } from "../src/tenant";
 
+import type { NoteSearchIndexProducer } from "../src/search/note-search-index-producer";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 import type { PgTransactionConfig } from "drizzle-orm/pg-core/session";
 
@@ -101,7 +102,9 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
           new AuthorizationPolicyService(),
           tenant,
         );
-        const service = new NotesService(database, authorization, tenant);
+        const service = new NotesService(database, authorization, tenant, {
+          scheduleSearchSync: async () => undefined,
+        } as unknown as NoteSearchIndexProducer);
         const shareService = new NoteSharesService(database, authorization, tenant);
         const owner = principal(SEED_IDS.users.alphaOwner);
         const admin = principal(SEED_IDS.users.alphaAdmin);
@@ -820,6 +823,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
       database,
       authorization as unknown as AuthorizationEntryService,
       tenant,
+      { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
     );
     await expect(
       service.navigation({
@@ -861,6 +865,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
           tenant,
         ),
         tenant,
+        { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
       );
     const normalTenant = new TenantContextService();
     const normalDatabase = {

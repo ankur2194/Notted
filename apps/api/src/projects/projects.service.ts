@@ -46,6 +46,7 @@ import {
   taskDoneCount,
   taskOpenTotalCount,
 } from "../database/sql-aggregates";
+import { NoteSearchIndexProducer } from "../search/note-search-index-producer";
 import {
   activeWorkspaceId,
   assertWorkspaceInsertValues,
@@ -147,6 +148,9 @@ export class ProjectsService {
     private readonly database: DatabaseService,
     private readonly authorizationEntry: AuthorizationEntryService,
     private readonly tenantContext: TenantContextService,
+    // Part 51.3 — re-syncs every note whose `projectId` is nulled by a
+    // project delete so the index's `projectId` filter field converges.
+    private readonly searchIndexProducer: NoteSearchIndexProducer,
   ) {}
 
   async list(input: ListProjectsInput): Promise<ProjectPage> {
@@ -372,6 +376,16 @@ export class ProjectsService {
     return this.authorizationEntry.run(operation, async () => {
       await this.database.transaction(async (tx) => {
         await this.readRow(tx, input.projectId);
+        // Part 51.3: capture the IDs of every note whose `projectId` will be
+        // nulled BEFORE the update runs. After the update the project link is
+        // gone, and although the notes still exist the index's `projectId`
+        // filter field must be re-derived by the handler's authoritative read.
+        const affectedNoteIds = await tx
+          .select({ id: notes.id })
+          .from(notes)
+          .where(
+            and(eq(notes.projectId, input.projectId), whereWorkspace(notes, this.tenantContext)),
+          );
         // Both project links use workspace+project NO ACTION composite FKs.
         // Nullify only active-tenant rows first; the notes/tasks survive as
         // standalone rows and unrelated/cross-tenant rows cannot be touched.
@@ -388,6 +402,18 @@ export class ProjectsService {
             and(eq(tasks.projectId, input.projectId), whereWorkspace(tasks, this.tenantContext)),
           );
         await this.recordMutation(tx, "delete", input.projectId, input);
+        if (affectedNoteIds.length > 0) {
+          await this.searchIndexProducer.scheduleSearchSync(
+            tx,
+            input.workspaceId,
+            affectedNoteIds.map((row) => row.id),
+            {
+              mutation: PROJECT_DOMAIN_EVENTS.delete,
+              correlationId: input.requestId,
+              actorId: input.principal.userId,
+            },
+          );
+        }
         const deleted = await tx
           .delete(projects)
           .where(

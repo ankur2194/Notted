@@ -73,7 +73,14 @@ import { workspaces } from "./workspaces";
 // --------------------------------------------------------------------------- //
 // Delivery status. `suppressed` short-circuits future sends to a recipient on
 // a permanent suppress list (hard bounce/complaint).
-export const emailStatusEnum = pgEnum("email_status", ["queued", "sent", "failed", "suppressed"]);
+export const emailStatusEnum = pgEnum("email_status", [
+  "queued",
+  "processing",
+  "sent",
+  "failed",
+  "suppressed",
+  "reconciliation_required",
+]);
 
 // --------------------------------------------------------------------------- //
 // email_deliveries

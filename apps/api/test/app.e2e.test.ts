@@ -101,11 +101,10 @@ describe.sequential("API scaffold", () => {
       { name: "api", status: "up" },
       { name: "database", status: "down", message: "database query failed" },
       { name: "redis", status: "disabled" },
+      { name: "queue", status: "disabled", message: "Queue execution is disabled." },
       { name: "minio", status: "disabled" },
       { name: "meilisearch", status: "disabled" },
       { name: "smtp", status: "disabled" },
-      { name: "auth-email-queue", status: "disabled" },
-      { name: "invitation-email-queue", status: "disabled" },
     ]);
     expect(
       response.body.checks.every(

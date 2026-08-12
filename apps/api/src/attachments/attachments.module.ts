@@ -11,6 +11,7 @@ import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
 import { AuthorizationModule } from "../authorization/authorization.module";
 import { MinioModule } from "../infrastructure/minio/minio.module";
+import { SearchModule } from "../search/search.module";
 import { StorageModule } from "../storage/storage.module";
 
 import { AttachmentsController, NoteAttachmentsController } from "./attachments.controller";
@@ -21,7 +22,9 @@ import { ImageProcessingService } from "./image-processing.service";
 @Module({
   // Part 45: `StorageModule` supplies `StorageQuotaService`, the single owner of
   // the quota rules the upload path enforces.
-  imports: [AuthModule, AuthorizationModule, MinioModule, StorageModule],
+  // Part 51.3: `SearchModule` supplies `NoteSearchIndexProducer` for
+  // re-syncing the owning note on attachment ready/delete.
+  imports: [AuthModule, AuthorizationModule, MinioModule, StorageModule, SearchModule],
   controllers: [AttachmentsController, NoteAttachmentsController],
   providers: [
     AttachmentsService,

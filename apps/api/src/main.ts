@@ -11,14 +11,23 @@ import { AppModule } from "./app.module";
 import { AuthRateLimitMiddleware } from "./auth/auth-rate-limit.middleware";
 import { AuthService } from "./auth/auth.service";
 import { BETTER_AUTH_NODE_HANDLER } from "./auth/auth.tokens";
+import { PlatformOperatorService } from "./auth/platform-operator.service";
 import { ApiExceptionFilter } from "./common/errors/api-exception.filter";
 import { ApiHttpException } from "./common/errors/api-http.exception";
 import { validationExceptionFactory } from "./common/errors/validation-exception.factory";
 import { StructuredLogger } from "./common/logging/structured-logger.service";
 import { RateLimitService } from "./common/rate-limit/rate-limit.service";
+import { getRequestId } from "./common/request/request-context";
 import { RequestContextMiddleware } from "./common/request/request-context.middleware";
 import { APP_CONFIG, type AppConfig } from "./config/app.config";
 import { AUTH_CONFIG, type AuthConfig } from "./config/auth.config";
+import {
+  BULL_BOARD_PATH,
+  bullBoardRequestPolicy,
+  hasSafeBullBoardQuery,
+} from "./queue/bull-board-policy";
+import { BullBoardService } from "./queue/bull-board.service";
+import { QueueAdminRemediationService } from "./queue/queue-admin-remediation.service";
 import { TrpcRootRouter } from "./trpc/trpc-root.service";
 import { TRPC_PATH } from "./trpc/trpc.router";
 
@@ -38,7 +47,10 @@ export async function createApplication(): Promise<NestExpressApplication> {
   const requestContext = app.get(RequestContextMiddleware);
   const authRateLimit = app.get(AuthRateLimitMiddleware);
   const authService = app.get(AuthService);
+  const platformOperator = app.get(PlatformOperatorService);
   const rateLimit = app.get(RateLimitService);
+  const bullBoard = app.get(BullBoardService);
+  const queueAdmin = app.get(QueueAdminRemediationService);
   const rootTrpc = app.get(TrpcRootRouter);
   const authHandler = app.get<
     ((request: IncomingMessage, response: ServerResponse) => Promise<void>) | null
@@ -110,6 +122,75 @@ export async function createApplication(): Promise<NestExpressApplication> {
       limit: config.requestBodyLimitBytes,
       parameterLimit: 1_000,
     }),
+  );
+  // This literal, unversioned operational route is mounted before Nest's
+  // `/api/v1` prefix. Authentication is performed for every document, asset,
+  // and API request. Only the board operations required by Part 50 are
+  // allow-listed; mutations require trusted Origin and a committed audit row
+  // before Bull Board can touch Redis.
+  express.use(
+    BULL_BOARD_PATH,
+    helmet.contentSecurityPolicy({
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    }),
+    (request, response, next) => {
+      void (async () => {
+        const operator = await platformOperator.requireOperator(request);
+        rateLimit.enforce(request, response);
+
+        const policy = bullBoardRequestPolicy(request.method, request.path);
+        if (policy === null || (policy.kind === "read" && !hasSafeBullBoardQuery(request.query))) {
+          response.status(404).json({
+            success: false,
+            error: { code: "NOT_FOUND", message: "The requested resource was not found." },
+            requestId: response.getHeader("X-Request-Id") ?? "unknown",
+          });
+          return;
+        }
+        if (policy.kind === "mutation") {
+          authService.assertTrustedMutationOrigin(request);
+          const requestId = getRequestId(request);
+          if (requestId === undefined || policy.audit.jobId === undefined) {
+            throw new Error("QUEUE_ADMIN_REQUEST_INVALID");
+          }
+          await queueAdmin.retry({
+            queueName: policy.audit.queueName,
+            jobId: policy.audit.jobId,
+            requestId,
+            operator,
+          });
+          response.status(200).json({ status: "retried" });
+          return;
+        }
+
+        response.setHeader("Cache-Control", "no-store");
+        response.setHeader("Referrer-Policy", "no-referrer");
+        response.setHeader("X-Robots-Tag", "noindex, nofollow");
+        bullBoard.middleware()(request, response, next);
+      })().catch((error: unknown) => {
+        if (error instanceof ApiHttpException) {
+          response.status(error.getStatus()).json({
+            success: false,
+            error: error.safeResponse,
+            requestId: response.getHeader("X-Request-Id") ?? "unknown",
+          });
+          return;
+        }
+        response.status(503).json({
+          success: false,
+          error: { code: "SERVICE_UNAVAILABLE", message: "Administrative access is unavailable." },
+          requestId: response.getHeader("X-Request-Id") ?? "unknown",
+        });
+      });
+    },
   );
   // Resolve valid cookie sessions before Nest's global rate-limit guard. A
   // forged header can never select the authenticated tier; only this trusted

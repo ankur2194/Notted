@@ -48,6 +48,11 @@ export class AuthService {
     });
   }
 
+  /** Internal availability seam for transports that must distinguish outage from no session. */
+  isAvailable(): boolean {
+    return this.auth !== null;
+  }
+
   assertTrustedMutationOrigin(request: Request): void {
     const origin = request.header("origin");
     if (origin === undefined || !this.config.trustedOrigins.includes(origin)) {

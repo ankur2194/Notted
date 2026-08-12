@@ -1,33 +1,23 @@
-import { createHash } from "node:crypto";
-
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { z } from "zod";
 
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { StructuredLogger } from "../common/logging/structured-logger.service";
 import { APP_CONFIG, type AppConfig } from "../config/app.config";
-import {
-  AUTH_EMAIL_QUEUE_CONFIG,
-  type AuthEmailQueueConfig,
-} from "../config/auth-email-queue.config";
+import { FEATURES_CONFIG, type FeaturesConfig } from "../config/features.config";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
-import {
-  emailDeliveries,
-  invitations,
-  jobIdempotency,
-  jobOutbox,
-  workspaces,
-} from "../database/schema";
+import { emailDeliveries, invitations, workspaces } from "../database/schema";
 import { SmtpService } from "../infrastructure/smtp/smtp.service";
+import { defineQueueJobRegistration, type QueueJobContext } from "../queue/job-contracts";
+import { WORKSPACE_INVITATION_EMAIL_JOB_DEFINITION } from "../queue/job-registry";
+import { PermanentQueueJobError } from "../queue/queue-errors";
+import { QueueHandlerRegistry } from "../queue/queue-handler-registry.service";
 import { TenantContextService, whereWorkspace } from "../tenant";
 
 import { InvitationTokenService } from "./invitation-token.service";
-import {
-  INVITATION_EMAIL_IDEMPOTENCY_PREFIX,
-  INVITATION_EMAIL_QUEUE_NAME,
-} from "./memberships.constants";
 
-import type { InvitationEmailJobPayload } from "./invitation-email.types";
+const invitationResourceIdsSchema = z.tuple([z.string().uuid(), z.string().uuid()]).readonly();
 
 function escapeHtml(value: string): string {
   return value
@@ -37,8 +27,23 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
+type InvitationQueueContext = QueueJobContext<
+  typeof WORKSPACE_INVITATION_EMAIL_JOB_DEFINITION.jobType,
+  z.output<typeof WORKSPACE_INVITATION_EMAIL_JOB_DEFINITION.payloadSchema>
+>;
+
+interface InvitationIdentifiers {
+  readonly workspaceId: string;
+  readonly invitationId: string;
+  readonly deliveryId: string;
+}
+
+/** Tenant-scoped concrete handler on the shared default BullMQ lane. */
 @Injectable()
-export class InvitationEmailWorkerService {
+export class InvitationEmailQueueHandler implements OnModuleInit, OnModuleDestroy {
+  readonly jobType = WORKSPACE_INVITATION_EMAIL_JOB_DEFINITION.jobType;
+  private unregister?: () => void;
+
   constructor(
     private readonly database: DatabaseService,
     private readonly authorizationEntry: AuthorizationEntryService,
@@ -46,25 +51,53 @@ export class InvitationEmailWorkerService {
     private readonly tokens: InvitationTokenService,
     private readonly smtp: SmtpService,
     private readonly logger: StructuredLogger,
+    private readonly registry: QueueHandlerRegistry,
     @Inject(APP_CONFIG) private readonly appConfig: AppConfig,
-    @Inject(AUTH_EMAIL_QUEUE_CONFIG) private readonly config: AuthEmailQueueConfig,
+    @Inject(FEATURES_CONFIG) private readonly features: FeaturesConfig,
   ) {}
 
-  async process(payload: InvitationEmailJobPayload, finalAttempt: boolean): Promise<void> {
+  onModuleInit(): void {
+    if (!this.features.emailEnabled) return;
+    this.unregister = this.registry.register(
+      defineQueueJobRegistration({
+        definition: WORKSPACE_INVITATION_EMAIL_JOB_DEFINITION,
+        handler: this,
+      }),
+    );
+  }
+
+  onModuleDestroy(): void {
+    this.unregister?.();
+  }
+
+  async handle(context: InvitationQueueContext): Promise<void> {
+    if (context.payload.intentId !== context.outboxIntentId) {
+      throw new PermanentQueueJobError("payload_invalid");
+    }
+    const parsedIds = invitationResourceIdsSchema.safeParse(context.payload.resourceIds);
+    if (!parsedIds.success) throw new PermanentQueueJobError("payload_invalid");
+    const [invitationId, deliveryId] = parsedIds.data;
+    const identifiers = { workspaceId: context.payload.workspaceId, invitationId, deliveryId };
+
+    // Resolve the invitation and workspace relationship in one bounded query.
+    // A missing row and a cross-workspace tamper share the same safe failure.
     const [resolved] = await this.database.db
       .select({ workspaceId: invitations.workspaceId })
       .from(invitations)
-      .where(eq(invitations.id, payload.invitationId))
+      .innerJoin(workspaces, eq(workspaces.id, invitations.workspaceId))
+      .where(
+        and(
+          eq(invitations.id, identifiers.invitationId),
+          eq(invitations.workspaceId, identifiers.workspaceId),
+        ),
+      )
       .limit(1);
-    if (resolved === undefined) {
-      await this.cancel(payload, "INVITATION_NOT_FOUND");
-      return;
-    }
+    if (resolved === undefined) throw new PermanentQueueJobError("handler_failed");
 
     const operation = await this.authorizationEntry.authorizeSystem({
       actor: {
         kind: "system",
-        authorityId: "invitation-email-worker",
+        authorityId: "invitation-email-queue-handler",
         workspaceId: resolved.workspaceId,
         purpose: "deliver a pending workspace invitation",
         allowedActions: ["member.invite"],
@@ -72,86 +105,82 @@ export class InvitationEmailWorkerService {
       },
       action: "member.invite",
       resource: { kind: "workspace" },
-      correlationId: payload.deliveryId,
+      correlationId: context.correlationId,
     });
-    return this.authorizationEntry.run(operation, async () => {
-      const claim = await this.database.transaction((tx) => this.claim(tx, payload));
+
+    await this.authorizationEntry.run(operation, async () => {
+      const claim = await this.database.transaction((tx) => this.claim(tx, identifiers));
       if (claim === null) return;
 
-      const token = this.tokens.derive(payload.invitationId);
+      const token = this.tokens.derive(identifiers.invitationId);
       const actionUrl = new URL("/invitations/accept", this.appConfig.appUrl);
       actionUrl.searchParams.set("token", token);
       const workspaceName = escapeHtml(claim.workspaceName);
       const escapedUrl = escapeHtml(actionUrl.toString());
+      let providerMessageId: string;
       try {
-        const providerMessageId = await this.smtp.send({
+        providerMessageId = await this.smtp.send({
           to: claim.recipient,
           subject: `Join ${claim.workspaceName} on Notted`,
           text: `You were invited to join ${claim.workspaceName} on Notted: ${actionUrl.toString()}\n\nThis link is single-use and expires in seven days.`,
           html: `<p>You were invited to join <strong>${workspaceName}</strong> on Notted.</p><p><a href="${escapedUrl}">Accept workspace invitation</a></p><p>This link is single-use and expires in seven days.</p>`,
         });
-        const now = new Date();
-        await this.database.transaction(async (tx) => {
-          await tx
-            .update(emailDeliveries)
-            .set({
-              status: "sent",
-              attempts: sql`${emailDeliveries.attempts} + 1`,
-              providerMessageId,
-              sentAt: now,
-              errorMessage: null,
-            })
-            .where(eq(emailDeliveries.id, payload.deliveryId));
-          await tx
-            .update(jobIdempotency)
-            .set({ status: "completed", result: { outcome: "sent" }, updatedAt: now })
-            .where(eq(jobIdempotency.key, this.idempotencyKey(payload.invitationId)));
-          await tx
-            .update(jobOutbox)
-            .set({ status: "completed", completedAt: now, updatedAt: now })
-            .where(eq(jobOutbox.idempotencyKey, this.idempotencyKey(payload.invitationId)));
-        });
-        this.logger.info(
-          { jobId: payload.invitationId, queue: INVITATION_EMAIL_QUEUE_NAME, outcome: "sent" },
-          "Invitation email delivery completed",
-        );
       } catch {
-        const now = new Date();
-        await this.database.transaction(async (tx) => {
-          await tx
-            .update(emailDeliveries)
-            .set({
-              status: finalAttempt ? "failed" : "queued",
-              attempts: sql`${emailDeliveries.attempts} + 1`,
-              errorMessage: finalAttempt ? "Delivery attempts exhausted" : null,
-            })
-            .where(eq(emailDeliveries.id, payload.deliveryId));
-          if (finalAttempt) {
-            await tx
-              .update(jobIdempotency)
-              .set({
-                status: "failed",
-                errorMessage: "Delivery attempts exhausted",
-                updatedAt: now,
-              })
-              .where(eq(jobIdempotency.key, this.idempotencyKey(payload.invitationId)));
-            await tx
-              .update(jobOutbox)
-              .set({ status: "failed", lastErrorCode: "DELIVERY_FAILED", updatedAt: now })
-              .where(eq(jobOutbox.idempotencyKey, this.idempotencyKey(payload.invitationId)));
-          }
-        });
-        throw new Error("Invitation email delivery failed");
+        await this.database.db
+          .update(emailDeliveries)
+          .set({
+            status: "reconciliation_required",
+            attempts: sql`${emailDeliveries.attempts} + 1`,
+            errorMessage: "Provider outcome requires reconciliation",
+          })
+          .where(
+            and(
+              eq(emailDeliveries.id, identifiers.deliveryId),
+              eq(emailDeliveries.workspaceId, identifiers.workspaceId),
+              eq(emailDeliveries.relatedEntityType, "invitation"),
+              eq(emailDeliveries.relatedEntityId, identifiers.invitationId),
+              eq(emailDeliveries.status, "processing"),
+            ),
+          );
+        // SMTP failures are ambiguous: the provider may have accepted before
+        // the connection failed. Never auto-resend this invitation.
+        throw new PermanentQueueJobError("reconciliation_required");
       }
+      await this.database.db
+        .update(emailDeliveries)
+        .set({
+          status: "sent",
+          attempts: sql`${emailDeliveries.attempts} + 1`,
+          providerMessageId,
+          sentAt: new Date(),
+          errorMessage: null,
+        })
+        .where(
+          and(
+            eq(emailDeliveries.id, identifiers.deliveryId),
+            eq(emailDeliveries.workspaceId, identifiers.workspaceId),
+            eq(emailDeliveries.relatedEntityType, "invitation"),
+            eq(emailDeliveries.relatedEntityId, identifiers.invitationId),
+            eq(emailDeliveries.status, "processing"),
+          ),
+        );
+      this.logger.info(
+        {
+          jobId: identifiers.invitationId,
+          queue: WORKSPACE_INVITATION_EMAIL_JOB_DEFINITION.route.physicalQueueName,
+          outcome: "sent",
+        },
+        "Invitation email delivery completed",
+      );
     });
   }
 
   private async claim(
     tx: DatabaseTransaction,
-    payload: InvitationEmailJobPayload,
+    identifiers: InvitationIdentifiers,
   ): Promise<{ readonly recipient: string; readonly workspaceName: string } | null> {
     await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${`invitation-id:${payload.invitationId}`}, 0))`,
+      sql`select pg_advisory_xact_lock(hashtextextended(${`invitation-id:${identifiers.invitationId}`}, 0))`,
     );
     const [row] = await tx
       .select({
@@ -164,14 +193,16 @@ export class InvitationEmailWorkerService {
       .innerJoin(
         emailDeliveries,
         and(
-          eq(emailDeliveries.id, payload.deliveryId),
+          eq(emailDeliveries.id, identifiers.deliveryId),
+          eq(emailDeliveries.workspaceId, identifiers.workspaceId),
           eq(emailDeliveries.relatedEntityType, "invitation"),
           eq(emailDeliveries.relatedEntityId, invitations.id),
         ),
       )
       .where(
         and(
-          eq(invitations.id, payload.invitationId),
+          eq(invitations.id, identifiers.invitationId),
+          eq(invitations.workspaceId, identifiers.workspaceId),
           whereWorkspace(invitations, this.tenantContext),
           isNull(invitations.acceptedAt),
           isNull(invitations.revokedAt),
@@ -179,57 +210,45 @@ export class InvitationEmailWorkerService {
         ),
       )
       .limit(1);
-    if (row === undefined || row.deliveryStatus !== "queued") {
-      await this.cancelInTransaction(tx, payload, "INVITATION_NOT_PENDING");
+    if (row === undefined) {
+      // Relationship predicates prevent a tampered delivery identifier from
+      // mutating another invitation or tenant. Active-state failures converge
+      // the authoritative delivery to a safe terminal state.
+      await tx
+        .update(emailDeliveries)
+        .set({ status: "failed", errorMessage: "Invitation is no longer pending" })
+        .where(
+          and(
+            eq(emailDeliveries.id, identifiers.deliveryId),
+            eq(emailDeliveries.workspaceId, identifiers.workspaceId),
+            eq(emailDeliveries.relatedEntityType, "invitation"),
+            eq(emailDeliveries.relatedEntityId, identifiers.invitationId),
+            eq(emailDeliveries.status, "queued"),
+          ),
+        );
       return null;
     }
-
-    const key = this.idempotencyKey(payload.invitationId);
-    const payloadHash = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
-    const [existing] = await tx
-      .select({ status: jobIdempotency.status, payloadHash: jobIdempotency.payloadHash })
-      .from(jobIdempotency)
-      .where(eq(jobIdempotency.key, key))
-      .limit(1);
-    if (existing?.status === "completed") return null;
-    if (existing !== undefined && existing.payloadHash !== payloadHash) {
-      await this.cancelInTransaction(tx, payload, "IDEMPOTENCY_PAYLOAD_MISMATCH");
+    if (row.deliveryStatus === "processing") {
+      await tx
+        .update(emailDeliveries)
+        .set({
+          status: "reconciliation_required",
+          errorMessage: "Interrupted delivery requires reconciliation",
+        })
+        .where(eq(emailDeliveries.id, identifiers.deliveryId));
       return null;
     }
-    if (existing === undefined) {
-      await tx.insert(jobIdempotency).values({
-        key,
-        queueName: INVITATION_EMAIL_QUEUE_NAME,
-        payloadHash,
-        expiresAt: new Date(
-          Date.now() + this.config.idempotencyRetentionDays * 24 * 60 * 60 * 1_000,
-        ),
-      });
-    }
-    return Object.freeze({ recipient: row.recipient, workspaceName: row.workspaceName });
-  }
-
-  private async cancel(payload: InvitationEmailJobPayload, errorCode: string): Promise<void> {
-    await this.database.transaction((tx) => this.cancelInTransaction(tx, payload, errorCode));
-  }
-
-  private async cancelInTransaction(
-    tx: DatabaseTransaction,
-    payload: InvitationEmailJobPayload,
-    errorCode: string,
-  ): Promise<void> {
-    const now = new Date();
+    if (row.deliveryStatus !== "queued") return null;
     await tx
       .update(emailDeliveries)
-      .set({ status: "failed", errorMessage: "Invitation is no longer pending" })
-      .where(and(eq(emailDeliveries.id, payload.deliveryId), eq(emailDeliveries.status, "queued")));
-    await tx
-      .update(jobOutbox)
-      .set({ status: "cancelled", lastErrorCode: errorCode, updatedAt: now })
-      .where(eq(jobOutbox.idempotencyKey, this.idempotencyKey(payload.invitationId)));
-  }
-
-  private idempotencyKey(invitationId: string): string {
-    return `${INVITATION_EMAIL_IDEMPOTENCY_PREFIX}${invitationId}`;
+      .set({ status: "processing", errorMessage: null })
+      .where(
+        and(
+          eq(emailDeliveries.id, identifiers.deliveryId),
+          eq(emailDeliveries.workspaceId, identifiers.workspaceId),
+          eq(emailDeliveries.status, "queued"),
+        ),
+      );
+    return Object.freeze({ recipient: row.recipient, workspaceName: row.workspaceName });
   }
 }

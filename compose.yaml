@@ -130,6 +130,7 @@ x-api-environment: &api-environment
   MINIO_BUCKET_EXPORTS: ${MINIO_BUCKET_EXPORTS:-notted-exports}
   MEILISEARCH_HOST: http://meilisearch:7700
   MEILISEARCH_API_KEY: ${MEILI_MASTER_KEY:-notted-dev-meili-master-key}
+  MEILISEARCH_INDEX_PREFIX: ${MEILISEARCH_INDEX_PREFIX:-notted_dev_}
   EMAIL_SMTP_HOST: mailpit
   EMAIL_SMTP_PORT: "1025"
   EMAIL_SMTP_SECURE: "false"
@@ -167,9 +168,8 @@ x-api-environment: &api-environment
 #   * The PostgreSQL, Redis, MinIO, Meilisearch and Mailpit *servers*, plus
 #     `deps` and `contracts` (installed dependencies and compiled contract
 #     packages). Sharing these costs nothing and avoids a second install.
-#   * Meilisearch. Nothing indexes documents yet — `MeilisearchService` only
-#     performs a health probe — so there is no index to collide over, and the
-#     API exposes no index-prefix setting to isolate one with.
+#   * Meilisearch. The server is shared, while versioned index prefixes isolate
+#     development from disposable e2e documents.
 #   * Mailpit. `clearMailpit()` empties the whole mailbox, so a concurrent
 #     developer-stack email could be deleted mid-run. No spec asserts on the
 #     dev stack's mail, so this is a nuisance, not a correctness problem.
@@ -189,6 +189,7 @@ x-api-e2e-environment: &api-e2e-environment
   REDIS_URL: redis://redis:6379/1
   MINIO_BUCKET_ATTACHMENTS: ${MINIO_E2E_BUCKET_ATTACHMENTS:-notted-e2e-attachments}
   MINIO_BUCKET_EXPORTS: ${MINIO_E2E_BUCKET_EXPORTS:-notted-e2e-exports}
+  MEILISEARCH_INDEX_PREFIX: ${MEILISEARCH_E2E_INDEX_PREFIX:-notted_e2e_}
   BETTER_AUTH_URL: http://localhost:${NOTTED_E2E_API_PORT:-3011}
   BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:${NOTTED_E2E_WEB_PORT:-3010}
   # Rate limiting is keyed by client IP. A containerised Playwright joins

@@ -24,6 +24,7 @@ import {
   tasks,
   taskTags,
 } from "../database/schema";
+import { NoteSearchIndexProducer } from "../search/note-search-index-producer";
 import {
   activeWorkspaceId,
   assertWorkspaceInsertValues,
@@ -99,6 +100,10 @@ export class TagsService {
     private readonly database: DatabaseService,
     private readonly authorizationEntry: AuthorizationEntryService,
     private readonly tenantContext: TenantContextService,
+    // Part 51.3 — used to re-sync every note linked to a renamed or deleted
+    // tag, since the indexed `tags` field changes for every linked note even
+    // when the note row itself is untouched.
+    private readonly searchIndexProducer: NoteSearchIndexProducer,
   ) {}
 
   async list(input: ListTagsServiceInput): Promise<TagPage> {
@@ -204,6 +209,13 @@ export class TagsService {
     });
     return this.authorizationEntry.run(operation, async () => {
       const row = await this.database.transaction(async (tx) => {
+        // Part 51.3: capture the linked note IDs BEFORE the tag update so the
+        // sync intent covers every note whose indexed `tags` field changes.
+        // The rename itself does not touch `note_tags`; the index's `tags`
+        // field is derived by the projection from `tags.name`, so a rename
+        // silently changes the indexed value of every linked note.
+        const linkedNoteIds =
+          input.name === undefined ? [] : await this.linkedNoteIds(tx, input.tagId);
         const changes: Partial<typeof tags.$inferInsert> = {};
         if (input.name !== undefined) changes.name = input.name;
         if (input.color !== undefined) changes.color = input.color;
@@ -215,6 +227,13 @@ export class TagsService {
           .catch((error: unknown) => this.rethrowNameConflict(error));
         if (updated.length === 0) this.notFound();
         await this.recordMutation(tx, "update", input.tagId, input);
+        if (linkedNoteIds.length > 0) {
+          await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, linkedNoteIds, {
+            mutation: TAG_DOMAIN_EVENTS.update,
+            correlationId: input.requestId,
+            actorId: input.principal.userId,
+          });
+        }
         return this.readRow(tx, input.tagId);
       });
       return Object.freeze({ tag: this.toSummary(row) });
@@ -234,10 +253,22 @@ export class TagsService {
         // Read before delete: the same scoped read both conceals a foreign id as
         // 404 and reports how many note/task assignments the cascade removes.
         const row = await this.readRow(tx, input.tagId);
+        // Part 51.3: capture linked note IDs BEFORE the cascade. Tag deletion
+        // cascades `note_tags`, after which the IDs cannot be recovered from
+        // the junction. Each previously linked note must re-sync because its
+        // indexed `tags` field loses this tag's name.
+        const linkedNoteIds = await this.linkedNoteIds(tx, input.tagId);
         await tx
           .delete(tags)
           .where(and(eq(tags.id, input.tagId), whereWorkspace(tags, this.tenantContext)));
         await this.recordMutation(tx, "delete", input.tagId, input);
+        if (linkedNoteIds.length > 0) {
+          await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, linkedNoteIds, {
+            mutation: TAG_DOMAIN_EVENTS.delete,
+            correlationId: input.requestId,
+            actorId: input.principal.userId,
+          });
+        }
         return Object.freeze({
           tagId: row.id,
           deleted: true as const,
@@ -292,6 +323,28 @@ export class TagsService {
       .limit(1);
     if (row === undefined) return this.notFound();
     return row;
+  }
+
+  /**
+   * Part 51.3. The IDs of every live (non-soft-deleted) note linked to `tagId`,
+   * scoped through the joined parent so a junction row from another tenant can
+   * never appear. Used to fan out `note.search.sync` intents on tag rename and
+   * tag delete. Captured BEFORE the cascade so delete-time callers can still
+   * read the junction.
+   */
+  private async linkedNoteIds(tx: DatabaseTransaction, tagId: string): Promise<string[]> {
+    const rows = await tx
+      .select({ noteId: noteTags.noteId })
+      .from(noteTags)
+      .innerJoin(notes, eq(notes.id, noteTags.noteId))
+      .where(
+        and(
+          eq(noteTags.tagId, tagId),
+          eq(notes.isDeleted, false),
+          whereWorkspace(notes, this.tenantContext),
+        ),
+      );
+    return rows.map((row) => row.noteId);
   }
 
   private async assertCapacity(tx: DatabaseTransaction): Promise<void> {

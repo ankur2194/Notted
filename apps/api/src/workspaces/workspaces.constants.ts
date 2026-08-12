@@ -2,9 +2,8 @@
 //
 // These constants name the audit action verbs written to `audit_logs` and the
 // durable `job_outbox` intent emitted when a workspace is deleted. The object-
-// store cleanup worker is Part 40 and the search-index cleanup worker is Part
-// 51; neither exists yet, so the outbox intent (committed atomically with the
-// workspace deletion) is the scoped-complete contract for those later workers.
+// completed object-store cleanup and the search-index purge use separate
+// concern-specific intents committed atomically with workspace deletion.
 //
 // Mirrors `apps/api/src/auth/auth-email.types.ts` for the job-type/version pair.
 
@@ -35,6 +34,9 @@ export const WORKSPACE_DELETED_PAYLOAD_VERSION = 1 as const;
  * per deletion and safe to retry if the dispatcher re-reads the outbox row.
  */
 export const WORKSPACE_DELETED_IDEMPOTENCY_PREFIX = "workspace-deleted:" as const;
+export const WORKSPACE_SEARCH_PURGE_JOB_TYPE = "workspace.search.purge" as const;
+export const WORKSPACE_SEARCH_PURGE_QUEUE_NAME = "workspace-search-purge" as const;
+export const WORKSPACE_SEARCH_PURGE_IDEMPOTENCY_PREFIX = "workspace-search-purge:" as const;
 
 /** Maximum slug-resolution attempts before surfacing a slug-collision error. */
 export const WORKSPACE_MAX_SLUG_ATTEMPTS = 5 as const;

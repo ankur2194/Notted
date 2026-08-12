@@ -17,12 +17,9 @@ The `e2e` Compose profile is a second application stack — `api-e2e` and `web-e
 logical database 1. It shares the PostgreSQL, Redis, MinIO, Meilisearch and Mailpit *servers*, plus
 the installed dependencies and compiled contract packages, with the development stack.
 
-**Two shared services are isolated only by circumstance, and both have an expiry condition.**
-Meilisearch is shared with no index separation, which is safe *only because nothing indexes documents
-yet* — `MeilisearchService` performs a health probe and nothing more, and `meilisearch.config.ts`
-exposes no index-prefix setting. **The part that introduces search indexing must give the e2e stack
-its own index prefix (or its own instance) in the same change**, or an e2e run will contaminate the
-developer's search results and vice versa. Mailpit is likewise shared, and `clearMailpit()` empties
+**Shared services require logical isolation.** Meilisearch uses distinct deterministic, versioned
+index prefixes (`notted_dev_` and `notted_e2e_`) on the shared server, so an e2e rebuild cannot
+contaminate developer indexes. Mailpit is likewise shared, and `clearMailpit()` empties
 the entire mailbox, so a concurrent e2e run can delete a message a developer was reading; that is a
 nuisance rather than a correctness problem, and it is why no spec should assert on mail it did not
 itself send.

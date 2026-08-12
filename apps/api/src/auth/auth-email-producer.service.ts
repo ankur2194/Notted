@@ -10,7 +10,6 @@ import {
   type AuthEmailPurpose,
 } from "../database/schema";
 
-import { AuthEmailDispatcherService } from "./auth-email-dispatcher.service";
 import { AuthEmailEncryptionService, type AuthEmailContext } from "./auth-email-encryption.service";
 import { AUTH_EMAIL_JOB_TYPE, AUTH_EMAIL_PAYLOAD_VERSION } from "./auth-email.types";
 
@@ -33,7 +32,6 @@ export class AuthEmailProducerService {
   constructor(
     private readonly database: DatabaseService,
     private readonly encryption: AuthEmailEncryptionService,
-    private readonly dispatcher: AuthEmailDispatcherService,
   ) {}
 
   async queue(input: QueueAuthEmailInput): Promise<QueuedAuthEmail> {
@@ -73,9 +71,9 @@ export class AuthEmailProducerService {
       });
     });
 
-    // The durable transaction is complete before Redis/BullMQ is touched.
-    // Dispatch failure is non-fatal: the periodic dispatcher retains intent.
-    this.dispatcher.kick();
+    // The shared bounded dispatcher discovers this durable intent after commit.
+    // No queue client is exposed to the producer and no Redis side effect can
+    // race the business transaction.
     return { deliveryId, intentId, status: "queued" };
   }
 }

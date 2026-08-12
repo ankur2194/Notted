@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { parseAiConfig } from "./ai.config";
-import { parseAuthEmailQueueConfig } from "./auth-email-queue.config";
 import { parseAuthConfig } from "./auth.config";
 import { parseFeaturesConfig } from "./features.config";
 import { parseImageProcessingConfig } from "./image-processing.config";
@@ -21,7 +20,6 @@ describe("server environment contract", () => {
       parseMeilisearchConfig({}),
       parseSmtpConfig({}),
       parseAuthConfig({}),
-      parseAuthEmailQueueConfig({}),
       parseSecurityConfig({}),
       parseImageProcessingConfig({}),
       parseAiConfig({}),

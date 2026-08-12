@@ -77,6 +77,7 @@ import {
   notificationsRelations,
   notificationTargetTypeEnum,
 } from "./notifications";
+import { platformAdminAudits } from "./platform-admin-audits";
 import {
   projectAccess,
   projectAccessRelations,
@@ -197,6 +198,7 @@ export {
 } from "./ai";
 export { apiKeys, apiKeysRelations } from "./api-keys";
 export { apiIdempotencyRecords } from "./api-idempotency";
+export { platformAdminAudits } from "./platform-admin-audits";
 export { auditLogs, auditLogsRelations } from "./audit-logs";
 export {
   authEmailIntents,
@@ -316,6 +318,8 @@ export const schema = {
   // content/secrets).
   auditLogs,
   auditLogsRelations,
+  // Part 50 — platform-scoped, payload-free Bull Board mutation evidence.
+  platformAdminAudits,
   // api_keys: hash-only machine credentials (UNIQUE key_hash); raw keys are
   // never persisted. Authenticated by the API-key service (Part 61).
   apiKeys,

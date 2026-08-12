@@ -10,12 +10,11 @@ import { DatabaseModule } from "../database/database.module";
 import { DatabaseService } from "../database/database.service";
 import { RedisModule } from "../infrastructure/redis/redis.module";
 import { SmtpModule } from "../infrastructure/smtp/smtp.module";
+import { QueueModule } from "../queue/queue.module";
 
-import { AuthEmailDispatcherService } from "./auth-email-dispatcher.service";
 import { AuthEmailEncryptionService } from "./auth-email-encryption.service";
 import { AuthEmailProducerService } from "./auth-email-producer.service";
-import { AuthEmailQueueService } from "./auth-email-queue.service";
-import { AuthEmailWorkerService } from "./auth-email-worker.service";
+import { AuthEmailQueueHandler } from "./auth-email-worker.service";
 import { AuthRateLimitMiddleware } from "./auth-rate-limit.middleware";
 import { AuthSecurityService } from "./auth-security.service";
 import { AuthController } from "./auth.controller";
@@ -28,16 +27,15 @@ import {
   setupBetterAuth,
   type BetterAuthInstance,
 } from "./better-auth.setup";
+import { PlatformOperatorService } from "./platform-operator.service";
 
 @Module({
-  imports: [AuthorizationPolicyModule, DatabaseModule, RedisModule, SmtpModule],
+  imports: [AuthorizationPolicyModule, DatabaseModule, RedisModule, SmtpModule, QueueModule],
   controllers: [AuthController],
   providers: [
     BetterAuthRedisStorage,
     AuthEmailEncryptionService,
-    AuthEmailWorkerService,
-    AuthEmailQueueService,
-    AuthEmailDispatcherService,
+    AuthEmailQueueHandler,
     AuthEmailProducerService,
     {
       provide: BETTER_AUTH_INSTANCE,
@@ -91,6 +89,7 @@ import {
       },
     },
     AuthService,
+    PlatformOperatorService,
     AuthSecurityService,
     AuthGuard,
     AuthRateLimitMiddleware,
@@ -99,10 +98,10 @@ import {
     BETTER_AUTH_INSTANCE,
     BETTER_AUTH_NODE_HANDLER,
     AuthEmailProducerService,
-    AuthEmailQueueService,
     AuthGuard,
     AuthRateLimitMiddleware,
     AuthService,
+    PlatformOperatorService,
   ],
 })
 export class AuthModule {}

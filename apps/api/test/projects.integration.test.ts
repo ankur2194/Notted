@@ -30,6 +30,7 @@ import {
 import { ProjectsService } from "../src/projects/projects.service";
 import { TenantContextService } from "../src/tenant";
 
+import type { NoteSearchIndexProducer } from "../src/search/note-search-index-producer";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -104,7 +105,9 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 29 project CRUD (live)", () => {
           new AuthorizationPolicyService(),
           tenant,
         );
-        const service = new ProjectsService(database, entry, tenant);
+        const service = new ProjectsService(database, entry, tenant, {
+          scheduleSearchSync: async () => undefined,
+        } as unknown as NoteSearchIndexProducer);
         const owner = principal(SEED_IDS.users.alphaOwner);
         const admin = principal(SEED_IDS.users.alphaAdmin);
         const editor = principal(SEED_IDS.users.alphaEditor);
@@ -599,7 +602,9 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 29 project CRUD (live)", () => {
           new AuthorizationPolicyService(),
           tenant,
         );
-        const service = new ProjectsService(database, entry, tenant);
+        const service = new ProjectsService(database, entry, tenant, {
+          scheduleSearchSync: async () => undefined,
+        } as unknown as NoteSearchIndexProducer);
         const owner = principal(SEED_IDS.users.alphaOwner);
         const scope = { principal: owner, workspaceId: SEED_IDS.workspaces.alpha };
 
@@ -721,7 +726,9 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 29 project CRUD (live)", () => {
           new AuthorizationPolicyService(),
           tenant,
         );
-        const service = new ProjectsService(database, entry, tenant);
+        const service = new ProjectsService(database, entry, tenant, {
+          scheduleSearchSync: async () => undefined,
+        } as unknown as NoteSearchIndexProducer);
         const fixtureName = `Rollback ${randomUUID()}`;
         const beforeAudits = await tx
           .select({ id: auditLogs.id })

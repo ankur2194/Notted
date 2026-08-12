@@ -48,6 +48,7 @@ import {
   ObjectStorageService,
   type ObjectStore,
 } from "../infrastructure/minio/object-storage.service";
+import { NoteSearchIndexProducer } from "../search/note-search-index-producer";
 import { StorageQuotaService } from "../storage/storage-quota.service";
 import {
   activeWorkspaceId,
@@ -195,6 +196,9 @@ export class AttachmentsService {
     // the read-only usage endpoint can never disagree about what a workspace is
     // allowed to store.
     private readonly quota: StorageQuotaService,
+    // Part 51.3. Re-sync the owning note when an attachment reaches `ready`
+    // or is deleted so the index's `hasAttachments` flag converges.
+    private readonly searchIndexProducer: NoteSearchIndexProducer,
   ) {}
 
   /**
@@ -394,6 +398,13 @@ export class AttachmentsService {
             sizeBytes: input.buffer.byteLength,
             mimeType: sniffed,
           });
+          // Part 51.3: an attachment reaching `ready` flips the owning note's
+          // `hasAttachments` flag in the index. Re-sync that one note.
+          await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, [input.noteId], {
+            mutation: ATTACHMENT_DOMAIN_EVENTS.created,
+            correlationId: input.requestId,
+            actorId: input.principal.userId,
+          });
         });
       } catch (error: unknown) {
         await this.compensate(attachmentId, input, written, error);
@@ -553,6 +564,12 @@ export class AttachmentsService {
             sizeBytes: input.buffer.byteLength,
             mimeType: admitted.mimeType,
           });
+          // Part 51.3: same `hasAttachments` flip as the image ready path.
+          await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, [input.noteId], {
+            mutation: ATTACHMENT_DOMAIN_EVENTS.created,
+            correlationId: input.requestId,
+            actorId: input.principal.userId,
+          });
         });
       } catch (error: unknown) {
         await this.compensate(
@@ -664,6 +681,11 @@ export class AttachmentsService {
     return this.authorizationEntry.run(operation, async () => {
       const keys = await this.database.transaction(async (tx) => {
         const row = await this.readRow(input.attachmentId, tx);
+        // Part 51.3: capture the owning note id BEFORE the row is deleted so
+        // the sync intent can target it. After the delete, the link is gone
+        // and the note's `hasAttachments` flag must be re-derived by the
+        // handler's authoritative read.
+        const owningNoteId = row.noteId;
         const deleted = await tx
           .delete(attachments)
           .where(
@@ -675,6 +697,11 @@ export class AttachmentsService {
           .returning({ id: attachments.id });
         if (deleted.length !== 1) return this.notFound();
         await this.recordMutation(tx, "deleted", input.attachmentId, input);
+        await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, [owningNoteId], {
+          mutation: ATTACHMENT_DOMAIN_EVENTS.deleted,
+          correlationId: input.requestId,
+          actorId: input.principal.userId,
+        });
         return this.variantKeys(row.variants);
       });
       await this.objects.removeObjects(ATTACHMENTS_BUCKET, keys);

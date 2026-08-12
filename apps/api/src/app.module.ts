@@ -13,6 +13,8 @@ import { MembershipsModule } from "./memberships/memberships.module";
 import { NotesModule } from "./notes/notes.module";
 import { NotificationModule } from "./notifications/notification.module";
 import { ProjectsModule } from "./projects/projects.module";
+import { QueueModule } from "./queue/queue.module";
+import { SearchModule } from "./search/search.module";
 import { ShellModule } from "./shell/shell.module";
 import { StorageModule } from "./storage/storage.module";
 import { TagsModule } from "./tags/tags.module";
@@ -40,6 +42,11 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
     NotificationModule,
     NotesModule,
     ProjectsModule,
+    // Safe with zero handlers: QueueHandlerRegistry is the mandatory dispatch gate.
+    QueueModule,
+    // Safe before Part 51 queue producers/handlers: this owns only the
+    // rebuildable note-index contract and provider adapter.
+    SearchModule,
     TagsModule,
     TasksModule,
     TenantContextModule,

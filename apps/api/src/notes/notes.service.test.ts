@@ -10,6 +10,7 @@ import { NotesService } from "./notes.service";
 
 import type { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import type { DatabaseService } from "../database/database.service";
+import type { NoteSearchIndexProducer } from "../search/note-search-index-producer";
 import type { NoteDocument } from "@notted/shared-types";
 
 const principal = Object.freeze({
@@ -53,6 +54,19 @@ const copyInput = Object.freeze({
   idempotencyKey: "note-copy-key-0001",
 });
 
+/**
+ * No-op stub for the {@link NoteSearchIndexProducer}. Existing unit tests
+ * assert policy, ordering, and projection behavior; they verify the
+ * producer's contract separately in
+ * `search/note-search-index-producer.test.ts`. The stub keeps these suites
+ * focused without exercising the producer wiring on every assertion.
+ */
+function noOpSearchIndexProducer(): NoteSearchIndexProducer {
+  return {
+    scheduleSearchSync: vi.fn().mockResolvedValue(undefined),
+  } as unknown as NoteSearchIndexProducer;
+}
+
 describe("NotesService policy and safe behavior", () => {
   it("authorizes before any SQL for detail reads", async () => {
     const denial = new Error("concealed");
@@ -69,6 +83,7 @@ describe("NotesService policy and safe behavior", () => {
       { db } as unknown as DatabaseService,
       { authorizeUser } as unknown as AuthorizationEntryService,
       {} as TenantContextService,
+      noOpSearchIndexProducer(),
     );
     await expect(service.read({ principal, workspaceId, noteId })).rejects.toBe(denial);
     expect(authorizeUser).toHaveBeenCalledWith(
@@ -91,6 +106,7 @@ describe("NotesService policy and safe behavior", () => {
       { transaction } as unknown as DatabaseService,
       { authorizeUser } as unknown as AuthorizationEntryService,
       {} as TenantContextService,
+      noOpSearchIndexProducer(),
     );
     await expect(
       service.move({
@@ -121,6 +137,7 @@ describe("NotesService policy and safe behavior", () => {
       { db: forbiddenDatabase(), transaction } as unknown as DatabaseService,
       { authorizeUser } as unknown as AuthorizationEntryService,
       {} as TenantContextService,
+      noOpSearchIndexProducer(),
     );
     await expect(service.copy(copyInput)).rejects.toBe(denial);
     expect(authorizeUser.mock.calls.map(([value]) => value)).toEqual([
@@ -152,6 +169,7 @@ describe("NotesService policy and safe behavior", () => {
         { db: forbiddenDatabase(), transaction } as unknown as DatabaseService,
         { authorizeUser } as unknown as AuthorizationEntryService,
         {} as TenantContextService,
+        noOpSearchIndexProducer(),
       );
       await expect(service.copy({ ...copyInput, ...container })).rejects.toBe(denial);
       expect(authorizeUser.mock.calls[1]?.[0]).toEqual(
@@ -182,6 +200,7 @@ describe("NotesService policy and safe behavior", () => {
       version: 7,
     };
     const inserts: { values: Record<string, unknown> }[] = [];
+    const producer = noOpSearchIndexProducer();
     const tx = {
       execute: vi.fn().mockResolvedValue(undefined),
       select: () => {
@@ -208,6 +227,7 @@ describe("NotesService policy and safe behavior", () => {
         run: (_operation: unknown, run: () => Promise<unknown>) => run(),
       } as unknown as AuthorizationEntryService,
       { get: () => ({ workspaceId }) } as unknown as TenantContextService,
+      producer,
     );
     // Only the insert under test stays real; the surrounding helpers have their
     // own coverage and would otherwise need the whole query builder faked.
@@ -271,6 +291,12 @@ describe("NotesService policy and safe behavior", () => {
     expect(replaceTags).toHaveBeenCalledWith(tx, values.id, [
       "10000000-0000-4000-8000-000000000006",
     ]);
+    expect(producer.scheduleSearchSync).toHaveBeenCalledWith(
+      tx,
+      workspaceId,
+      [values.id],
+      expect.objectContaining({ mutation: "note.created" }),
+    );
   });
 
   it("uses explicit transport/database note type mapping", () => {
@@ -278,6 +304,7 @@ describe("NotesService policy and safe behavior", () => {
       {} as DatabaseService,
       {} as AuthorizationEntryService,
       {} as TenantContextService,
+      noOpSearchIndexProducer(),
     );
     expect(service["toDatabaseType"]("task-list")).toBe("task");
     expect(service["fromDatabaseType"]("task")).toBe("task-list");
@@ -289,6 +316,7 @@ describe("NotesService policy and safe behavior", () => {
       {} as DatabaseService,
       {} as AuthorizationEntryService,
       {} as TenantContextService,
+      noOpSearchIndexProducer(),
     );
     for (const invoke of [
       () => service["versionConflict"](),
@@ -321,6 +349,7 @@ describe("NotesService checklist projection and progress", () => {
       {} as DatabaseService,
       {} as AuthorizationEntryService,
       {} as TenantContextService,
+      noOpSearchIndexProducer(),
     );
   }
 
@@ -387,6 +416,7 @@ describe("NotesService checklist projection and progress", () => {
 
   it("writes the counters alongside content_plain when a note is created", async () => {
     const inserts: { values: Record<string, unknown> }[] = [];
+    const producer = noOpSearchIndexProducer();
     const tx = {
       execute: vi.fn().mockResolvedValue(undefined),
       select: () => {
@@ -413,6 +443,7 @@ describe("NotesService checklist projection and progress", () => {
         run: (_operation: unknown, run: () => Promise<unknown>) => run(),
       } as unknown as AuthorizationEntryService,
       { get: () => ({ workspaceId }) } as unknown as TenantContextService,
+      producer,
     );
     Object.assign(service, {
       validateContainer: vi.fn().mockResolvedValue(undefined),
@@ -447,10 +478,17 @@ describe("NotesService checklist projection and progress", () => {
       checklistDone: 1,
       checklistTotal: 2,
     });
+    expect(producer.scheduleSearchSync).toHaveBeenCalledWith(
+      tx,
+      workspaceId,
+      [expect.any(String)],
+      expect.objectContaining({ mutation: "note.created" }),
+    );
   });
 
   it("rewrites the counters whenever an update replaces the content", async () => {
     const changeSets: Record<string, unknown>[] = [];
+    const producer = noOpSearchIndexProducer();
     const tx = {
       update: () => ({
         set: (values: Record<string, unknown>) => {
@@ -472,6 +510,7 @@ describe("NotesService checklist projection and progress", () => {
         run: (_operation: unknown, run: () => Promise<unknown>) => run(),
       } as unknown as AuthorizationEntryService,
       { get: () => ({ workspaceId }) } as unknown as TenantContextService,
+      producer,
     );
     Object.assign(service, {
       readRow: vi.fn().mockResolvedValue({ id: noteId, isDeleted: false }),
@@ -492,6 +531,12 @@ describe("NotesService checklist projection and progress", () => {
       checklistDone: 1,
       checklistTotal: 2,
     });
+    expect(producer.scheduleSearchSync).toHaveBeenCalledWith(
+      tx,
+      workspaceId,
+      [noteId],
+      expect.objectContaining({ mutation: "note.updated" }),
+    );
   });
 
   it("leaves the counters untouched when an update does not carry content", async () => {
@@ -517,6 +562,7 @@ describe("NotesService checklist projection and progress", () => {
         run: (_operation: unknown, run: () => Promise<unknown>) => run(),
       } as unknown as AuthorizationEntryService,
       { get: () => ({ workspaceId }) } as unknown as TenantContextService,
+      noOpSearchIndexProducer(),
     );
     Object.assign(service, {
       readRow: vi.fn().mockResolvedValue({ id: noteId, isDeleted: false }),
@@ -645,6 +691,7 @@ function moveService(fixture: MoveFixture = {}) {
 
   const authorizeUser = vi.fn().mockResolvedValue({ workspaceId, userId: principal.userId });
   const positionFor = vi.fn().mockResolvedValue(5);
+  const producer = noOpSearchIndexProducer();
   const service = new NotesService(
     {
       db: {},
@@ -659,6 +706,7 @@ function moveService(fixture: MoveFixture = {}) {
         ),
     } as unknown as AuthorizationEntryService,
     tenant,
+    producer,
   );
   Object.assign(service, {
     readRow: vi.fn().mockResolvedValue(source),
@@ -671,7 +719,7 @@ function moveService(fixture: MoveFixture = {}) {
     loadTagIds: vi.fn().mockResolvedValue([]),
     loadTaskProgress: vi.fn().mockResolvedValue({ done: 0, total: 0 }),
   });
-  return { service, source, reads, updates, authorizeUser, positionFor };
+  return { service, source, reads, updates, authorizeUser, positionFor, producer };
 }
 
 function moveInput(overrides: Record<string, unknown> = {}) {
@@ -698,6 +746,18 @@ async function apiRejection(promise: Promise<unknown>): Promise<ApiHttpException
 }
 
 describe("NotesService.move board column", () => {
+  it("adds a search intent for the moved root and every affected descendant", async () => {
+    const descendants = [descendantId, "10000000-0000-4000-8000-000000000010"];
+    const { service, producer } = moveService({ descendantIds: descendants });
+    await service.move(moveInput());
+    expect(producer.scheduleSearchSync).toHaveBeenCalledWith(
+      expect.anything(),
+      workspaceId,
+      [noteId, ...descendants],
+      expect.objectContaining({ mutation: "note.moved" }),
+    );
+  });
+
   it("accepts a workspace-wide column for any destination", async () => {
     const { service, updates } = moveService({ column: { projectId: null } });
     const result = await service.move(moveInput({ projectId, boardColumnId: columnId }));

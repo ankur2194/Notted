@@ -1,15 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { invitations } from "../database/schema";
+import { PermanentQueueJobError } from "../queue/queue-errors";
+import { QueueHandlerRegistry } from "../queue/queue-handler-registry.service";
 import { createTenantContext, TenantContextService } from "../tenant";
 
-import { InvitationEmailWorkerService } from "./invitation-email-worker.service";
+import { InvitationEmailQueueHandler } from "./invitation-email-worker.service";
 
 import type { InvitationTokenService } from "./invitation-token.service";
 import type { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import type { StructuredLogger } from "../common/logging/structured-logger.service";
 import type { AppConfig } from "../config/app.config";
-import type { AuthEmailQueueConfig } from "../config/auth-email-queue.config";
+import type { FeaturesConfig } from "../config/features.config";
 import type { DatabaseService } from "../database/database.service";
 import type { SmtpService } from "../infrastructure/smtp/smtp.service";
 
@@ -17,141 +18,196 @@ const workspaceId = "30000000-0000-4000-8000-000000000001";
 const invitationId = "30000000-0000-4000-8000-000000000002";
 const deliveryId = "30000000-0000-4000-8000-000000000003";
 
-function config(): AuthEmailQueueConfig {
+function context(overrides: { workspaceId?: string; resourceIds?: readonly string[] } = {}) {
   return {
-    queueName: "auth-email",
-    payloadVersion: 1,
-    dispatcherIntervalMs: 1_000,
-    concurrency: 1,
-    attempts: 3,
-    retryBackoffMs: 1_000,
-    idempotencyRetentionDays: 7,
+    outboxIntentId: "30000000-0000-4000-8000-000000000004",
+    jobType: "workspace.invitation.send" as const,
+    idempotencyKey: `workspace-invitation-send:${invitationId}`,
+    signal: new AbortController().signal,
+    payload: {
+      action: "workspace.invitation.send" as const,
+      intentId: "30000000-0000-4000-8000-000000000004",
+      workspaceId: overrides.workspaceId ?? workspaceId,
+      resourceIds: overrides.resourceIds ?? [invitationId, deliveryId],
+      actorId: "30000000-0000-4000-8000-000000000005",
+    },
   };
 }
 
-function authorization(tenant: TenantContextService) {
-  return {
+function build(database: unknown) {
+  const tenant = new TenantContextService();
+  const authorization = {
     authorizeSystem: vi.fn().mockResolvedValue({ workspaceId }),
     run: (_operation: unknown, work: () => unknown) =>
       tenant.run(createTenantContext({ workspaceId, userId: null }), work),
   };
+  const smtp = { send: vi.fn() };
+  const tokens = { derive: vi.fn() };
+  const registry = new QueueHandlerRegistry();
+  const handler = new InvitationEmailQueueHandler(
+    database as DatabaseService,
+    authorization as unknown as AuthorizationEntryService,
+    tenant,
+    tokens as unknown as InvitationTokenService,
+    smtp as unknown as SmtpService,
+    { info: vi.fn(), failure: vi.fn() } as unknown as StructuredLogger,
+    registry,
+    { appUrl: new URL("https://app.notted.test") } as AppConfig,
+    { emailEnabled: true } as FeaturesConfig,
+  );
+  return { handler, authorization, smtp, tokens, registry };
 }
 
-function updateChain() {
-  return { set: () => ({ where: () => Promise.resolve() }) };
-}
+describe("InvitationEmailQueueHandler", () => {
+  it("rejects malformed resource identifiers before loading tenant data", async () => {
+    const database = { db: { select: vi.fn() } };
+    const subject = build(database);
+    await expect(
+      subject.handler.handle(context({ resourceIds: [invitationId] })),
+    ).rejects.toBeInstanceOf(PermanentQueueJobError);
+    expect(database.db.select).not.toHaveBeenCalled();
+  });
 
-describe("InvitationEmailWorkerService", () => {
-  it("derives the token only after a pending claim and records no raw token", async () => {
-    const tenant = new TenantContextService();
-    const inserted: unknown[] = [];
-    const claimTx = {
-      execute: () => Promise.resolve(),
-      select: () => ({
-        from: (table: unknown) =>
-          table === invitations
-            ? {
-                innerJoin: () => ({
-                  innerJoin: () => ({
-                    where: () => ({
-                      limit: () =>
-                        Promise.resolve([
-                          {
-                            recipient: "invitee@example.test",
-                            deliveryStatus: "queued",
-                            workspaceName: "Alpha & Co",
-                          },
-                        ]),
-                    }),
-                  }),
-                }),
-              }
-            : { where: () => ({ limit: () => Promise.resolve([]) }) },
-      }),
-      insert: () => ({
-        values: (value: unknown) => {
-          inserted.push(value);
-          return Promise.resolve();
-        },
-      }),
-      update: updateChain,
-    };
-    const finalTx = { update: updateChain };
+  it("fails cross-workspace payload tampering without authorizing or sending", async () => {
     const database = {
       db: {
         select: () => ({
-          from: () => ({ where: () => ({ limit: () => Promise.resolve([{ workspaceId }]) }) }),
+          from: () => ({ innerJoin: () => ({ where: () => ({ limit: () => [] }) }) }),
         }),
       },
-      transaction: vi
-        .fn()
-        .mockImplementationOnce((work: (tx: typeof claimTx) => unknown) => work(claimTx))
-        .mockImplementationOnce((work: (tx: typeof finalTx) => unknown) => work(finalTx)),
     };
-    const tokens = { derive: vi.fn().mockReturnValue("raw-invitation-token") };
-    const smtp = { send: vi.fn().mockResolvedValue("mailpit-message-id") };
-    const logger = { info: vi.fn(), failure: vi.fn() };
-    const worker = new InvitationEmailWorkerService(
-      database as unknown as DatabaseService,
-      authorization(tenant) as unknown as AuthorizationEntryService,
-      tenant,
-      tokens as unknown as InvitationTokenService,
-      smtp as unknown as SmtpService,
-      logger as unknown as StructuredLogger,
-      { appUrl: new URL("https://app.notted.test") } as AppConfig,
-      config(),
-    );
-
-    await worker.process({ invitationId, deliveryId }, false);
-
-    expect(tokens.derive).toHaveBeenCalledWith(invitationId);
-    expect(smtp.send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: "invitee@example.test",
-        subject: "Join Alpha & Co on Notted",
-        text: expect.stringContaining("raw-invitation-token"),
-      }),
-    );
-    expect(JSON.stringify(inserted)).not.toContain("raw-invitation-token");
+    const subject = build(database);
+    await expect(subject.handler.handle(context())).rejects.toBeInstanceOf(PermanentQueueJobError);
+    expect(subject.authorization.authorizeSystem).not.toHaveBeenCalled();
+    expect(subject.tokens.derive).not.toHaveBeenCalled();
+    expect(subject.smtp.send).not.toHaveBeenCalled();
   });
 
-  it("cancels a stale invitation without deriving or sending a token", async () => {
-    const tenant = new TenantContextService();
+  it("rechecks pending delivery state under tenant context and treats duplicates as no-ops", async () => {
     const claimTx = {
-      execute: () => Promise.resolve(),
+      execute: vi.fn().mockResolvedValue(undefined),
       select: () => ({
         from: () => ({
           innerJoin: () => ({
-            innerJoin: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }),
+            innerJoin: () => ({
+              where: () => ({
+                limit: () => [
+                  { deliveryStatus: "sent", recipient: "u@example.test", workspaceName: "Alpha" },
+                ],
+              }),
+            }),
           }),
         }),
       }),
-      update: updateChain,
     };
     const database = {
       db: {
         select: () => ({
-          from: () => ({ where: () => ({ limit: () => Promise.resolve([{ workspaceId }]) }) }),
+          from: () => ({
+            innerJoin: () => ({ where: () => ({ limit: () => [{ workspaceId }] }) }),
+          }),
         }),
       },
-      transaction: vi.fn((work: (tx: typeof claimTx) => unknown) => work(claimTx)),
+      transaction: (work: (tx: typeof claimTx) => unknown) => work(claimTx),
     };
-    const tokens = { derive: vi.fn() };
-    const smtp = { send: vi.fn() };
-    const worker = new InvitationEmailWorkerService(
-      database as unknown as DatabaseService,
-      authorization(tenant) as unknown as AuthorizationEntryService,
-      tenant,
-      tokens as unknown as InvitationTokenService,
-      smtp as unknown as SmtpService,
-      { info: vi.fn(), failure: vi.fn() } as unknown as StructuredLogger,
-      { appUrl: new URL("https://app.notted.test") } as AppConfig,
-      config(),
+    const subject = build(database);
+    subject.handler.onModuleInit();
+    expect(subject.registry.lookup("workspace.invitation.send")?.handler).toBe(subject.handler);
+    await subject.handler.handle(context());
+    expect(subject.authorization.authorizeSystem).toHaveBeenCalledWith(
+      expect.objectContaining({ actor: expect.objectContaining({ workspaceId }) }),
     );
+    expect(subject.tokens.derive).not.toHaveBeenCalled();
+    expect(subject.smtp.send).not.toHaveBeenCalled();
+  });
 
-    await worker.process({ invitationId, deliveryId }, false);
+  it("moves a processing delivery to reconciliation after restart without resending", async () => {
+    const set = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+    const claimTx = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockReturnValue({ set }),
+      select: () => ({
+        from: () => ({
+          innerJoin: () => ({
+            innerJoin: () => ({
+              where: () => ({
+                limit: () => [
+                  {
+                    deliveryStatus: "processing",
+                    recipient: "u@example.test",
+                    workspaceName: "Alpha",
+                  },
+                ],
+              }),
+            }),
+          }),
+        }),
+      }),
+    };
+    const database = {
+      db: {
+        select: () => ({
+          from: () => ({
+            innerJoin: () => ({ where: () => ({ limit: () => [{ workspaceId }] }) }),
+          }),
+        }),
+      },
+      transaction: (work: (tx: typeof claimTx) => unknown) => work(claimTx),
+    };
+    const subject = build(database);
+    await subject.handler.handle(context());
+    expect(set).toHaveBeenCalledWith({
+      status: "reconciliation_required",
+      errorMessage: "Interrupted delivery requires reconciliation",
+    });
+    expect(subject.smtp.send).not.toHaveBeenCalled();
+  });
 
-    expect(tokens.derive).not.toHaveBeenCalled();
-    expect(smtp.send).not.toHaveBeenCalled();
+  it("quarantines an ambiguous SMTP acceptance timeout instead of making it retryable", async () => {
+    const claimSet = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+    const reconcileSet = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+    const claimTx = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockReturnValue({ set: claimSet }),
+      select: () => ({
+        from: () => ({
+          innerJoin: () => ({
+            innerJoin: () => ({
+              where: () => ({
+                limit: () => [
+                  {
+                    deliveryStatus: "queued",
+                    recipient: "u@example.test",
+                    workspaceName: "Alpha",
+                  },
+                ],
+              }),
+            }),
+          }),
+        }),
+      }),
+    };
+    const database = {
+      db: {
+        select: () => ({
+          from: () => ({
+            innerJoin: () => ({ where: () => ({ limit: () => [{ workspaceId }] }) }),
+          }),
+        }),
+        update: vi.fn().mockReturnValue({ set: reconcileSet }),
+      },
+      transaction: (work: (tx: typeof claimTx) => unknown) => work(claimTx),
+    };
+    const subject = build(database);
+    subject.tokens.derive.mockReturnValue("opaque-token");
+    subject.smtp.send.mockRejectedValue(new Error("provider outcome unknown"));
+    await expect(subject.handler.handle(context())).rejects.toMatchObject({
+      reasonCode: "reconciliation_required",
+    });
+    expect(claimSet).toHaveBeenCalledWith({ status: "processing", errorMessage: null });
+    expect(reconcileSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "reconciliation_required" }),
+    );
+    expect(subject.smtp.send).toHaveBeenCalledTimes(1);
   });
 });

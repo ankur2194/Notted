@@ -107,11 +107,11 @@ they never silently promote a browser-session login to a remembered session.
 `AUTH_RECENT_AUTH_SECONDS` configures Better Auth `session.freshAge` and the matching internal
 principal freshness projection. `AUTH_TWO_FACTOR_CHALLENGE_SECONDS`,
 `AUTH_TWO_FACTOR_LOCKOUT_ATTEMPTS`, and `AUTH_TWO_FACTOR_LOCKOUT_SECONDS` bound challenge and
-account-level brute-force behavior. The bounded auth-email bridge
-uses `AUTH_EMAIL_DISPATCH_INTERVAL_MS`, `AUTH_EMAIL_QUEUE_CONCURRENCY`,
-`AUTH_EMAIL_QUEUE_ATTEMPTS`, `AUTH_EMAIL_QUEUE_BACKOFF_MS`, and
-`AUTH_EMAIL_IDEMPOTENCY_RETENTION_DAYS`. These are operational limits, never payload or
-secret inputs. `DATA_ENCRYPTION_KEYS` protects tokenized auth-email context at rest.
+account-level brute-force behavior. Authentication and invitation email intents use the shared
+BullMQ runtime's `QUEUE_*` dispatch, attempt, backoff, timeout, concurrency, and idempotency
+limits; there is no standalone auth-email queue configuration. These are operational limits,
+never payload or secret inputs. `DATA_ENCRYPTION_KEYS` protects tokenized auth-email context at
+rest.
 
 Playwright-only overrides are `PLAYWRIGHT_APP_URL`, `PLAYWRIGHT_API_URL`, and
 `PLAYWRIGHT_MAILPIT_URL`. They are test-runner process values, not browser bundle values or

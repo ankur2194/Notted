@@ -12,13 +12,27 @@ import { Module } from "@nestjs/common";
 
 import { AuthorizationModule } from "../authorization/authorization.module";
 import { MinioModule } from "../infrastructure/minio/minio.module";
+import { QueueModule } from "../queue/queue.module";
 
+import { JobIdempotencyCleanupQueueService } from "./job-idempotency-cleanup-queue.service";
+import {
+  JobIdempotencyCleanupRepository,
+  JobIdempotencyCleanupService,
+} from "./job-idempotency-cleanup.service";
+import { StorageMaintenanceQueueHandler } from "./storage-maintenance-queue-handler.service";
 import { StorageMaintenanceScheduler } from "./storage-maintenance.scheduler";
 import { StorageMaintenanceService } from "./storage-maintenance.service";
 
 @Module({
-  imports: [AuthorizationModule, MinioModule],
-  providers: [StorageMaintenanceService, StorageMaintenanceScheduler],
+  imports: [AuthorizationModule, MinioModule, QueueModule],
+  providers: [
+    StorageMaintenanceService,
+    StorageMaintenanceScheduler,
+    StorageMaintenanceQueueHandler,
+    JobIdempotencyCleanupRepository,
+    JobIdempotencyCleanupService,
+    JobIdempotencyCleanupQueueService,
+  ],
   exports: [StorageMaintenanceService],
 })
 export class MaintenanceModule {}

@@ -20,9 +20,9 @@ export class DatabaseReadinessIndicator implements ReadinessIndicator, BeforeApp
   private readonly state: DependencyState;
 
   constructor(
-    private readonly database: DatabaseService,
+    @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(DATABASE_CONFIG) private readonly config: DatabaseConfig,
-    logger: StructuredLogger,
+    @Inject(StructuredLogger) logger: StructuredLogger,
   ) {
     this.state = new DependencyState(this.name, true, logger);
   }

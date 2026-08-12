@@ -17,11 +17,25 @@ import { createTenantContext, TenantContextService } from "../tenant";
 import { PROJECT_AUDIT_ACTIONS, PROJECT_DOMAIN_EVENTS } from "./projects.constants";
 import { ProjectsService } from "./projects.service";
 
+import type { NoteSearchIndexProducer } from "../search/note-search-index-producer";
 import type { AuthenticatedPrincipal, ProjectStatus } from "@notted/shared-types";
 
 const userId = "20000000-0000-4000-8000-000000000001";
 const workspaceId = "20000000-0000-4000-8100-000000000001";
 const projectId = "20000000-0000-4000-8200-000000000001";
+
+/**
+ * No-op stub for the {@link NoteSearchIndexProducer}. Project-service tests
+ * assert project lifecycle, authorization, and projection behavior; the
+ * producer's contract is covered separately in
+ * `search/note-search-index-producer.test.ts` and a dedicated Part 51.3 test
+ * for project-delete fan-out below.
+ */
+function noOpSearchIndexProducer(): NoteSearchIndexProducer {
+  return {
+    scheduleSearchSync: vi.fn().mockResolvedValue(undefined),
+  } as unknown as NoteSearchIndexProducer;
+}
 
 function principal(): AuthenticatedPrincipal {
   return Object.freeze({
@@ -102,7 +116,12 @@ describe("ProjectsService (unit)", () => {
       const database = {
         transaction: <T>(work: (scope: typeof tx) => Promise<T>) => work(tx),
       } as unknown as DatabaseService;
-      const service = new ProjectsService(database, authorized.value, tenant);
+      const service = new ProjectsService(
+        database,
+        authorized.value,
+        tenant,
+        noOpSearchIndexProducer(),
+      );
       const result = await service[method]({ principal: principal(), workspaceId, projectId });
       expect(result.project.status).toBe(expectedStatus);
       expect(result.project.isArchived).toBe(expectedStatus === "archived");
@@ -154,6 +173,7 @@ describe("ProjectsService (unit)", () => {
       } as unknown as DatabaseService,
       authorized.value,
       tenant,
+      noOpSearchIndexProducer(),
     );
     await expect(
       service.delete({ principal: principal(), workspaceId, projectId }),
@@ -182,6 +202,7 @@ describe("ProjectsService (unit)", () => {
       { db: { select } } as unknown as DatabaseService,
       { authorizeUser } as unknown as AuthorizationEntryService,
       tenant,
+      noOpSearchIndexProducer(),
     );
     await expect(
       service.read({ principal: principal(), workspaceId, projectId }),
@@ -260,6 +281,7 @@ describe("ProjectsService (unit)", () => {
       { db } as unknown as DatabaseService,
       authorized.value,
       tenant,
+      noOpSearchIndexProducer(),
     );
 
     const detail = await service.read({ principal: principal(), workspaceId, projectId });
@@ -294,6 +316,7 @@ describe("ProjectsService (unit)", () => {
       {} as DatabaseService,
       {} as AuthorizationEntryService,
       tenant,
+      noOpSearchIndexProducer(),
     );
     const coverId = "20000000-0000-4000-8900-000000000001";
     const queriedTables: unknown[] = [];
@@ -373,10 +396,138 @@ describe("ProjectsService (unit)", () => {
       database as unknown as DatabaseService,
       authorized.value,
       tenant,
+      noOpSearchIndexProducer(),
     );
     await expect(
       service.create({ principal: principal(), workspaceId, name: "Alpha" }),
     ).rejects.toThrow("outbox unavailable");
     expect(committed).toEqual([]);
+  });
+});
+
+// --------------------------------------------------------------------------- //
+// Part 51.3 — search-index sync fan-out on project delete
+// --------------------------------------------------------------------------- //
+
+describe("ProjectsService Part 51.3 search-index sync fan-out", () => {
+  /**
+   * Project delete nullifies `notes.project_id` for every linked note. The
+   * indexed `projectId` filter field changes for every one of them, so each
+   * affected note must re-sync. The IDs are captured BEFORE the nullify
+   * update; the producer is invoked inside the same transaction.
+   */
+  it("schedules a search sync covering every note whose projectId was nulled", async () => {
+    const tenant = new TenantContextService();
+    const authorized = entry(tenant);
+    const affectedNoteIds = [
+      "20000000-0000-4000-8000-000000000010",
+      "20000000-0000-4000-8000-000000000011",
+      "20000000-0000-4000-8000-000000000012",
+    ];
+    const producer = {
+      scheduleSearchSync: vi.fn().mockResolvedValue(undefined),
+    } as unknown as NoteSearchIndexProducer;
+    const selectCalls: { readonly table: unknown; readonly predicate: unknown }[] = [];
+    const tx = {
+      select: (fields: Record<string, unknown>) => ({
+        from: (table: unknown) => ({
+          where: (predicate: unknown) => {
+            // Capture the note-id lookup BEFORE the nullify update.
+            if (table === notes && "id" in fields) {
+              selectCalls.push({ table, predicate });
+              return Promise.resolve(affectedNoteIds.map((id) => ({ id })));
+            }
+            return { limit: () => Promise.resolve([row()]) };
+          },
+        }),
+      }),
+      update: () => ({
+        set: () => ({
+          where: () => Promise.resolve(),
+        }),
+      }),
+      insert: () => ({
+        values: () => Promise.resolve(),
+      }),
+      delete: (table: unknown) => ({
+        where: () => ({
+          returning: () => {
+            expect(table).toBe(projects);
+            return Promise.resolve([{ id: projectId }]);
+          },
+        }),
+      }),
+    };
+    const service = new ProjectsService(
+      {
+        transaction: <T>(work: (scope: typeof tx) => Promise<T>) => work(tx),
+      } as unknown as DatabaseService,
+      authorized.value,
+      tenant,
+      producer,
+    );
+
+    await service.delete({ principal: principal(), workspaceId, projectId });
+
+    // Exactly one producer call, in the same transaction, covering every
+    // affected note id. The producer handles chunking internally; the service
+    // passes the full list.
+    expect(producer.scheduleSearchSync).toHaveBeenCalledTimes(1);
+    const [txArg, workspaceArg, idsArg, optionsArg] = (
+      producer.scheduleSearchSync as unknown as ReturnType<typeof vi.fn>
+    ).mock.calls[0] as unknown as readonly [
+      unknown,
+      string,
+      readonly string[],
+      { readonly actorId: string; readonly mutation: string },
+    ];
+    expect(txArg).toBe(tx);
+    expect(workspaceArg).toBe(workspaceId);
+    expect(idsArg).toEqual(affectedNoteIds);
+    expect(optionsArg.actorId).toBe(userId);
+    expect(optionsArg.mutation).toBe(PROJECT_DOMAIN_EVENTS.delete);
+  });
+
+  it("skips the producer call when no notes are linked to the project", async () => {
+    const tenant = new TenantContextService();
+    const authorized = entry(tenant);
+    const producer = {
+      scheduleSearchSync: vi.fn().mockResolvedValue(undefined),
+    } as unknown as NoteSearchIndexProducer;
+    const tx = {
+      select: (fields: Record<string, unknown>) => ({
+        from: (table: unknown) => ({
+          where: () => {
+            if (table === notes && "id" in fields) return Promise.resolve([]);
+            return { limit: () => Promise.resolve([row()]) };
+          },
+        }),
+      }),
+      update: () => ({
+        set: () => ({
+          where: () => Promise.resolve(),
+        }),
+      }),
+      insert: () => ({
+        values: () => Promise.resolve(),
+      }),
+      delete: () => ({
+        where: () => ({
+          returning: () => Promise.resolve([{ id: projectId }]),
+        }),
+      }),
+    };
+    const service = new ProjectsService(
+      {
+        transaction: <T>(work: (scope: typeof tx) => Promise<T>) => work(tx),
+      } as unknown as DatabaseService,
+      authorized.value,
+      tenant,
+      producer,
+    );
+
+    await service.delete({ principal: principal(), workspaceId, projectId });
+
+    expect(producer.scheduleSearchSync).not.toHaveBeenCalled();
   });
 });

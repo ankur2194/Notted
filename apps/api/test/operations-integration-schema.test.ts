@@ -192,10 +192,23 @@ describe("operations and integration tables schema (unit)", () => {
     expect(aiProviderEnum.enumValues).toEqual(["openai", "anthropic", "disabled"]);
 
     expect(emailStatusEnum.enumName).toBe("email_status");
-    expect(emailStatusEnum.enumValues).toEqual(["queued", "sent", "failed", "suppressed"]);
+    expect(emailStatusEnum.enumValues).toEqual([
+      "queued",
+      "processing",
+      "sent",
+      "failed",
+      "suppressed",
+      "reconciliation_required",
+    ]);
 
     expect(jobStatusEnum.enumName).toBe("job_status");
-    expect(jobStatusEnum.enumValues).toEqual(["pending", "completed", "failed"]);
+    expect(jobStatusEnum.enumValues).toEqual([
+      "pending",
+      "processing",
+      "completed",
+      "failed",
+      "reconciliation_required",
+    ]);
     expect(jobOutboxStatusEnum.enumName).toBe("job_outbox_status");
     expect(jobOutboxStatusEnum.enumValues).toEqual([
       "pending",

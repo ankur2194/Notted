@@ -1,7 +1,5 @@
 import { Module } from "@nestjs/common";
 
-import { AuthEmailQueueService } from "../auth/auth-email-queue.service";
-import { AuthModule } from "../auth/auth.module";
 import { DatabaseReadinessIndicator } from "../database/database-readiness.indicator";
 import { DatabaseModule } from "../database/database.module";
 import { MeilisearchModule } from "../infrastructure/meilisearch/meilisearch.module";
@@ -12,23 +10,15 @@ import { RedisModule } from "../infrastructure/redis/redis.module";
 import { RedisService } from "../infrastructure/redis/redis.service";
 import { SmtpModule } from "../infrastructure/smtp/smtp.module";
 import { SmtpService } from "../infrastructure/smtp/smtp.service";
-import { InvitationEmailQueueService } from "../memberships/invitation-email-queue.service";
-import { MembershipsModule } from "../memberships/memberships.module";
+import { QUEUE_READINESS_INDICATOR, type QueueReadiness } from "../queue/queue-readiness.indicator";
+import { QueueModule } from "../queue/queue.module";
 
 import { HealthController } from "./health.controller";
 import { ProcessReadinessIndicator } from "./process-readiness.indicator";
 import { READINESS_INDICATORS } from "./readiness-indicator";
 
 @Module({
-  imports: [
-    AuthModule,
-    DatabaseModule,
-    RedisModule,
-    MinioModule,
-    MeilisearchModule,
-    SmtpModule,
-    MembershipsModule,
-  ],
+  imports: [DatabaseModule, RedisModule, MinioModule, MeilisearchModule, SmtpModule, QueueModule],
   controllers: [HealthController],
   providers: [
     ProcessReadinessIndicator,
@@ -38,30 +28,27 @@ import { READINESS_INDICATORS } from "./readiness-indicator";
         ProcessReadinessIndicator,
         DatabaseReadinessIndicator,
         RedisService,
+        QUEUE_READINESS_INDICATOR,
         MinioService,
         MeilisearchService,
         SmtpService,
-        AuthEmailQueueService,
-        InvitationEmailQueueService,
       ],
       useFactory: (
         processIndicator: ProcessReadinessIndicator,
         databaseIndicator: DatabaseReadinessIndicator,
         redisIndicator: RedisService,
+        queueIndicator: QueueReadiness,
         minioIndicator: MinioService,
         meilisearchIndicator: MeilisearchService,
         smtpIndicator: SmtpService,
-        authEmailQueueIndicator: AuthEmailQueueService,
-        invitationEmailQueueIndicator: InvitationEmailQueueService,
       ) => [
         processIndicator,
         databaseIndicator,
         redisIndicator,
+        queueIndicator,
         minioIndicator,
         meilisearchIndicator,
         smtpIndicator,
-        authEmailQueueIndicator,
-        invitationEmailQueueIndicator,
       ],
     },
   ],

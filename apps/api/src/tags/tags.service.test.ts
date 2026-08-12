@@ -4,14 +4,26 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import { hashApiPayload } from "../common/idempotency/api-idempotency";
-import { apiIdempotencyRecords, auditLogs, jobOutbox, tags } from "../database/schema";
+import { apiIdempotencyRecords, auditLogs, jobOutbox, noteTags, tags } from "../database/schema";
 import { assertWorkspaceInsertValues, createTenantContext, TenantContextService } from "../tenant";
 
 import { TAG_MAX_PER_WORKSPACE } from "./tags.constants";
 import { TagsService } from "./tags.service";
 
+/**
+ * No-op stub for the {@link NoteSearchIndexProducer}. Tag-service tests assert
+ * authorization, capacity, and naming behavior; the producer's contract is
+ * covered separately and via a dedicated Part 51.3 fan-out test below.
+ */
+function noOpSearchIndexProducer(): NoteSearchIndexProducer {
+  return {
+    scheduleSearchSync: vi.fn().mockResolvedValue(undefined),
+  } as unknown as NoteSearchIndexProducer;
+}
+
 import type { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import type { DatabaseService } from "../database/database.service";
+import type { NoteSearchIndexProducer } from "../search/note-search-index-producer";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 
 const USER_ID = "30000000-0000-4000-8000-000000000001";
@@ -127,6 +139,7 @@ interface TransactionOptions {
   readonly insertError?: unknown;
   readonly updateError?: unknown;
   readonly updated?: readonly { readonly id: string }[];
+  readonly linkedNoteIds?: readonly string[];
 }
 
 /** One captured statement: the table it addressed and the predicate it carried. */
@@ -165,14 +178,24 @@ function serviceWith(options: TransactionOptions = {}) {
   const scope = {
     execute: () => Promise.resolve(),
     select: (fields: Record<string, unknown>) => ({
-      from: (table: unknown) => ({
-        where: (predicate: unknown) => {
-          reads.push({ table, predicate });
-          if (table === apiIdempotencyRecords) return rows(options.replay ?? []);
-          if ("count" in fields) return rows([{ count: options.tagCount ?? 0 }]);
-          return rows([storedRow]);
-        },
-      }),
+      from: (table: unknown) => {
+        const builder: {
+          innerJoin: (joined: unknown, predicate: unknown) => unknown;
+          where: (predicate: unknown) => Awaitable<unknown[]>;
+        } = {
+          innerJoin: () => builder,
+          where: (predicate: unknown) => {
+            reads.push({ table, predicate });
+            if (table === apiIdempotencyRecords) return rows(options.replay ?? []);
+            if (table === noteTags) {
+              return rows((options.linkedNoteIds ?? []).map((noteId) => ({ noteId })));
+            }
+            if ("count" in fields) return rows([{ count: options.tagCount ?? 0 }]);
+            return rows([storedRow]);
+          },
+        };
+        return builder;
+      },
     }),
     insert: (table: unknown) => ({
       values: (values: unknown) => {
@@ -214,6 +237,7 @@ function serviceWith(options: TransactionOptions = {}) {
       return work(scope);
     },
   } as unknown as DatabaseService;
+  const producer = noOpSearchIndexProducer();
   return {
     database,
     inserted,
@@ -223,7 +247,8 @@ function serviceWith(options: TransactionOptions = {}) {
     isolationLevels,
     tenant,
     authorizeUser,
-    service: new TagsService(database, entry, tenant),
+    producer,
+    service: new TagsService(database, entry, tenant, producer),
   };
 }
 
@@ -271,6 +296,7 @@ describe("TagsService authorization", () => {
       forbiddenDatabase(),
       { authorizeUser } as unknown as AuthorizationEntryService,
       {} as TenantContextService,
+      noOpSearchIndexProducer(),
     );
     await expect(invoke(service)).rejects.toBe(denial);
     expect(authorizeUser).toHaveBeenCalledWith(
@@ -309,6 +335,35 @@ describe("TagsService duplicate names", () => {
     );
     expect(error.getStatus()).toBe(404);
     expect(error.safeResponse.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("TagsService search-index fan-out", () => {
+  it("syncs every linked note for rename and delete using distinct mutation discriminators", async () => {
+    const linked = ["30000000-0000-4000-8300-000000000001", "30000000-0000-4000-8300-000000000002"];
+    const context = serviceWith({ linkedNoteIds: linked });
+    await context.service.update({
+      principal,
+      workspaceId: WORKSPACE_ID,
+      tagId: TAG_ID,
+      name: "Renamed",
+    });
+    await context.service.remove({ principal, workspaceId: WORKSPACE_ID, tagId: TAG_ID });
+
+    expect(context.producer.scheduleSearchSync).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      WORKSPACE_ID,
+      linked,
+      expect.objectContaining({ mutation: "tag.updated" }),
+    );
+    expect(context.producer.scheduleSearchSync).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      WORKSPACE_ID,
+      linked,
+      expect.objectContaining({ mutation: "tag.deleted" }),
+    );
   });
 });
 
@@ -423,7 +478,12 @@ describe("TagsService projection and usage counts", () => {
 
   it("scopes both usage counts through their parent and excludes trashed notes", () => {
     const tenant = new TenantContextService();
-    const service = new TagsService({} as DatabaseService, {} as AuthorizationEntryService, tenant);
+    const service = new TagsService(
+      {} as DatabaseService,
+      {} as AuthorizationEntryService,
+      tenant,
+      noOpSearchIndexProducer(),
+    );
     tenant.run(createTenantContext({ workspaceId: WORKSPACE_ID, userId: USER_ID }), () => {
       const noteCount = dialect.sqlToQuery(service["noteCount"]());
       expect(noteCount.sql).toContain('inner join "notes"');

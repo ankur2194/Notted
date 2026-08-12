@@ -1,54 +1,127 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { StructuredLogger } from "../common/logging/structured-logger.service";
-import { DatabaseService } from "../database/database.service";
-import { SmtpService } from "../infrastructure/smtp/smtp.service";
+import { PermanentQueueJobError } from "../queue/queue-errors";
+import { QueueHandlerRegistry } from "../queue/queue-handler-registry.service";
 
-import { AuthEmailEncryptionService } from "./auth-email-encryption.service";
-import { AuthEmailWorkerService } from "./auth-email-worker.service";
+import { AuthEmailQueueHandler } from "./auth-email-worker.service";
 
-import type { AuthEmailQueueConfig } from "../config/auth-email-queue.config";
+import type { AuthEmailEncryptionService } from "./auth-email-encryption.service";
+import type { StructuredLogger } from "../common/logging/structured-logger.service";
+import type { FeaturesConfig } from "../config/features.config";
+import type { DatabaseService } from "../database/database.service";
+import type { SmtpService } from "../infrastructure/smtp/smtp.service";
 
-describe("AuthEmailWorkerService duplicate protection", () => {
-  it("does not decrypt or send an already terminal delivery", async () => {
+const intentId = "00000000-0000-4000-8000-000000000021";
+const deliveryId = "00000000-0000-4000-8000-000000000022";
+
+function context() {
+  return {
+    outboxIntentId: "00000000-0000-4000-8000-000000000023",
+    jobType: "deliver-auth-email" as const,
+    idempotencyKey: `auth-email:${intentId}`,
+    signal: new AbortController().signal,
+    payload: { action: "deliver-auth-email" as const, intentId },
+  };
+}
+
+function features(): FeaturesConfig {
+  return { emailEnabled: true } as FeaturesConfig;
+}
+
+describe("AuthEmailQueueHandler", () => {
+  it("registers the canonical shared-runtime handler and skips a terminal delivery", async () => {
     const row = {
-      intent: {
-        id: "00000000-0000-4000-8000-000000000021",
-        status: "sent",
-        expiresAt: new Date(Date.now() + 60_000),
-      },
-      delivery: { id: "00000000-0000-4000-8000-000000000022" },
+      intent: { id: intentId, status: "sent", expiresAt: new Date(Date.now() + 60_000) },
+      delivery: { id: deliveryId },
     };
-    const limit = vi.fn().mockResolvedValue([row]);
     const database = {
       db: {
         select: () => ({
-          from: () => ({ innerJoin: () => ({ where: () => ({ limit }) }) }),
+          from: () => ({ innerJoin: () => ({ where: () => ({ limit: () => [row] }) }) }),
         }),
       },
     };
     const encryption = { decrypt: vi.fn() };
     const smtp = { send: vi.fn() };
-    const logger = { info: vi.fn(), failure: vi.fn() };
-    const config: AuthEmailQueueConfig = {
-      queueName: "auth-email",
-      payloadVersion: 1,
-      dispatcherIntervalMs: 1_000,
-      concurrency: 1,
-      attempts: 3,
-      retryBackoffMs: 1_000,
-      idempotencyRetentionDays: 7,
-    };
-    const worker = new AuthEmailWorkerService(
+    const registry = new QueueHandlerRegistry();
+    const handler = new AuthEmailQueueHandler(
       database as unknown as DatabaseService,
       encryption as unknown as AuthEmailEncryptionService,
       smtp as unknown as SmtpService,
-      logger as unknown as StructuredLogger,
-      config,
+      { info: vi.fn(), failure: vi.fn() } as unknown as StructuredLogger,
+      registry,
+      features(),
     );
 
-    await worker.process(row.intent.id, false);
+    handler.onModuleInit();
+    expect(registry.lookup("deliver-auth-email")?.handler).toBe(handler);
+    await handler.handle(context());
     expect(encryption.decrypt).not.toHaveBeenCalled();
     expect(smtp.send).not.toHaveBeenCalled();
+    handler.onModuleDestroy();
+    expect(registry.lookup("deliver-auth-email")).toBeUndefined();
+  });
+
+  it("marks ambiguous SMTP rejection for reconciliation so a retry cannot resend", async () => {
+    let status: "pending" | "processing" | "failed" = "pending";
+    const intent = {
+      id: intentId,
+      status,
+      purpose: "magic_link" as const,
+      expiresAt: new Date(Date.now() + 60_000),
+      encryptedContext: "ciphertext",
+      encryptionKeyVersion: 1,
+      nonce: "nonce",
+      authenticationTag: "tag",
+    };
+    const db = {
+      select: () => ({
+        from: () => ({
+          innerJoin: () => ({
+            where: () => ({
+              limit: () => [
+                {
+                  intent: { ...intent, status },
+                  delivery: { id: deliveryId, recipient: "u@example.test" },
+                },
+              ],
+            }),
+          }),
+        }),
+      }),
+      update: () => ({
+        set: (value: { status?: string }) => {
+          if (value.status === "processing" || value.status === "failed") status = value.status;
+          return {
+            where: () => ({
+              returning: () => {
+                return [{ id: intentId }];
+              },
+              then: (resolve: (value: unknown) => unknown) => resolve(undefined),
+            }),
+          };
+        },
+      }),
+    };
+    const database = {
+      db,
+      transaction: <T>(work: (tx: typeof db) => Promise<T>) => work(db),
+    };
+    const smtp = { send: vi.fn().mockRejectedValue(new Error("ambiguous provider result")) };
+    const handler = new AuthEmailQueueHandler(
+      database as unknown as DatabaseService,
+      {
+        decrypt: vi.fn().mockReturnValue({ actionUrl: "https://example.test/secret" }),
+      } as unknown as AuthEmailEncryptionService,
+      smtp as unknown as SmtpService,
+      { info: vi.fn(), failure: vi.fn() } as unknown as StructuredLogger,
+      new QueueHandlerRegistry(),
+      features(),
+    );
+
+    await expect(handler.handle(context())).rejects.toBeInstanceOf(PermanentQueueJobError);
+    expect(status).toBe("failed");
+    await expect(handler.handle(context())).resolves.toBeUndefined();
+    expect(smtp.send).toHaveBeenCalledTimes(1);
   });
 });
