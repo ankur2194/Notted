@@ -1,0 +1,111 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_claude_agents_frontend_editor_engineer_md",
+      "label": "frontend-editor-engineer.md",
+      "file_type": "document",
+      "source_file": ".claude/agents/frontend-editor-engineer.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_claude_agents_frontend_editor_engineer_authority_chain",
+      "label": "Authority chain",
+      "file_type": "document",
+      "source_file": ".claude/agents/frontend-editor-engineer.md",
+      "source_location": "L9"
+    },
+    {
+      "id": "$graphify-root$_claude_agents_frontend_editor_engineer_skills_to_load",
+      "label": "Skills to load",
+      "file_type": "document",
+      "source_file": ".claude/agents/frontend-editor-engineer.md",
+      "source_location": "L13"
+    },
+    {
+      "id": "$graphify-root$_claude_agents_frontend_editor_engineer_operating_rules",
+      "label": "Operating rules",
+      "file_type": "document",
+      "source_file": ".claude/agents/frontend-editor-engineer.md",
+      "source_location": "L17"
+    },
+    {
+      "id": "$graphify-root$_claude_agents_frontend_editor_engineer_verification",
+      "label": "Verification",
+      "file_type": "document",
+      "source_file": ".claude/agents/frontend-editor-engineer.md",
+      "source_location": "L32"
+    },
+    {
+      "id": "$graphify-root$_claude_agents_frontend_editor_engineer_delegation_synchronous_delegation_protocol_claude_code_mechanism",
+      "label": "Delegation (Synchronous Delegation Protocol, Claude Code mechanism)",
+      "file_type": "document",
+      "source_file": ".claude/agents/frontend-editor-engineer.md",
+      "source_location": "L36"
+    },
+    {
+      "id": "$graphify-root$_claude_agents_frontend_editor_engineer_completion_payload",
+      "label": "Completion payload",
+      "file_type": "document",
+      "source_file": ".claude/agents/frontend-editor-engineer.md",
+      "source_location": "L47"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_claude_agents_frontend_editor_engineer_md",
+      "target": "$graphify-root$_claude_agents_frontend_editor_engineer_authority_chain",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/agents/frontend-editor-engineer.md",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_agents_frontend_editor_engineer_md",
+      "target": "$graphify-root$_claude_agents_frontend_editor_engineer_skills_to_load",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/agents/frontend-editor-engineer.md",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_agents_frontend_editor_engineer_md",
+      "target": "$graphify-root$_claude_agents_frontend_editor_engineer_operating_rules",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/agents/frontend-editor-engineer.md",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_agents_frontend_editor_engineer_md",
+      "target": "$graphify-root$_claude_agents_frontend_editor_engineer_verification",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/agents/frontend-editor-engineer.md",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_agents_frontend_editor_engineer_md",
+      "target": "$graphify-root$_claude_agents_frontend_editor_engineer_delegation_synchronous_delegation_protocol_claude_code_mechanism",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/agents/frontend-editor-engineer.md",
+      "source_location": "L36",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_agents_frontend_editor_engineer_md",
+      "target": "$graphify-root$_claude_agents_frontend_editor_engineer_completion_payload",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/agents/frontend-editor-engineer.md",
+      "source_location": "L47",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

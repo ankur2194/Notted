@@ -1,0 +1,235 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_claude_md",
+      "label": "CLAUDE.md",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_claude_notted_coding_conventions",
+      "label": "Notted Coding Conventions",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_claude_quality_gates_run_before_every_push",
+      "label": "Quality gates (run before every push)",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L7"
+    },
+    {
+      "id": "$graphify-root$_claude_architecture",
+      "label": "Architecture",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L12"
+    },
+    {
+      "id": "$graphify-root$_claude_naming_conventions_reconciled_with_the_notted_md_structure",
+      "label": "Naming conventions (reconciled with the `Notted.md` structure)",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L19"
+    },
+    {
+      "id": "$graphify-root$_claude_code_style",
+      "label": "Code style",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L31"
+    },
+    {
+      "id": "$graphify-root$_claude_database",
+      "label": "Database",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L38"
+    },
+    {
+      "id": "$graphify-root$_claude_frontend",
+      "label": "Frontend",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L45"
+    },
+    {
+      "id": "$graphify-root$_claude_api_design",
+      "label": "API design",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L52"
+    },
+    {
+      "id": "$graphify-root$_claude_security",
+      "label": "Security",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L58"
+    },
+    {
+      "id": "$graphify-root$_claude_testing",
+      "label": "Testing",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L64"
+    },
+    {
+      "id": "$graphify-root$_claude_docker_and_operations",
+      "label": "Docker and operations",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L70"
+    },
+    {
+      "id": "$graphify-root$_claude_graphify",
+      "label": "graphify",
+      "file_type": "document",
+      "source_file": "CLAUDE.md",
+      "source_location": "L76"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_claude_md",
+      "target": "$graphify-root$_claude_notted_coding_conventions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_md",
+      "target": "$graphify-root$_agents_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L3",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/AGENTS.md"
+    },
+    {
+      "source": "$graphify-root$_claude_md",
+      "target": "$graphify-root$_docs_standards_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_md",
+      "target": "$graphify-root$_docs_decisions_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_notted_coding_conventions",
+      "target": "$graphify-root$_claude_quality_gates_run_before_every_push",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_notted_coding_conventions",
+      "target": "$graphify-root$_claude_architecture",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_notted_coding_conventions",
+      "target": "$graphify-root$_claude_naming_conventions_reconciled_with_the_notted_md_structure",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_notted_coding_conventions",
+      "target": "$graphify-root$_claude_code_style",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_notted_coding_conventions",
+      "target": "$graphify-root$_claude_database",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L38",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_notted_coding_conventions",
+      "target": "$graphify-root$_claude_frontend",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L45",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_notted_coding_conventions",
+      "target": "$graphify-root$_claude_api_design",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L52",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_notted_coding_conventions",
+      "target": "$graphify-root$_claude_security",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L58",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_notted_coding_conventions",
+      "target": "$graphify-root$_claude_testing",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L64",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_notted_coding_conventions",
+      "target": "$graphify-root$_claude_docker_and_operations",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L70",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_notted_coding_conventions",
+      "target": "$graphify-root$_claude_graphify",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "CLAUDE.md",
+      "source_location": "L76",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

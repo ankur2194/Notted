@@ -1,0 +1,143 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_md",
+      "label": "part-50-establish-bullmq-queues-workers.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_part_50_establish_bullmq_queues_and_workers",
+      "label": "Part 50 \u2014 Establish BullMQ queues and workers",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_result",
+      "label": "Result",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L8"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_architecture_and_security_decisions",
+      "label": "Architecture and security decisions",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L14"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_migration",
+      "label": "Migration",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L32"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_files",
+      "label": "Files",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L40"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_test_coverage",
+      "label": "Test coverage",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L51"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_known_limitations_and_follow_up_boundaries",
+      "label": "Known limitations and follow-up boundaries",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L60"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_commands",
+      "label": "Commands",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L68"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_md",
+      "target": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_part_50_establish_bullmq_queues_and_workers",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_part_50_establish_bullmq_queues_and_workers",
+      "target": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_result",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_part_50_establish_bullmq_queues_and_workers",
+      "target": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_architecture_and_security_decisions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_part_50_establish_bullmq_queues_and_workers",
+      "target": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_migration",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_part_50_establish_bullmq_queues_and_workers",
+      "target": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_files",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L40",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_part_50_establish_bullmq_queues_and_workers",
+      "target": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_test_coverage",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L51",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_part_50_establish_bullmq_queues_and_workers",
+      "target": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_known_limitations_and_follow_up_boundaries",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L60",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_part_50_establish_bullmq_queues_and_workers",
+      "target": "$graphify-root$_docs_completed_parts_part_50_establish_bullmq_queues_workers_commands",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-50-establish-bullmq-queues-workers.md",
+      "source_location": "L68",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

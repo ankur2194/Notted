@@ -1,0 +1,31 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_standards_architecture_md",
+      "label": "architecture.md",
+      "file_type": "document",
+      "source_file": "docs/standards/architecture.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_standards_architecture_architecture_standard",
+      "label": "Architecture Standard",
+      "file_type": "document",
+      "source_file": "docs/standards/architecture.md",
+      "source_location": "L1"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_standards_architecture_md",
+      "target": "$graphify-root$_docs_standards_architecture_architecture_standard",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/standards/architecture.md",
+      "source_location": "L1",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

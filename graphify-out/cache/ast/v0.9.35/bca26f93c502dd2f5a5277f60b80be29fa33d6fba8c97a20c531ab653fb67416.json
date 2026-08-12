@@ -1,0 +1,207 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_md",
+      "label": "part-19-tenant-protection-and-retention.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_part_19_database_level_tenant_protection_and_retention_policies",
+      "label": "Part 19 \u2014 Database-level tenant protection and retention policies",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_status",
+      "label": "Status",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_objective_and_scope",
+      "label": "Objective and scope",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L15"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_implemented_work",
+      "label": "Implemented work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L30"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_adr_0009",
+      "label": "ADR 0009",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L32"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_tenant_context_and_scoping_helper",
+      "label": "Tenant context and scoping helper",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L57"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_retention_configuration",
+      "label": "Retention configuration",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L91"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_isolation_coverage_matrix",
+      "label": "Isolation coverage matrix",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L117"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_files_and_components",
+      "label": "Files and components",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L136"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_verification_evidence",
+      "label": "Verification evidence",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L153"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_known_limitations_and_follow_up",
+      "label": "Known limitations and follow-up",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L164"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_revision_history",
+      "label": "Revision history",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L176"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_md",
+      "target": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_part_19_database_level_tenant_protection_and_retention_policies",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_part_19_database_level_tenant_protection_and_retention_policies",
+      "target": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_part_19_database_level_tenant_protection_and_retention_policies",
+      "target": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_objective_and_scope",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_part_19_database_level_tenant_protection_and_retention_policies",
+      "target": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_implemented_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L30",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_adr_0009",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_tenant_context_and_scoping_helper",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L57",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_retention_configuration",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L91",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_isolation_coverage_matrix",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L117",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_part_19_database_level_tenant_protection_and_retention_policies",
+      "target": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_files_and_components",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L136",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_part_19_database_level_tenant_protection_and_retention_policies",
+      "target": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_verification_evidence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L153",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_part_19_database_level_tenant_protection_and_retention_policies",
+      "target": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_known_limitations_and_follow_up",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L164",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_part_19_database_level_tenant_protection_and_retention_policies",
+      "target": "$graphify-root$_docs_completed_parts_part_19_tenant_protection_and_retention_revision_history",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-19-tenant-protection-and-retention.md",
+      "source_location": "L176",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

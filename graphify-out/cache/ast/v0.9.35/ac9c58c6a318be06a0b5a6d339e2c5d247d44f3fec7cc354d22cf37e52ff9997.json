@@ -1,0 +1,111 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_md",
+      "label": "0011-explicit-project-restriction-state.md",
+      "file_type": "document",
+      "source_file": "docs/decisions/0011-explicit-project-restriction-state.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_adr_0011_explicit_durable_project_restriction_state",
+      "label": "ADR 0011: Explicit durable project restriction state",
+      "file_type": "document",
+      "source_file": "docs/decisions/0011-explicit-project-restriction-state.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_context",
+      "label": "Context",
+      "file_type": "document",
+      "source_file": "docs/decisions/0011-explicit-project-restriction-state.md",
+      "source_location": "L8"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_decision",
+      "label": "Decision",
+      "file_type": "document",
+      "source_file": "docs/decisions/0011-explicit-project-restriction-state.md",
+      "source_location": "L12"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_alternatives_considered",
+      "label": "Alternatives considered",
+      "file_type": "document",
+      "source_file": "docs/decisions/0011-explicit-project-restriction-state.md",
+      "source_location": "L20"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_consequences",
+      "label": "Consequences",
+      "file_type": "document",
+      "source_file": "docs/decisions/0011-explicit-project-restriction-state.md",
+      "source_location": "L26"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_migration_and_rollback",
+      "label": "Migration and rollback",
+      "file_type": "document",
+      "source_file": "docs/decisions/0011-explicit-project-restriction-state.md",
+      "source_location": "L30"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_md",
+      "target": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_adr_0011_explicit_durable_project_restriction_state",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0011-explicit-project-restriction-state.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_adr_0011_explicit_durable_project_restriction_state",
+      "target": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_context",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0011-explicit-project-restriction-state.md",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_adr_0011_explicit_durable_project_restriction_state",
+      "target": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_decision",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0011-explicit-project-restriction-state.md",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_adr_0011_explicit_durable_project_restriction_state",
+      "target": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_alternatives_considered",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0011-explicit-project-restriction-state.md",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_adr_0011_explicit_durable_project_restriction_state",
+      "target": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_consequences",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0011-explicit-project-restriction-state.md",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_adr_0011_explicit_durable_project_restriction_state",
+      "target": "$graphify-root$_docs_decisions_0011_explicit_project_restriction_state_migration_and_rollback",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0011-explicit-project-restriction-state.md",
+      "source_location": "L30",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

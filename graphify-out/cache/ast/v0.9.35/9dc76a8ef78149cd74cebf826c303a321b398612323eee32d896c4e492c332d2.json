@@ -1,0 +1,14 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_opencode_agent_backend_platform_engineer_md",
+      "label": "backend-platform-engineer.md",
+      "file_type": "document",
+      "source_file": ".opencode/agent/backend-platform-engineer.md",
+      "source_location": "L1"
+    }
+  ],
+  "edges": [],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

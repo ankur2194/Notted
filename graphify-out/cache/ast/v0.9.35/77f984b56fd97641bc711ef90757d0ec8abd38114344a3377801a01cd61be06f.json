@@ -1,0 +1,215 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_md",
+      "label": "disposable-e2e-stack-2026-08-07.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_disposable_end_to_end_stack_and_the_production_defect_it_uncovered",
+      "label": "Disposable end-to-end stack, and the production defect it uncovered",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_why_this_work_happened",
+      "label": "Why this work happened",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L8"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_what_was_built",
+      "label": "What was built",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L16"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_decisions_worth_keeping",
+      "label": "Decisions worth keeping",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L37"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_the_production_defect_the_clean_database_uncovered",
+      "label": "The production defect the clean database uncovered",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L45"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_what_changed",
+      "label": "What changed",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L56"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_test_defects_corrected",
+      "label": "Test defects corrected",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L63"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_verification",
+      "label": "Verification",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L72"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_known_gaps_and_follow_up",
+      "label": "Known gaps and follow-up",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L92"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_files",
+      "label": "Files",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L102"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_md",
+      "target": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_disposable_end_to_end_stack_and_the_production_defect_it_uncovered",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_md",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-41-image-ingestion-processing.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_md",
+      "target": "$graphify-root$_docs_completed_parts_part_29_project_crud_apis_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-29-project-crud-apis.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_md",
+      "target": "$graphify-root$_docs_completed_parts_part_32_note_browsing_hierarchy_share_ui_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-32-note-browsing-hierarchy-share-ui.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_md",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/all-in-docker-development-2026-08-04.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_disposable_end_to_end_stack_and_the_production_defect_it_uncovered",
+      "target": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_why_this_work_happened",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_disposable_end_to_end_stack_and_the_production_defect_it_uncovered",
+      "target": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_what_was_built",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_what_was_built",
+      "target": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_decisions_worth_keeping",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L37",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_disposable_end_to_end_stack_and_the_production_defect_it_uncovered",
+      "target": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_the_production_defect_the_clean_database_uncovered",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L45",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_the_production_defect_the_clean_database_uncovered",
+      "target": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_what_changed",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L56",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_disposable_end_to_end_stack_and_the_production_defect_it_uncovered",
+      "target": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_test_defects_corrected",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L63",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_disposable_end_to_end_stack_and_the_production_defect_it_uncovered",
+      "target": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_verification",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L72",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_disposable_end_to_end_stack_and_the_production_defect_it_uncovered",
+      "target": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_known_gaps_and_follow_up",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L92",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_disposable_end_to_end_stack_and_the_production_defect_it_uncovered",
+      "target": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_files",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/disposable-e2e-stack-2026-08-07.md",
+      "source_location": "L102",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

@@ -1,0 +1,847 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_notted_md",
+      "label": "Notted.md",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "label": "Notted \u2014 Corporate Notes Platform",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_notted_project_overview",
+      "label": "Project Overview",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_notted_tech_stack",
+      "label": "Tech Stack",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L11"
+    },
+    {
+      "id": "$graphify-root$_notted_project_structure",
+      "label": "Project Structure",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L41"
+    },
+    {
+      "id": "$graphify-root$_notted_docker_compose_configuration",
+      "label": "Docker Compose Configuration",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L310"
+    },
+    {
+      "id": "$graphify-root$_notted_production_stack_docker_docker_compose_yml",
+      "label": "Production Stack (`docker/docker-compose.yml`)",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L312"
+    },
+    {
+      "id": "$graphify-root$_notted_development_stack_compose_yaml",
+      "label": "Development Stack (`compose.yaml`)",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L503"
+    },
+    {
+      "id": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "label": "Database Schema (Drizzle ORM)",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L516"
+    },
+    {
+      "id": "$graphify-root$_notted_users_table",
+      "label": "Users Table",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L518"
+    },
+    {
+      "id": "$graphify-root$_notted_workspaces_table",
+      "label": "Workspaces Table",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L535"
+    },
+    {
+      "id": "$graphify-root$_notted_workspace_members_table",
+      "label": "Workspace Members Table",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L559"
+    },
+    {
+      "id": "$graphify-root$_notted_projects_table",
+      "label": "Projects Table",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L578"
+    },
+    {
+      "id": "$graphify-root$_notted_notes_table",
+      "label": "Notes Table",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L604"
+    },
+    {
+      "id": "$graphify-root$_notted_note_versions_table",
+      "label": "Note Versions Table",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L635"
+    },
+    {
+      "id": "$graphify-root$_notted_attachments_table",
+      "label": "Attachments Table",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L654"
+    },
+    {
+      "id": "$graphify-root$_notted_tags_note_tags_tables",
+      "label": "Tags & Note Tags Tables",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L679"
+    },
+    {
+      "id": "$graphify-root$_notted_note_embeddings_table_semantic_search",
+      "label": "Note Embeddings Table (Semantic Search)",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L705"
+    },
+    {
+      "id": "$graphify-root$_notted_comments_table",
+      "label": "Comments Table",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L723"
+    },
+    {
+      "id": "$graphify-root$_notted_audit_logs_table",
+      "label": "Audit Logs Table",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L745"
+    },
+    {
+      "id": "$graphify-root$_notted_api_keys_table",
+      "label": "API Keys Table",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L767"
+    },
+    {
+      "id": "$graphify-root$_notted_core_features_specification",
+      "label": "Core Features Specification",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L792"
+    },
+    {
+      "id": "$graphify-root$_notted_1_white_a4_letter_page_layout",
+      "label": "1. White A4/Letter Page Layout",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L794"
+    },
+    {
+      "id": "$graphify-root$_notted_2_rich_text_editor_tiptap",
+      "label": "2. Rich Text Editor (TipTap)",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L810"
+    },
+    {
+      "id": "$graphify-root$_notted_3_image_handling",
+      "label": "3. Image Handling",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L875"
+    },
+    {
+      "id": "$graphify-root$_notted_4_checklists_and_task_management",
+      "label": "4. Checklists and Task Management",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L915"
+    },
+    {
+      "id": "$graphify-root$_notted_5_project_vs_standalone_notes",
+      "label": "5. Project vs. Standalone Notes",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L950"
+    },
+    {
+      "id": "$graphify-root$_notted_6_attachments",
+      "label": "6. Attachments",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L982"
+    },
+    {
+      "id": "$graphify-root$_notted_7_version_history",
+      "label": "7. Version History",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1013"
+    },
+    {
+      "id": "$graphify-root$_notted_8_export_capabilities",
+      "label": "8. Export Capabilities",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1033"
+    },
+    {
+      "id": "$graphify-root$_notted_9_search",
+      "label": "9. Search",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1055"
+    },
+    {
+      "id": "$graphify-root$_notted_10_real_time_collaboration_socket_io",
+      "label": "10. Real-Time Collaboration (Socket.io)",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1077"
+    },
+    {
+      "id": "$graphify-root$_notted_11_ai_features",
+      "label": "11. AI Features",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1100"
+    },
+    {
+      "id": "$graphify-root$_notted_12_authentication_authorization",
+      "label": "12. Authentication & Authorization",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1136"
+    },
+    {
+      "id": "$graphify-root$_notted_13_background_jobs_bullmq",
+      "label": "13. Background Jobs (BullMQ)",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1175"
+    },
+    {
+      "id": "$graphify-root$_notted_14_email_system",
+      "label": "14. Email System",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1197"
+    },
+    {
+      "id": "$graphify-root$_notted_15_api_webhooks",
+      "label": "15. API & Webhooks",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1219"
+    },
+    {
+      "id": "$graphify-root$_notted_16_white_label_customization",
+      "label": "16. White-Label & Customization",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1239"
+    },
+    {
+      "id": "$graphify-root$_notted_environment_variables",
+      "label": "Environment Variables",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1257"
+    },
+    {
+      "id": "$graphify-root$_notted_deployment_instructions",
+      "label": "Deployment Instructions",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1316"
+    },
+    {
+      "id": "$graphify-root$_notted_server_requirements",
+      "label": "Server Requirements",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1318"
+    },
+    {
+      "id": "$graphify-root$_notted_step_1_server_setup",
+      "label": "Step 1: Server Setup",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1326"
+    },
+    {
+      "id": "$graphify-root$_notted_step_2_ssl_certificate_let_s_encrypt",
+      "label": "Step 2: SSL Certificate (Let's Encrypt)",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1374"
+    },
+    {
+      "id": "$graphify-root$_notted_step_3_nginx_configuration",
+      "label": "Step 3: Nginx Configuration",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1380"
+    },
+    {
+      "id": "$graphify-root$_notted_step_4_deploy_application",
+      "label": "Step 4: Deploy Application",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1435"
+    },
+    {
+      "id": "$graphify-root$_notted_step_5_database_migrations",
+      "label": "Step 5: Database Migrations",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1484"
+    },
+    {
+      "id": "$graphify-root$_notted_step_6_backup_script",
+      "label": "Step 6: Backup Script",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1494"
+    },
+    {
+      "id": "$graphify-root$_notted_development_workflow",
+      "label": "Development Workflow",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1522"
+    },
+    {
+      "id": "$graphify-root$_notted_local_development_setup",
+      "label": "Local Development Setup",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1524"
+    },
+    {
+      "id": "$graphify-root$_notted_available_make_commands",
+      "label": "Available Make Commands",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1539"
+    },
+    {
+      "id": "$graphify-root$_notted_ai_coding_conventions_claude_md",
+      "label": "AI Coding Conventions (CLAUDE.md)",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1586"
+    },
+    {
+      "id": "$graphify-root$_notted_what_this_project_demonstrates",
+      "label": "What This Project Demonstrates",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1661"
+    },
+    {
+      "id": "$graphify-root$_notted_development_steps",
+      "label": "Development Steps",
+      "file_type": "document",
+      "source_file": "Notted.md",
+      "source_location": "L1681"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_notted_md",
+      "target": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "target": "$graphify-root$_notted_project_overview",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "target": "$graphify-root$_notted_tech_stack",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "target": "$graphify-root$_notted_project_structure",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L41",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "target": "$graphify-root$_notted_docker_compose_configuration",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L310",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_docker_compose_configuration",
+      "target": "$graphify-root$_notted_production_stack_docker_docker_compose_yml",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L312",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_docker_compose_configuration",
+      "target": "$graphify-root$_notted_development_stack_compose_yaml",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L503",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "target": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L516",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "target": "$graphify-root$_notted_users_table",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L518",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "target": "$graphify-root$_notted_workspaces_table",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L535",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "target": "$graphify-root$_notted_workspace_members_table",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L559",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "target": "$graphify-root$_notted_projects_table",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L578",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "target": "$graphify-root$_notted_notes_table",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L604",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "target": "$graphify-root$_notted_note_versions_table",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L635",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "target": "$graphify-root$_notted_attachments_table",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L654",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "target": "$graphify-root$_notted_tags_note_tags_tables",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L679",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "target": "$graphify-root$_notted_note_embeddings_table_semantic_search",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L705",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "target": "$graphify-root$_notted_comments_table",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L723",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "target": "$graphify-root$_notted_audit_logs_table",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L745",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_database_schema_drizzle_orm",
+      "target": "$graphify-root$_notted_api_keys_table",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L767",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "target": "$graphify-root$_notted_core_features_specification",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L792",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_1_white_a4_letter_page_layout",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L794",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_2_rich_text_editor_tiptap",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L810",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_3_image_handling",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L875",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_4_checklists_and_task_management",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L915",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_5_project_vs_standalone_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L950",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_6_attachments",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L982",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_7_version_history",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1013",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_8_export_capabilities",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1033",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_9_search",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1055",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_10_real_time_collaboration_socket_io",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1077",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_11_ai_features",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1100",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_12_authentication_authorization",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1136",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_13_background_jobs_bullmq",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1175",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_14_email_system",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1197",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_15_api_webhooks",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1219",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_core_features_specification",
+      "target": "$graphify-root$_notted_16_white_label_customization",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1239",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "target": "$graphify-root$_notted_environment_variables",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1257",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "target": "$graphify-root$_notted_deployment_instructions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1316",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_deployment_instructions",
+      "target": "$graphify-root$_notted_server_requirements",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1318",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_deployment_instructions",
+      "target": "$graphify-root$_notted_step_1_server_setup",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1326",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_deployment_instructions",
+      "target": "$graphify-root$_notted_step_2_ssl_certificate_let_s_encrypt",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1374",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_deployment_instructions",
+      "target": "$graphify-root$_notted_step_3_nginx_configuration",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1380",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_deployment_instructions",
+      "target": "$graphify-root$_notted_step_4_deploy_application",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1435",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_deployment_instructions",
+      "target": "$graphify-root$_notted_step_5_database_migrations",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1484",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_deployment_instructions",
+      "target": "$graphify-root$_notted_step_6_backup_script",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1494",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "target": "$graphify-root$_notted_development_workflow",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1522",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_development_workflow",
+      "target": "$graphify-root$_notted_local_development_setup",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1524",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_development_workflow",
+      "target": "$graphify-root$_notted_available_make_commands",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1539",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "target": "$graphify-root$_notted_ai_coding_conventions_claude_md",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1586",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "target": "$graphify-root$_notted_what_this_project_demonstrates",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1661",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_notted_notted_corporate_notes_platform",
+      "target": "$graphify-root$_notted_development_steps",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "Notted.md",
+      "source_location": "L1681",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

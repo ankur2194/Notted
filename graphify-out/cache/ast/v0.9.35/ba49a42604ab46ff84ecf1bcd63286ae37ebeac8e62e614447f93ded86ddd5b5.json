@@ -1,0 +1,253 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_readme_md",
+      "label": "README.md",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_readme_local_development",
+      "label": "Local development",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_readme_prerequisites",
+      "label": "Prerequisites",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_readme_clone_to_running",
+      "label": "Clone to running",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L21"
+    },
+    {
+      "id": "$graphify-root$_docs_readme_running_the_applications_on_the_host_instead",
+      "label": "Running the applications on the host instead",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L47"
+    },
+    {
+      "id": "$graphify-root$_docs_readme_deterministic_development_seed",
+      "label": "Deterministic development seed",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L62"
+    },
+    {
+      "id": "$graphify-root$_docs_readme_local_authentication_and_mailpit",
+      "label": "Local authentication and Mailpit",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L101"
+    },
+    {
+      "id": "$graphify-root$_docs_readme_dashboard_shell_and_notifications",
+      "label": "Dashboard shell and notifications",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L135"
+    },
+    {
+      "id": "$graphify-root$_docs_readme_services_and_ports",
+      "label": "Services and ports",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L158"
+    },
+    {
+      "id": "$graphify-root$_docs_readme_host_tooling_and_the_debug_ports_override",
+      "label": "Host tooling and the debug-ports override",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L200"
+    },
+    {
+      "id": "$graphify-root$_docs_readme_infrastructure_lifecycle",
+      "label": "Infrastructure lifecycle",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L215"
+    },
+    {
+      "id": "$graphify-root$_docs_readme_database_workflow",
+      "label": "Database workflow",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L258"
+    },
+    {
+      "id": "$graphify-root$_docs_readme_quality_commands",
+      "label": "Quality commands",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L281"
+    },
+    {
+      "id": "$graphify-root$_docs_readme_troubleshooting",
+      "label": "Troubleshooting",
+      "file_type": "document",
+      "source_file": "docs/README.md",
+      "source_location": "L352"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_readme_md",
+      "target": "$graphify-root$_docs_readme_local_development",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_readme_local_development",
+      "target": "$graphify-root$_docs_readme_prerequisites",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_readme_local_development",
+      "target": "$graphify-root$_docs_readme_clone_to_running",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_readme_clone_to_running",
+      "target": "$graphify-root$_docs_readme_running_the_applications_on_the_host_instead",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L47",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_readme_clone_to_running",
+      "target": "$graphify-root$_docs_readme_deterministic_development_seed",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L62",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_readme_clone_to_running",
+      "target": "$graphify-root$_docs_readme_local_authentication_and_mailpit",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L101",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_readme_md",
+      "target": "$graphify-root$_docs_environment_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L120",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/environment.md"
+    },
+    {
+      "source": "$graphify-root$_docs_readme_clone_to_running",
+      "target": "$graphify-root$_docs_readme_dashboard_shell_and_notifications",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L135",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_readme_local_development",
+      "target": "$graphify-root$_docs_readme_services_and_ports",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L158",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_readme_services_and_ports",
+      "target": "$graphify-root$_docs_readme_host_tooling_and_the_debug_ports_override",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L200",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_readme_local_development",
+      "target": "$graphify-root$_docs_readme_infrastructure_lifecycle",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L215",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_readme_md",
+      "target": "$graphify-root$_docs_legacy_development_volumes_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L244",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/legacy-development-volumes.md"
+    },
+    {
+      "source": "$graphify-root$_docs_readme_local_development",
+      "target": "$graphify-root$_docs_readme_database_workflow",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L258",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_readme_md",
+      "target": "$graphify-root$_docs_database_migrations_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L279",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/database-migrations.md"
+    },
+    {
+      "source": "$graphify-root$_docs_readme_local_development",
+      "target": "$graphify-root$_docs_readme_quality_commands",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L281",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_readme_local_development",
+      "target": "$graphify-root$_docs_readme_troubleshooting",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/README.md",
+      "source_location": "L352",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

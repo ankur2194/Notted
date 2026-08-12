@@ -1,0 +1,111 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_claude_agents_lead_part_engineer_md",
+      "label": "lead-part-engineer.md",
+      "file_type": "document",
+      "source_file": ".claude/agents/lead-part-engineer.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_claude_agents_lead_part_engineer_authority_chain",
+      "label": "Authority chain",
+      "file_type": "document",
+      "source_file": ".claude/agents/lead-part-engineer.md",
+      "source_location": "L9"
+    },
+    {
+      "id": "$graphify-root$_claude_agents_lead_part_engineer_skill_to_load",
+      "label": "Skill to load",
+      "file_type": "document",
+      "source_file": ".claude/agents/lead-part-engineer.md",
+      "source_location": "L13"
+    },
+    {
+      "id": "$graphify-root$_claude_agents_lead_part_engineer_operating_rules",
+      "label": "Operating rules",
+      "file_type": "document",
+      "source_file": ".claude/agents/lead-part-engineer.md",
+      "source_location": "L17"
+    },
+    {
+      "id": "$graphify-root$_claude_agents_lead_part_engineer_delegation",
+      "label": "Delegation",
+      "file_type": "document",
+      "source_file": ".claude/agents/lead-part-engineer.md",
+      "source_location": "L30"
+    },
+    {
+      "id": "$graphify-root$_claude_agents_lead_part_engineer_synchronous_delegation_protocol_claude_code_mechanism",
+      "label": "Synchronous Delegation Protocol (Claude Code mechanism)",
+      "file_type": "document",
+      "source_file": ".claude/agents/lead-part-engineer.md",
+      "source_location": "L44"
+    },
+    {
+      "id": "$graphify-root$_claude_agents_lead_part_engineer_completion_payload",
+      "label": "Completion payload",
+      "file_type": "document",
+      "source_file": ".claude/agents/lead-part-engineer.md",
+      "source_location": "L58"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_claude_agents_lead_part_engineer_md",
+      "target": "$graphify-root$_claude_agents_lead_part_engineer_authority_chain",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/agents/lead-part-engineer.md",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_agents_lead_part_engineer_md",
+      "target": "$graphify-root$_claude_agents_lead_part_engineer_skill_to_load",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/agents/lead-part-engineer.md",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_agents_lead_part_engineer_md",
+      "target": "$graphify-root$_claude_agents_lead_part_engineer_operating_rules",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/agents/lead-part-engineer.md",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_agents_lead_part_engineer_md",
+      "target": "$graphify-root$_claude_agents_lead_part_engineer_delegation",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/agents/lead-part-engineer.md",
+      "source_location": "L30",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_agents_lead_part_engineer_delegation",
+      "target": "$graphify-root$_claude_agents_lead_part_engineer_synchronous_delegation_protocol_claude_code_mechanism",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/agents/lead-part-engineer.md",
+      "source_location": "L44",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_agents_lead_part_engineer_md",
+      "target": "$graphify-root$_claude_agents_lead_part_engineer_completion_payload",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/agents/lead-part-engineer.md",
+      "source_location": "L58",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

@@ -1,0 +1,111 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_decisions_0005_private_object_storage_md",
+      "label": "0005-private-object-storage.md",
+      "file_type": "document",
+      "source_file": "docs/decisions/0005-private-object-storage.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0005_private_object_storage_adr_0005_store_private_binaries_in_minio_with_postgresql_metadata",
+      "label": "ADR 0005: Store private binaries in MinIO with PostgreSQL metadata",
+      "file_type": "document",
+      "source_file": "docs/decisions/0005-private-object-storage.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0005_private_object_storage_context",
+      "label": "Context",
+      "file_type": "document",
+      "source_file": "docs/decisions/0005-private-object-storage.md",
+      "source_location": "L7"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0005_private_object_storage_decision",
+      "label": "Decision",
+      "file_type": "document",
+      "source_file": "docs/decisions/0005-private-object-storage.md",
+      "source_location": "L11"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0005_private_object_storage_alternatives_considered",
+      "label": "Alternatives considered",
+      "file_type": "document",
+      "source_file": "docs/decisions/0005-private-object-storage.md",
+      "source_location": "L30"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0005_private_object_storage_consequences",
+      "label": "Consequences",
+      "file_type": "document",
+      "source_file": "docs/decisions/0005-private-object-storage.md",
+      "source_location": "L37"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0005_private_object_storage_migration_and_rollback_impact",
+      "label": "Migration and rollback impact",
+      "file_type": "document",
+      "source_file": "docs/decisions/0005-private-object-storage.md",
+      "source_location": "L44"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_decisions_0005_private_object_storage_md",
+      "target": "$graphify-root$_docs_decisions_0005_private_object_storage_adr_0005_store_private_binaries_in_minio_with_postgresql_metadata",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0005-private-object-storage.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0005_private_object_storage_adr_0005_store_private_binaries_in_minio_with_postgresql_metadata",
+      "target": "$graphify-root$_docs_decisions_0005_private_object_storage_context",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0005-private-object-storage.md",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0005_private_object_storage_adr_0005_store_private_binaries_in_minio_with_postgresql_metadata",
+      "target": "$graphify-root$_docs_decisions_0005_private_object_storage_decision",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0005-private-object-storage.md",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0005_private_object_storage_adr_0005_store_private_binaries_in_minio_with_postgresql_metadata",
+      "target": "$graphify-root$_docs_decisions_0005_private_object_storage_alternatives_considered",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0005-private-object-storage.md",
+      "source_location": "L30",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0005_private_object_storage_adr_0005_store_private_binaries_in_minio_with_postgresql_metadata",
+      "target": "$graphify-root$_docs_decisions_0005_private_object_storage_consequences",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0005-private-object-storage.md",
+      "source_location": "L37",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0005_private_object_storage_adr_0005_store_private_binaries_in_minio_with_postgresql_metadata",
+      "target": "$graphify-root$_docs_decisions_0005_private_object_storage_migration_and_rollback_impact",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0005-private-object-storage.md",
+      "source_location": "L44",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

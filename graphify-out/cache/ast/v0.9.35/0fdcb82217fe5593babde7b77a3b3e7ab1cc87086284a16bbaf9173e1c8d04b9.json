@@ -1,0 +1,31 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_standards_operations_md",
+      "label": "operations.md",
+      "file_type": "document",
+      "source_file": "docs/standards/operations.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_standards_operations_operations_standard",
+      "label": "Operations Standard",
+      "file_type": "document",
+      "source_file": "docs/standards/operations.md",
+      "source_location": "L1"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_standards_operations_md",
+      "target": "$graphify-root$_docs_standards_operations_operations_standard",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/standards/operations.md",
+      "source_location": "L1",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

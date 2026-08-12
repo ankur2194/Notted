@@ -1,0 +1,63 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_agents_skills_notted_backend_data_skill_md",
+      "label": "SKILL.md",
+      "file_type": "document",
+      "source_file": ".agents/skills/notted-backend-data/SKILL.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_agents_skills_notted_backend_data_skill_build_notted_backend_and_data_features",
+      "label": "Build Notted Backend and Data Features",
+      "file_type": "document",
+      "source_file": ".agents/skills/notted-backend-data/SKILL.md",
+      "source_location": "L6"
+    },
+    {
+      "id": "$graphify-root$_agents_skills_notted_backend_data_skill_architecture_and_safety",
+      "label": "Architecture and safety",
+      "file_type": "document",
+      "source_file": ".agents/skills/notted-backend-data/SKILL.md",
+      "source_location": "L12"
+    },
+    {
+      "id": "$graphify-root$_agents_skills_notted_backend_data_skill_verify",
+      "label": "Verify",
+      "file_type": "document",
+      "source_file": ".agents/skills/notted-backend-data/SKILL.md",
+      "source_location": "L23"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_agents_skills_notted_backend_data_skill_md",
+      "target": "$graphify-root$_agents_skills_notted_backend_data_skill_build_notted_backend_and_data_features",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/notted-backend-data/SKILL.md",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_agents_skills_notted_backend_data_skill_build_notted_backend_and_data_features",
+      "target": "$graphify-root$_agents_skills_notted_backend_data_skill_architecture_and_safety",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/notted-backend-data/SKILL.md",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_agents_skills_notted_backend_data_skill_build_notted_backend_and_data_features",
+      "target": "$graphify-root$_agents_skills_notted_backend_data_skill_verify",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/notted-backend-data/SKILL.md",
+      "source_location": "L23",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

@@ -1,0 +1,159 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_md",
+      "label": "part-25-dashboard-shell.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_part_25_build_the_dashboard_shell",
+      "label": "Part 25 \u2014 Build the dashboard shell",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_status",
+      "label": "Status",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_objective_and_implemented_work",
+      "label": "Objective and implemented work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L15"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_database_and_migration",
+      "label": "Database and migration",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L48"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_api_and_security_boundaries",
+      "label": "API and security boundaries",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L62"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_authored_verification_not_run",
+      "label": "Authored verification (not run)",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L77"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_known_limitations_and_ownership_handoff",
+      "label": "Known limitations and ownership handoff",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L91"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_completion_verification_update",
+      "label": "Completion Verification Update",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L106"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_revision_history",
+      "label": "Revision history",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L120"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_md",
+      "target": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_part_25_build_the_dashboard_shell",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_part_25_build_the_dashboard_shell",
+      "target": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_part_25_build_the_dashboard_shell",
+      "target": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_objective_and_implemented_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_part_25_build_the_dashboard_shell",
+      "target": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_database_and_migration",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L48",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_part_25_build_the_dashboard_shell",
+      "target": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_api_and_security_boundaries",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L62",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_part_25_build_the_dashboard_shell",
+      "target": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_authored_verification_not_run",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L77",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_part_25_build_the_dashboard_shell",
+      "target": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_known_limitations_and_ownership_handoff",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L91",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_part_25_build_the_dashboard_shell",
+      "target": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_completion_verification_update",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L106",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_part_25_build_the_dashboard_shell",
+      "target": "$graphify-root$_docs_completed_parts_part_25_dashboard_shell_revision_history",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-25-dashboard-shell.md",
+      "source_location": "L120",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

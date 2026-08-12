@@ -1,0 +1,271 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_md",
+      "label": "part-44-generic-attachments.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "label": "Part 44 \u2014 Implement generic attachment flows",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_status",
+      "label": "Status",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_objective",
+      "label": "Objective",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L11"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_implemented_work",
+      "label": "Implemented Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L15"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_shared_contract_packages_shared_validators",
+      "label": "Shared contract (`packages/shared-validators`)",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L17"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_api_apps_api",
+      "label": "API (`apps/api`)",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L23"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_editor_and_frontend_apps_web",
+      "label": "Editor and frontend (`apps/web`)",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L32"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_important_decisions",
+      "label": "Important Decisions",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L43"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_files_and_components",
+      "label": "Files and Components",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L61"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_database_and_data_changes",
+      "label": "Database and Data Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L100"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_api_configuration_and_operational_changes",
+      "label": "API, Configuration, and Operational Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L104"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_security_and_tenant_isolation_notes",
+      "label": "Security and Tenant-Isolation Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L111"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_verification_evidence",
+      "label": "Verification Evidence",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L121"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_known_limitations_and_follow_up_work",
+      "label": "Known Limitations and Follow-up Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L143"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_handoff_notes",
+      "label": "Handoff Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L153"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_revision_history",
+      "label": "Revision History",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L170"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_md",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_objective",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_implemented_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_shared_contract_packages_shared_validators",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_api_apps_api",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L23",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_editor_and_frontend_apps_web",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_important_decisions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_files_and_components",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L61",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_database_and_data_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L100",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_api_configuration_and_operational_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L104",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_security_and_tenant_isolation_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L111",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_verification_evidence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L121",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_known_limitations_and_follow_up_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L143",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_handoff_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L153",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_part_44_implement_generic_attachment_flows",
+      "target": "$graphify-root$_docs_completed_parts_part_44_generic_attachments_revision_history",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-44-generic-attachments.md",
+      "source_location": "L170",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

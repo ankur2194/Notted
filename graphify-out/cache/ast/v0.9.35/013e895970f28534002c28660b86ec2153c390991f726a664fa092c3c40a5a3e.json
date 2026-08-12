@@ -1,0 +1,121 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_claude_skills_notted_part_delivery_skill_md",
+      "label": "SKILL.md",
+      "file_type": "document",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_claude_skills_notted_part_delivery_skill_deliver_a_notted_plan_part",
+      "label": "Deliver a Notted Plan Part",
+      "file_type": "document",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L6"
+    },
+    {
+      "id": "$graphify-root$_claude_skills_notted_part_delivery_skill_establish_context",
+      "label": "Establish context",
+      "file_type": "document",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L8"
+    },
+    {
+      "id": "$graphify-root$_claude_skills_notted_part_delivery_skill_execute",
+      "label": "Execute",
+      "file_type": "document",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L15"
+    },
+    {
+      "id": "$graphify-root$_claude_skills_notted_part_delivery_skill_verify_and_hand_off",
+      "label": "Verify and hand off",
+      "file_type": "document",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L23"
+    },
+    {
+      "id": "$graphify-root$_claude_skills_notted_part_delivery_skill_synchronous_delegation_protocol_in_claude_code",
+      "label": "Synchronous Delegation Protocol in Claude Code",
+      "file_type": "document",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L33"
+    },
+    {
+      "id": "$graphify-root$_claude_skills_notted_part_delivery_skill_actions",
+      "label": "Actions",
+      "file_type": "document",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L45"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_claude_skills_notted_part_delivery_skill_md",
+      "target": "$graphify-root$_claude_skills_notted_part_delivery_skill_deliver_a_notted_plan_part",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_skills_notted_part_delivery_skill_deliver_a_notted_plan_part",
+      "target": "$graphify-root$_claude_skills_notted_part_delivery_skill_establish_context",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_skills_notted_part_delivery_skill_deliver_a_notted_plan_part",
+      "target": "$graphify-root$_claude_skills_notted_part_delivery_skill_execute",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_skills_notted_part_delivery_skill_deliver_a_notted_plan_part",
+      "target": "$graphify-root$_claude_skills_notted_part_delivery_skill_verify_and_hand_off",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L23",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_skills_notted_part_delivery_skill_md",
+      "target": "$graphify-root$_claude_skills_notted_part_delivery_part_completion_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L31",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/.claude/skills/notted-part-delivery/part-completion.md"
+    },
+    {
+      "source": "$graphify-root$_claude_skills_notted_part_delivery_skill_deliver_a_notted_plan_part",
+      "target": "$graphify-root$_claude_skills_notted_part_delivery_skill_synchronous_delegation_protocol_in_claude_code",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L33",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_claude_skills_notted_part_delivery_skill_deliver_a_notted_plan_part",
+      "target": "$graphify-root$_claude_skills_notted_part_delivery_skill_actions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".claude/skills/notted-part-delivery/SKILL.md",
+      "source_location": "L45",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

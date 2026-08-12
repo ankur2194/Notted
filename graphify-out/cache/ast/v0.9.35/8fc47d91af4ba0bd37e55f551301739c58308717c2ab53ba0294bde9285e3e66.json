@@ -1,0 +1,223 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_md",
+      "label": "part-16-tags-attachments-comments-versions.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "label": "Part 16 \u2014 Implement Tags, Attachments, Comments, and Note Versions",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_status",
+      "label": "Status",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_objective",
+      "label": "Objective",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L15"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_implemented_work",
+      "label": "Implemented Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L27"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_important_decisions",
+      "label": "Important Decisions",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L148"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_files_and_components",
+      "label": "Files and Components",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L259"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_database_and_data_changes",
+      "label": "Database and Data Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L275"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_api_configuration_and_operational_changes",
+      "label": "API, Configuration, and Operational Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L318"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_security_and_tenant_isolation_notes",
+      "label": "Security and Tenant-Isolation Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L328"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_verification_evidence",
+      "label": "Verification Evidence",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L364"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_known_limitations_and_follow_up_work",
+      "label": "Known Limitations and Follow-up Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L375"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_handoff_notes",
+      "label": "Handoff Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L412"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_revision_history",
+      "label": "Revision History",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L444"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_md",
+      "target": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "target": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "target": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_objective",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "target": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_implemented_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "target": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_important_decisions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L148",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "target": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_files_and_components",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L259",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "target": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_database_and_data_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L275",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "target": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_api_configuration_and_operational_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L318",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "target": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_security_and_tenant_isolation_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L328",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "target": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_verification_evidence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L364",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "target": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_known_limitations_and_follow_up_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L375",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "target": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_handoff_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L412",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_part_16_implement_tags_attachments_comments_and_note_versions",
+      "target": "$graphify-root$_docs_completed_parts_part_16_tags_attachments_comments_versions_revision_history",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-16-tags-attachments-comments-versions.md",
+      "source_location": "L444",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

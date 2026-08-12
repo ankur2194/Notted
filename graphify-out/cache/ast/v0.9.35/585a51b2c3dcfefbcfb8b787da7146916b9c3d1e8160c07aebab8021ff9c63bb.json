@@ -1,0 +1,313 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_md",
+      "label": "part-41-image-ingestion-processing.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "label": "Part 41 \u2014 Implement image ingestion and processing",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_status",
+      "label": "Status",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_objective",
+      "label": "Objective",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L11"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_implemented_work",
+      "label": "Implemented Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L17"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_important_decisions",
+      "label": "Important Decisions",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L31"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_files_and_components",
+      "label": "Files and Components",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L47"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_database_and_data_changes",
+      "label": "Database and Data Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L72"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_api_configuration_and_operational_changes",
+      "label": "API, Configuration, and Operational Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L78"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_security_and_tenant_isolation_notes",
+      "label": "Security and Tenant-Isolation Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L98"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_what_part_42_receives",
+      "label": "What Part 42 receives",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L109"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_verification_evidence",
+      "label": "Verification Evidence",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L113"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_two_real_defects_the_gates_caught_and_what_they_mean",
+      "label": "Two real defects the gates caught, and what they mean",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L131"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_two_further_prescan_gaps_closed_in_the_final_pass",
+      "label": "Two further prescan gaps closed in the final pass",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L156"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_svg_prescan_now_covers_namespace_prefixed_elements",
+      "label": "SVG prescan now covers namespace-prefixed elements",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L171"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_unit_test_coverage_of_plan_md_s_verify_clause",
+      "label": "Unit-test coverage of `Plan.md`'s Verify clause",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L188"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_known_limitations_and_follow_up_work",
+      "label": "Known Limitations and Follow-up Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L207"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_handoff_notes",
+      "label": "Handoff Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L219"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_revision_history",
+      "label": "Revision History",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L230"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_md",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_md",
+      "target": "$graphify-root$_third_party_notices_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/THIRD-PARTY-NOTICES.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_objective",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_implemented_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_important_decisions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_files_and_components",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L47",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_database_and_data_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L72",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_api_configuration_and_operational_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L78",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_security_and_tenant_isolation_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L98",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_security_and_tenant_isolation_notes",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_what_part_42_receives",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L109",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_verification_evidence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L113",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_verification_evidence",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_two_real_defects_the_gates_caught_and_what_they_mean",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L131",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_verification_evidence",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_two_further_prescan_gaps_closed_in_the_final_pass",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L156",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_verification_evidence",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_svg_prescan_now_covers_namespace_prefixed_elements",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L171",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_verification_evidence",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_unit_test_coverage_of_plan_md_s_verify_clause",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L188",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_known_limitations_and_follow_up_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L207",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_handoff_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L219",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_part_41_implement_image_ingestion_and_processing",
+      "target": "$graphify-root$_docs_completed_parts_part_41_image_ingestion_processing_revision_history",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-41-image-ingestion-processing.md",
+      "source_location": "L230",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

@@ -1,0 +1,207 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_md",
+      "label": "part-51-meilisearch-indexing-pipeline.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_part_51_meilisearch_indexing_pipeline",
+      "label": "Part 51 \u2014 Meilisearch indexing pipeline",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_status",
+      "label": "Status",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_objective_and_current_result",
+      "label": "Objective and current result",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L10"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_index_and_document_contract",
+      "label": "Index and document contract",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L16"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_producer_mutation_matrix",
+      "label": "Producer mutation matrix",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L28"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_reindex_and_tenant_security",
+      "label": "Reindex and tenant security",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L42"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_operational_command",
+      "label": "Operational command",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L51"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_prefix_isolation_rollback_and_rebuild",
+      "label": "Prefix isolation, rollback, and rebuild",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L58"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_files_and_test_source",
+      "label": "Files and test source",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L64"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_known_limitations",
+      "label": "Known limitations",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L74"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_revision_history",
+      "label": "Revision history",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L80"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_commands",
+      "label": "Commands",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L87"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_md",
+      "target": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_part_51_meilisearch_indexing_pipeline",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_part_51_meilisearch_indexing_pipeline",
+      "target": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_part_51_meilisearch_indexing_pipeline",
+      "target": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_objective_and_current_result",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_part_51_meilisearch_indexing_pipeline",
+      "target": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_index_and_document_contract",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_part_51_meilisearch_indexing_pipeline",
+      "target": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_producer_mutation_matrix",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_part_51_meilisearch_indexing_pipeline",
+      "target": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_reindex_and_tenant_security",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L42",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_part_51_meilisearch_indexing_pipeline",
+      "target": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_operational_command",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L51",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_part_51_meilisearch_indexing_pipeline",
+      "target": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_prefix_isolation_rollback_and_rebuild",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L58",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_part_51_meilisearch_indexing_pipeline",
+      "target": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_files_and_test_source",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L64",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_part_51_meilisearch_indexing_pipeline",
+      "target": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_known_limitations",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L74",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_part_51_meilisearch_indexing_pipeline",
+      "target": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_revision_history",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L80",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_part_51_meilisearch_indexing_pipeline",
+      "target": "$graphify-root$_docs_completed_parts_part_51_meilisearch_indexing_pipeline_commands",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md",
+      "source_location": "L87",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

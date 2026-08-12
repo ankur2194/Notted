@@ -1,0 +1,253 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_md",
+      "label": "all-in-docker-development-2026-08-04.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_all_in_docker_development_stack",
+      "label": "All-in-Docker development stack",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_status",
+      "label": "Status",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_objective",
+      "label": "Objective",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L11"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_implemented_work",
+      "label": "Implemented Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L22"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_important_decisions",
+      "label": "Important Decisions",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L56"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_files_and_components",
+      "label": "Files and Components",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L101"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_database_and_data_changes",
+      "label": "Database and Data Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L119"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_api_configuration_and_operational_changes",
+      "label": "API, Configuration, and Operational Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L130"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_security_and_tenant_isolation_notes",
+      "label": "Security and Tenant-Isolation Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L148"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_verification_evidence",
+      "label": "Verification Evidence",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L165"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_2026_08_04_runtime_verification",
+      "label": "2026-08-04 runtime verification",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L178"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_2026_08_04_registration_and_email_verification_flow",
+      "label": "2026-08-04 registration and email-verification flow",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L200"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_known_limitations_and_follow_up_work",
+      "label": "Known Limitations and Follow-up Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L215"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_md",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_all_in_docker_development_stack",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_all_in_docker_development_stack",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_md",
+      "target": "$graphify-root$_docs_completed_parts_part_08_environment_contracts_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-08-environment-contracts.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_md",
+      "target": "$graphify-root$_docs_completed_parts_part_09_development_compose_stack_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-09-development-compose-stack.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_md",
+      "target": "$graphify-root$_docs_completed_parts_part_10_developer_commands_onboarding_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-10-developer-commands-onboarding.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_all_in_docker_development_stack",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_objective",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_all_in_docker_development_stack",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_implemented_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_all_in_docker_development_stack",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_important_decisions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L56",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_all_in_docker_development_stack",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_files_and_components",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L101",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_all_in_docker_development_stack",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_database_and_data_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L119",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_all_in_docker_development_stack",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_api_configuration_and_operational_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L130",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_all_in_docker_development_stack",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_security_and_tenant_isolation_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L148",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_all_in_docker_development_stack",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_verification_evidence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L165",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_verification_evidence",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_2026_08_04_runtime_verification",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L178",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_verification_evidence",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_2026_08_04_registration_and_email_verification_flow",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L200",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_all_in_docker_development_stack",
+      "target": "$graphify-root$_docs_completed_parts_all_in_docker_development_2026_08_04_known_limitations_and_follow_up_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/all-in-docker-development-2026-08-04.md",
+      "source_location": "L215",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

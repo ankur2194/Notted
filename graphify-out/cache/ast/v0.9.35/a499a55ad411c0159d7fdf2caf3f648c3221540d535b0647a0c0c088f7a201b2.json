@@ -1,0 +1,223 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_md",
+      "label": "part-03-formatting-linting-commit-gates.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "label": "Part 03 \u2014 Establish formatting, linting, and commit quality gates",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_status",
+      "label": "Status",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_objective",
+      "label": "Objective",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L11"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_implemented_work",
+      "label": "Implemented Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L15"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_important_decisions",
+      "label": "Important Decisions",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L26"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_files_and_components",
+      "label": "Files and Components",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L36"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_database_and_data_changes",
+      "label": "Database and Data Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L51"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_api_configuration_and_operational_changes",
+      "label": "API, Configuration, and Operational Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L55"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_security_and_tenant_isolation_notes",
+      "label": "Security and Tenant-Isolation Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L61"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_verification_evidence",
+      "label": "Verification Evidence",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L65"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_known_limitations_and_follow_up_work",
+      "label": "Known Limitations and Follow-up Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L95"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_handoff_notes",
+      "label": "Handoff Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L103"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_revision_history",
+      "label": "Revision History",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L111"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_md",
+      "target": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "target": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "target": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_objective",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "target": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_implemented_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "target": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_important_decisions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "target": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_files_and_components",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L36",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "target": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_database_and_data_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L51",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "target": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_api_configuration_and_operational_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L55",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "target": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_security_and_tenant_isolation_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L61",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "target": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_verification_evidence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L65",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "target": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_known_limitations_and_follow_up_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L95",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "target": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_handoff_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L103",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_part_03_establish_formatting_linting_and_commit_quality_gates",
+      "target": "$graphify-root$_docs_completed_parts_part_03_formatting_linting_commit_gates_revision_history",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-03-formatting-linting-commit-gates.md",
+      "source_location": "L111",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

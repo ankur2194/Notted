@@ -1,0 +1,271 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_md",
+      "label": "coverage-remediation-2026-08-04.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "label": "Coverage remediation \u2014 making `pnpm test:ci` pass",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_status",
+      "label": "Status",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_objective",
+      "label": "Objective",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L11"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_the_actual_starting_state",
+      "label": "The actual starting state",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L17"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_implemented_work",
+      "label": "Implemented Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L41"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_make_the_api_s_existing_integration_tests_actually_run",
+      "label": "Make the API's existing integration tests actually run",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L43"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_fix_two_pre_existing_flaws_the_newly_running_tests_exposed",
+      "label": "Fix two pre-existing flaws the newly-running tests exposed",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L59"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_cover_the_gaps",
+      "label": "Cover the gaps",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L75"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_bug_found_and_fixed",
+      "label": "Bug found and fixed",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L90"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_files_and_components",
+      "label": "Files and Components",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L104"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_database_and_data_changes",
+      "label": "Database and Data Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L115"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_security_and_tenant_isolation_notes",
+      "label": "Security and Tenant-Isolation Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L121"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_verification_evidence",
+      "label": "Verification Evidence",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L130"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_known_limitations_and_follow_up_work",
+      "label": "Known Limitations and Follow-up Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L158"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_handoff_notes",
+      "label": "Handoff Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L174"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_revision_history",
+      "label": "Revision History",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L185"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_md",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_objective",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_the_actual_starting_state",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_implemented_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L41",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_make_the_api_s_existing_integration_tests_actually_run",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_fix_two_pre_existing_flaws_the_newly_running_tests_exposed",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L59",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_cover_the_gaps",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L75",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_bug_found_and_fixed",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L90",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_files_and_components",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L104",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_database_and_data_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L115",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_security_and_tenant_isolation_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L121",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_verification_evidence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L130",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_known_limitations_and_follow_up_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L158",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_handoff_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L174",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_coverage_remediation_making_pnpm_test_ci_pass",
+      "target": "$graphify-root$_docs_completed_parts_coverage_remediation_2026_08_04_revision_history",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/coverage-remediation-2026-08-04.md",
+      "source_location": "L185",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

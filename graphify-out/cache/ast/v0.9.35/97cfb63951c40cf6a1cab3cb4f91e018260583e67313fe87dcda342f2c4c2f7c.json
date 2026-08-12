@@ -1,0 +1,395 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_md",
+      "label": "part-48-board-calendar-progress.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "label": "Part 48 \u2014 Add board, calendar, and progress views",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_status",
+      "label": "Status",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_objective",
+      "label": "Objective",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L11"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_implemented_work",
+      "label": "Implemented Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L15"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_1_custom_task_status_crud",
+      "label": "48.1 \u2014 Custom task status CRUD",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L17"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_2_board",
+      "label": "48.2 \u2014 Board",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L27"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_3_calendar",
+      "label": "48.3 \u2014 Calendar",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L37"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_4_progress",
+      "label": "48.4 \u2014 Progress",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L43"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_5_my_tasks_widget",
+      "label": "48.5 \u2014 My Tasks widget",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L52"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_6_part_47_s_recorded_editor_affordance_defect_closed",
+      "label": "48.6 \u2014 Part 47's recorded editor-affordance defect, closed",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L56"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_7_routes_and_view_persistence",
+      "label": "48.7 \u2014 Routes and view persistence",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L60"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_important_decisions",
+      "label": "Important Decisions",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L64"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_files_and_components",
+      "label": "Files and Components",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L79"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_database_and_data_changes",
+      "label": "Database and Data Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L114"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_api_configuration_and_operational_changes",
+      "label": "API, Configuration, and Operational Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L125"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_security_and_tenant_isolation_notes",
+      "label": "Security and Tenant-Isolation Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L147"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_verification_evidence",
+      "label": "Verification Evidence",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L160"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_known_limitations_and_follow_up_work",
+      "label": "Known Limitations and Follow-up Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L194"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_handoff_notes",
+      "label": "Handoff Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L212"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_revision_history",
+      "label": "Revision History",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L222"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_md",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_md",
+      "target": "$graphify-root$_docs_completed_parts_part_47_standalone_tasks_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-47-standalone-tasks.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_md",
+      "target": "$graphify-root$_docs_completed_parts_part_17_standalone_task_data_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-17-standalone-task-data.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_md",
+      "target": "$graphify-root$_docs_completed_parts_part_46_tags_and_templates_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-46-tags-and-templates.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_md",
+      "target": "$graphify-root$_docs_completed_parts_part_33_tiptap_document_contract_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-33-tiptap-document-contract.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_md",
+      "target": "$graphify-root$_docs_completed_parts_part_30_project_list_detail_ui_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-30-project-list-detail-ui.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_md",
+      "target": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/disposable-e2e-stack-2026-08-07.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_objective",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_implemented_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_1_custom_task_status_crud",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_2_board",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_3_calendar",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L37",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_4_progress",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_5_my_tasks_widget",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L52",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_6_part_47_s_recorded_editor_affordance_defect_closed",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L56",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_48_7_routes_and_view_persistence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L60",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_important_decisions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L64",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_files_and_components",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L79",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_database_and_data_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L114",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_api_configuration_and_operational_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L125",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_security_and_tenant_isolation_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L147",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_verification_evidence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L160",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_known_limitations_and_follow_up_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L194",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_handoff_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L212",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_part_48_add_board_calendar_and_progress_views",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_revision_history",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-48-board-calendar-progress.md",
+      "source_location": "L222",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

@@ -1,0 +1,347 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_md",
+      "label": "part-49-project-board-timeline.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "label": "Part 49 \u2014 Add project board and timeline views",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_status",
+      "label": "Status",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_objective",
+      "label": "Objective",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L11"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_implemented_work",
+      "label": "Implemented Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L15"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_49_1_note_board_columns",
+      "label": "49.1 \u2014 Note board columns",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L17"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_49_2_noteboard_tsx",
+      "label": "49.2 \u2014 `NoteBoard.tsx`",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L31"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_49_3_notetimeline_tsx_lib_notes_timeline_ts",
+      "label": "49.3 \u2014 `NoteTimeline.tsx` + `lib/notes/timeline.ts`",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L39"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_49_4_the_stable_view_switching_contract",
+      "label": "49.4 \u2014 The stable view-switching contract",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L49"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_important_decisions",
+      "label": "Important Decisions",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L60"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_files_and_components",
+      "label": "Files and Components",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L75"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_database_and_data_changes",
+      "label": "Database and Data Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L98"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_api_configuration_and_operational_changes",
+      "label": "API, Configuration, and Operational Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L117"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_security_and_tenant_isolation_notes",
+      "label": "Security and Tenant-Isolation Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L128"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_verification_evidence",
+      "label": "Verification Evidence",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L140"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_known_limitations_and_follow_up_work",
+      "label": "Known Limitations and Follow-up Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L175"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_handoff_notes",
+      "label": "Handoff Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L195"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_revision_history",
+      "label": "Revision History",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L206"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_md",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_md",
+      "target": "$graphify-root$_docs_completed_parts_part_48_board_calendar_progress_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-48-board-calendar-progress.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_md",
+      "target": "$graphify-root$_docs_completed_parts_part_47_standalone_tasks_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-47-standalone-tasks.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_md",
+      "target": "$graphify-root$_docs_completed_parts_part_32_note_browsing_hierarchy_share_ui_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-32-note-browsing-hierarchy-share-ui.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_md",
+      "target": "$graphify-root$_docs_completed_parts_part_31_core_note_apis_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-31-core-note-apis.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_md",
+      "target": "$graphify-root$_docs_completed_parts_part_30_project_list_detail_ui_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/part-30-project-list-detail-ui.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_md",
+      "target": "$graphify-root$_docs_completed_parts_disposable_e2e_stack_2026_08_07_md",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L9",
+      "weight": 1.0,
+      "target_file": "$graphify-root$/docs/completed-parts/disposable-e2e-stack-2026-08-07.md"
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_objective",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_implemented_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_49_1_note_board_columns",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_49_2_noteboard_tsx",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_49_3_notetimeline_tsx_lib_notes_timeline_ts",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L39",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_implemented_work",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_49_4_the_stable_view_switching_contract",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L49",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_important_decisions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L60",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_files_and_components",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L75",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_database_and_data_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L98",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_api_configuration_and_operational_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L117",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_security_and_tenant_isolation_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L128",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_verification_evidence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L140",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_known_limitations_and_follow_up_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L175",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_handoff_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L195",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_part_49_add_project_board_and_timeline_views",
+      "target": "$graphify-root$_docs_completed_parts_part_49_project_board_timeline_revision_history",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-49-project-board-timeline.md",
+      "source_location": "L206",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

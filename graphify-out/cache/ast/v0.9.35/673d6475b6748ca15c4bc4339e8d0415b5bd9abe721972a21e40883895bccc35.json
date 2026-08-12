@@ -1,0 +1,255 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_md",
+      "label": "part-21-better-auth-backend.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "label": "Part 21 \u2014 Integrate Better Auth on the backend",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_status",
+      "label": "Status",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_objective",
+      "label": "Objective",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L15"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_implemented_work",
+      "label": "Implemented Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L23"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_important_decisions",
+      "label": "Important Decisions",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L54"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_files_and_components",
+      "label": "Files and Components",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L72"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_database_and_data_changes",
+      "label": "Database and Data Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L99"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_api_configuration_and_operational_changes",
+      "label": "API, Configuration, and Operational Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L112"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_security_and_tenant_isolation_notes",
+      "label": "Security and Tenant-Isolation Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L127"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_verification_evidence",
+      "label": "Verification Evidence",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L142"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_known_limitations_and_follow_up_work",
+      "label": "Known Limitations and Follow-up Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L150"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_handoff_notes",
+      "label": "Handoff Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L171"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_completion_verification_update",
+      "label": "Completion Verification Update",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L178"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_dependency_advisory_resolution",
+      "label": "Dependency Advisory Resolution",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L198"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_revision_history",
+      "label": "Revision History",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L212"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_md",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_objective",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_implemented_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L23",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_important_decisions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L54",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_files_and_components",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L72",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_database_and_data_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L99",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_api_configuration_and_operational_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L112",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_security_and_tenant_isolation_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L127",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_verification_evidence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L142",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_known_limitations_and_follow_up_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L150",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_handoff_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L171",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_completion_verification_update",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L178",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_dependency_advisory_resolution",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L198",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_part_21_integrate_better_auth_on_the_backend",
+      "target": "$graphify-root$_docs_completed_parts_part_21_better_auth_backend_revision_history",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-21-better-auth-backend.md",
+      "source_location": "L212",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

@@ -1,0 +1,239 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_md",
+      "label": "part-23-advanced-authentication.md",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "label": "Part 23 \u2014 Add OAuth, two-factor authentication, passkeys, and session controls",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_status",
+      "label": "Status",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L3"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_objective",
+      "label": "Objective",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L15"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_implemented_work",
+      "label": "Implemented Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L23"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_important_decisions",
+      "label": "Important Decisions",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L66"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_files_and_components",
+      "label": "Files and Components",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L88"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_database_and_data_changes",
+      "label": "Database and Data Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L110"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_api_configuration_and_operational_changes",
+      "label": "API, Configuration, and Operational Changes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L118"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_security_and_tenant_isolation_notes",
+      "label": "Security and Tenant-Isolation Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L135"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_verification_evidence",
+      "label": "Verification Evidence",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L150"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_known_limitations_and_follow_up_work",
+      "label": "Known Limitations and Follow-up Work",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L161"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_handoff_notes",
+      "label": "Handoff Notes",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L180"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_completion_verification_update",
+      "label": "Completion Verification Update",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L188"
+    },
+    {
+      "id": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_revision_history",
+      "label": "Revision History",
+      "file_type": "document",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L200"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_md",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_objective",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_implemented_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L23",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_important_decisions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L66",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_files_and_components",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L88",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_database_and_data_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L110",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_api_configuration_and_operational_changes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L118",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_security_and_tenant_isolation_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L135",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_verification_evidence",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L150",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_known_limitations_and_follow_up_work",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L161",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_handoff_notes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L180",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_completion_verification_update",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L188",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_part_23_add_oauth_two_factor_authentication_passkeys_and_session_controls",
+      "target": "$graphify-root$_docs_completed_parts_part_23_advanced_authentication_revision_history",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/completed-parts/part-23-advanced-authentication.md",
+      "source_location": "L200",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

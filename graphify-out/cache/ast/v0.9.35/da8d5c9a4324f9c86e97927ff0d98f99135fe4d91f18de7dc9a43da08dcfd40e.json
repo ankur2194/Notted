@@ -1,0 +1,111 @@
+{
+  "nodes": [
+    {
+      "id": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_md",
+      "label": "0010-auth-session-cache-and-email-intent.md",
+      "file_type": "document",
+      "source_file": "docs/decisions/0010-auth-session-cache-and-email-intent.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_adr_0010_persist_better_auth_sessions_and_encrypted_authentication_email_intent",
+      "label": "ADR 0010: Persist Better Auth sessions and encrypted authentication-email intent",
+      "file_type": "document",
+      "source_file": "docs/decisions/0010-auth-session-cache-and-email-intent.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_context",
+      "label": "Context",
+      "file_type": "document",
+      "source_file": "docs/decisions/0010-auth-session-cache-and-email-intent.md",
+      "source_location": "L7"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_decision",
+      "label": "Decision",
+      "file_type": "document",
+      "source_file": "docs/decisions/0010-auth-session-cache-and-email-intent.md",
+      "source_location": "L15"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_alternatives_considered",
+      "label": "Alternatives considered",
+      "file_type": "document",
+      "source_file": "docs/decisions/0010-auth-session-cache-and-email-intent.md",
+      "source_location": "L60"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_consequences",
+      "label": "Consequences",
+      "file_type": "document",
+      "source_file": "docs/decisions/0010-auth-session-cache-and-email-intent.md",
+      "source_location": "L76"
+    },
+    {
+      "id": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_migration_and_rollback_impact",
+      "label": "Migration and rollback impact",
+      "file_type": "document",
+      "source_file": "docs/decisions/0010-auth-session-cache-and-email-intent.md",
+      "source_location": "L88"
+    }
+  ],
+  "edges": [
+    {
+      "source": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_md",
+      "target": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_adr_0010_persist_better_auth_sessions_and_encrypted_authentication_email_intent",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0010-auth-session-cache-and-email-intent.md",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_adr_0010_persist_better_auth_sessions_and_encrypted_authentication_email_intent",
+      "target": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_context",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0010-auth-session-cache-and-email-intent.md",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_adr_0010_persist_better_auth_sessions_and_encrypted_authentication_email_intent",
+      "target": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_decision",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0010-auth-session-cache-and-email-intent.md",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_adr_0010_persist_better_auth_sessions_and_encrypted_authentication_email_intent",
+      "target": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_alternatives_considered",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0010-auth-session-cache-and-email-intent.md",
+      "source_location": "L60",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_adr_0010_persist_better_auth_sessions_and_encrypted_authentication_email_intent",
+      "target": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_consequences",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0010-auth-session-cache-and-email-intent.md",
+      "source_location": "L76",
+      "weight": 1.0
+    },
+    {
+      "source": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_adr_0010_persist_better_auth_sessions_and_encrypted_authentication_email_intent",
+      "target": "$graphify-root$_docs_decisions_0010_auth_session_cache_and_email_intent_migration_and_rollback_impact",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/decisions/0010-auth-session-cache-and-email-intent.md",
+      "source_location": "L88",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}
