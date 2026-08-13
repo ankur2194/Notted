@@ -46,15 +46,14 @@ test.describe("Part 25 dashboard shell", () => {
     });
   }
 
-  test("keyboard command placeholder, user menu security link and logout work", async ({
-    page,
-  }) => {
+  test("keyboard command palette, user menu security link and logout work", async ({ page }) => {
     const commandTrigger = page.getByRole("button", { name: "Open command menu and search" });
     await commandTrigger.click();
-    await expect(page.getByRole("dialog", { name: "Command menu" })).toBeVisible();
+    const palette = page.getByRole("dialog", { name: "Search notes" });
+    await expect(palette).toBeVisible();
     await page.keyboard.press("Escape");
     await page.keyboard.press("Control+K");
-    await expect(page.getByRole("dialog", { name: "Command menu" })).toContainText("Parts 50–52");
+    await expect(palette).toBeVisible();
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Open user menu" }).click();
     await expect(page.getByRole("menuitem", { name: "Security settings" })).toBeVisible();

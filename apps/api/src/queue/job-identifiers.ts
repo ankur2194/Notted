@@ -41,6 +41,7 @@ export const DOMAIN_JOB_TYPES = Object.freeze({
   // (Part 51.3) emit one intent per note mutation batch; the handler re-reads
   // authoritative PostgreSQL state so out-of-order events converge.
   noteSearchSync: "note.search.sync",
+  noteEmbeddingGenerate: "note.embedding.generate",
 } as const);
 
 export type DomainJobType = (typeof DOMAIN_JOB_TYPES)[keyof typeof DOMAIN_JOB_TYPES];

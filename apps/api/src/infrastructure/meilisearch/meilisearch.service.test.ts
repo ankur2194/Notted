@@ -19,6 +19,16 @@ function fixture(
     updateDocuments: vi.fn(task),
     deleteDocuments: vi.fn(task),
     getDocuments: vi.fn().mockResolvedValue({ results: [], offset: 0, limit: 20, total: 0 }),
+    // Part 52.1: `search()` is required by the interface. The existing
+    // compatibility tests do not exercise it; provide a safe empty default so
+    // the typed fixture still satisfies the interface.
+    search: vi.fn().mockResolvedValue({
+      hits: [],
+      estimatedTotalHits: 0,
+      offset: 0,
+      limit: 0,
+      processingTimeMs: 0,
+    }),
   };
   const client: MeilisearchClient = {
     health: vi.fn().mockResolvedValue({ status: "available" }),
@@ -58,5 +68,31 @@ describe("MeilisearchService 0.60 source compatibility", () => {
     expect(source.client.tasks.getTask).toHaveBeenCalledTimes(5);
     expect(source.index.deleteDocuments).toHaveBeenCalledWith({ filter: 'workspaceId = "safe"' });
     expect(source.index.deleteDocuments).toHaveBeenCalledWith(["a"]);
+  });
+
+  it("passes the query separately from search options for meilisearch 0.60", async () => {
+    const source = fixture();
+    await source.service.search("index", {
+      query: "release",
+      filter: 'workspaceId = "safe"',
+      limit: 25,
+      offset: 0,
+      attributesToRetrieve: ["id", "title"],
+      attributesToHighlight: ["title"],
+      highlightPreTag: "\u0000",
+      highlightPostTag: "\u0001",
+      showRankingScore: true,
+    });
+
+    expect(source.index.search).toHaveBeenCalledWith("release", {
+      filter: 'workspaceId = "safe"',
+      limit: 25,
+      offset: 0,
+      attributesToRetrieve: ["id", "title"],
+      attributesToHighlight: ["title"],
+      highlightPreTag: "\u0000",
+      highlightPostTag: "\u0001",
+      showRankingScore: true,
+    });
   });
 });

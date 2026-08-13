@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable, Optional } from "@nestjs/common";
 import { countChecklist, extractNoteContentPlain } from "@notted/shared-validators";
 import { and, asc, desc, eq, exists, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
 
@@ -30,6 +30,7 @@ import {
   workspaceMembers,
 } from "../database/schema";
 import { taskDoneCount, taskOpenTotalCount } from "../database/sql-aggregates";
+import { NoteEmbeddingProducer } from "../search/note-embedding-producer";
 import { NoteSearchIndexProducer } from "../search/note-search-index-producer";
 import {
   activeWorkspaceId,
@@ -233,6 +234,7 @@ export class NotesService {
     // transaction as each note mutation so the Meilisearch handler can
     // re-read authoritative PostgreSQL and converge the index.
     private readonly searchIndexProducer: NoteSearchIndexProducer,
+    @Optional() private readonly embeddingProducer?: NoteEmbeddingProducer,
   ) {}
 
   async create(input: CreateNoteServiceInput): Promise<NoteCreateResult> {
@@ -303,6 +305,11 @@ export class NotesService {
           // in the same transaction. The handler re-reads authoritative state
           // so an out-of-order delivery still converges to "indexed".
           await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, [noteId], {
+            mutation: NOTE_DOMAIN_EVENTS.create,
+            correlationId: input.requestId,
+            actorId: input.principal.userId,
+          });
+          await this.embeddingProducer?.scheduleGeneration(tx, input.workspaceId, [noteId], {
             mutation: NOTE_DOMAIN_EVENTS.create,
             correlationId: input.requestId,
             actorId: input.principal.userId,
@@ -432,6 +439,17 @@ export class NotesService {
             correlationId: input.requestId,
             actorId: input.principal.userId,
           });
+          if (input.title !== undefined || input.content !== undefined)
+            await this.embeddingProducer?.scheduleGeneration(
+              tx,
+              input.workspaceId,
+              [input.noteId],
+              {
+                mutation: NOTE_DOMAIN_EVENTS.update,
+                correlationId: input.requestId,
+                actorId: input.principal.userId,
+              },
+            );
           return updated;
         },
         { isolationLevel: "serializable" },
@@ -636,6 +654,11 @@ export class NotesService {
           // Part 51.3: copy-as-create produces a brand new note row that the
           // index has never seen. Sync it so it appears in search results.
           await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, [noteId], {
+            mutation: NOTE_DOMAIN_EVENTS.create,
+            correlationId: input.requestId,
+            actorId: input.principal.userId,
+          });
+          await this.embeddingProducer?.scheduleGeneration(tx, input.workspaceId, [noteId], {
             mutation: NOTE_DOMAIN_EVENTS.create,
             correlationId: input.requestId,
             actorId: input.principal.userId,

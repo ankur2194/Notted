@@ -133,11 +133,19 @@ export type {
   ShellUserSummary,
   ShellWorkspaceMembership,
 } from "./shell";
+export { SEARCH_API_PATHS } from "./search";
 export type {
+  RecentSearch,
+  RecentSearchesPayload,
+  SearchAvailability,
   SearchHighlight,
   SearchMode,
-  SearchResultDetail,
+  SearchPage,
+  SearchResult,
   SearchResultSummary,
+  SearchSort,
+  SearchSortDirection,
+  SearchSuggestion,
 } from "./search";
 export { TAG_API_PATHS } from "./tag";
 export type {

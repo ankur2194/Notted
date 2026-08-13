@@ -96,6 +96,15 @@ export const NOTE_SEARCH_SYNC_JOB_DEFINITION = defineOutboxJob({
   authority: "system",
 });
 
+export const NOTE_EMBEDDING_GENERATE_SOURCE_QUEUE_NAME = "note-embedding-generate" as const;
+export const NOTE_EMBEDDING_GENERATE_JOB_DEFINITION = defineOutboxJob({
+  jobType: DOMAIN_JOB_TYPES.noteEmbeddingGenerate,
+  payloadVersion: 1,
+  payloadSchema: platformIdentifierPayloadSchema(DOMAIN_JOB_TYPES.noteEmbeddingGenerate),
+  route: route(PHYSICAL_QUEUE_NAMES.ai, NOTE_EMBEDDING_GENERATE_SOURCE_QUEUE_NAME),
+  authority: "system",
+});
+
 export const JOB_IDEMPOTENCY_CLEANUP_SOURCE_QUEUE_NAME = "queue-maintenance" as const;
 
 export const JOB_IDEMPOTENCY_CLEANUP_DEFINITION = defineOutboxJob({
@@ -145,6 +154,7 @@ const registryEntries = [
   STORAGE_MAINTENANCE_JOB_DEFINITION,
   JOB_IDEMPOTENCY_CLEANUP_DEFINITION,
   NOTE_SEARCH_SYNC_JOB_DEFINITION,
+  NOTE_EMBEDDING_GENERATE_JOB_DEFINITION,
 ] as const satisfies readonly AnyOutboxJobDefinition[];
 
 export const JOB_REGISTRY: ReadonlyMap<DomainJobType, AnyOutboxJobDefinition> = new Map(

@@ -479,11 +479,11 @@
     }
   },
   "apps/api/package.json": {
-    "size": 2677,
-    "mtime_ns": 1786472686680424773,
-    "word_count": 199,
+    "size": 2768,
+    "mtime_ns": 1786559611263974122,
+    "word_count": 205,
     "hashes": {
-      "apps/api/package.json": "6518487aa196be6a5ce1b757774fed393410946fb973f06655a9c597eaafbf69"
+      "apps/api/package.json": "e940bce410a85f7f43ce102eb4d97ab691c916f2c474255696dadbae330039f2"
     }
   },
   "apps/api/scripts/search-reindex.ts": {
@@ -808,9 +808,9 @@
     "word_count": 240
   },
   "apps/api/src/authorization/authorization-entry.service.ts": {
-    "size": 7113,
-    "mtime_ns": 1785415674541345200,
-    "word_count": 562
+    "size": 7212,
+    "mtime_ns": 1786530822259958572,
+    "word_count": 568
   },
   "apps/api/src/authorization/authorization-http.context.ts": {
     "size": 590,
@@ -833,9 +833,9 @@
     "word_count": 119
   },
   "apps/api/src/authorization/authorization-http.test.ts": {
-    "size": 5004,
-    "mtime_ns": 1785415674541345200,
-    "word_count": 524
+    "size": 5032,
+    "mtime_ns": 1786531070728113599,
+    "word_count": 526
   },
   "apps/api/src/authorization/authorization-policy.module.ts": {
     "size": 259,
@@ -848,14 +848,14 @@
     "word_count": 1628
   },
   "apps/api/src/authorization/authorization-policy.service.ts": {
-    "size": 19867,
-    "mtime_ns": 1786264949288041159,
-    "word_count": 1742
+    "size": 21249,
+    "mtime_ns": 1786563226356097039,
+    "word_count": 1932
   },
   "apps/api/src/authorization/authorization.contracts.ts": {
-    "size": 7104,
-    "mtime_ns": 1786264939829685443,
-    "word_count": 682
+    "size": 7611,
+    "mtime_ns": 1786530804102853756,
+    "word_count": 753
   },
   "apps/api/src/authorization/authorization.errors.ts": {
     "size": 1835,
@@ -993,9 +993,9 @@
     "word_count": 46
   },
   "apps/api/src/config/ai.config.ts": {
-    "size": 1948,
-    "mtime_ns": 1785182277277212000,
-    "word_count": 202
+    "size": 4006,
+    "mtime_ns": 1786563226760113156,
+    "word_count": 369
   },
   "apps/api/src/config/app.config.test.ts": {
     "size": 2854,
@@ -1033,9 +1033,9 @@
     "word_count": 425
   },
   "apps/api/src/config/environment-contract.test.ts": {
-    "size": 9089,
-    "mtime_ns": 1786454308351513123,
-    "word_count": 702
+    "size": 9365,
+    "mtime_ns": 1786559802854613023,
+    "word_count": 719
   },
   "apps/api/src/config/environment-readers.ts": {
     "size": 4301,
@@ -1634,19 +1634,19 @@
     "word_count": 176
   },
   "apps/api/src/infrastructure/meilisearch/meilisearch.service.test.ts": {
-    "size": 2690,
-    "mtime_ns": 1786477052437173096,
-    "word_count": 243
+    "size": 3836,
+    "mtime_ns": 1786564852306527808,
+    "word_count": 354
   },
   "apps/api/src/infrastructure/meilisearch/meilisearch.service.ts": {
-    "size": 6299,
-    "mtime_ns": 1786477842894449762,
-    "word_count": 584
+    "size": 10524,
+    "mtime_ns": 1786564852302527518,
+    "word_count": 1042
   },
   "apps/api/src/infrastructure/meilisearch/meilisearch.tokens.ts": {
-    "size": 1574,
-    "mtime_ns": 1786476589422927205,
-    "word_count": 142
+    "size": 4257,
+    "mtime_ns": 1786564852294526939,
+    "word_count": 453
   },
   "apps/api/src/infrastructure/minio/minio.module.ts": {
     "size": 1514,
@@ -1866,9 +1866,9 @@
     "word_count": 3184
   },
   "apps/api/src/notes/notes.service.ts": {
-    "size": 71646,
-    "mtime_ns": 1786475402717589913,
-    "word_count": 6287
+    "size": 72712,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 6345
   },
   "apps/api/src/notes/notes.trpc.test.ts": {
     "size": 5519,
@@ -1987,14 +1987,14 @@
     "word_count": 341
   },
   "apps/api/src/queue/job-identifiers.ts": {
-    "size": 1925,
-    "mtime_ns": 1786474638687082335,
-    "word_count": 149
+    "size": 1977,
+    "mtime_ns": 1786559469784422666,
+    "word_count": 151
   },
   "apps/api/src/queue/job-registry.ts": {
-    "size": 6963,
-    "mtime_ns": 1786477052437173096,
-    "word_count": 439
+    "size": 7444,
+    "mtime_ns": 1786559469788422666,
+    "word_count": 464
   },
   "apps/api/src/queue/outbox-dispatcher.service.test.ts": {
     "size": 4554,
@@ -2107,9 +2107,9 @@
     "word_count": 650
   },
   "apps/api/src/search/note-index.repository.ts": {
-    "size": 7309,
-    "mtime_ns": 1786477842894449762,
-    "word_count": 632
+    "size": 18691,
+    "mtime_ns": 1786563229920239221,
+    "word_count": 1877
   },
   "apps/api/src/search/note-projection.repository.test.ts": {
     "size": 13507,
@@ -2152,9 +2152,9 @@
     "word_count": 203
   },
   "apps/api/src/search/search.module.ts": {
-    "size": 1701,
-    "mtime_ns": 1786477052437173096,
-    "word_count": 152
+    "size": 3670,
+    "mtime_ns": 1786562191797056410,
+    "word_count": 318
   },
   "apps/api/src/search/workspace-search.repository.ts": {
     "size": 1629,
@@ -2611,9 +2611,9 @@
   },
   "apps/web/e2e/auth.spec.ts": { "size": 7558, "mtime_ns": 1785437233016714400, "word_count": 625 },
   "apps/web/e2e/dashboard-shell.spec.ts": {
-    "size": 5833,
-    "mtime_ns": 1785436225973346600,
-    "word_count": 527
+    "size": 5791,
+    "mtime_ns": 1786563224168009750,
+    "word_count": 525
   },
   "apps/web/e2e/mailpit.ts": { "size": 2650, "mtime_ns": 1785565437049329924, "word_count": 267 },
   "apps/web/e2e/note-attachments.spec.ts": {
@@ -2671,7 +2671,7 @@
     "mtime_ns": 1785565437097333603,
     "word_count": 917
   },
-  "apps/web/next-env.d.ts": { "size": 251, "mtime_ns": 1786478064831758041, "word_count": 24 },
+  "apps/web/next-env.d.ts": { "size": 251, "mtime_ns": 1786563216611771301, "word_count": 24 },
   "apps/web/next.config.js": { "size": 941, "mtime_ns": 1785843113314130286, "word_count": 131 },
   "apps/web/package.json": {
     "size": 3325,
@@ -2769,9 +2769,9 @@
     "word_count": 102
   },
   "apps/web/src/app/(dashboard)/page.tsx": {
-    "size": 5992,
-    "mtime_ns": 1786363031244929133,
-    "word_count": 526
+    "size": 6065,
+    "mtime_ns": 1786563225536064326,
+    "word_count": 536
   },
   "apps/web/src/app/(dashboard)/settings/security/error.tsx": {
     "size": 503,
@@ -3484,9 +3484,9 @@
     "word_count": 110
   },
   "apps/web/src/components/layout/DashboardShell.tsx": {
-    "size": 7045,
-    "mtime_ns": 1786363474933611597,
-    "word_count": 637
+    "size": 7309,
+    "mtime_ns": 1786558166405414290,
+    "word_count": 664
   },
   "apps/web/src/components/layout/NotificationCenter.tsx": {
     "size": 7585,
@@ -3499,9 +3499,9 @@
     "word_count": 796
   },
   "apps/web/src/components/layout/TopBar.tsx": {
-    "size": 4890,
-    "mtime_ns": 1785998539811971667,
-    "word_count": 357
+    "size": 4947,
+    "mtime_ns": 1786558156892942020,
+    "word_count": 383
   },
   "apps/web/src/components/layout/WorkspaceSwitcher.tsx": {
     "size": 3343,
@@ -3509,9 +3509,9 @@
     "word_count": 299
   },
   "apps/web/src/components/layout/dashboard-shell.test.tsx": {
-    "size": 6636,
-    "mtime_ns": 1786266657286847998,
-    "word_count": 568
+    "size": 6906,
+    "mtime_ns": 1786558200802568336,
+    "word_count": 594
   },
   "apps/web/src/components/layout/workspace-switcher.test.tsx": {
     "size": 2079,
@@ -4497,11 +4497,11 @@
     }
   },
   "docs/completed-parts/README.md": {
-    "size": 35978,
-    "mtime_ns": 1786478116601679038,
-    "word_count": 4924,
+    "size": 36618,
+    "mtime_ns": 1786566148795791398,
+    "word_count": 4994,
     "hashes": {
-      "docs/completed-parts/readme.md": "c8655f27e555062b86608b22a6cc042a966562f9d26f664b75f0b92b9dedbedd"
+      "docs/completed-parts/readme.md": "51f5db53184d41b60cad3cab7671de2f8e266a0635cc1098f6eef128929b241b"
     }
   },
   "docs/completed-parts/TEMPLATE.md": {
@@ -4929,11 +4929,11 @@
     }
   },
   "docs/completed-parts/part-50-establish-bullmq-queues-workers.md": {
-    "size": 9483,
-    "mtime_ns": 1786478116601679038,
+    "size": 9530,
+    "mtime_ns": 1786478200001460208,
     "word_count": 1117,
     "hashes": {
-      "docs/completed-parts/part-50-establish-bullmq-queues-workers.md": "8d4cd1b6642ff1eb79967c405c2156fe8b2df28dd61e51174ee2c6fd083afab1"
+      "docs/completed-parts/part-50-establish-bullmq-queues-workers.md": "ecfa4c14dbab79f4fe2f44130d658419f13bbcb8bdebabc0c0d56e4e2f8eb184"
     }
   },
   "docs/completed-parts/part-51-meilisearch-indexing-pipeline.md": {
@@ -5193,9 +5193,9 @@
     "word_count": 103
   },
   "packages/shared-types/src/index.ts": {
-    "size": 4491,
-    "mtime_ns": 1786361153722928870,
-    "word_count": 332
+    "size": 4664,
+    "mtime_ns": 1786563159159953308,
+    "word_count": 345
   },
   "packages/shared-types/src/note.test.ts": {
     "size": 3490,
@@ -5213,9 +5213,9 @@
     "word_count": 314
   },
   "packages/shared-types/src/search.ts": {
-    "size": 521,
-    "mtime_ns": 1784911190292104400,
-    "word_count": 60
+    "size": 4081,
+    "mtime_ns": 1786563223924000015,
+    "word_count": 480
   },
   "packages/shared-types/src/shell.ts": {
     "size": 2149,
@@ -5312,9 +5312,9 @@
     "word_count": 363
   },
   "packages/shared-validators/src/index.ts": {
-    "size": 9992,
-    "mtime_ns": 1786361366110694943,
-    "word_count": 496
+    "size": 10440,
+    "mtime_ns": 1786562151187219520,
+    "word_count": 513
   },
   "packages/shared-validators/src/membership.schema.test.ts": {
     "size": 3638,
@@ -5342,9 +5342,9 @@
     "word_count": 667
   },
   "packages/shared-validators/src/search.schema.ts": {
-    "size": 1224,
-    "mtime_ns": 1784911190678512800,
-    "word_count": 97
+    "size": 6610,
+    "mtime_ns": 1786562151179219130,
+    "word_count": 633
   },
   "packages/shared-validators/src/shell.schema.test.ts": {
     "size": 1092,
@@ -5430,5 +5430,274 @@
     "mtime_ns": 1785783446173186143,
     "word_count": 189,
     "hashes": { "turbo.json": "f9cb8727339528f6765972690cca7c70750e9d7d6e77d4a6bc53af4ca980f815" }
+  },
+  "apps/api/scripts/embedding-reindex.ts": {
+    "size": 1974,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 169
+  },
+  "apps/api/src/config/ai.config.test.ts": {
+    "size": 734,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 72
+  },
+  "apps/api/src/infrastructure/embeddings/embedding-provider.ts": {
+    "size": 1230,
+    "mtime_ns": 1786561807396346650,
+    "word_count": 126
+  },
+  "apps/api/src/infrastructure/embeddings/embeddings.module.ts": {
+    "size": 417,
+    "mtime_ns": 1786559381709522339,
+    "word_count": 36
+  },
+  "apps/api/src/infrastructure/embeddings/openai-compatible-embedding.provider.test.ts": {
+    "size": 2206,
+    "mtime_ns": 1786563227768153369,
+    "word_count": 195
+  },
+  "apps/api/src/infrastructure/embeddings/openai-compatible-embedding.provider.ts": {
+    "size": 2184,
+    "mtime_ns": 1786562191796729566,
+    "word_count": 196
+  },
+  "apps/api/src/search/embedding-reindex-cli.module.ts": {
+    "size": 907,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 79
+  },
+  "apps/api/src/search/embedding-source.test.ts": {
+    "size": 750,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 73
+  },
+  "apps/api/src/search/embedding-source.ts": {
+    "size": 1293,
+    "mtime_ns": 1786563229552224540,
+    "word_count": 117
+  },
+  "apps/api/src/search/hybrid-ranking.service.test.ts": {
+    "size": 2773,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 294
+  },
+  "apps/api/src/search/hybrid-ranking.service.ts": {
+    "size": 4261,
+    "mtime_ns": 1786563229600226455,
+    "word_count": 489
+  },
+  "apps/api/src/search/hybrid-search.integration.test.ts": {
+    "size": 7801,
+    "mtime_ns": 1786563229612226934,
+    "word_count": 837
+  },
+  "apps/api/src/search/hybrid-search.service.test.ts": {
+    "size": 6281,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 621
+  },
+  "apps/api/src/search/hybrid-search.service.ts": {
+    "size": 8979,
+    "mtime_ns": 1786563159155953218,
+    "word_count": 802
+  },
+  "apps/api/src/search/note-embedding-job-handler.service.test.ts": {
+    "size": 2752,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 233
+  },
+  "apps/api/src/search/note-embedding-job-handler.service.ts": {
+    "size": 2858,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 220
+  },
+  "apps/api/src/search/note-embedding-producer.test.ts": {
+    "size": 1079,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 99
+  },
+  "apps/api/src/search/note-embedding-producer.ts": {
+    "size": 2334,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 180
+  },
+  "apps/api/src/search/note-embedding-reindex.service.test.ts": {
+    "size": 2782,
+    "mtime_ns": 1786563229776233477,
+    "word_count": 260
+  },
+  "apps/api/src/search/note-embedding-reindex.service.ts": {
+    "size": 2097,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 183
+  },
+  "apps/api/src/search/note-embedding.repository.ts": {
+    "size": 6019,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 492
+  },
+  "apps/api/src/search/note-index.repository.search.test.ts": {
+    "size": 10936,
+    "mtime_ns": 1786563229868237147,
+    "word_count": 964
+  },
+  "apps/api/src/search/search-result.repository.test.ts": {
+    "size": 17682,
+    "mtime_ns": 1786562162636751953,
+    "word_count": 1725
+  },
+  "apps/api/src/search/search-result.repository.ts": {
+    "size": 12263,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 1312
+  },
+  "apps/api/src/search/search.controller.test.ts": {
+    "size": 7380,
+    "mtime_ns": 1786563230160248796,
+    "word_count": 649
+  },
+  "apps/api/src/search/search.controller.ts": {
+    "size": 6408,
+    "mtime_ns": 1786562191797056410,
+    "word_count": 646
+  },
+  "apps/api/src/search/search.module.test.ts": {
+    "size": 891,
+    "mtime_ns": 1786562309319198156,
+    "word_count": 91
+  },
+  "apps/api/src/search/search.service.test.ts": {
+    "size": 21862,
+    "mtime_ns": 1786563207695031113,
+    "word_count": 2057
+  },
+  "apps/api/src/search/search.service.ts": {
+    "size": 20027,
+    "mtime_ns": 1786564852310528096,
+    "word_count": 1940
+  },
+  "apps/api/src/search/semantic-search.integration.test.ts": {
+    "size": 5943,
+    "mtime_ns": 1786562162515147201,
+    "word_count": 606
+  },
+  "apps/api/src/search/semantic-search.repository.ts": {
+    "size": 4225,
+    "mtime_ns": 1786562191796729566,
+    "word_count": 326
+  },
+  "apps/api/src/search/semantic-search.service.ts": {
+    "size": 1425,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 125
+  },
+  "apps/api/src/search/test-fixtures/hybrid-ranking.fixture.ts": {
+    "size": 2750,
+    "mtime_ns": 1786560207040813367,
+    "word_count": 211
+  },
+  "apps/web/e2e/search.spec.ts": {
+    "size": 9577,
+    "mtime_ns": 1786565301453252475,
+    "word_count": 974
+  },
+  "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/search/page.tsx": {
+    "size": 3761,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 397
+  },
+  "apps/web/src/components/search/GlobalSearchDialog.test.tsx": {
+    "size": 8723,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 830
+  },
+  "apps/web/src/components/search/GlobalSearchDialog.tsx": {
+    "size": 16307,
+    "mtime_ns": 1786563624759871297,
+    "word_count": 1584
+  },
+  "apps/web/src/components/search/SearchContainer.tsx": {
+    "size": 10171,
+    "mtime_ns": 1786563624779873157,
+    "word_count": 937
+  },
+  "apps/web/src/components/search/SearchFilters.tsx": {
+    "size": 8858,
+    "mtime_ns": 1786563229580225658,
+    "word_count": 660
+  },
+  "apps/web/src/components/search/SearchResults.test.tsx": {
+    "size": 1474,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 107
+  },
+  "apps/web/src/components/search/SearchResults.tsx": {
+    "size": 9392,
+    "mtime_ns": 1786563624863880969,
+    "word_count": 920
+  },
+  "apps/web/src/lib/search/highlights.test.ts": {
+    "size": 2520,
+    "mtime_ns": 1786557582668955499,
+    "word_count": 304
+  },
+  "apps/web/src/lib/search/highlights.ts": {
+    "size": 2271,
+    "mtime_ns": 1786557567919074273,
+    "word_count": 343
+  },
+  "apps/web/src/lib/search/query-keys.ts": {
+    "size": 1540,
+    "mtime_ns": 1786563627056084852,
+    "word_count": 198
+  },
+  "apps/web/src/lib/search/recent-searches.test.ts": {
+    "size": 6634,
+    "mtime_ns": 1786563231340295542,
+    "word_count": 620
+  },
+  "apps/web/src/lib/search/recent-searches.ts": {
+    "size": 4828,
+    "mtime_ns": 1786562207479585119,
+    "word_count": 606
+  },
+  "apps/web/src/lib/search/requests.test.ts": {
+    "size": 8340,
+    "mtime_ns": 1786563231364296387,
+    "word_count": 640
+  },
+  "apps/web/src/lib/search/requests.ts": {
+    "size": 5009,
+    "mtime_ns": 1786563362155900354,
+    "word_count": 534
+  },
+  "docs/completed-parts/part-52-authorized-full-text-search.md": {
+    "size": 3882,
+    "mtime_ns": 1786566148791791293,
+    "word_count": 513,
+    "hashes": {
+      "docs/completed-parts/part-52-authorized-full-text-search.md": "20c4dab5c6fb7e671970be607fb6a742e43dec965f1943f1d48c591bdfc03710"
+    }
+  },
+  "docs/completed-parts/part-53-embeddings-semantic-search.md": {
+    "size": 3933,
+    "mtime_ns": 1786566148791791293,
+    "word_count": 503,
+    "hashes": {
+      "docs/completed-parts/part-53-embeddings-semantic-search.md": "488119b409ab8f98c2c5fa819fd482216e2404215a5985eea6a96ec305a97c5d"
+    }
+  },
+  "docs/completed-parts/part-54-hybrid-ranking.md": {
+    "size": 3128,
+    "mtime_ns": 1786566148791791293,
+    "word_count": 409,
+    "hashes": {
+      "docs/completed-parts/part-54-hybrid-ranking.md": "421571104717433bcfee47a0f3b78f4e1fe3c1870715ab1cd8aa28d0056f55a8"
+    }
+  },
+  "packages/shared-validators/src/search.schema.test.ts": {
+    "size": 7040,
+    "mtime_ns": 1786563225276053953,
+    "word_count": 597
   }
 }

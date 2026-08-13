@@ -238,8 +238,31 @@ export type {
   ProjectListQueryInput,
   UpdateProjectInput,
 } from "./project.schema";
-export { searchModeSchema, searchQuerySchema, searchSortSchema } from "./search.schema";
-export type { SearchQueryInput } from "./search.schema";
+export {
+  recentSearchSchema,
+  recentSearchesPayloadSchema,
+  searchAvailabilitySchema,
+  searchHighlightSchema,
+  searchModeSchema,
+  searchPageSchema,
+  searchQuerySchema,
+  searchResultSchema,
+  searchSortDirectionSchema,
+  searchSortSchema,
+  searchSuggestionQuerySchema,
+  searchSuggestionSchema,
+} from "./search.schema";
+export type {
+  RecentSearchOutput,
+  RecentSearchesPayloadOutput,
+  SearchAvailabilityOutput,
+  SearchHighlightOutput,
+  SearchPageOutput,
+  SearchQueryInput,
+  SearchResultOutput,
+  SearchSuggestionOutput,
+  SearchSuggestionQueryInput,
+} from "./search.schema";
 export {
   notificationKindSchema,
   notificationListQuerySchema,

@@ -142,6 +142,7 @@ export class AuthorizationEntryService {
       workspaceId: null,
       userId: actor.userId,
       decision,
+      membershipRole: null,
     });
   }
 
@@ -193,6 +194,7 @@ export class AuthorizationEntryService {
         workspaceId,
         userId: actor.userId,
         decision,
+        membershipRole: membership.role,
       });
     });
   }
@@ -228,6 +230,7 @@ export class AuthorizationEntryService {
         workspaceId: actor.workspaceId,
         userId: null,
         decision,
+        membershipRole: null,
       });
     });
   }

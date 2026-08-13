@@ -55,6 +55,15 @@ describe("server environment contract", () => {
       enabled: false,
       openAi: undefined,
       claude: undefined,
+      embeddings: {
+        enabled: false,
+        provider: "openai-compatible",
+        baseUrl: "https://api.openai.com/v1",
+        model: "text-embedding-3-small",
+        dimensions: 1536,
+        maxSourceCharacters: 24_000,
+        requestTimeoutMs: 30_000,
+      },
     });
   });
 

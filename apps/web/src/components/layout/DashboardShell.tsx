@@ -69,6 +69,14 @@ export function breadcrumbsFor(pathname: string): readonly BreadcrumbItem[] {
       { label: "Tasks" },
     ];
   }
+  const searchMatch = /^\/workspaces\/([^/]+)\/search$/.exec(pathname);
+  if (searchMatch) {
+    return [
+      { label: "Workspaces", href: "/workspaces" },
+      { label: "Overview", href: `/workspaces/${searchMatch[1]}` },
+      { label: "Search" },
+    ];
+  }
   const workspaceMatch = /^\/workspaces\/([^/]+)(\/settings)?$/.exec(pathname);
   if (workspaceMatch) {
     const items: BreadcrumbItem[] = [{ label: "Workspaces", href: "/workspaces" }];

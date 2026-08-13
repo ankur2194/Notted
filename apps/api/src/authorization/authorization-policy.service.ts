@@ -337,6 +337,36 @@ export class AuthorizationPolicyService {
     );
   }
 
+  /**
+   * Part 52.2 — batch-friendly `note.read` predicate for the search result
+   * repository. This is the SAME rule `decide` applies for `note.read` after
+   * membership/tenant scoping succeeds, factored so the search path can decide
+   * many notes from a single batched fact load without reconstructing a full
+   * {@link AuthorizationEvaluation} per candidate.
+   *
+   * Rule (matches `projectCanRead` for editor/viewer, allow for owner/admin):
+   * - owner/admin: always readable.
+   * - editor/viewer: readable iff the project is null (standalone note), not
+   *   restricted, OR the actor has an explicit `project_access` grant.
+   *
+   * The existing `note.read` policy DOES NOT broaden restricted-project access
+   * via a note share (see `authorization-policy.service.test.ts` — "does not
+   * let a note share broaden a restricted project"). Callers that want
+   * search-time inclusion of explicitly-shared notes must OR that condition in
+   * at the call site and document the deviation.
+   */
+  canReadNote(
+    role: WorkspaceRole,
+    project: {
+      readonly restricted: boolean;
+      readonly actorAccess: ProjectAccessRole | null;
+    } | null,
+  ): boolean {
+    if (role === "owner" || role === "admin") return true;
+    if (project === null || project === undefined) return true;
+    return !project.restricted || project.actorAccess !== null;
+  }
+
   private decideSession(
     evaluation: AuthorizationEvaluation,
     action: AuthorizationAction,

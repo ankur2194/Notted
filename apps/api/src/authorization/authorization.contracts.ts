@@ -230,6 +230,16 @@ export interface AuthorizedOperation {
   readonly workspaceId: string | null;
   readonly userId: string | null;
   readonly decision: Extract<AuthorizationDecision, { readonly allowed: true }>;
+  /**
+   * The actor's workspace membership role at the time of authorization.
+   *
+   * `null` for system / API-key actors and for the session-only
+   * `authorizeCurrentUserSession` path. User actors carry the role loaded by
+   * `AuthorizationRepository.findMembership`; downstream handlers that need
+   * the role for batch decisions (e.g. Part 52 search authorizing many notes
+   * with one role lookup) read it from here rather than re-querying.
+   */
+  readonly membershipRole: WorkspaceRole | null;
 }
 
 export function actorFromPrincipal(principal: AuthenticatedPrincipal): UserAuthorizationActor {

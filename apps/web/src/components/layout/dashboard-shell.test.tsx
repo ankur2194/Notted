@@ -71,6 +71,11 @@ describe("DashboardShell", () => {
       { label: "Projects", href: `/workspaces/${workspaceId}/projects` },
       { label: "Project detail" },
     ]);
+    expect(breadcrumbsFor(`/workspaces/${workspaceId}/search`)).toEqual([
+      { label: "Workspaces", href: "/workspaces" },
+      { label: "Overview", href: `/workspaces/${workspaceId}` },
+      { label: "Search" },
+    ]);
     render(
       <DashboardShell
         shell={{ ...shell, currentWorkspace: null }}
@@ -109,7 +114,7 @@ describe("DashboardShell", () => {
     expect(open).toHaveFocus();
   });
 
-  it("opens command placeholder with Ctrl+K and closes the user menu with Escape", async () => {
+  it("opens the search palette with Ctrl+K and closes the user menu with Escape", async () => {
     const user = userEvent.setup();
     render(
       <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
@@ -117,7 +122,8 @@ describe("DashboardShell", () => {
       </DashboardShell>,
     );
     await user.keyboard("{Control>}k{/Control}");
-    expect(screen.getByRole("dialog", { name: "Command menu" })).toHaveTextContent(/Parts 50–52/);
+    const palette = await screen.findByRole("dialog", { name: "Search notes" });
+    expect(palette).toHaveTextContent(/Start typing to search/);
     await user.keyboard("{Escape}");
     const userMenu = screen.getByRole("button", { name: "Open user menu" });
     await user.click(userMenu);

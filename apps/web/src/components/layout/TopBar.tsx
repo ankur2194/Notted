@@ -10,15 +10,9 @@ import { NotificationCenter } from "./NotificationCenter";
 import type { ShellBootstrap } from "@notted/shared-types";
 
 import { LogoutButton } from "@/components/auth/logout-button";
+import { GlobalSearchDialog } from "@/components/search/GlobalSearchDialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogTrigger } from "@/components/ui/dialog";
 
 export function TopBar({
   shell,
@@ -34,10 +28,17 @@ export function TopBar({
   const [commandOpen, setCommandOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const userButton = useRef<HTMLButtonElement>(null);
+  const searchTrigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     function keyboard(event: KeyboardEvent): void {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        // Do not double-open or toggle when the palette is already capturing
+        // the chord: a Radix dialog open above us owns the next keystrokes.
+        if (commandOpen) return;
         event.preventDefault();
+        // Focus the trigger before opening so Radix restores focus to it on
+        // close, even when the shortcut was pressed from elsewhere.
+        searchTrigger.current?.focus();
         setCommandOpen(true);
       }
       if (event.key === "Escape" && userOpen) {
@@ -47,7 +48,7 @@ export function TopBar({
     }
     document.addEventListener("keydown", keyboard);
     return () => document.removeEventListener("keydown", keyboard);
-  }, [userOpen]);
+  }, [userOpen, commandOpen]);
   return (
     <header
       className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85"
@@ -71,6 +72,7 @@ export function TopBar({
         <Dialog open={commandOpen} onOpenChange={setCommandOpen}>
           <DialogTrigger asChild>
             <Button
+              ref={searchTrigger}
               variant="outline"
               className="min-h-11 min-w-0 justify-start text-muted-foreground sm:w-40 lg:w-52"
               aria-label="Open command menu and search"
@@ -80,21 +82,11 @@ export function TopBar({
               <kbd className="ml-auto hidden text-xs xl:inline">Ctrl K</kbd>
             </Button>
           </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Command menu</DialogTitle>
-              <DialogDescription>
-                Search and commands are unavailable until Parts 50–52. This accessible shell
-                placeholder does not query note content.
-              </DialogDescription>
-            </DialogHeader>
-            <div
-              className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground"
-              role="status"
-            >
-              No commands are available yet.
-            </div>
-          </DialogContent>
+          <GlobalSearchDialog
+            workspaceId={shell.currentWorkspace?.workspaceId ?? null}
+            open={commandOpen}
+            onOpenChange={setCommandOpen}
+          />
         </Dialog>
         <NotificationCenter
           workspaceId={shell.currentWorkspace?.workspaceId ?? null}

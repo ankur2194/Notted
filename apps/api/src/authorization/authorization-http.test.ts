@@ -55,6 +55,7 @@ const operation = {
       reason: "test",
     },
   },
+  membershipRole: "editor",
 } as const satisfies AuthorizedOperation;
 
 function executionContext(request: Request): ExecutionContext {

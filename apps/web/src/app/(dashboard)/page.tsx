@@ -99,10 +99,11 @@ export default async function DashboardPage() {
             <Sparkles className="size-5 text-info" aria-hidden="true" />
             <h3 className="mt-4 font-semibold">Search</h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              Full-text and semantic search arrive in Parts 50–52.
+              Press Ctrl/Cmd+K to search notes by title or content. Semantic and hybrid search
+              arrive in Parts 53–54.
             </p>
             <span className="mt-4 inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium">
-              Unavailable
+              Full-text available
             </span>
           </article>
         </div>

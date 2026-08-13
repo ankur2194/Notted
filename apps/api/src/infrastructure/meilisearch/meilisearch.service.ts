@@ -9,6 +9,9 @@ import {
   type MeilisearchClient,
   type MeilisearchDocumentsPage,
   type MeilisearchIndex,
+  type MeilisearchSearchHit,
+  type MeilisearchSearchOptions,
+  type MeilisearchSearchResponse,
   type MeilisearchTask,
   type MeilisearchTaskReference,
 } from "./meilisearch.tokens";
@@ -118,6 +121,27 @@ export class MeilisearchService implements ReadinessIndicator, OnModuleInit, OnA
     }
   }
 
+  /**
+   * Run a Meilisearch search and return a provider-neutral
+   * {@link MeilisearchSearchResponse}. Only the allow-listed fields on
+   * {@link MeilisearchSearchHit} are surfaced; everything else the SDK returns
+   * is dropped at this boundary so provider drift cannot leak into the
+   * application layer. Provider errors are collapsed to a generic
+   * `Meilisearch search failed` so request content is never echoed.
+   */
+  async search(
+    indexUid: string,
+    options: MeilisearchSearchOptions,
+  ): Promise<MeilisearchSearchResponse> {
+    try {
+      const { query, ...providerOptions } = options;
+      const raw = await this.index(indexUid).search(query, providerOptions);
+      return parseSearchResponse(raw);
+    } catch {
+      throw safeMeilisearchError("search");
+    }
+  }
+
   private async probe(): Promise<void> {
     const health = await withTimeout<{ readonly status: string }>(
       () => this.requireClient().health(),
@@ -204,4 +228,89 @@ function safeMeilisearchError(operation: string): Error {
 
 function wait(delayMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+/**
+ * Narrow the raw SDK search response to the allow-listed
+ * {@link MeilisearchSearchResponse}. Unknown fields and unknown `_formatted`
+ * fields are dropped. Malformed shapes are surfaced as a generic
+ * `Meilisearch search failed` error so request content never echoes back.
+ */
+function parseSearchResponse(raw: unknown): MeilisearchSearchResponse {
+  if (typeof raw !== "object" || raw === null) {
+    throw safeMeilisearchError("search");
+  }
+  const root = raw as Record<string, unknown>;
+  const hitsRaw = Array.isArray(root.hits) ? root.hits : [];
+  const hits = hitsRaw.map(parseSearchHit);
+  const estimatedTotalHits =
+    typeof root.estimatedTotalHits === "number" && Number.isFinite(root.estimatedTotalHits)
+      ? Math.max(0, Math.trunc(root.estimatedTotalHits))
+      : 0;
+  const offset =
+    typeof root.offset === "number" && Number.isFinite(root.offset)
+      ? Math.max(0, Math.trunc(root.offset))
+      : 0;
+  const limit =
+    typeof root.limit === "number" && Number.isFinite(root.limit)
+      ? Math.max(0, Math.trunc(root.limit))
+      : 0;
+  const processingTimeMs =
+    typeof root.processingTimeMs === "number" && Number.isFinite(root.processingTimeMs)
+      ? Math.max(0, Math.trunc(root.processingTimeMs))
+      : 0;
+  return Object.freeze({
+    hits,
+    estimatedTotalHits,
+    offset,
+    limit,
+    processingTimeMs,
+  });
+}
+
+function parseSearchHit(raw: unknown): MeilisearchSearchHit {
+  if (typeof raw !== "object" || raw === null) {
+    throw safeMeilisearchError("search");
+  }
+  const hit = raw as Record<string, unknown>;
+  if (typeof hit.id !== "string") {
+    throw safeMeilisearchError("search");
+  }
+  const pickString = (value: unknown): string | undefined =>
+    typeof value === "string" ? value : undefined;
+  const pickStringArray = (value: unknown): readonly string[] | undefined =>
+    Array.isArray(value) && value.every((entry) => typeof entry === "string")
+      ? Object.freeze(value as readonly string[])
+      : undefined;
+  const formattedRaw = hit._formatted;
+  const formattedRecord =
+    typeof formattedRaw === "object" && formattedRaw !== null
+      ? (formattedRaw as Record<string, unknown>)
+      : null;
+  const formattedTags = formattedRecord?.tags;
+  const formatted =
+    formattedRecord !== null
+      ? Object.freeze({
+          ...(typeof formattedRecord.title === "string" ? { title: formattedRecord.title } : {}),
+          ...(typeof formattedRecord.content === "string"
+            ? { content: formattedRecord.content }
+            : {}),
+          ...(Array.isArray(formattedTags) &&
+          formattedTags.every((entry: unknown) => typeof entry === "string")
+            ? {
+                tags: Object.freeze(formattedTags as readonly string[]),
+              }
+            : {}),
+        })
+      : undefined;
+  return Object.freeze({
+    id: hit.id,
+    ...(pickString(hit.title) === undefined ? {} : { title: pickString(hit.title) }),
+    ...(pickString(hit.content) === undefined ? {} : { content: pickString(hit.content) }),
+    ...(pickStringArray(hit.tags) === undefined ? {} : { tags: pickStringArray(hit.tags) }),
+    ...(formatted === undefined ? {} : { _formatted: formatted }),
+    ...(typeof hit._rankingScore === "number" && Number.isFinite(hit._rankingScore)
+      ? { _rankingScore: hit._rankingScore }
+      : {}),
+  });
 }
