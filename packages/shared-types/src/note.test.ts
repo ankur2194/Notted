@@ -22,6 +22,13 @@ describe("NOTE_API_PATHS", () => {
     expect(NOTE_API_PATHS.folders(workspaceId)).toBe(`${base}/folders`);
     expect(NOTE_API_PATHS.folder(workspaceId, folderId)).toBe(`${base}/folders/${folderId}`);
     expect(NOTE_API_PATHS.shares(workspaceId, noteId)).toBe(`${base}/notes/${noteId}/shares`);
+    expect(NOTE_API_PATHS.versions(workspaceId, noteId)).toBe(`${base}/notes/${noteId}/versions`);
+    expect(NOTE_API_PATHS.version(workspaceId, noteId, userId)).toBe(
+      `${base}/notes/${noteId}/versions/${userId}`,
+    );
+    expect(NOTE_API_PATHS.restoreVersion(workspaceId, noteId, userId)).toBe(
+      `${base}/notes/${noteId}/versions/${userId}/restore`,
+    );
     expect(NOTE_API_PATHS.share(workspaceId, noteId, userId)).toBe(
       `${base}/notes/${noteId}/shares/${userId}`,
     );
@@ -46,6 +53,9 @@ describe("NOTE_API_PATHS", () => {
       NOTE_API_PATHS.folders(workspaceId),
       NOTE_API_PATHS.folder(workspaceId, folderId),
       NOTE_API_PATHS.shares(workspaceId, noteId),
+      NOTE_API_PATHS.versions(workspaceId, noteId),
+      NOTE_API_PATHS.version(workspaceId, noteId, userId),
+      NOTE_API_PATHS.restoreVersion(workspaceId, noteId, userId),
       NOTE_API_PATHS.share(workspaceId, noteId, userId),
       NOTE_API_PATHS.copy(workspaceId, noteId),
     ];

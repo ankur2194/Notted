@@ -21,6 +21,8 @@ import { getRequestId } from "./common/request/request-context";
 import { RequestContextMiddleware } from "./common/request/request-context.middleware";
 import { APP_CONFIG, type AppConfig } from "./config/app.config";
 import { AUTH_CONFIG, type AuthConfig } from "./config/auth.config";
+import { FEATURES_CONFIG, type FeaturesConfig } from "./config/features.config";
+import { REALTIME_CONFIG, type RealtimeConfig } from "./config/realtime.config";
 import {
   BULL_BOARD_PATH,
   bullBoardRequestPolicy,
@@ -28,6 +30,9 @@ import {
 } from "./queue/bull-board-policy";
 import { BullBoardService } from "./queue/bull-board.service";
 import { QueueAdminRemediationService } from "./queue/queue-admin-remediation.service";
+import { RealtimeRateLimitService } from "./realtime/realtime-rate-limit.service";
+import { RealtimeRedisAdapterService } from "./realtime/realtime-redis-adapter.service";
+import { RealtimeSocketAdapter } from "./realtime/realtime-socket.adapter";
 import { TrpcRootRouter } from "./trpc/trpc-root.service";
 import { TRPC_PATH } from "./trpc/trpc.router";
 
@@ -58,6 +63,19 @@ export async function createApplication(): Promise<NestExpressApplication> {
   const express = app.getHttpAdapter().getInstance() as Express;
 
   app.useLogger(logger);
+  const realtimeRedis = app.get(RealtimeRedisAdapterService);
+  await realtimeRedis.initialize();
+  app.useWebSocketAdapter(
+    new RealtimeSocketAdapter(
+      app,
+      app.get<FeaturesConfig>(FEATURES_CONFIG),
+      app.get<RealtimeConfig>(REALTIME_CONFIG),
+      authConfig,
+      config,
+      app.get(RealtimeRateLimitService),
+      realtimeRedis,
+    ),
+  );
   express.set("trust proxy", config.trustProxyHops === 0 ? false : config.trustProxyHops);
 
   app.use(requestContext.use.bind(requestContext));

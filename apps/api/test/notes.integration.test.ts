@@ -22,6 +22,7 @@ import {
 } from "../src/database/schema";
 import { SEED_IDS, seedDatabase } from "../src/database/seed";
 import { NoteSharesService } from "../src/notes/note-shares.service";
+import { NoteVersionsService } from "../src/notes/note-versions.service";
 import { NOTE_DOMAIN_EVENT_QUEUE } from "../src/notes/notes.constants";
 import { NotesService } from "../src/notes/notes.service";
 import { TenantContextService } from "../src/tenant";
@@ -102,9 +103,13 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
           new AuthorizationPolicyService(),
           tenant,
         );
-        const service = new NotesService(database, authorization, tenant, {
-          scheduleSearchSync: async () => undefined,
-        } as unknown as NoteSearchIndexProducer);
+        const service = new NotesService(
+          database,
+          authorization,
+          tenant,
+          { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
+          new NoteVersionsService(tenant),
+        );
         const shareService = new NoteSharesService(database, authorization, tenant);
         const owner = principal(SEED_IDS.users.alphaOwner);
         const admin = principal(SEED_IDS.users.alphaAdmin);
@@ -824,6 +829,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
       authorization as unknown as AuthorizationEntryService,
       tenant,
       { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
+      new NoteVersionsService(tenant),
     );
     await expect(
       service.navigation({
@@ -866,6 +872,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
         ),
         tenant,
         { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
+        new NoteVersionsService(tenant),
       );
     const normalTenant = new TenantContextService();
     const normalDatabase = {

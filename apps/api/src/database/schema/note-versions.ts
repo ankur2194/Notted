@@ -3,7 +3,9 @@
 // Per Plan Part 16 ("version metadata/title if restoration should reproduce
 // the whole note"). `note_versions` stores POINT-IN-TIME SNAPSHOT rows of a
 // note so the history/restore UI (Part 55+) can show prior states and roll a
-// note back to a previous version.
+// note back to a previous version. Each row is the accepted POST-SAVE state at
+// version N; create/copy establish v1 and successful non-collaborative updates
+// append their new state in the same transaction.
 //
 // DISTINCTION FROM `notes.version`: there are TWO distinct version concepts
 // and they MUST NOT be confused:
@@ -24,15 +26,12 @@
 // (ADR 0004) and `content_plain` is the extracted plain text at snapshot time
 // (default empty string). Restoring a row therefore reproduces the full note
 // state (title + content) without needing to join other tables. The Yjs
-// binary state for the snapshot is a separate concern (Part 39/55); this row
+// binary state for the snapshot is a separate concern (Part 58); this row
 // is the deterministic projection snapshot.
 //
-// RETENTION IS DEFERRED (Plan Part 19 / Part 55): the spec calls for free-
-// tier 30-day and pro-tier unlimited version retention. That purge policy is
-// NOT implemented here — it is a Part 19 (retention policies) / Part 55
-// (history UI) concern that runs as a scheduled job deleting rows older than
-// the workspace's plan retention window. This table only stores the rows;
-// deletion is a later, policy-driven operation.
+// RETENTION (Part 55) is plan-aware: finite free-plan windows are purged by a
+// bounded global maintenance job while paid null windows are unlimited. The
+// purge preserves each note's earliest, latest, and current-version checkpoint.
 //
 // `created_by_id` (the user whose edit produced the snapshotted state) uses
 // RESTRICT, matching the Part 14/15 convention for audit trails: deleting the
@@ -95,6 +94,10 @@ export const noteVersions = pgTable(
     uniqueIndex("note_versions_note_version_unique").on(t.noteId, t.version),
     // "Snapshots produced by user X" admin/authoring view.
     index("note_versions_created_by_id_idx").on(t.createdById),
+    // Global retention sweep orders eligible rows by (created_at,id). This
+    // avoids a full-table sort while the per-note history indexes remain tuned
+    // for interactive reads.
+    index("note_versions_retention_scan_idx").on(t.createdAt, t.id),
   ],
 );
 

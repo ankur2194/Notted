@@ -87,6 +87,9 @@ Add one row after creating each record. Keep rows ordered by part number.
 |   52 | Complete | 2026-08-13 | Authorized workspace full-text search, filters/sorting/highlights/pagination/suggestions, workspace-local recents, accessible palette/results UI, and live Meilisearch-backed Chromium verification. |
 |   53 | Complete | 2026-08-13 | Provider-neutral fixed-dimension embeddings, deterministic source hashing/truncation, durable generation/reindexing, tenant-scoped semantic search, and safe unavailable fallback. |
 |   54 | Complete | 2026-08-13 | Deterministic weighted lexical/vector fusion, authorized stable pagination, bounded candidate depth, text-only fallback, and non-sensitive tuning diagnostics. |
+|   55 | Complete | 2026-08-14 | Verified accepted snapshots, collaborative cadence seam, and bounded plan-aware retention; live PostgreSQL and full repository coverage pass. |
+|   56 | Complete | 2026-08-14 | Verified authorized history/diff/N+1 restore, search convergence, accessible UI, tenant isolation, and focused real-stack Chromium journey. |
+|   57 | Complete | 2026-08-14 | Verified authenticated WebSocket-only multi-instance Socket.io infrastructure, Redis fan-out, private rooms, limits, revocation, readiness, and shutdown. |
 
 ## Cross-cutting records
 

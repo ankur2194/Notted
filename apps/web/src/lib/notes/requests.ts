@@ -21,8 +21,13 @@ import {
   noteShareListSchema,
   noteShareUpsertResultSchema,
   noteUpdateResultSchema,
+  noteVersionDetailSchema,
+  noteVersionListQuerySchema,
+  noteVersionPageSchema,
+  noteVersionRestoreResultSchema,
   permanentDeleteNoteSchema,
   restoreNoteSchema,
+  restoreNoteVersionSchema,
   updateFolderSchema,
   updateNoteSchema,
   upsertNoteShareSchema,
@@ -46,6 +51,9 @@ import type {
   NoteShareList,
   NoteShareUpsertResult,
   NoteUpdateResult,
+  NoteVersionDetail,
+  NoteVersionPage,
+  NoteVersionRestoreResult,
   WorkspaceMemberPage,
 } from "@notted/shared-types";
 import type {
@@ -58,6 +66,7 @@ import type {
   RestoreNoteInput,
   UpdateFolderInput,
   UpdateNoteInput,
+  RestoreNoteVersionInput,
   UpsertNoteShareInput,
 } from "@notted/shared-validators";
 
@@ -189,6 +198,51 @@ export function updateNote(
     json("PATCH", parsed.data),
     (value) => noteUpdateResultSchema.safeParse(value),
     options,
+  );
+}
+
+export function requestNoteVersions(
+  workspaceId: string,
+  noteId: string,
+  input: { readonly limit?: number; readonly cursor?: string } = {},
+): Promise<NoteRequestResult<NoteVersionPage>> {
+  const parsed = noteVersionListQuerySchema.safeParse(input);
+  if (!validIds(workspaceId, noteId) || !parsed.success)
+    return Promise.resolve({ ok: false, kind: "invalid" });
+  const query = new URLSearchParams({ limit: String(parsed.data.limit) });
+  if (parsed.data.cursor !== undefined) query.set("cursor", parsed.data.cursor);
+  return requestJson(
+    `${NOTE_API_PATHS.versions(workspaceId, noteId)}?${query.toString()}`,
+    {},
+    (value) => noteVersionPageSchema.safeParse(value),
+  );
+}
+
+export function requestNoteVersion(
+  workspaceId: string,
+  noteId: string,
+  versionId: string,
+): Promise<NoteRequestResult<NoteVersionDetail>> {
+  if (!validIds(workspaceId, noteId, versionId))
+    return Promise.resolve({ ok: false, kind: "invalid" });
+  return requestJson(NOTE_API_PATHS.version(workspaceId, noteId, versionId), {}, (value) =>
+    noteVersionDetailSchema.safeParse(value),
+  );
+}
+
+export function restoreNoteVersion(
+  workspaceId: string,
+  noteId: string,
+  versionId: string,
+  input: RestoreNoteVersionInput,
+): Promise<NoteRequestResult<NoteVersionRestoreResult>> {
+  const parsed = restoreNoteVersionSchema.safeParse(input);
+  if (!validIds(workspaceId, noteId, versionId) || !parsed.success)
+    return Promise.resolve({ ok: false, kind: "invalid" });
+  return requestJson(
+    NOTE_API_PATHS.restoreVersion(workspaceId, noteId, versionId),
+    json("POST", parsed.data),
+    (value) => noteVersionRestoreResultSchema.safeParse(value),
   );
 }
 

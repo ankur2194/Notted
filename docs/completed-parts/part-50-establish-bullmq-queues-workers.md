@@ -76,3 +76,18 @@ Part 50 is complete. Independent review ran twice around one bounded remediation
 - `pnpm --filter @notted/api db:check` and `pnpm --filter @notted/api build` — passed.
 - Production-environment root build — passed before the final dependency-injection-only CLI correction; the API build was rerun afterward and passed.
 - Independent quality review, bounded remediation, and fresh second review — completed; remaining findings were resolved by the lead before the final gate.
+
+## Corrective verification — 2026-08-14
+
+Migration `0017_sloppy_giant_man.sql` had correctly inserted `processing` and
+`reconciliation_required` into both `email_status` and `job_status`, but the live
+PostgreSQL assertions in `operations-integration-schema.test.ts` still expected
+the pre-Part-50 arrays. The assertions now preserve exact equality and enum order
+for all six email states and all five job states; no schema or migration changed.
+
+The focused schema suite passed 18/18 after applying every migration to fresh
+disposable PostgreSQL. `DATABASE_URL=... FEATURE_REALTIME_ENABLED=false pnpm
+test:ci` then passed all six repository tasks, including 1,477 API tests and all
+coverage thresholds. Independent backend implementation and read-only quality
+review completed before the lead's live verification. The disposable database
+was removed afterward.

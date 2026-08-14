@@ -55,6 +55,7 @@ export interface NoteAutosaveHandle {
   readonly version: number;
   /** The size the server last acknowledged, for announcements. */
   readonly savedPageSize: PageSize;
+  readonly savedDocument: NoteDocument | null;
   readonly documentRejected: boolean;
   readonly hasUnsavedWork: boolean;
   readonly onDocumentChange: (document: NoteDocument) => void;
@@ -292,6 +293,7 @@ export function useNoteAutosave({
     pageSize: effectivePageSize(snapshot),
     version: snapshot.version,
     savedPageSize: snapshot.savedPageSize,
+    savedDocument: snapshot.savedDocument,
     documentRejected: snapshot.documentRejected,
     hasUnsavedWork: hasUnsavedWork(snapshot),
     onDocumentChange,

@@ -47,4 +47,26 @@ describe("queue contracts", () => {
     };
     expect(() => definition?.payloadSchema.parse(payload)).toThrow();
   });
+
+  it("registers note-version retention as strict unscoped system maintenance", () => {
+    const definition = registeredJobDefinition(DOMAIN_JOB_TYPES.noteVersionRetentionSweep);
+    expect(definition).toMatchObject({
+      authority: "system",
+      payloadVersion: 1,
+      route: { physicalQueueName: PHYSICAL_QUEUE_NAMES.maintenance },
+    });
+    expect(
+      definition?.payloadSchema.parse({
+        action: DOMAIN_JOB_TYPES.noteVersionRetentionSweep,
+        intentId: "00000000-0000-4000-8000-000000000001",
+      }),
+    ).toBeDefined();
+    expect(() =>
+      definition?.payloadSchema.parse({
+        action: DOMAIN_JOB_TYPES.noteVersionRetentionSweep,
+        intentId: "00000000-0000-4000-8000-000000000001",
+        workspaceId: "00000000-0000-4000-8000-000000000002",
+      }),
+    ).toThrow();
+  });
 });

@@ -19,6 +19,8 @@ import {
   JobIdempotencyCleanupRepository,
   JobIdempotencyCleanupService,
 } from "./job-idempotency-cleanup.service";
+import { NoteVersionRetentionQueueService } from "./note-version-retention-queue.service";
+import { NoteVersionRetentionService } from "./note-version-retention.service";
 import { StorageMaintenanceQueueHandler } from "./storage-maintenance-queue-handler.service";
 import { StorageMaintenanceScheduler } from "./storage-maintenance.scheduler";
 import { StorageMaintenanceService } from "./storage-maintenance.service";
@@ -32,6 +34,8 @@ import { StorageMaintenanceService } from "./storage-maintenance.service";
     JobIdempotencyCleanupRepository,
     JobIdempotencyCleanupService,
     JobIdempotencyCleanupQueueService,
+    NoteVersionRetentionService,
+    NoteVersionRetentionQueueService,
   ],
   exports: [StorageMaintenanceService],
 })

@@ -99,6 +99,16 @@ export type {
 } from "./common.schema";
 export { exactByteLabel, formatBinaryBytes } from "./format-bytes";
 export {
+  noteVersionCursorSchema,
+  noteVersionDetailSchema,
+  noteVersionListQuerySchema,
+  noteVersionPageSchema,
+  noteVersionRestoreResultSchema,
+  noteVersionSummarySchema,
+  restoreNoteVersionSchema,
+} from "./note-version.schema";
+export type { NoteVersionListQueryInput, RestoreNoteVersionInput } from "./note-version.schema";
+export {
   NOTE_DOCUMENT_ATTACHMENT_CLASS,
   NOTE_DOCUMENT_ATTACHMENT_META_CLASS,
   NOTE_DOCUMENT_ATTACHMENT_NAME_CLASS,

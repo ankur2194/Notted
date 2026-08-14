@@ -56,6 +56,30 @@ export const E2E_ONE_SHOT_SERVICES = Object.freeze([
 
 const E2E_SERVICES = Object.freeze([...E2E_ONE_SHOT_SERVICES, ...E2E_PERSISTENT_SERVICES]);
 
+/** Shared dependencies required by the disposable stack, excluding dev-only applications. */
+export const E2E_SUPPORTING_PERSISTENT_SERVICES = Object.freeze([
+  "postgres",
+  "redis",
+  "meilisearch",
+  "minio",
+  "mailpit",
+  "contracts",
+]);
+
+/** `deps` is shared; the dev database/minio initializers are intentionally not. */
+export const E2E_SUPPORTING_ONE_SHOT_SERVICES = Object.freeze(["deps"]);
+
+export function e2eReadinessServices() {
+  return {
+    oneShot: [...E2E_SUPPORTING_ONE_SHOT_SERVICES, ...E2E_ONE_SHOT_SERVICES],
+    persistent: [...E2E_SUPPORTING_PERSISTENT_SERVICES, ...E2E_PERSISTENT_SERVICES],
+  };
+}
+
+export function e2eUpServices() {
+  return [...E2E_PERSISTENT_SERVICES];
+}
+
 const E2E_WEB_PORT = process.env.NOTTED_E2E_WEB_PORT ?? "3010";
 const E2E_API_PORT = process.env.NOTTED_E2E_API_PORT ?? "3011";
 const E2E_DATABASE = process.env.POSTGRES_E2E_DB ?? "notted_e2e_test";
@@ -369,15 +393,22 @@ export function playwrightEnvironment({
   databaseName,
   postgresUser,
   postgresPassword,
+  ci = false,
+  lightweight = false,
 }) {
   return {
     HOME: "/tmp",
     PLAYWRIGHT_DISPOSABLE_TEST_RUN: "true",
-    PLAYWRIGHT_REUSE_EXISTING_SERVER: "true",
+    // The disposable applications are already healthy. Omitting Playwright's
+    // webServer lifecycle avoids rebuilding or starting dev applications for a
+    // targeted run and keeps retries attached to the same isolated processes.
+    PLAYWRIGHT_EXTERNAL_SERVERS: "true",
     PLAYWRIGHT_APP_URL: `http://localhost:${webPort}`,
     PLAYWRIGHT_API_URL: `http://localhost:${apiPort}`,
     PLAYWRIGHT_MAILPIT_URL: "http://mailpit:8025",
     DATABASE_URL: `postgres://${postgresUser}:${postgresPassword}@postgres:5432/${databaseName}`,
+    ...(ci ? { CI: "true" } : {}),
+    ...(lightweight ? { PLAYWRIGHT_LIGHTWEIGHT_MODE: "true" } : {}),
   };
 }
 
@@ -430,13 +461,11 @@ async function startE2eStack(options) {
     "up",
     "--detach",
     "--build",
+    ...e2eUpServices(),
   ]);
   await waitForStack(
     e2eComposeOptions(options),
-    {
-      oneShot: [...ONE_SHOT_SERVICES, ...E2E_ONE_SHOT_SERVICES],
-      persistent: [...PERSISTENT_SERVICES, ...E2E_PERSISTENT_SERVICES],
-    },
+    e2eReadinessServices(),
     `End-to-end stack is ready on http://localhost:${E2E_WEB_PORT} with a freshly reset "${E2E_DATABASE}" database.`,
   );
 }
@@ -466,6 +495,8 @@ async function runE2eTests(playwrightArguments) {
     databaseName: E2E_DATABASE,
     postgresUser: process.env.POSTGRES_USER ?? "notted",
     postgresPassword: process.env.POSTGRES_PASSWORD ?? "notted_dev_password",
+    ci: process.env.CI !== undefined,
+    lightweight: process.env.PLAYWRIGHT_LIGHTWEIGHT_MODE === "true",
   });
 
   await run("docker", [

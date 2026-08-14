@@ -6,6 +6,7 @@ import { SearchModule } from "../search/search.module";
 
 import { NoteSharesController } from "./note-shares.controller";
 import { NoteSharesService } from "./note-shares.service";
+import { NoteVersionsService } from "./note-versions.service";
 import { FoldersController, NotesController } from "./notes.controller";
 import { NotesService } from "./notes.service";
 import { NotesTrpcRouter } from "./notes.trpc";
@@ -15,7 +16,7 @@ import { NotesTrpcRouter } from "./notes.trpc";
   // `note.search.sync` intents alongside note mutations (Part 51.3).
   imports: [AuthModule, AuthorizationModule, SearchModule],
   controllers: [NotesController, FoldersController, NoteSharesController],
-  providers: [NotesService, NoteSharesService, NotesTrpcRouter],
-  exports: [NotesService, NoteSharesService, NotesTrpcRouter],
+  providers: [NotesService, NoteSharesService, NoteVersionsService, NotesTrpcRouter],
+  exports: [NotesService, NoteSharesService, NoteVersionsService, NotesTrpcRouter],
 })
 export class NotesModule {}

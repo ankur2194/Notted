@@ -20,8 +20,10 @@ import {
   moveNoteSchema,
   noteListQuerySchema,
   noteNavigationQuerySchema,
+  noteVersionListQuerySchema,
   permanentDeleteNoteSchema,
   restoreNoteSchema,
+  restoreNoteVersionSchema,
   updateFolderSchema,
   updateNoteSchema,
   uuidSchema,
@@ -51,10 +53,16 @@ import type {
   NotePermanentDeleteResult,
   NoteRestoreResult,
   NoteUpdateResult,
+  NoteVersionDetail,
+  NoteVersionPage,
+  NoteVersionRestoreResult,
 } from "@notted/shared-types";
 import type { Request } from "express";
 
-function routeUuid(request: Request, key: "workspaceId" | "noteId" | "folderId"): string {
+function routeUuid(
+  request: Request,
+  key: "workspaceId" | "noteId" | "folderId" | "versionId",
+): string {
   return uuidSchema.parse(request.params[key]);
 }
 
@@ -145,6 +153,39 @@ export class NotesController {
   @RequireAuthorization(noteAuthorization("note.read"))
   read(@Req() request: Request): Promise<NoteDetail> {
     return this.notes.read(this.noteScope(request));
+  }
+
+  @Get(":noteId/versions")
+  @RequireAuthorization(noteAuthorization("note.read"))
+  listVersions(@Req() request: Request, @Query() rawQuery: unknown): Promise<NoteVersionPage> {
+    const query = noteVersionListQuerySchema.safeParse(rawQuery);
+    if (!query.success) this.invalid();
+    return this.notes.listVersions({ ...this.noteScope(request), ...query.data });
+  }
+
+  @Get(":noteId/versions/:versionId")
+  @RequireAuthorization(noteAuthorization("note.read"))
+  readVersion(@Req() request: Request): Promise<NoteVersionDetail> {
+    return this.notes.readVersion({
+      ...this.noteScope(request),
+      versionId: routeUuid(request, "versionId"),
+    });
+  }
+
+  @Post(":noteId/versions/:versionId/restore")
+  @RequireAuthorization(noteAuthorization("note.update"))
+  restoreVersion(
+    @Req() request: Request,
+    @Body() rawBody: unknown,
+  ): Promise<NoteVersionRestoreResult> {
+    this.auth.assertTrustedMutationOrigin(request);
+    const body = restoreNoteVersionSchema.safeParse(rawBody);
+    if (!body.success) this.invalid();
+    return this.notes.restoreVersion({
+      ...this.noteScope(request),
+      versionId: routeUuid(request, "versionId"),
+      expectedVersion: body.data.expectedVersion,
+    });
   }
 
   @Patch(":noteId")

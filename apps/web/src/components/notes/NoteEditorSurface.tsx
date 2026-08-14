@@ -41,6 +41,12 @@ export interface NoteEditorSurfaceProps {
   readonly editable: boolean;
   readonly ariaLabel?: string;
   readonly readOnlyReason?: string;
+  /**
+   * Historical previews render inside the live note's save provider but must
+   * never publish their document as a baseline or change. Defaults to true for
+   * the ordinary editor; Part 56 passes false for immutable previews.
+   */
+  readonly bindToNoteSave?: boolean;
   /** Part 39 seam, and how tests drive the real editor through this wrapper. */
   readonly onEditorReady?: (editor: Editor | null) => void;
 }
@@ -60,6 +66,7 @@ export function NoteEditorSurface({
   editable,
   ariaLabel,
   readOnlyReason,
+  bindToNoteSave = true,
   onEditorReady,
 }: NoteEditorSurfaceProps) {
   const queryClient = useQueryClient();
@@ -176,13 +183,13 @@ export function NoteEditorSurface({
    */
   const handleEditorReady = useCallback(
     (instance: Editor | null): void => {
-      if (instance !== null) {
+      if (bindToNoteSave && instance !== null) {
         const parsed = safeParseNoteDocument(instance.getJSON());
         if (parsed.success) save.onDocumentBaseline(parsed.doc);
       }
       onEditorReady?.(instance);
     },
-    [onEditorReady, save],
+    [bindToNoteSave, onEditorReady, save],
   );
 
   return (
@@ -202,8 +209,8 @@ export function NoteEditorSurface({
         onRequestAttachmentFiles={editable ? images.requestAttachmentFiles : undefined}
         workspaceId={workspaceId}
         attachmentDirectory={attachmentDirectory}
-        onDocumentChange={save.onDocumentChange}
-        onDocumentRejected={hasSaveHost ? save.onDocumentRejected : undefined}
+        onDocumentChange={bindToNoteSave ? save.onDocumentChange : undefined}
+        onDocumentRejected={bindToNoteSave && hasSaveHost ? save.onDocumentRejected : undefined}
         onEditorReady={handleEditorReady}
       />
       {/*

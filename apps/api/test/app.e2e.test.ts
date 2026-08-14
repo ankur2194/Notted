@@ -23,6 +23,7 @@ const ENVIRONMENT_KEYS = [
   "RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE",
   "RATE_LIMIT_AUTHENTICATED_PER_MINUTE",
   "FEATURE_REDIS_ENABLED",
+  "FEATURE_REALTIME_ENABLED",
   "FEATURE_STORAGE_ENABLED",
   "FEATURE_SEARCH_ENABLED",
   "FEATURE_EMAIL_ENABLED",
@@ -66,6 +67,7 @@ describe.sequential("API scaffold", () => {
       RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE: "100",
       RATE_LIMIT_AUTHENTICATED_PER_MINUTE: "1000",
       FEATURE_REDIS_ENABLED: "false",
+      FEATURE_REALTIME_ENABLED: "false",
       FEATURE_STORAGE_ENABLED: "false",
       FEATURE_SEARCH_ENABLED: "false",
       FEATURE_EMAIL_ENABLED: "false",
@@ -105,6 +107,7 @@ describe.sequential("API scaffold", () => {
       { name: "minio", status: "disabled" },
       { name: "meilisearch", status: "disabled" },
       { name: "smtp", status: "disabled" },
+      { name: "realtime", status: "disabled" },
     ]);
     expect(
       response.body.checks.every(
@@ -207,6 +210,7 @@ describe.sequential("unauthenticated rate-limit trust boundary", () => {
       RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE: "1",
       RATE_LIMIT_AUTHENTICATED_PER_MINUTE: "1000",
       FEATURE_REDIS_ENABLED: "false",
+      FEATURE_REALTIME_ENABLED: "false",
       FEATURE_STORAGE_ENABLED: "false",
       FEATURE_SEARCH_ENABLED: "false",
       FEATURE_EMAIL_ENABLED: "false",

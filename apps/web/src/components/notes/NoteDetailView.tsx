@@ -200,6 +200,7 @@ export function NoteDetailView({
           noteId={note.id}
           initialPageSize={note.pageSize}
           initialVersion={note.version}
+          initialDocument={note.content}
           canUpdate={canEdit}
         >
           <NoteEditorSurface

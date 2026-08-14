@@ -6,6 +6,7 @@ import { ApiHttpException } from "../common/errors/api-http.exception";
 import { notes, taskStatuses } from "../database/schema";
 import { createTenantContext, TenantContextService } from "../tenant";
 
+import { NoteVersionsService } from "./note-versions.service";
 import { NotesService } from "./notes.service";
 
 import type { AuthorizationEntryService } from "../authorization/authorization-entry.service";
@@ -67,6 +68,19 @@ function noOpSearchIndexProducer(): NoteSearchIndexProducer {
   } as unknown as NoteSearchIndexProducer;
 }
 
+/**
+ * No-op stub for {@link NoteVersionsService}. Existing unit tests assert
+ * policy, ordering, and projection behavior; the Part 55 snapshot writes are
+ * verified in the dedicated `note-versions.service.test.ts` and in the new
+ * snapshot-specific tests below. The stub keeps existing suites focused
+ * without re-running the snapshot insert on every assertion.
+ */
+function noOpNoteVersionsService(): NoteVersionsService {
+  return {
+    recordAcceptedState: vi.fn().mockResolvedValue(undefined),
+  } as unknown as NoteVersionsService;
+}
+
 describe("NotesService policy and safe behavior", () => {
   it("authorizes before any SQL for detail reads", async () => {
     const denial = new Error("concealed");
@@ -84,6 +98,7 @@ describe("NotesService policy and safe behavior", () => {
       { authorizeUser } as unknown as AuthorizationEntryService,
       {} as TenantContextService,
       noOpSearchIndexProducer(),
+      noOpNoteVersionsService(),
     );
     await expect(service.read({ principal, workspaceId, noteId })).rejects.toBe(denial);
     expect(authorizeUser).toHaveBeenCalledWith(
@@ -95,6 +110,24 @@ describe("NotesService policy and safe behavior", () => {
     );
   });
 
+  it("writes no snapshot when update authorization is denied", async () => {
+    const denial = new Error("concealed");
+    const versions = noOpNoteVersionsService();
+    const transaction = vi.fn();
+    const service = new NotesService(
+      { transaction } as unknown as DatabaseService,
+      { authorizeUser: vi.fn().mockRejectedValue(denial) } as unknown as AuthorizationEntryService,
+      {} as TenantContextService,
+      noOpSearchIndexProducer(),
+      versions,
+    );
+    await expect(
+      service.update({ principal, workspaceId, noteId, expectedVersion: 1, title: "Denied" }),
+    ).rejects.toBe(denial);
+    expect(transaction).not.toHaveBeenCalled();
+    expect(versions.recordAcceptedState).not.toHaveBeenCalled();
+  });
+
   it("proves both source edit and destination create authority before move SQL", async () => {
     const denial = new Error("destination denied");
     const authorizeUser = vi
@@ -102,11 +135,13 @@ describe("NotesService policy and safe behavior", () => {
       .mockResolvedValueOnce({ workspaceId, userId: principal.userId })
       .mockRejectedValueOnce(denial);
     const transaction = vi.fn();
+    const versions = noOpNoteVersionsService();
     const service = new NotesService(
       { transaction } as unknown as DatabaseService,
       { authorizeUser } as unknown as AuthorizationEntryService,
       {} as TenantContextService,
       noOpSearchIndexProducer(),
+      versions,
     );
     await expect(
       service.move({
@@ -124,6 +159,7 @@ describe("NotesService policy and safe behavior", () => {
       "note.create",
     ]);
     expect(transaction).not.toHaveBeenCalled();
+    expect(versions.recordAcceptedState).not.toHaveBeenCalled();
   });
 
   it("proves source read then destination create authority before any copy SQL", async () => {
@@ -138,6 +174,7 @@ describe("NotesService policy and safe behavior", () => {
       { authorizeUser } as unknown as AuthorizationEntryService,
       {} as TenantContextService,
       noOpSearchIndexProducer(),
+      noOpNoteVersionsService(),
     );
     await expect(service.copy(copyInput)).rejects.toBe(denial);
     expect(authorizeUser.mock.calls.map(([value]) => value)).toEqual([
@@ -170,6 +207,7 @@ describe("NotesService policy and safe behavior", () => {
         { authorizeUser } as unknown as AuthorizationEntryService,
         {} as TenantContextService,
         noOpSearchIndexProducer(),
+        noOpNoteVersionsService(),
       );
       await expect(service.copy({ ...copyInput, ...container })).rejects.toBe(denial);
       expect(authorizeUser.mock.calls[1]?.[0]).toEqual(
@@ -201,6 +239,7 @@ describe("NotesService policy and safe behavior", () => {
     };
     const inserts: { values: Record<string, unknown> }[] = [];
     const producer = noOpSearchIndexProducer();
+    const versions = noOpNoteVersionsService();
     const tx = {
       execute: vi.fn().mockResolvedValue(undefined),
       select: () => {
@@ -228,6 +267,7 @@ describe("NotesService policy and safe behavior", () => {
       } as unknown as AuthorizationEntryService,
       { get: () => ({ workspaceId }) } as unknown as TenantContextService,
       producer,
+      versions,
     );
     // Only the insert under test stays real; the surrounding helpers have their
     // own coverage and would otherwise need the whole query builder faked.
@@ -297,6 +337,16 @@ describe("NotesService policy and safe behavior", () => {
       [values.id],
       expect.objectContaining({ mutation: "note.created" }),
     );
+    expect(versions.recordAcceptedState).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        version: 1,
+        title: "Weekly review template",
+        content: source.content,
+        contentPlain: source.contentPlain,
+        createdById: principal.userId,
+      }),
+    );
   });
 
   it("uses explicit transport/database note type mapping", () => {
@@ -305,6 +355,7 @@ describe("NotesService policy and safe behavior", () => {
       {} as AuthorizationEntryService,
       {} as TenantContextService,
       noOpSearchIndexProducer(),
+      noOpNoteVersionsService(),
     );
     expect(service["toDatabaseType"]("task-list")).toBe("task");
     expect(service["fromDatabaseType"]("task")).toBe("task-list");
@@ -317,6 +368,7 @@ describe("NotesService policy and safe behavior", () => {
       {} as AuthorizationEntryService,
       {} as TenantContextService,
       noOpSearchIndexProducer(),
+      noOpNoteVersionsService(),
     );
     for (const invoke of [
       () => service["versionConflict"](),
@@ -350,6 +402,7 @@ describe("NotesService checklist projection and progress", () => {
       {} as AuthorizationEntryService,
       {} as TenantContextService,
       noOpSearchIndexProducer(),
+      noOpNoteVersionsService(),
     );
   }
 
@@ -417,6 +470,7 @@ describe("NotesService checklist projection and progress", () => {
   it("writes the counters alongside content_plain when a note is created", async () => {
     const inserts: { values: Record<string, unknown> }[] = [];
     const producer = noOpSearchIndexProducer();
+    const versions = noOpNoteVersionsService();
     const tx = {
       execute: vi.fn().mockResolvedValue(undefined),
       select: () => {
@@ -444,6 +498,7 @@ describe("NotesService checklist projection and progress", () => {
       } as unknown as AuthorizationEntryService,
       { get: () => ({ workspaceId }) } as unknown as TenantContextService,
       producer,
+      versions,
     );
     Object.assign(service, {
       validateContainer: vi.fn().mockResolvedValue(undefined),
@@ -484,18 +539,33 @@ describe("NotesService checklist projection and progress", () => {
       [expect.any(String)],
       expect.objectContaining({ mutation: "note.created" }),
     );
+    expect(versions.recordAcceptedState).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ version: 1, title: "Weekly review", content: checklistDocument }),
+    );
   });
 
   it("rewrites the counters whenever an update replaces the content", async () => {
     const changeSets: Record<string, unknown>[] = [];
     const producer = noOpSearchIndexProducer();
+    const versions = noOpNoteVersionsService();
     const tx = {
       update: () => ({
         set: (values: Record<string, unknown>) => {
           changeSets.push(values);
           const node = {
             where: () => node,
-            returning: () => Promise.resolve([{ id: noteId }]),
+            returning: () =>
+              Promise.resolve([
+                {
+                  ...baseNoteRow,
+                  ...values,
+                  title: "Accepted title",
+                  content: checklistDocument,
+                  contentPlain: "A\nB",
+                  version: 5,
+                },
+              ]),
           };
           return node;
         },
@@ -511,6 +581,7 @@ describe("NotesService checklist projection and progress", () => {
       } as unknown as AuthorizationEntryService,
       { get: () => ({ workspaceId }) } as unknown as TenantContextService,
       producer,
+      versions,
     );
     Object.assign(service, {
       readRow: vi.fn().mockResolvedValue({ id: noteId, isDeleted: false }),
@@ -537,17 +608,29 @@ describe("NotesService checklist projection and progress", () => {
       [noteId],
       expect.objectContaining({ mutation: "note.updated" }),
     );
+    expect(versions.recordAcceptedState).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        noteId,
+        version: 5,
+        title: "Accepted title",
+        content: checklistDocument,
+        contentPlain: "A\nB",
+      }),
+    );
   });
 
   it("leaves the counters untouched when an update does not carry content", async () => {
     const changeSets: Record<string, unknown>[] = [];
+    const versions = noOpNoteVersionsService();
     const tx = {
       update: () => ({
         set: (values: Record<string, unknown>) => {
           changeSets.push(values);
           const node = {
             where: () => node,
-            returning: () => Promise.resolve([{ id: noteId }]),
+            returning: () =>
+              Promise.resolve([{ ...baseNoteRow, ...values, title: "Renamed", version: 5 }]),
           };
           return node;
         },
@@ -563,6 +646,7 @@ describe("NotesService checklist projection and progress", () => {
       } as unknown as AuthorizationEntryService,
       { get: () => ({ workspaceId }) } as unknown as TenantContextService,
       noOpSearchIndexProducer(),
+      versions,
     );
     Object.assign(service, {
       readRow: vi.fn().mockResolvedValue({ id: noteId, isDeleted: false }),
@@ -574,6 +658,86 @@ describe("NotesService checklist projection and progress", () => {
 
     expect(changeSets[0]).not.toHaveProperty("checklistDone");
     expect(changeSets[0]).not.toHaveProperty("contentPlain");
+    expect(versions.recordAcceptedState).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ version: 5, title: "Renamed", content: baseNoteRow.content }),
+    );
+  });
+
+  it("writes no snapshot or side-effect intent after a stale CAS loses", async () => {
+    const versions = noOpNoteVersionsService();
+    const producer = noOpSearchIndexProducer();
+    const tx = {
+      update: () => ({
+        set: () => {
+          const node = { where: () => node, returning: () => Promise.resolve([]) };
+          return node;
+        },
+      }),
+    };
+    const service = new NotesService(
+      {
+        transaction: (run: (value: unknown) => Promise<unknown>) => run(tx),
+      } as unknown as DatabaseService,
+      {
+        authorizeUser: vi.fn().mockResolvedValue({ workspaceId, userId: principal.userId }),
+        run: (_operation: unknown, run: () => Promise<unknown>) => run(),
+      } as unknown as AuthorizationEntryService,
+      { get: () => ({ workspaceId }) } as unknown as TenantContextService,
+      producer,
+      versions,
+    );
+    Object.assign(service, {
+      readRow: vi
+        .fn()
+        .mockResolvedValueOnce({ ...baseNoteRow, isDeleted: false })
+        .mockResolvedValueOnce({ ...baseNoteRow, version: 6 }),
+    });
+    await expect(
+      service.update({ principal, workspaceId, noteId, expectedVersion: 4, pageSize: "letter" }),
+    ).rejects.toBeInstanceOf(ApiHttpException);
+    expect(versions.recordAcceptedState).not.toHaveBeenCalled();
+    expect(producer.scheduleSearchSync).not.toHaveBeenCalled();
+  });
+
+  it("aborts accepted update side effects when snapshot persistence fails", async () => {
+    const snapshotFailure = new Error("snapshot failed");
+    const versions = {
+      recordAcceptedState: vi.fn().mockRejectedValue(snapshotFailure),
+    } as unknown as NoteVersionsService;
+    const producer = noOpSearchIndexProducer();
+    const tx = {
+      update: () => ({
+        set: (values: Record<string, unknown>) => {
+          const node = {
+            where: () => node,
+            returning: () => Promise.resolve([{ ...baseNoteRow, ...values, version: 5 }]),
+          };
+          return node;
+        },
+      }),
+    };
+    const service = new NotesService(
+      {
+        transaction: (run: (value: unknown) => Promise<unknown>) => run(tx),
+      } as unknown as DatabaseService,
+      {
+        authorizeUser: vi.fn().mockResolvedValue({ workspaceId, userId: principal.userId }),
+        run: (_operation: unknown, run: () => Promise<unknown>) => run(),
+      } as unknown as AuthorizationEntryService,
+      { get: () => ({ workspaceId }) } as unknown as TenantContextService,
+      producer,
+      versions,
+    );
+    Object.assign(service, {
+      readRow: vi.fn().mockResolvedValue({ ...baseNoteRow, isDeleted: false }),
+      recordMutation: vi.fn(),
+    });
+    await expect(
+      service.update({ principal, workspaceId, noteId, expectedVersion: 4, pageSize: "letter" }),
+    ).rejects.toBe(snapshotFailure);
+    expect(service["recordMutation"]).not.toHaveBeenCalled();
+    expect(producer.scheduleSearchSync).not.toHaveBeenCalled();
   });
 });
 
@@ -692,6 +856,7 @@ function moveService(fixture: MoveFixture = {}) {
   const authorizeUser = vi.fn().mockResolvedValue({ workspaceId, userId: principal.userId });
   const positionFor = vi.fn().mockResolvedValue(5);
   const producer = noOpSearchIndexProducer();
+  const versions = noOpNoteVersionsService();
   const service = new NotesService(
     {
       db: {},
@@ -707,6 +872,7 @@ function moveService(fixture: MoveFixture = {}) {
     } as unknown as AuthorizationEntryService,
     tenant,
     producer,
+    versions,
   );
   Object.assign(service, {
     readRow: vi.fn().mockResolvedValue(source),
@@ -719,7 +885,7 @@ function moveService(fixture: MoveFixture = {}) {
     loadTagIds: vi.fn().mockResolvedValue([]),
     loadTaskProgress: vi.fn().mockResolvedValue({ done: 0, total: 0 }),
   });
-  return { service, source, reads, updates, authorizeUser, positionFor, producer };
+  return { service, source, reads, updates, authorizeUser, positionFor, producer, versions };
 }
 
 function moveInput(overrides: Record<string, unknown> = {}) {
@@ -748,7 +914,7 @@ async function apiRejection(promise: Promise<unknown>): Promise<ApiHttpException
 describe("NotesService.move board column", () => {
   it("adds a search intent for the moved root and every affected descendant", async () => {
     const descendants = [descendantId, "10000000-0000-4000-8000-000000000010"];
-    const { service, producer } = moveService({ descendantIds: descendants });
+    const { service, producer, versions } = moveService({ descendantIds: descendants });
     await service.move(moveInput());
     expect(producer.scheduleSearchSync).toHaveBeenCalledWith(
       expect.anything(),
@@ -756,6 +922,7 @@ describe("NotesService.move board column", () => {
       [noteId, ...descendants],
       expect.objectContaining({ mutation: "note.moved" }),
     );
+    expect(versions.recordAcceptedState).not.toHaveBeenCalled();
   });
 
   it("accepts a workspace-wide column for any destination", async () => {

@@ -719,7 +719,14 @@ describe.skipIf(!HAS_DATABASE_URL)("operations and integration tables schema (li
       byType.set(row.typname, list);
     }
     expect(byType.get("ai_provider")).toEqual(["openai", "anthropic", "disabled"]);
-    expect(byType.get("email_status")).toEqual(["queued", "sent", "failed", "suppressed"]);
+    expect(byType.get("email_status")).toEqual([
+      "queued",
+      "processing",
+      "sent",
+      "failed",
+      "suppressed",
+      "reconciliation_required",
+    ]);
     expect(byType.get("export_format")).toEqual(["pdf", "html", "markdown", "txt", "docx", "zip"]);
     expect(byType.get("export_status")).toEqual([
       "queued",
@@ -729,7 +736,13 @@ describe.skipIf(!HAS_DATABASE_URL)("operations and integration tables schema (li
       "expired",
       "cancelled",
     ]);
-    expect(byType.get("job_status")).toEqual(["pending", "completed", "failed"]);
+    expect(byType.get("job_status")).toEqual([
+      "pending",
+      "processing",
+      "completed",
+      "failed",
+      "reconciliation_required",
+    ]);
     expect(byType.get("job_outbox_status")).toEqual([
       "pending",
       "dispatching",

@@ -58,6 +58,15 @@ export const STORAGE_MAINTENANCE_JOB_DEFINITION = defineOutboxJob({
   authority: "system",
 });
 
+export const NOTE_VERSION_RETENTION_SOURCE_QUEUE_NAME = "note-version-retention" as const;
+export const NOTE_VERSION_RETENTION_JOB_DEFINITION = defineOutboxJob({
+  jobType: DOMAIN_JOB_TYPES.noteVersionRetentionSweep,
+  payloadVersion: 1,
+  payloadSchema: unscopedIdentifierPayloadSchema(DOMAIN_JOB_TYPES.noteVersionRetentionSweep),
+  route: route(PHYSICAL_QUEUE_NAMES.maintenance, NOTE_VERSION_RETENTION_SOURCE_QUEUE_NAME),
+  authority: "system",
+});
+
 /**
  * Workspace-deletion cleanup intent. Authority is "system" and the payload is
  * identifier-only so the durable intent survives the workspace cascade
@@ -152,6 +161,7 @@ const registryEntries = [
   WORKSPACE_DELETED_JOB_DEFINITION,
   WORKSPACE_SEARCH_PURGE_JOB_DEFINITION,
   STORAGE_MAINTENANCE_JOB_DEFINITION,
+  NOTE_VERSION_RETENTION_JOB_DEFINITION,
   JOB_IDEMPOTENCY_CLEANUP_DEFINITION,
   NOTE_SEARCH_SYNC_JOB_DEFINITION,
   NOTE_EMBEDDING_GENERATE_JOB_DEFINITION,

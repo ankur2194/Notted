@@ -256,6 +256,7 @@ describe("tags, attachments, comments, and note versions schema (unit)", () => {
     expect(indexUniqueness(noteVersions).get("note_versions_note_created_idx")).toBe(false);
     expect(indexUniqueness(noteVersions).get("note_versions_note_version_unique")).toBe(true);
     expect(indexUniqueness(noteVersions).get("note_versions_created_by_id_idx")).toBe(false);
+    expect(indexUniqueness(noteVersions).get("note_versions_retention_scan_idx")).toBe(false);
   });
 
   it("uses the intended cascade/restrict/set-null behavior on every foreign key", () => {

@@ -127,6 +127,13 @@
       "when": 1786475128657,
       "tag": "0017_sloppy_giant_man",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786604183479,
+      "tag": "0018_quick_purifiers",
+      "breakpoints": true
     }
   ]
 }

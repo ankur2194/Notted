@@ -8,5 +8,6 @@ export {
 export { NotesModule } from "./notes.module";
 export { NoteSharesController } from "./note-shares.controller";
 export { NoteSharesService } from "./note-shares.service";
+export { NoteVersionsService } from "./note-versions.service";
 export { NotesService } from "./notes.service";
 export { NotesTrpcRouter } from "./notes.trpc";

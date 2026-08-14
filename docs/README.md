@@ -346,6 +346,25 @@ gigabytes and starve the host, at which point page loads and hydration stretch p
 reasonable timeout. `docker compose restart web` reclaims it and is safe; no data lives in
 that container.
 
+`pnpm build` **needs production-grade public URLs supplied on the command line.** The web
+build runs `pnpm env:validate --production` first, and production rejects `http://` and
+`ws://` because Next.js embeds `NEXT_PUBLIC_*` into the browser bundle at build time. The
+loopback values in `apps/web/.env.local` are correct for `pnpm dev` and wrong for a
+production bundle, so a bare `pnpm build` fails with three `must use a secure protocol in
+production` issues. Override them for the command; any resolvable-looking origin works,
+because a build only embeds the strings:
+
+```bash
+NEXT_PUBLIC_APP_URL=https://app.local.notted.invalid \
+NEXT_PUBLIC_API_URL=https://api.local.notted.invalid \
+NEXT_PUBLIC_WS_URL=wss://api.local.notted.invalid \
+pnpm build
+```
+
+CI does exactly this through workflow-level `env` in [`ci.yml`](../.github/workflows/ci.yml).
+`turbo.json` declares all three in the `build` task's `env`, so changing them correctly
+invalidates the build cache. Use your real origins when producing a deployable bundle.
+
 The root `Makefile` is an optional thin alias layer (`make infra-up`, `make test`,
 `make db-migrate`, and so on); pnpm scripts are canonical and cross-platform.
 

@@ -6,6 +6,7 @@ node_modules/
 coverage/
 test-results/
 playwright-report/
+graphify-out/
 
 # Lockfile is generated; do not reformat
 pnpm-lock.yaml

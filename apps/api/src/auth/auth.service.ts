@@ -26,6 +26,16 @@ export function toWebHeaders(request: Request): Headers {
   return headers;
 }
 
+export function toWebHeadersFromRaw(rawHeaders: readonly string[]): Headers {
+  const headers = new Headers();
+  for (let index = 0; index < rawHeaders.length; index += 2) {
+    const name = rawHeaders[index];
+    const value = rawHeaders[index + 1];
+    if (name !== undefined && value !== undefined) headers.append(name, value);
+  }
+  return headers;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -97,5 +107,22 @@ export class AuthService {
     setAuthPrincipal(request, principal);
     setTrustedPrincipal(request, { actorId: principal.userId, kind: "user" });
     return principal;
+  }
+
+  /** Provider-owned cookie validation for non-Express transports. */
+  async authenticateHeaders(headers: Headers): Promise<AuthenticatedPrincipal | null> {
+    if (this.auth === null) return null;
+    const result = await this.auth.api.getSession({ headers });
+    if (result === null) return null;
+    const createdAt = result.session.createdAt;
+    return Object.freeze({
+      userId: result.user.id,
+      sessionId: result.session.id,
+      method: "opaque-session",
+      assurance: "single-factor",
+      expiresAt: result.session.expiresAt.toISOString(),
+      authenticatedAt: createdAt.toISOString(),
+      isFresh: Date.now() - createdAt.getTime() <= this.config.recentAuthenticationSeconds * 1_000,
+    });
   }
 }

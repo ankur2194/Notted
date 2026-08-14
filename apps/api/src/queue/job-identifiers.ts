@@ -36,6 +36,7 @@ export const DOMAIN_JOB_TYPES = Object.freeze({
   workspaceDeleted: "workspace.deleted",
   workspaceSearchPurge: "workspace.search.purge",
   storageMaintenanceSweep: "storage.maintenance.sweep",
+  noteVersionRetentionSweep: "note.version.retention.sweep",
   jobIdempotencyCleanup: "queue.idempotency.cleanup",
   // Part 51.2 — system-owned, rebuildable search-index sync. Producers
   // (Part 51.3) emit one intent per note mutation batch; the handler re-reads

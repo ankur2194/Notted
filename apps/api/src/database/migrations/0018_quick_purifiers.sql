@@ -1,0 +1,1 @@
+CREATE INDEX "note_versions_retention_scan_idx" ON "note_versions" USING btree ("created_at","id");

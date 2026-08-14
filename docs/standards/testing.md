@@ -47,6 +47,22 @@ when `PLAYWRIGHT_APP_URL` is unset outside CI, so a bare `playwright test` fails
 instruction instead of silently targeting `localhost:3000`. Set `PLAYWRIGHT_APP_URL` explicitly to
 aim at some other stack on purpose.
 
+The targeted startup names only `api-e2e` and `web-e2e`; Compose starts their shared infrastructure,
+contract, migration, reset, and bucket dependencies transitively, but does not build or start the
+development `api`, `web`, `db-init`, or `minio-init` services. Playwright is told these disposable
+servers are external, so retries attach to the same healthy processes instead of invoking its
+development-server commands or rebuilding between attempts.
+
+For a resource-constrained local diagnosis where failure traces, screenshots, videos, and the HTML
+report are not needed, opt into the lightweight runner explicitly:
+
+```bash
+PLAYWRIGHT_LIGHTWEIGHT_MODE=true pnpm e2e:test version-history.spec.ts
+```
+
+List output and assertions remain unchanged. CI ignores lightweight mode and retains the default
+failure artifacts and HTML report.
+
 Only the chromium project runs unless you pass your own `--project`. A `--grep` filter therefore
 narrows the run without also widening it to firefox and webkit, which are not part of the maintained
 baseline.

@@ -15,8 +15,9 @@ import { NoteSaveProvider, type NoteSaveHandle } from "./note-save-context";
 import { PagePrintStyle } from "./PagePrintStyle";
 import { SaveStatusIndicator } from "./SaveStatusIndicator";
 import { useNoteAutosave } from "./useNoteAutosave";
+import { VersionHistory } from "./VersionHistory";
 
-import type { PageSize } from "@notted/shared-types";
+import type { NoteDocument, PageSize } from "@notted/shared-types";
 
 import { PAGE_BREAK_CLASS } from "@/components/editor/extensions/page-break";
 import { FormField } from "@/components/ui/form-controls";
@@ -77,6 +78,7 @@ export interface PageContainerProps {
   readonly initialPageSize: PageSize;
   /** Server-rendered note version; the optimistic mutation below owns it from here. */
   readonly initialVersion: number;
+  readonly initialDocument?: NoteDocument;
   /** Backend policy remains authoritative; this only decides whether a control is offered. */
   readonly canUpdate: boolean;
   readonly children: ReactNode;
@@ -111,6 +113,7 @@ export function PageContainer({
   noteId,
   initialPageSize,
   initialVersion,
+  initialDocument = { type: "doc", content: [] } as NoteDocument,
   canUpdate,
   children,
 }: PageContainerProps) {
@@ -139,8 +142,16 @@ export function PageContainer({
       onDocumentChange: autosave.onDocumentChange,
       onDocumentBaseline: autosave.onDocumentBaseline,
       onDocumentRejected: autosave.onDocumentRejected,
+      status: autosave.status,
+      hasUnsavedWork: autosave.hasUnsavedWork,
     }),
-    [autosave.onDocumentChange, autosave.onDocumentBaseline, autosave.onDocumentRejected],
+    [
+      autosave.onDocumentChange,
+      autosave.onDocumentBaseline,
+      autosave.onDocumentRejected,
+      autosave.status,
+      autosave.hasUnsavedWork,
+    ],
   );
 
   const [status, setStatus] = useState("");
@@ -581,6 +592,17 @@ export function PageContainer({
         >
           Focus mode
         </button>
+        <div data-notted-focus-hide data-notted-print-hide>
+          <VersionHistory
+            workspaceId={workspaceId}
+            noteId={noteId}
+            currentVersion={autosave.version}
+            currentDocument={autosave.savedDocument ?? initialDocument}
+            canRestore={canUpdate}
+            saveStatus={autosave.status}
+            hasUnsavedWork={autosave.hasUnsavedWork}
+          />
+        </div>
       </div>
 
       {/*

@@ -6,11 +6,25 @@
 - **Completed on:** 2026-07-31
 - **Implemented by:** Phase 4 Part 21 implementation agent
 - **Plan reference:** `Plan.md`, Part 21
-- **Related records:** Parts 13, 18, 19, and 20; ADRs 0003, 0006-0010
+- **Related records:** Parts 13, 18, 19, and 20; Part 50; ADRs 0003, 0006-0010
 
 Implementation and required verification are complete. Historical statements below describing
 checks as not run reflect the initial implementation-only session and are superseded by the
 completion update near the end of this record.
+
+> **Correction (2026-08-14):** Part 50 generalized this part's narrow auth-email queue, as
+> this record's Objective anticipated. The standalone BullMQ queue service, outbox
+> dispatcher, and per-queue configuration named below no longer exist:
+> `apps/api/src/auth/auth-email-queue.service.ts`,
+> `apps/api/src/auth/auth-email-dispatcher.service.ts`, and
+> `apps/api/src/config/auth-email-queue.config.ts` were removed. Auth email now runs on the
+> shared queue runtime: `AuthEmailQueueHandler` in `apps/api/src/auth/auth-email-worker.service.ts`
+> registers `AUTH_EMAIL_JOB_DEFINITION` with `QueueHandlerRegistry`, and `OutboxDispatcherService`
+> plus `QueueWorkerProcessorService` own dispatch and execution for every queue. The
+> `AUTH_EMAIL_*` tuning variables were replaced by the shared `QUEUE_*` values in
+> `apps/api/src/config/queue.config.ts`. Encrypted intent storage, the `auth_email_intents`
+> schema, payload shape, and every security property below are unchanged. See
+> [`part-50-establish-bullmq-queues-workers.md`](part-50-establish-bullmq-queues-workers.md).
 
 ## Objective
 
@@ -73,12 +87,12 @@ email queue that Parts 50/61 can later generalize.
 
 | Path | Purpose |
 |---|---|
-| `apps/api/src/auth/` | Better Auth integration, principal/guard, encrypted email producer/dispatcher/queue/worker, Redis secondary storage, and focused tests |
+| `apps/api/src/auth/` | Better Auth integration, principal/guard, encrypted email producer/dispatcher/queue/worker, Redis secondary storage, and focused tests. Part 50 removed the standalone dispatcher and queue services here; the producer and worker remain |
 | `apps/api/src/app.module.ts` | Imports the canonical auth module |
 | `apps/api/src/main.ts` | Mounts raw Better Auth handler before parsers and reconciles CORS/origins/principal ordering |
 | `apps/api/src/config/auth.config.ts` | Auth URL/origin/secret and link TTL contract |
-| `apps/api/src/config/auth-email-queue.config.ts` | Bounded queue/dispatcher/retry configuration |
-| `apps/api/src/config/config.module.ts` | Exports auth-email queue configuration |
+| `apps/api/src/config/auth-email-queue.config.ts` | Bounded queue/dispatcher/retry configuration. **Removed by Part 50**; superseded by `apps/api/src/config/queue.config.ts` |
+| `apps/api/src/config/config.module.ts` | Exported auth-email queue configuration. **Removed by Part 50**; the module no longer registers an auth-email provider |
 | `apps/api/src/config/retention.config.ts` | Constrains non-remembered sessions to Better Auth's supported 24 hours |
 | `apps/api/src/database/schema/auth-email-intents.ts` | Encrypted one-time auth-email context schema |
 | `apps/api/src/database/schema/index.ts` | Exports and aggregates Part 21 schema |
@@ -116,12 +130,15 @@ Seed fixtures are unchanged and remain non-authenticating relational identities.
 - Custom hashed-reset paths: `/api/auth/notted/request-password-reset` and
   `/api/auth/notted/reset-password`; conflicting core reset paths are disabled.
 - New values: `AUTH_VERIFICATION_TOKEN_TTL_SECONDS`,
-  `AUTH_MAGIC_LINK_TOKEN_TTL_SECONDS`, `AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS`,
-  `AUTH_EMAIL_DISPATCH_INTERVAL_MS`, `AUTH_EMAIL_QUEUE_CONCURRENCY`,
+  `AUTH_MAGIC_LINK_TOKEN_TTL_SECONDS`, and `AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS`.
+- Retired by Part 50: `AUTH_EMAIL_DISPATCH_INTERVAL_MS`, `AUTH_EMAIL_QUEUE_CONCURRENCY`,
   `AUTH_EMAIL_QUEUE_ATTEMPTS`, `AUTH_EMAIL_QUEUE_BACKOFF_MS`, and
-  `AUTH_EMAIL_IDEMPOTENCY_RETENTION_DAYS`.
+  `AUTH_EMAIL_IDEMPOTENCY_RETENTION_DAYS`. These are no longer read anywhere; the shared
+  `QUEUE_DISPATCH_INTERVAL_MS`, `QUEUE_DEFAULT_CONCURRENCY`, `QUEUE_ATTEMPTS`, and
+  `QUEUE_BACKOFF_BASE_MS` values in `apps/api/src/config/queue.config.ts` govern auth email.
 - `SESSION_SHORT_LIVED_HOURS` accepts only `24`; `SESSION_REMEMBER_ME_DAYS` remains bounded.
-- Queue name `auth-email`; payload version 1; payload is only `{ intentId }`.
+- Source queue name `auth-email`; payload version 1; payload is only `{ intentId }`. Part 50
+  routes that source queue onto the physical `notted-default` queue at high priority.
 - Development Mailpit remains `127.0.0.1:1025` / `http://localhost:8025`.
 
 ## Security and Tenant-Isolation Notes
@@ -172,7 +189,8 @@ Seed fixtures are unchanged and remain non-authenticating relational identities.
 
 Do not mark this part complete until the migration and every required focused/broad gate
 have passed. Keep migrations 0000-0007 immutable. PostgreSQL and Redis must be available
-for auth; Mailpit/SMTP and the auth-email worker must be available for link delivery. Never
+for auth; Mailpit/SMTP and the shared queue runtime that executes `AuthEmailQueueHandler` must
+be available for link delivery. Never
 add workspace claims to the session principal or expose provider session/token objects.
 
 ## Completion Verification Update
@@ -215,3 +233,4 @@ All repository gates re-passed: build, type-check, db:check, format:check, 623 t
 |---|---|---|
 | 2026-07-29 | Phase 4 Part 21 implementation agent | Authored implementation, migration, tests, ADR, and docs; state remains In progress with verification pending by instruction. |
 | 2026-07-31 | Lead part engineer | Resolved all 5 transitive dependency advisories via pnpm overrides; documented false-positive CVE on @nestjs/core v10; re-ran all gates; marked Complete. |
+| 2026-08-14 | Maintenance | Recorded Part 50's supersession of the standalone auth-email queue, dispatcher, and per-queue configuration, and retired the five `AUTH_EMAIL_*` tuning variables that are no longer read. No behavior change; auth email delivery is unchanged. |

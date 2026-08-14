@@ -17,6 +17,7 @@ import {
 } from "./meilisearch.config";
 import { MINIO_CONFIG, MinioConfigProvider, minioConfigProvider } from "./minio.config";
 import { QUEUE_CONFIG, QueueConfigProvider, queueConfigProvider } from "./queue.config";
+import { REALTIME_CONFIG, RealtimeConfigProvider, realtimeConfigProvider } from "./realtime.config";
 import { REDIS_CONFIG, RedisConfigProvider, redisConfigProvider } from "./redis.config";
 import {
   RETENTION_CONFIG,
@@ -50,6 +51,8 @@ import { STORAGE_CONFIG, StorageConfigProvider, storageConfigProvider } from "./
     queueConfigProvider,
     RedisConfigProvider,
     redisConfigProvider,
+    RealtimeConfigProvider,
+    realtimeConfigProvider,
     RetentionConfigProvider,
     retentionConfigProvider,
     SecurityConfigProvider,
@@ -70,6 +73,7 @@ import { STORAGE_CONFIG, StorageConfigProvider, storageConfigProvider } from "./
     MINIO_CONFIG,
     QUEUE_CONFIG,
     REDIS_CONFIG,
+    REALTIME_CONFIG,
     RETENTION_CONFIG,
     SECURITY_CONFIG,
     SMTP_CONFIG,

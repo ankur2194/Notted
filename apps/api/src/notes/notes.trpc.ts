@@ -22,8 +22,13 @@ import {
   notePermanentDeleteResultSchema,
   noteRestoreResultSchema,
   noteUpdateResultSchema,
+  noteVersionDetailSchema,
+  noteVersionListQuerySchema,
+  noteVersionPageSchema,
+  noteVersionRestoreResultSchema,
   permanentDeleteNoteSchema,
   restoreNoteSchema,
+  restoreNoteVersionSchema,
   updateFolderSchema,
   updateNoteSchema,
   uuidSchema,
@@ -46,6 +51,7 @@ const authenticatedProcedure = trpc.procedure.use(({ ctx, next }) => {
 });
 
 const noteSelectorSchema = z.object({ workspaceId: uuidSchema, noteId: uuidSchema }).strict();
+const versionSelectorSchema = noteSelectorSchema.extend({ versionId: uuidSchema }).strict();
 const withData = <T extends z.ZodType>(data: T) =>
   z.object({ workspaceId: uuidSchema, noteId: uuidSchema, data }).strict();
 const withFolderData = <T extends z.ZodType>(data: T) =>
@@ -98,6 +104,47 @@ function buildNoteSubrouter(notes: NotesService, auth: AuthService) {
         executeTrpc(() =>
           notes.read({ ...input, principal: ctx.principal, requestId: ctx.requestId }),
         ),
+      ),
+    versions: authenticatedProcedure
+      .input(noteSelectorSchema.extend({ query: noteVersionListQuerySchema }).strict())
+      .output(noteVersionPageSchema)
+      .query(({ ctx, input }) =>
+        executeTrpc(async () => {
+          const page = await notes.listVersions({
+            workspaceId: input.workspaceId,
+            noteId: input.noteId,
+            principal: ctx.principal,
+            requestId: ctx.requestId,
+            ...input.query,
+          });
+          // Zod intentionally materializes mutable arrays at the transport
+          // boundary; the application service keeps its immutable contract.
+          return { ...page, items: [...page.items] };
+        }),
+      ),
+    version: authenticatedProcedure
+      .input(versionSelectorSchema)
+      .output(noteVersionDetailSchema)
+      .query(({ ctx, input }) =>
+        executeTrpc(() =>
+          notes.readVersion({ ...input, principal: ctx.principal, requestId: ctx.requestId }),
+        ),
+      ),
+    restoreVersion: authenticatedProcedure
+      .input(versionSelectorSchema.extend({ data: restoreNoteVersionSchema }).strict())
+      .output(noteVersionRestoreResultSchema)
+      .mutation(({ ctx, input }) =>
+        executeTrpc(async () => {
+          auth.assertTrustedMutationOrigin(ctx.request);
+          return notes.restoreVersion({
+            workspaceId: input.workspaceId,
+            noteId: input.noteId,
+            versionId: input.versionId,
+            expectedVersion: input.data.expectedVersion,
+            principal: ctx.principal,
+            requestId: ctx.requestId,
+          });
+        }),
       ),
     update: authenticatedProcedure
       .input(withData(updateNoteSchema))

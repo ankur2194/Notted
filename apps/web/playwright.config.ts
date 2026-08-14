@@ -1,8 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { playwrightDiagnostics } from "./src/lib/testing/playwright-runtime";
+
 const appUrl = process.env.PLAYWRIGHT_APP_URL ?? "http://localhost:3000";
 const apiUrl = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:3001";
 const disposableTestRun = process.env.PLAYWRIGHT_DISPOSABLE_TEST_RUN === "true";
+const externalServers = process.env.PLAYWRIGHT_EXTERNAL_SERVERS === "true";
+const diagnostics = playwrightDiagnostics(process.env);
 
 /**
  * A disposable run normally owns its servers, so it refuses to reuse one that is
@@ -56,28 +60,32 @@ export default defineConfig({
   timeout: 120_000,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  reporter: [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]],
+  reporter: diagnostics.htmlReport
+    ? [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]]
+    : [["list"]],
   outputDir: "test-results/playwright",
   use: {
     baseURL: appUrl,
-    trace: "retain-on-failure",
-    screenshot: "only-on-failure",
-    video: "retain-on-failure",
+    trace: diagnostics.trace,
+    screenshot: diagnostics.screenshot,
+    video: diagnostics.video,
   },
-  webServer: [
-    {
-      command: "pnpm --dir ../api start",
-      url: `${apiUrl}/health/live`,
-      reuseExistingServer,
-      timeout: 300_000,
-    },
-    {
-      command: "pnpm exec rimraf .next && pnpm dev",
-      url: `${appUrl}/settings/security`,
-      reuseExistingServer,
-      timeout: 300_000,
-    },
-  ],
+  webServer: externalServers
+    ? undefined
+    : [
+        {
+          command: "pnpm --dir ../api start",
+          url: `${apiUrl}/health/live`,
+          reuseExistingServer,
+          timeout: 300_000,
+        },
+        {
+          command: "pnpm exec rimraf .next && pnpm dev",
+          url: `${appUrl}/settings/security`,
+          reuseExistingServer,
+          timeout: 300_000,
+        },
+      ],
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
     { name: "firefox", use: { ...devices["Desktop Firefox"] } },

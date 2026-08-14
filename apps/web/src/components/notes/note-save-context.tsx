@@ -23,12 +23,17 @@ export interface NoteSaveHandle {
   readonly onDocumentBaseline: (document: NoteDocument) => void;
   /** The editor produced JSON the note contract rejects. */
   readonly onDocumentRejected: (rejected: boolean) => void;
+  readonly status:
+    "idle" | "dirty" | "saving" | "saved" | "retrying" | "error" | "conflict" | "offline";
+  readonly hasUnsavedWork: boolean;
 }
 
 const NO_SAVE_HANDLE: NoteSaveHandle = {
   onDocumentChange: () => undefined,
   onDocumentBaseline: () => undefined,
   onDocumentRejected: () => undefined,
+  status: "idle",
+  hasUnsavedWork: false,
 };
 
 const NoteSaveContext = createContext<NoteSaveHandle | null>(null);
@@ -47,8 +52,16 @@ export function NoteSaveProvider({
       onDocumentChange: value.onDocumentChange,
       onDocumentBaseline: value.onDocumentBaseline,
       onDocumentRejected: value.onDocumentRejected,
+      status: value.status,
+      hasUnsavedWork: value.hasUnsavedWork,
     }),
-    [value.onDocumentChange, value.onDocumentBaseline, value.onDocumentRejected],
+    [
+      value.onDocumentChange,
+      value.onDocumentBaseline,
+      value.onDocumentRejected,
+      value.status,
+      value.hasUnsavedWork,
+    ],
   );
   return <NoteSaveContext.Provider value={handle}>{children}</NoteSaveContext.Provider>;
 }

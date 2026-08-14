@@ -12,13 +12,23 @@ import { SmtpModule } from "../infrastructure/smtp/smtp.module";
 import { SmtpService } from "../infrastructure/smtp/smtp.service";
 import { QUEUE_READINESS_INDICATOR, type QueueReadiness } from "../queue/queue-readiness.indicator";
 import { QueueModule } from "../queue/queue.module";
+import { RealtimeRedisAdapterService } from "../realtime/realtime-redis-adapter.service";
+import { RealtimeModule } from "../realtime/realtime.module";
 
 import { HealthController } from "./health.controller";
 import { ProcessReadinessIndicator } from "./process-readiness.indicator";
 import { READINESS_INDICATORS } from "./readiness-indicator";
 
 @Module({
-  imports: [DatabaseModule, RedisModule, MinioModule, MeilisearchModule, SmtpModule, QueueModule],
+  imports: [
+    DatabaseModule,
+    RedisModule,
+    MinioModule,
+    MeilisearchModule,
+    SmtpModule,
+    QueueModule,
+    RealtimeModule,
+  ],
   controllers: [HealthController],
   providers: [
     ProcessReadinessIndicator,
@@ -32,6 +42,7 @@ import { READINESS_INDICATORS } from "./readiness-indicator";
         MinioService,
         MeilisearchService,
         SmtpService,
+        RealtimeRedisAdapterService,
       ],
       useFactory: (
         processIndicator: ProcessReadinessIndicator,
@@ -41,6 +52,7 @@ import { READINESS_INDICATORS } from "./readiness-indicator";
         minioIndicator: MinioService,
         meilisearchIndicator: MeilisearchService,
         smtpIndicator: SmtpService,
+        realtimeIndicator: RealtimeRedisAdapterService,
       ) => [
         processIndicator,
         databaseIndicator,
@@ -49,6 +61,7 @@ import { READINESS_INDICATORS } from "./readiness-indicator";
         minioIndicator,
         meilisearchIndicator,
         smtpIndicator,
+        realtimeIndicator,
       ],
     },
   ],

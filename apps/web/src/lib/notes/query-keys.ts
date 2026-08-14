@@ -18,6 +18,10 @@ export const noteQueryKeys = Object.freeze({
    */
   attachments: (workspaceId: string, noteId: string) =>
     ["notes", workspaceId, noteId, "attachments"] as const,
+  versions: (workspaceId: string, noteId: string) =>
+    ["notes", workspaceId, noteId, "versions"] as const,
+  version: (workspaceId: string, noteId: string, versionId: string) =>
+    ["notes", workspaceId, noteId, "versions", versionId] as const,
 });
 
 /**

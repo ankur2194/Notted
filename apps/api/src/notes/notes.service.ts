@@ -1,8 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { HttpStatus, Injectable, Optional } from "@nestjs/common";
-import { countChecklist, extractNoteContentPlain } from "@notted/shared-validators";
-import { and, asc, desc, eq, exists, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import {
+  countChecklist,
+  extractNoteContentPlain,
+  migrateNoteDocument,
+  noteVersionCursorSchema,
+} from "@notted/shared-validators";
+import { and, asc, desc, eq, exists, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { AuthorizationDeniedError } from "../authorization/authorization.errors";
@@ -21,6 +26,7 @@ import {
   jobOutbox,
   type JobOutboxPayload,
   notes,
+  noteVersions,
   noteTags,
   projectAccess,
   projects,
@@ -28,6 +34,7 @@ import {
   tasks,
   taskStatuses,
   workspaceMembers,
+  users,
 } from "../database/schema";
 import { taskDoneCount, taskOpenTotalCount } from "../database/sql-aggregates";
 import { NoteEmbeddingProducer } from "../search/note-embedding-producer";
@@ -39,6 +46,7 @@ import {
   whereWorkspace,
 } from "../tenant";
 
+import { NoteVersionsService } from "./note-versions.service";
 import {
   FOLDER_AUDIT_ENTITY_TYPE,
   FOLDER_MAX_DEPTH,
@@ -72,6 +80,10 @@ import type {
   NoteSummary,
   NoteType,
   NoteUpdateResult,
+  NoteVersionDetail,
+  NoteVersionPage,
+  NoteVersionRestoreResult,
+  NoteVersionSummary,
   PageSize,
   Progress,
 } from "@notted/shared-types";
@@ -174,6 +186,45 @@ export interface UpdateNoteServiceInput extends NoteSelector {
   readonly content?: NoteDocument;
 }
 
+export interface ListNoteVersionsServiceInput extends NoteSelector {
+  readonly limit: number;
+  readonly cursor?: string;
+}
+
+export interface NoteVersionSelector extends NoteSelector {
+  readonly versionId: string;
+}
+
+export interface RestoreNoteVersionServiceInput extends NoteVersionSelector {
+  readonly expectedVersion: number;
+}
+
+interface NoteVersionCursor {
+  readonly createdAt: string;
+  readonly id: string;
+}
+
+type VersionDatabase = Pick<DatabaseTransaction, "select">;
+
+function encodeVersionCursor(cursor: NoteVersionCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodeVersionCursor(value: string): NoteVersionCursor | null {
+  if (!noteVersionCursorSchema.safeParse(value).success) return null;
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const candidate = parsed as Record<string, unknown>;
+    if (typeof candidate.createdAt !== "string" || typeof candidate.id !== "string") return null;
+    const date = new Date(candidate.createdAt);
+    if (!Number.isFinite(date.getTime())) return null;
+    return { createdAt: date.toISOString(), id: candidate.id };
+  } catch {
+    return null;
+  }
+}
+
 export interface MoveNoteServiceInput extends NoteSelector, Container {
   readonly expectedVersion: number;
   /** Omitted keeps the current column; `null` is an explicit "No column". */
@@ -234,6 +285,10 @@ export class NotesService {
     // transaction as each note mutation so the Meilisearch handler can
     // re-read authoritative PostgreSQL and converge the index.
     private readonly searchIndexProducer: NoteSearchIndexProducer,
+    // Part 55 — writes one immutable `note_versions` snapshot of the accepted
+    // post-save state inside create/copy/update transactions. Required: a
+    // missing provider must fail loudly rather than silently disabling history.
+    private readonly noteVersions: NoteVersionsService,
     @Optional() private readonly embeddingProducer?: NoteEmbeddingProducer,
   ) {}
 
@@ -275,6 +330,7 @@ export class NotesService {
           // concurrent parent move cannot leave the new child behind.
           if (input.parentId !== null) await this.validateContainer(tx, input, null);
           const sortOrder = await this.positionFor(tx, input, null, null);
+          const projection = this.contentProjection(content);
           await tx.insert(notes).values(
             assertWorkspaceInsertValues(
               {
@@ -285,7 +341,7 @@ export class NotesService {
                 parentId: input.parentId,
                 title: input.title,
                 content,
-                ...this.contentProjection(content),
+                ...projection,
                 noteType: this.toDatabaseType(input.type),
                 isTemplate: input.isTemplate,
                 isPinned: input.isPinned,
@@ -300,6 +356,19 @@ export class NotesService {
             ),
           );
           await this.replaceTags(tx, noteId, input.tagIds);
+          // Part 55: initial checkpoint. The new note's accepted state is its
+          // version-1 state; record one immutable snapshot in the same
+          // transaction so a create always has a restorable baseline. The
+          // snapshot captures the POST-SAVE state (decision 1).
+          await this.noteVersions.recordAcceptedState(tx, {
+            noteId,
+            workspaceId: activeWorkspaceId(this.tenantContext),
+            version: 1,
+            title: input.title,
+            content,
+            contentPlain: projection.contentPlain,
+            createdById: input.principal.userId,
+          });
           await this.recordMutation(tx, "create", noteId, input);
           // Part 51.3: schedule search-index sync for the newly created note
           // in the same transaction. The handler re-reads authoritative state
@@ -394,6 +463,151 @@ export class NotesService {
     );
   }
 
+  async listVersions(input: ListNoteVersionsServiceInput): Promise<NoteVersionPage> {
+    const operation = await this.authorizeNote(input, "note.read");
+    return this.authorizationEntry.run(operation, async () => {
+      const cursor = input.cursor === undefined ? null : decodeVersionCursor(input.cursor);
+      if (input.cursor !== undefined && cursor === null) this.invalidVersionRequest();
+      const cursorDate = cursor === null ? null : new Date(cursor.createdAt);
+      const rows = await this.database.db
+        .select({
+          id: noteVersions.id,
+          version: noteVersions.version,
+          title: noteVersions.title,
+          createdAt: noteVersions.createdAt,
+          authorId: users.id,
+          authorName: users.name,
+          currentVersion: notes.version,
+          latestCheckpointVersion: sql<number>`(
+            select max(latest_version.version)
+            from note_versions latest_version
+            where latest_version.note_id = ${noteVersions.noteId}
+          )`,
+        })
+        .from(noteVersions)
+        .innerJoin(
+          notes,
+          and(eq(notes.id, noteVersions.noteId), eq(notes.workspaceId, input.workspaceId)),
+        )
+        .innerJoin(users, eq(users.id, noteVersions.createdById))
+        .where(
+          and(
+            eq(noteVersions.noteId, input.noteId),
+            eq(notes.isDeleted, false),
+            cursorDate === null || cursor === null
+              ? undefined
+              : or(
+                  lt(noteVersions.createdAt, cursorDate),
+                  and(eq(noteVersions.createdAt, cursorDate), lt(noteVersions.id, cursor.id)),
+                ),
+          ),
+        )
+        .orderBy(desc(noteVersions.createdAt), desc(noteVersions.id))
+        .limit(input.limit + 1);
+      if (rows.length === 0 && cursor === null) await this.readDatabaseRow(input.noteId);
+      const visible = rows.slice(0, input.limit);
+      const items = visible.map((row) => this.toVersionSummary(row));
+      const last = visible.at(-1);
+      return Object.freeze({
+        items: Object.freeze(items),
+        hasMore: rows.length > input.limit,
+        nextCursor:
+          rows.length > input.limit && last !== undefined
+            ? encodeVersionCursor({ createdAt: last.createdAt.toISOString(), id: last.id })
+            : null,
+      });
+    });
+  }
+
+  async readVersion(input: NoteVersionSelector): Promise<NoteVersionDetail> {
+    const operation = await this.authorizeNote(input, "note.read");
+    return this.authorizationEntry.run(operation, async () => {
+      const row = await this.readVersionRow(this.database.db, input);
+      const document = this.migrateHistoricalContent(row.content);
+      return Object.freeze({ ...this.toVersionSummary(row), content: document });
+    });
+  }
+
+  async restoreVersion(input: RestoreNoteVersionServiceInput): Promise<NoteVersionRestoreResult> {
+    const operation = await this.authorizeNote(input, "note.update");
+    return this.authorizationEntry.run(operation, async () => {
+      const restored = await this.database.transaction(
+        async (tx) => {
+          const [current] = await tx
+            .select(this.noteSelection())
+            .from(notes)
+            .where(
+              and(
+                eq(notes.id, input.noteId),
+                eq(notes.workspaceId, input.workspaceId),
+                eq(notes.isDeleted, false),
+              ),
+            )
+            .for("update")
+            .limit(1);
+          if (current === undefined) this.notFound();
+          this.assertVersion(current, input.expectedVersion);
+          const source = await this.readVersionRow(tx, input);
+          if (source.version === source.latestCheckpointVersion) this.currentVersionConflict();
+          const content = this.migrateHistoricalContent(source.content);
+          const projection = this.contentProjection(content);
+          const [updated] = await tx
+            .update(notes)
+            .set({
+              title: source.title,
+              content,
+              ...projection,
+              updatedById: input.principal.userId,
+              updatedAt: new Date(),
+              version: sql`${notes.version} + 1`,
+            })
+            .where(
+              and(
+                eq(notes.id, input.noteId),
+                eq(notes.version, input.expectedVersion),
+                whereWorkspace(notes, this.tenantContext),
+              ),
+            )
+            .returning(this.noteSelection());
+          if (updated === undefined) return this.versionConflictOrNotFound(tx, input.noteId);
+          await this.noteVersions.recordAcceptedState(tx, {
+            noteId: input.noteId,
+            workspaceId: input.workspaceId,
+            version: updated.version,
+            title: updated.title,
+            content: updated.content,
+            contentPlain: updated.contentPlain ?? "",
+            createdById: input.principal.userId,
+          });
+          await this.recordMutation(tx, "update", input.noteId, input);
+          await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, [input.noteId], {
+            mutation: NOTE_DOMAIN_EVENTS.update,
+            correlationId: input.requestId,
+            actorId: input.principal.userId,
+          });
+          await this.embeddingProducer?.scheduleGeneration(tx, input.workspaceId, [input.noteId], {
+            mutation: NOTE_DOMAIN_EVENTS.update,
+            correlationId: input.requestId,
+            actorId: input.principal.userId,
+          });
+          return { updated, source };
+        },
+        { isolationLevel: "serializable" },
+      );
+      const note = await this.toDetail(restored.updated, input);
+      const createdVersion = await this.versionSummaryForVersion(
+        input.workspaceId,
+        input.noteId,
+        restored.updated.version,
+      );
+      return Object.freeze({
+        note,
+        restoredFrom: this.toVersionSummary(restored.source),
+        createdVersion,
+      });
+    });
+  }
+
   async update(input: UpdateNoteServiceInput): Promise<NoteUpdateResult> {
     const operation = await this.authorizeNote(input, "note.update");
     if (input.tagIds !== undefined) await this.authorizeNote(input, "note.tag");
@@ -429,6 +643,24 @@ export class NotesService {
             )
             .returning(this.noteSelection());
           if (updated === undefined) return this.versionConflictOrNotFound(tx, input.noteId);
+          // Part 55: post-update checkpoint. The optimistic CAS UPDATE won, so
+          // `updated` carries the accepted post-save state for the new
+          // `notes.version`. Record exactly one immutable snapshot BEFORE the
+          // audit/search/embedding intents, all in this transaction. If the CAS
+          // returned no row above, NOTHING is snapshotted (no misleading history
+          // for a conflict/not-found). Any failure here rolls the whole note
+          // update back, so no half-written note and no orphan snapshot. A
+          // settings-only accepted update still checkpoints because it is an
+          // accepted state change the user explicitly made (decision 4).
+          await this.noteVersions.recordAcceptedState(tx, {
+            noteId: input.noteId,
+            workspaceId: activeWorkspaceId(this.tenantContext),
+            version: updated.version,
+            title: updated.title,
+            content: updated.content,
+            contentPlain: updated.contentPlain ?? "",
+            createdById: input.principal.userId,
+          });
           if (input.tagIds !== undefined) await this.replaceTags(tx, input.noteId, input.tagIds);
           await this.recordMutation(tx, "update", input.noteId, input);
           // Part 51.3: title/content/tag-affecting update — re-sync this note.
@@ -650,6 +882,19 @@ export class NotesService {
             noteId,
             input.includeTags ? await this.loadTagIds(tx, input.noteId) : [],
           );
+          // Part 55: initial checkpoint for the NEW note. The copy is a brand
+          // new note row whose accepted state is version 1 of its own history;
+          // record one immutable snapshot of the copied title/content/plain in
+          // the same transaction so the copy has a restorable baseline.
+          await this.noteVersions.recordAcceptedState(tx, {
+            noteId,
+            workspaceId: activeWorkspaceId(this.tenantContext),
+            version: 1,
+            title: input.title ?? source.title,
+            content: source.content,
+            contentPlain: source.contentPlain ?? "",
+            createdById: input.principal.userId,
+          });
           await this.recordMutation(tx, "create", noteId, input);
           // Part 51.3: copy-as-create produces a brand new note row that the
           // index has never seen. Sync it so it appears in search results.
@@ -1780,6 +2025,108 @@ export class NotesService {
       createdAt: notes.createdAt,
       updatedAt: notes.updatedAt,
     };
+  }
+
+  private versionSelection() {
+    return {
+      id: noteVersions.id,
+      version: noteVersions.version,
+      title: noteVersions.title,
+      content: noteVersions.content,
+      createdAt: noteVersions.createdAt,
+      authorId: users.id,
+      authorName: users.name,
+      currentVersion: notes.version,
+      latestCheckpointVersion: sql<number>`(
+        select max(latest_version.version)
+        from note_versions latest_version
+        where latest_version.note_id = ${noteVersions.noteId}
+      )`,
+    };
+  }
+
+  private async readVersionRow(database: VersionDatabase, input: NoteVersionSelector) {
+    const [row] = await database
+      .select(this.versionSelection())
+      .from(noteVersions)
+      .innerJoin(
+        notes,
+        and(
+          eq(notes.id, noteVersions.noteId),
+          eq(notes.workspaceId, input.workspaceId),
+          eq(notes.isDeleted, false),
+        ),
+      )
+      .innerJoin(users, eq(users.id, noteVersions.createdById))
+      .where(and(eq(noteVersions.id, input.versionId), eq(noteVersions.noteId, input.noteId)))
+      .limit(1);
+    if (row === undefined) this.notFound();
+    return row;
+  }
+
+  private async versionSummaryForVersion(
+    workspaceId: string,
+    noteId: string,
+    version: number,
+  ): Promise<NoteVersionSummary> {
+    const [row] = await this.database.db
+      .select(this.versionSelection())
+      .from(noteVersions)
+      .innerJoin(notes, and(eq(notes.id, noteVersions.noteId), eq(notes.workspaceId, workspaceId)))
+      .innerJoin(users, eq(users.id, noteVersions.createdById))
+      .where(and(eq(noteVersions.noteId, noteId), eq(noteVersions.version, version)))
+      .limit(1);
+    if (row === undefined) this.notFound();
+    return this.toVersionSummary(row);
+  }
+
+  private toVersionSummary(row: {
+    readonly id: string;
+    readonly version: number;
+    readonly title: string;
+    readonly createdAt: Date;
+    readonly authorId: string;
+    readonly authorName: string;
+    readonly currentVersion: number;
+    readonly latestCheckpointVersion: number;
+  }): NoteVersionSummary {
+    return Object.freeze({
+      id: row.id,
+      version: row.version,
+      title: row.title,
+      author: Object.freeze({ id: row.authorId, name: row.authorName }),
+      createdAt: row.createdAt.toISOString(),
+      // Structural note mutations can advance notes.version without changing
+      // recoverable content or adding a checkpoint. The latest accepted
+      // checkpoint, not numeric equality with notes.version, is therefore the
+      // history UI's current content state.
+      isCurrent: row.version === row.latestCheckpointVersion,
+    });
+  }
+
+  private migrateHistoricalContent(content: unknown): NoteDocument {
+    try {
+      return migrateNoteDocument(content).doc;
+    } catch {
+      throw new ApiHttpException(HttpStatus.UNPROCESSABLE_ENTITY, {
+        code: "UNPROCESSABLE_ENTITY",
+        message: "This historical version cannot be safely previewed or restored.",
+      });
+    }
+  }
+
+  private invalidVersionRequest(): never {
+    throw new ApiHttpException(HttpStatus.BAD_REQUEST, {
+      code: "VALIDATION_ERROR",
+      message: "The version request is invalid.",
+    });
+  }
+
+  private currentVersionConflict(): never {
+    throw new ApiHttpException(HttpStatus.CONFLICT, {
+      code: "NOTE_STATE_CONFLICT",
+      message: "The selected checkpoint is already current.",
+    });
   }
 
   private folderSelection() {

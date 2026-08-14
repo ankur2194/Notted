@@ -29,6 +29,12 @@ export const NOTE_API_PATHS = Object.freeze({
     `/api/v1/workspaces/${workspaceId}/folders/${folderId}`,
   shares: (workspaceId: string, noteId: string) =>
     `/api/v1/workspaces/${workspaceId}/notes/${noteId}/shares`,
+  versions: (workspaceId: string, noteId: string) =>
+    `/api/v1/workspaces/${workspaceId}/notes/${noteId}/versions`,
+  version: (workspaceId: string, noteId: string, versionId: string) =>
+    `/api/v1/workspaces/${workspaceId}/notes/${noteId}/versions/${versionId}`,
+  restoreVersion: (workspaceId: string, noteId: string, versionId: string) =>
+    `/api/v1/workspaces/${workspaceId}/notes/${noteId}/versions/${versionId}/restore`,
   share: (workspaceId: string, noteId: string, userId: string) =>
     `/api/v1/workspaces/${workspaceId}/notes/${noteId}/shares/${userId}`,
 } as const);
@@ -110,6 +116,31 @@ export interface NoteCapabilities {
   readonly canUpdate: boolean;
   readonly canDelete: boolean;
   readonly canShare: boolean;
+}
+
+export interface NoteVersionSummary {
+  readonly id: string;
+  readonly version: number;
+  readonly title: string;
+  readonly author: { readonly id: UserId; readonly name: string };
+  readonly createdAt: IsoTimestamp;
+  readonly isCurrent: boolean;
+}
+
+export interface NoteVersionPage {
+  readonly items: readonly NoteVersionSummary[];
+  readonly nextCursor: string | null;
+  readonly hasMore: boolean;
+}
+
+export interface NoteVersionDetail extends NoteVersionSummary {
+  readonly content: NoteDocument;
+}
+
+export interface NoteVersionRestoreResult {
+  readonly note: NoteDetail;
+  readonly restoredFrom: NoteVersionSummary;
+  readonly createdVersion: NoteVersionSummary;
 }
 
 export interface NotePage {

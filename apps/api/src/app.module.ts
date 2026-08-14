@@ -14,6 +14,7 @@ import { NotesModule } from "./notes/notes.module";
 import { NotificationModule } from "./notifications/notification.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { QueueModule } from "./queue/queue.module";
+import { RealtimeModule } from "./realtime/realtime.module";
 import { SearchModule } from "./search/search.module";
 import { ShellModule } from "./shell/shell.module";
 import { StorageModule } from "./storage/storage.module";
@@ -44,6 +45,7 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
     ProjectsModule,
     // Safe with zero handlers: QueueHandlerRegistry is the mandatory dispatch gate.
     QueueModule,
+    RealtimeModule,
     // Safe before Part 51 queue producers/handlers: this owns only the
     // rebuildable note-index contract and provider adapter.
     SearchModule,

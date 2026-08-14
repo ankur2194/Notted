@@ -7,12 +7,16 @@ import { fileURLToPath } from "node:url";
 import {
   E2E_ONE_SHOT_SERVICES,
   E2E_PERSISTENT_SERVICES,
+  E2E_SUPPORTING_ONE_SHOT_SERVICES,
+  E2E_SUPPORTING_PERSISTENT_SERVICES,
   ONE_SHOT_SERVICES,
   PERSISTENT_SERVICES,
   assertLocalDockerEndpoint,
   assertResetEnvironment,
   assertResetTarget,
   evaluateComposeReadiness,
+  e2eReadinessServices,
+  e2eUpServices,
   findLegacyVolumes,
   parseCommandOptions,
   parseComposeProcesses,
@@ -206,6 +210,20 @@ test("the e2e profile is classified separately so `pnpm infra:up` never waits fo
   assert.deepEqual(evaluateComposeReadiness(readyStackProcesses()), { ready: true, pending: [] });
 });
 
+test("targeted e2e startup excludes development applications and initializers", () => {
+  assert.deepEqual(e2eUpServices(), ["api-e2e", "web-e2e"]);
+  const expected = e2eReadinessServices();
+  assert.deepEqual(expected, {
+    oneShot: [...E2E_SUPPORTING_ONE_SHOT_SERVICES, ...E2E_ONE_SHOT_SERVICES],
+    persistent: [...E2E_SUPPORTING_PERSISTENT_SERVICES, ...E2E_PERSISTENT_SERVICES],
+  });
+  for (const unrelated of ["api", "web", "db-init", "minio-init"]) {
+    assert.equal(expected.oneShot.includes(unrelated), false);
+    assert.equal(expected.persistent.includes(unrelated), false);
+    assert.equal(e2eUpServices().includes(unrelated), false);
+  }
+});
+
 test("readiness can be evaluated against an explicit service list", () => {
   assert.deepEqual(
     evaluateComposeReadiness(
@@ -254,6 +272,24 @@ test("Playwright inside the api-e2e namespace addresses dependencies by Compose 
   assert.equal(environment.PLAYWRIGHT_MAILPIT_URL, "http://mailpit:8025");
   assert.match(environment.DATABASE_URL, /@postgres:5432\/notted_e2e_test$/u);
   assert.equal(environment.PLAYWRIGHT_DISPOSABLE_TEST_RUN, "true");
+  assert.equal(environment.PLAYWRIGHT_EXTERNAL_SERVERS, "true");
+  assert.equal(environment.PLAYWRIGHT_LIGHTWEIGHT_MODE, undefined);
+  assert.equal(environment.CI, undefined);
+});
+
+test("Playwright diagnostics can be disabled explicitly for a local disposable run", () => {
+  const environment = playwrightEnvironment({
+    webPort: "3010",
+    apiPort: "3011",
+    databaseName: "notted_e2e_test",
+    postgresUser: "notted",
+    postgresPassword: "secret",
+    lightweight: true,
+    ci: true,
+  });
+
+  assert.equal(environment.PLAYWRIGHT_LIGHTWEIGHT_MODE, "true");
+  assert.equal(environment.CI, "true");
 });
 
 test("a Playwright filter narrows the run without widening it to other browsers", () => {

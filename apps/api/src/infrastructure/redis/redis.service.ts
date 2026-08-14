@@ -86,6 +86,31 @@ export class RedisService implements ReadinessIndicator, OnModuleInit, OnApplica
     return result;
   }
 
+  /** Atomically acquires one member of a bounded expiring distributed set. */
+  async acquireBoundedLease(
+    key: string,
+    leaseId: string,
+    limit: number,
+    ttlMs: number,
+  ): Promise<boolean> {
+    const result = await this.requireClient().eval(
+      "redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1]); if redis.call('ZSCORE', KEYS[1], ARGV[2]) then redis.call('ZADD', KEYS[1], ARGV[3], ARGV[2]); redis.call('PEXPIRE', KEYS[1], ARGV[4]); return 1; end; if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[5]) then return 0; end; redis.call('ZADD', KEYS[1], ARGV[3], ARGV[2]); redis.call('PEXPIRE', KEYS[1], ARGV[4]); return 1",
+      1,
+      key,
+      String(Date.now()),
+      leaseId,
+      String(Date.now() + ttlMs),
+      String(ttlMs),
+      String(limit),
+    );
+    return result === 1;
+  }
+
+  /** Releases a distributed lease only by its opaque member value. */
+  async releaseLease(key: string, leaseId: string): Promise<void> {
+    await this.requireClient().zrem(key, leaseId);
+  }
+
   async publish(channel: string, payload: string): Promise<number> {
     return this.requireClient().publish(channel, payload);
   }

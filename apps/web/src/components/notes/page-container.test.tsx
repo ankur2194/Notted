@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,16 +33,19 @@ function view(
     readonly initialVersion?: number;
   } = {},
 ) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <PageContainer
-      workspaceId={WORKSPACE_ID}
-      noteId={NOTE_ID}
-      initialPageSize={options.initialPageSize ?? "a4"}
-      initialVersion={options.initialVersion ?? 3}
-      canUpdate={options.canUpdate ?? true}
-    >
-      <div data-testid="editor-stand-in">Note body</div>
-    </PageContainer>,
+    <QueryClientProvider client={queryClient}>
+      <PageContainer
+        workspaceId={WORKSPACE_ID}
+        noteId={NOTE_ID}
+        initialPageSize={options.initialPageSize ?? "a4"}
+        initialVersion={options.initialVersion ?? 3}
+        canUpdate={options.canUpdate ?? true}
+      >
+        <div data-testid="editor-stand-in">Note body</div>
+      </PageContainer>
+    </QueryClientProvider>,
   );
 }
 
@@ -187,19 +191,22 @@ describe("PageContainer zoom", () => {
     const user = userEvent.setup();
     const clicked = vi.fn();
     const typed = vi.fn();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
-      <PageContainer
-        workspaceId={WORKSPACE_ID}
-        noteId={NOTE_ID}
-        initialPageSize="a4"
-        initialVersion={3}
-        canUpdate
-      >
-        <button type="button" onClick={clicked}>
-          Inside the page
-        </button>
-        <input aria-label="Body" onChange={(event) => typed(event.target.value)} />
-      </PageContainer>,
+      <QueryClientProvider client={queryClient}>
+        <PageContainer
+          workspaceId={WORKSPACE_ID}
+          noteId={NOTE_ID}
+          initialPageSize="a4"
+          initialVersion={3}
+          canUpdate
+        >
+          <button type="button" onClick={clicked}>
+            Inside the page
+          </button>
+          <input aria-label="Body" onChange={(event) => typed(event.target.value)} />
+        </PageContainer>
+      </QueryClientProvider>,
     );
     await user.selectOptions(screen.getByLabelText("Zoom"), "1.5");
 

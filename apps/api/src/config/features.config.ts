@@ -16,14 +16,19 @@ export interface FeaturesConfig {
 
 export function parseFeaturesConfig(environment: Environment): FeaturesConfig {
   try {
+    const redisEnabled = readBoolean(environment, "FEATURE_REDIS_ENABLED", true);
+    const realtimeEnabled = readBoolean(environment, "FEATURE_REALTIME_ENABLED", true);
+    if (realtimeEnabled && !redisEnabled) {
+      throw new Error("FEATURE_REALTIME_ENABLED=true requires FEATURE_REDIS_ENABLED=true");
+    }
     return Object.freeze({
-      redisEnabled: readBoolean(environment, "FEATURE_REDIS_ENABLED", true),
+      redisEnabled,
       storageEnabled: readBoolean(environment, "FEATURE_STORAGE_ENABLED", true),
       searchEnabled: readBoolean(environment, "FEATURE_SEARCH_ENABLED", true),
       emailEnabled: readBoolean(environment, "FEATURE_EMAIL_ENABLED", true),
       aiEnabled: readBoolean(environment, "FEATURE_AI_ENABLED", false),
       registrationEnabled: readBoolean(environment, "FEATURE_REGISTRATION_ENABLED", true),
-      realtimeEnabled: readBoolean(environment, "FEATURE_REALTIME_ENABLED", true),
+      realtimeEnabled,
     });
   } catch (error: unknown) {
     wrapConfigError("Invalid feature configuration", error);
