@@ -4,6 +4,7 @@ import { ApiController } from "./api.controller";
 import { AttachmentsModule } from "./attachments/attachments.module";
 import { AuthModule } from "./auth/auth.module";
 import { AuthorizationModule } from "./authorization/authorization.module";
+import { CommentsModule } from "./comments/comments.module";
 import { CommonModule } from "./common/common.module";
 import { ConfigModule } from "./config/config.module";
 import { DatabaseModule } from "./database/database.module";
@@ -32,6 +33,7 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
     AuthModule,
     AuthorizationModule,
     AttachmentsModule,
+    CommentsModule,
     HealthModule,
     // Part 45. `StorageModule` already imports `MaintenanceModule`; both are
     // listed so the scheduler is instantiated even if the storage transport is

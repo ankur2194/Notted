@@ -7,7 +7,7 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts", "test/**/*.test.ts"],
     hookTimeout: 180_000,
-    // Six suites call `seedDatabase()` against the one configured database, and
+    // Ten suites call `seedDatabase()` against the one configured database, and
     // they all upsert the same fixed `SEED_IDS` rows. Run in parallel they
     // contend on those rows and deadlock, which surfaces as an unrelated
     // "Failed query: insert into notes" inside whichever suite lost the race.

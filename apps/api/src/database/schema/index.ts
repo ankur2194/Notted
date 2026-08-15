@@ -61,6 +61,13 @@ import { exportFormatEnum, exportJobs, exportJobsRelations, exportStatusEnum } f
 import { folders, foldersRelations } from "./folders";
 import { jobStatusEnum, jobIdempotency } from "./job-idempotency";
 import { jobOutbox, jobOutboxRelations, jobOutboxStatusEnum } from "./job-outbox";
+import {
+  noteCollaborationRecordKind,
+  noteCollaborationStates,
+  noteCollaborationStatesRelations,
+  noteCollaborationUpdates,
+  noteCollaborationUpdatesRelations,
+} from "./note-collaboration";
 import { noteEmbeddings, noteEmbeddingsRelations } from "./note-embeddings";
 import { noteVersions, noteVersionsRelations } from "./note-versions";
 import {
@@ -175,6 +182,13 @@ export type {
   AttachmentVariantRecord,
 } from "./attachments";
 export { comments, commentsRelations } from "./comments";
+export {
+  noteCollaborationRecordKind,
+  noteCollaborationStates,
+  noteCollaborationStatesRelations,
+  noteCollaborationUpdates,
+  noteCollaborationUpdatesRelations,
+} from "./note-collaboration";
 export { noteVersions, noteVersionsRelations } from "./note-versions";
 export { noteTags, noteTagsRelations, tags, tagsRelations } from "./tags";
 export {
@@ -292,6 +306,16 @@ export const schema = {
   commentsRelations,
   noteVersions,
   noteVersionsRelations,
+  // Part 58 — the durable Yjs log behind live collaborative editing: one room
+  // cursor row per note plus an append-only binary update/snapshot log. Both
+  // hang off `notes` and carry no `workspace_id`, exactly like `note_versions`;
+  // tenant safety is the caller's `assertActiveWorkspace(...)` plus proving the
+  // parent note in the same transaction.
+  noteCollaborationStates,
+  noteCollaborationStatesRelations,
+  noteCollaborationUpdates,
+  noteCollaborationUpdatesRelations,
+  noteCollaborationRecordKind,
   // Part 17 — standalone tasks, custom task statuses (board columns), and
   // task-tag links. Status design: built-in `task_status` enum plus optional
   // `custom_status_id` override; recurrence as enum + optional cron. Inline

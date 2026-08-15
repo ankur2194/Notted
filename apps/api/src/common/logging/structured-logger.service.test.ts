@@ -144,6 +144,25 @@ describe("StructuredLogger LoggerService surface", () => {
     expect(output).not.toContain("hunter2");
   });
 
+  it("routes warning() to warn level with its metadata intact", () => {
+    // The whole reason this method exists: calling the `LoggerService` `warn`
+    // with a metadata object first silently dropped every field and logged the
+    // literal "Structured log event" — see the case directly above.
+    const output = capture((logger) => {
+      logger.warning(
+        { noteId: "note-1", reason: "tenant.workspace_mismatch" },
+        "Projection failed",
+      );
+    });
+
+    expect(JSON.parse(output)).toMatchObject({
+      level: 40,
+      msg: "Projection failed",
+      noteId: "note-1",
+      reason: "tenant.workspace_mismatch",
+    });
+  });
+
   it("routes failure() to error level with its metadata intact", () => {
     const output = capture((logger) => {
       logger.failure({ requestId: "request-1", attempt: 2 }, "Delivery failed");

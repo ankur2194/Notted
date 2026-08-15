@@ -37,6 +37,8 @@ import {
   users,
 } from "../database/schema";
 import { taskDoneCount, taskOpenTotalCount } from "../database/sql-aggregates";
+import { MentionNotificationProducer } from "../notifications/mention-notification.producer";
+import { NoteCollaborationService } from "../realtime/yjs/note-collaboration.service";
 import { NoteEmbeddingProducer } from "../search/note-embedding-producer";
 import { NoteSearchIndexProducer } from "../search/note-search-index-producer";
 import {
@@ -290,6 +292,16 @@ export class NotesService {
     // missing provider must fail loudly rather than silently disabling history.
     private readonly noteVersions: NoteVersionsService,
     @Optional() private readonly embeddingProducer?: NoteEmbeddingProducer,
+    // Part 58 — reconciles the persisted Yjs authority with a restored
+    // projection inside `restoreVersion`'s transaction. Optional so the unit
+    // tests can construct this service without the realtime module graph; the
+    // application always provides it via `NotesModule`'s `RealtimeModule` import.
+    @Optional() private readonly collaboration?: NoteCollaborationService,
+    // Part 60 — emits one `notification.mention` intent per newly mentioned
+    // workspace member inside `update`'s transaction. Optional for the same
+    // reason as the two above: the unit tests construct this service without
+    // the notification module graph.
+    @Optional() private readonly mentionProducer?: MentionNotificationProducer,
   ) {}
 
   async create(input: CreateNoteServiceInput): Promise<NoteCreateResult> {
@@ -579,6 +591,15 @@ export class NotesService {
             contentPlain: updated.contentPlain ?? "",
             createdById: input.principal.userId,
           });
+          // Part 58: the restored TipTap projection becomes the new Yjs
+          // authority in this same transaction — one write authority, not two.
+          await this.collaboration?.resetToDocument(tx, {
+            noteId: input.noteId,
+            workspaceId: input.workspaceId,
+            document: updated.content,
+            noteVersion: updated.version,
+            actorId: input.principal.userId,
+          });
           await this.recordMutation(tx, "update", input.noteId, input);
           await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, [input.noteId], {
             mutation: NOTE_DOMAIN_EVENTS.update,
@@ -682,6 +703,17 @@ export class NotesService {
                 actorId: input.principal.userId,
               },
             );
+          // Part 60: `current.content` is the pre-update document, so only
+          // mentions ADDED by this save produce an intent. A re-save of an
+          // unchanged document returns before issuing any SQL — this is the
+          // autosave path.
+          await this.mentionProducer?.scheduleMentionNotifications(tx, input.workspaceId, {
+            noteId: input.noteId,
+            previousContent: current.content,
+            nextContent: input.content,
+            actorId: input.principal.userId,
+            correlationId: input.requestId,
+          });
           return updated;
         },
         { isolationLevel: "serializable" },

@@ -23,6 +23,12 @@ export interface NoteSaveHandle {
   readonly onDocumentBaseline: (document: NoteDocument) => void;
   /** The editor produced JSON the note contract rejects. */
   readonly onDocumentRejected: (rejected: boolean) => void;
+  /**
+   * A version the server stored for this note without this machine saving it —
+   * Part 58's collaborative projection. Ignored unless nothing local is
+   * outstanding.
+   */
+  readonly applyExternalVersion: (version: number) => void;
   readonly status:
     "idle" | "dirty" | "saving" | "saved" | "retrying" | "error" | "conflict" | "offline";
   readonly hasUnsavedWork: boolean;
@@ -32,6 +38,7 @@ const NO_SAVE_HANDLE: NoteSaveHandle = {
   onDocumentChange: () => undefined,
   onDocumentBaseline: () => undefined,
   onDocumentRejected: () => undefined,
+  applyExternalVersion: () => undefined,
   status: "idle",
   hasUnsavedWork: false,
 };
@@ -52,6 +59,7 @@ export function NoteSaveProvider({
       onDocumentChange: value.onDocumentChange,
       onDocumentBaseline: value.onDocumentBaseline,
       onDocumentRejected: value.onDocumentRejected,
+      applyExternalVersion: value.applyExternalVersion,
       status: value.status,
       hasUnsavedWork: value.hasUnsavedWork,
     }),
@@ -59,6 +67,7 @@ export function NoteSaveProvider({
       value.onDocumentChange,
       value.onDocumentBaseline,
       value.onDocumentRejected,
+      value.applyExternalVersion,
       value.status,
       value.hasUnsavedWork,
     ],

@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
+import { CommentsTrpcRouter } from "../comments/comments.trpc";
 import { NotesTrpcRouter } from "../notes/notes.trpc";
 import { TagsTrpcRouter } from "../tags/tags.trpc";
 import { TasksTrpcRouter } from "../tasks/tasks.trpc";
@@ -9,6 +10,7 @@ import { createTrpcContext } from "./trpc.context";
 import { trpc } from "./trpc.router";
 
 import type { TrpcContext } from "./trpc.context";
+import type { CommentSubrouter } from "../comments/comments.trpc";
 import type { FolderSubrouter, NoteSubrouter } from "../notes/notes.trpc";
 import type { TagSubrouter } from "../tags/tags.trpc";
 import type { TaskSubrouter } from "../tasks/tasks.trpc";
@@ -21,8 +23,9 @@ function buildRootRouter(
   folder: FolderSubrouter,
   tag: TagSubrouter,
   task: TaskSubrouter,
+  comment: CommentSubrouter,
 ) {
-  return trpc.router({ workspace, note, folder, tag, task });
+  return trpc.router({ workspace, note, folder, tag, task, comment });
 }
 
 export type AppRouter = ReturnType<typeof buildRootRouter>;
@@ -37,6 +40,7 @@ export class TrpcRootRouter {
     notes: NotesTrpcRouter,
     tags: TagsTrpcRouter,
     tasks: TasksTrpcRouter,
+    comments: CommentsTrpcRouter,
   ) {
     this.router = buildRootRouter(
       workspaces.workspaceRouter,
@@ -44,6 +48,7 @@ export class TrpcRootRouter {
       notes.folderRouter,
       tags.tagRouter,
       tasks.taskRouter,
+      comments.commentRouter,
     );
   }
 

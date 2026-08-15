@@ -34,6 +34,7 @@ describe("server environment contract", () => {
       aiEnabled: false,
       registrationEnabled: true,
       realtimeEnabled: true,
+      collaborationEnabled: true,
     });
     expect(parseRedisConfig({}).url).toBe("redis://127.0.0.1:6379");
     expect(parseMinioConfig({}).attachmentsBucket).toBe("notted-attachments");

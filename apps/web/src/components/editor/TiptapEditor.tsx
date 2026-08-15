@@ -20,6 +20,7 @@ import { FOCUS_TOOLBAR_GROUPS } from "./toolbar-commands";
 import { useSuggestionPopup } from "./useSuggestionPopup";
 
 import type { AttachmentDirectory } from "./attachment-directory";
+import type { CommentAnchorTarget } from "./extensions/comment-decorations";
 import type {
   AttachmentFilePickerHandler,
   AttachmentUploadHandler,
@@ -27,6 +28,7 @@ import type {
 import type { ImageFilePickerHandler, ImageUploadHandler } from "./extensions/CustomImage";
 import type { MentionCandidate, MentionDirectory } from "./mention-members";
 import type { SlashCommand } from "./slash-commands";
+import type { NoteCollaborationBinding } from "@/lib/collaboration/note-collaboration-provider";
 import type { Editor } from "@tiptap/core";
 
 import { toggleFocusMode, useFocusMode } from "@/lib/notes/focus-mode";
@@ -104,6 +106,36 @@ export interface TiptapEditorProps {
   readonly workspaceId?: string;
   /** Loaded attachment metadata, used only to render existing images. */
   readonly attachmentDirectory?: AttachmentDirectory | null;
+  /**
+   * Part 58 seam. Absent or `null` is the solo editor every earlier part was
+   * written against. A binding is captured once per instance and never swapped:
+   * the host (`NoteEditorSurface`) remounts this component with a new `key` when
+   * the mode changes, so one instance is either collaborative or solo for its
+   * whole life. This component still performs no I/O — the socket, the sync
+   * protocol, and awareness all belong to the binding's owner.
+   */
+  readonly collaboration?: NoteCollaborationBinding | null;
+  /**
+   * Part 58 fallback, and the ONE thing about a collaborative instance that is
+   * allowed to change after creation.
+   *
+   * A live session whose realtime writes have failed for good hands the pen back
+   * to the Part 39 autosave IN PLACE. It is not remounted into solo mode,
+   * because this instance's content lives in the shared `Y.Doc` and a remount
+   * would reload the note as it was when the page opened — losing everything
+   * typed since. Set only by that path; a healthy collaborative editor drives no
+   * autosave at all, and a solo one ignores this entirely.
+   */
+  readonly collaborationWriteFailed?: boolean;
+  /**
+   * Part 60 seam. Anchored comment threads to highlight, read at redraw time so
+   * a new comment list never rebuilds the editor. Absent registers no plugin at
+   * all — the extension list is then byte-identical to every earlier part — and
+   * the host calls `refreshCommentDecorations` when the list changes.
+   */
+  readonly resolveComments?: () => readonly CommentAnchorTarget[];
+  /** Part 60 seam: the thread the reader currently has open, or `null`. */
+  readonly resolveActiveCommentId?: () => string | null;
 }
 
 type PreparedDocument =
@@ -166,6 +198,10 @@ export function TiptapEditor({
   onRequestAttachmentFiles,
   workspaceId,
   attachmentDirectory,
+  collaboration,
+  collaborationWriteFailed,
+  resolveComments,
+  resolveActiveCommentId,
 }: TiptapEditorProps) {
   const prepared = useMemo(() => prepare(initialDocument), [initialDocument]);
 
@@ -199,6 +235,10 @@ export function TiptapEditor({
       onRequestAttachmentFiles={onRequestAttachmentFiles}
       workspaceId={workspaceId}
       attachmentDirectory={attachmentDirectory}
+      collaboration={collaboration}
+      collaborationWriteFailed={collaborationWriteFailed}
+      resolveComments={resolveComments}
+      resolveActiveCommentId={resolveActiveCommentId}
     />
   );
 }
@@ -222,6 +262,10 @@ interface EditorSurfaceProps {
   readonly onRequestAttachmentFiles?: AttachmentFilePickerHandler;
   readonly workspaceId?: string;
   readonly attachmentDirectory?: AttachmentDirectory | null;
+  readonly collaboration?: NoteCollaborationBinding | null;
+  readonly collaborationWriteFailed?: boolean;
+  readonly resolveComments?: () => readonly CommentAnchorTarget[];
+  readonly resolveActiveCommentId?: () => string | null;
 }
 
 function EditorSurface({
@@ -243,6 +287,10 @@ function EditorSurface({
   onRequestAttachmentFiles,
   workspaceId,
   attachmentDirectory,
+  collaboration,
+  collaborationWriteFailed = false,
+  resolveComments,
+  resolveActiveCommentId,
 }: EditorSurfaceProps) {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -340,6 +388,32 @@ function EditorSurface({
   // the mention directory: swapping it would mean rebuilding the editor.
   const attachmentDirectoryRef = useRef(attachmentDirectory ?? null);
 
+  // Part 58, and the one ref that is deliberately never refreshed from props:
+  // whether this instance is collaborative decides which plugins exist, which
+  // document owns the content, and whether autosave is driven at all. Fixing it
+  // at creation is what makes "one mode per editor instance" true rather than
+  // aspirational; the host remounts with a new `key` to change it.
+  const collaborationRef = useRef(collaboration ?? null);
+  // The exception to the rule above, and the only one: whether realtime has
+  // stopped taking this session's writes changes mid-session, so it is read
+  // through a ref at transaction time rather than captured at creation. It
+  // changes no plugin and no document ownership — only who is told about a
+  // change — so it is not a remount.
+  const collaborationWriteFailedRef = useRef(collaborationWriteFailed);
+  collaborationWriteFailedRef.current = collaborationWriteFailed;
+
+  // Part 60 follows the Part 42/44 ref discipline exactly: the comment list and
+  // the open thread are read through refs at redraw time, so a host that
+  // re-renders with a new list never rebuilds the editor. Whether the plugin
+  // exists at all is decided once, from the props this instance was created
+  // with, for the same reason `collaborationRef` is: it changes which plugins
+  // are installed, and that is a remount, not a prop update.
+  const resolveCommentsRef = useRef(resolveComments);
+  resolveCommentsRef.current = resolveComments;
+  const resolveActiveCommentIdRef = useRef(resolveActiveCommentId);
+  resolveActiveCommentIdRef.current = resolveActiveCommentId;
+  const commentsEnabledRef = useRef(resolveComments !== undefined);
+
   const extensions = useMemo(
     () => [
       ...createNoteEditorExtensions({
@@ -352,6 +426,16 @@ function EditorSurface({
         resolveImageFilePicker: () => requestImageFilesRef.current ?? null,
         resolveAttachmentUploader: () => uploadAttachmentsRef.current ?? null,
         resolveAttachmentFilePicker: () => requestAttachmentFilesRef.current ?? null,
+        collaboration: collaborationRef.current,
+        // Spread rather than passed as `undefined`: `createNoteEditorExtensions`
+        // appends the decoration extension only when the key is defined, so a
+        // host that never comments produces the pre-Part-60 extension list.
+        ...(commentsEnabledRef.current
+          ? {
+              resolveComments: () => resolveCommentsRef.current?.() ?? [],
+              resolveActiveCommentId: () => resolveActiveCommentIdRef.current?.() ?? null,
+            }
+          : {}),
       }),
       EditorShortcuts.configure({ resolveHandlers: () => handlersRef.current }),
     ],
@@ -359,6 +443,21 @@ function EditorSurface({
   );
 
   const handleUpdate = useCallback((instance: Editor): void => {
+    /*
+     * Part 58. In collaborative mode every remote transaction would re-run the
+     * contract check here and toggle `outputRejected` for content this writer
+     * never typed, and autosave is not bound to this editor at all. The contract
+     * guard moves server-side to the projection, which is the only writer of
+     * `notes.content` while a collaborative session is live.
+     */
+    /*
+     * The exception is a collaborative session whose realtime writes have
+     * failed: autosave is then the only writer left, so the contract check has
+     * to run and the change has to be reported. Nothing else re-enables it —
+     * merely being handed an `onDocumentChange` does not, because the host
+     * passes one throughout and the flag is what changes.
+     */
+    if (collaborationRef.current !== null && !collaborationWriteFailedRef.current) return;
     const json: unknown = instance.getJSON();
     const parsed = safeParseNoteDocument(json);
     if (!parsed.success) {
@@ -376,7 +475,14 @@ function EditorSurface({
 
   const editor = useEditor({
     extensions,
-    content: initialContentRef.current,
+    /*
+     * Part 58. Content is seeded here only in solo mode. Passing `content`
+     * alongside `Collaboration` appends the whole document into the shared type
+     * a second time — every peer would gain a duplicated copy of the note. That
+     * is data corruption, not a style preference; the Y.Doc is the sole source
+     * of content for a collaborative instance.
+     */
+    content: collaborationRef.current === null ? initialContentRef.current : undefined,
     editable,
     // Next.js renders this component on the server first; deferring the first
     // ProseMirror render avoids a hydration mismatch.
@@ -403,6 +509,11 @@ function EditorSurface({
   // only replace the content when it genuinely differs from what is loaded.
   useEffect(() => {
     if (editor === null) return;
+    // Part 58. `setContent` replaces the whole document, which in collaborative
+    // mode would be broadcast to every peer as a delete-and-reinsert of the
+    // note. Reconciliation belongs to Yjs there; a server-side change arrives as
+    // an update on the shared document, not as a new prop.
+    if (collaborationRef.current !== null) return;
     if (areDocumentsEquivalent(schemaNormalized(editor, noteDocument), editor.getJSON())) return;
     editor.commands.setContent(noteDocument, false);
   }, [editor, noteDocument]);

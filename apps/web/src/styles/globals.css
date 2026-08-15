@@ -72,6 +72,35 @@
     @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
 
+  /*
+   * Part 58 collaborator presence palette.
+   *
+   * Eight fixed slots picked by `lib/collaboration/user-color.ts` from a stable
+   * hash of the user id, so one person keeps one colour across sessions and
+   * across every peer's screen. Declared here as plain custom properties rather
+   * than in `@theme`: nothing in the markup references them through a Tailwind
+   * utility (the value is written into an inline `style` by the cursor
+   * decoration), and unused `@theme` entries are not guaranteed to be emitted.
+   *
+   * Every value is a caret *and* a name label painted on paper white (#ffffff,
+   * `.notted-page-paper`), so each one clears WCAG 2.2 AA normal-text contrast
+   * against that background — the measured ratio is recorded beside it. Colour
+   * is never the only signal anyway: the label carries the collaborator's name.
+   *
+   * There is no dark block in this stylesheet, so there is nothing to mirror;
+   * the paper is white in every theme.
+   */
+  :root {
+    --notted-presence-0: #b91c1c; /* 6.47:1 on #ffffff */
+    --notted-presence-1: #a16207; /* 4.92:1 on #ffffff */
+    --notted-presence-2: #15803d; /* 5.02:1 on #ffffff */
+    --notted-presence-3: #0f766e; /* 5.47:1 on #ffffff */
+    --notted-presence-4: #1d4ed8; /* 6.70:1 on #ffffff */
+    --notted-presence-5: #6d28d9; /* 7.10:1 on #ffffff */
+    --notted-presence-6: #be185d; /* 6.04:1 on #ffffff */
+    --notted-presence-7: #475569; /* 7.58:1 on #ffffff */
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -85,6 +114,114 @@
 }
 
 @layer components {
+  /*
+   * Collaborator carets (Part 59), paired with the `--notted-presence-*` palette
+   * declared in `@layer base` directly above.
+   *
+   * The elements are built by `createCursorRenderer` in
+   * `extensions/note-editor-extensions.ts`, which writes only the colour inline
+   * (validated against the palette there) and leaves every dimension here. Class
+   * rules cannot live in `@layer base` beside the palette without losing to
+   * component-layer utilities, so they sit at the top of this layer instead.
+   *
+   * The label is white text on a palette colour, and every palette colour is
+   * measured at >= 4.5:1 against #ffffff — contrast is symmetric, so the chip
+   * clears WCAG 2.2 AA in both directions. The name is the identity; the colour
+   * only groups the caret with its chip.
+   */
+  .notted-presence-caret {
+    position: relative;
+    margin-left: -1px;
+    margin-right: -1px;
+    border-left-width: 2px;
+    border-left-style: solid;
+    pointer-events: none;
+    word-break: normal;
+  }
+
+  .notted-presence-caret-label {
+    position: absolute;
+    top: -1.45em;
+    left: -2px;
+    z-index: 10;
+    white-space: nowrap;
+    border-radius: 0.25rem;
+    padding: 0 0.25rem;
+    font-size: 0.6875rem;
+    line-height: 1.45;
+    font-weight: 600;
+    color: #fff;
+    user-select: none;
+  }
+
+  /*
+   * A remote peer's selection: the same hue as their caret, at low alpha so the
+   * text under it stays readable. The colour arrives as a custom property that
+   * the renderer has already validated against the palette, so nothing a peer
+   * writes into their awareness state can reach this declaration.
+   */
+  .notted-presence-selection {
+    background-color: color-mix(in srgb, var(--notted-presence-selection) 28%, transparent);
+  }
+
+  /*
+   * Nothing above declares an animation or a transition, so this only guarantees
+   * that none is ever inherited: a caret that blinks or slides is motion the
+   * reader did not ask for, next to the text they are trying to read.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    .notted-presence-caret,
+    .notted-presence-caret-label {
+      animation: none;
+      transition: none;
+    }
+  }
+
+  /*
+   * Inline comment highlights (Part 60).
+   *
+   * Painted by the decoration plugin in
+   * `extensions/comment-decorations.ts`, which owns the class names — this block
+   * and that module are the single pair that has to agree.
+   *
+   * The tint is `--color-warning` over the paper, which is #ffffff in every
+   * theme (see the presence palette above), so there is no dark variant to
+   * mirror. At 18%/38% the resulting backgrounds are #eee3d2 and #dbc3a1, and
+   * body text (#0f172a) clears WCAG 2.2 AA normal-text contrast on both by a
+   * wide margin. The underline is a second, non-colour signal, and it is what
+   * keeps the highlight readable while the range is also inside a browser text
+   * selection — the selection paints its own background over the tint but not
+   * over the border.
+   *
+   * No transition and no animation is declared, so there is nothing for
+   * `prefers-reduced-motion` to suppress: text that pulses under the cursor is
+   * motion beside the words the reader is trying to read.
+   */
+  .notted-comment-highlight {
+    background-color: color-mix(in srgb, var(--color-warning) 18%, transparent);
+    border-bottom: 2px solid color-mix(in srgb, var(--color-warning) 70%, transparent);
+    cursor: pointer;
+  }
+
+  .notted-comment-highlight-active {
+    background-color: color-mix(in srgb, var(--color-warning) 38%, transparent);
+    border-bottom-color: var(--color-warning);
+  }
+
+  /*
+   * A comment is live-session chrome. Printing from the browser still has this
+   * stylesheet loaded, so the tint is dropped there; the standalone export path
+   * (`print.css` in Puppeteer) never sees these classes at all, because a
+   * decoration is view state and is not part of the document's HTML.
+   */
+  @media print {
+    .notted-comment-highlight,
+    .notted-comment-highlight-active {
+      background-color: transparent;
+      border-bottom: none;
+    }
+  }
+
   /*
    * Note editor content styles (Part 34).
    *

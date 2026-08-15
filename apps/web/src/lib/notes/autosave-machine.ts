@@ -116,6 +116,18 @@ export type AutosaveEvent =
    */
   | { readonly type: "document-baseline"; readonly document: NoteDocument }
   | { readonly type: "document-rejected"; readonly rejected: boolean }
+  /**
+   * A version the server assigned to this note through a path that is not this
+   * machine's own save — Part 58's collaborative projection writes
+   * `notes.content` and reports the version it stored.
+   *
+   * Adopted only while nothing is queued and nothing is in flight. With local
+   * work outstanding, `expectedVersion` is a precondition this machine already
+   * committed to, and moving it would turn the compare-and-set into a blind
+   * overwrite of whatever the projection just wrote. The contended case is
+   * already answered by `version-conflict`, which is never retried.
+   */
+  | { readonly type: "external-version"; readonly version: number }
   | { readonly type: "page-size-changed"; readonly pageSize: PageSize }
   | { readonly type: "debounce-elapsed" }
   | { readonly type: "retry-elapsed" }
@@ -455,6 +467,14 @@ export function autosaveReducer(state: AutosaveState, event: AutosaveEvent): Aut
 
     case "document-rejected":
       return { state: { ...state, documentRejected: event.rejected }, effects: [] };
+
+    case "external-version":
+      // Never a trigger for anything: no request, no timer, no status change.
+      // It only keeps the single version cell current while this machine is
+      // genuinely idle, so the next save's precondition is the one the server
+      // actually holds instead of a stale conflict waiting to happen.
+      if (hasPendingWork(state) || state.inFlight !== null) return { state, effects: [] };
+      return { state: { ...state, version: event.version }, effects: [] };
 
     case "debounce-elapsed":
     case "retry-elapsed":

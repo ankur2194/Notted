@@ -4,13 +4,15 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import { notifications } from "../database/schema";
-import { TenantContextService, whereWorkspace } from "../tenant";
+import { assertActiveWorkspace, TenantContextService, whereWorkspace } from "../tenant";
 
 import type {
+  NotificationKind,
   NotificationPage,
   NotificationReadResult,
   NotificationsMarkAllResult,
   NotificationSummary,
+  NotificationTargetType,
 } from "@notted/shared-types";
 
 type NotificationRow = typeof notifications.$inferSelect;
@@ -21,6 +23,41 @@ export class NotificationService {
     private readonly database: DatabaseService,
     private readonly tenantContext: TenantContextService,
   ) {}
+
+  /**
+   * Part 60 — the single write path into `notifications`. Insert only: a
+   * notification is an immutable record of something that already happened, so
+   * there is no update or upsert branch here (read-state changes go through
+   * `setReadState`/`markAllRead`). `workspaceId` is explicit and proved against
+   * the active tenant context before any SQL.
+   */
+  async emit(input: {
+    readonly workspaceId: string;
+    readonly recipientUserId: string;
+    readonly actorUserId: string | null;
+    readonly kind: NotificationKind;
+    readonly targetType: NotificationTargetType | null;
+    readonly targetId: string | null;
+    readonly summary: string;
+    readonly targetLabel: string | null;
+  }): Promise<NotificationSummary> {
+    assertActiveWorkspace(input.workspaceId, this.tenantContext, "notification.emit");
+    const [created] = await this.database.db
+      .insert(notifications)
+      .values({
+        workspaceId: input.workspaceId,
+        recipientUserId: input.recipientUserId,
+        actorUserId: input.actorUserId,
+        kind: input.kind,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        summary: input.summary,
+        targetLabel: input.targetLabel,
+      })
+      .returning();
+    if (created === undefined) throw new Error("Notification insert returned no row");
+    return this.toSummary(created);
+  }
 
   async list(input: {
     readonly recipientUserId: string;

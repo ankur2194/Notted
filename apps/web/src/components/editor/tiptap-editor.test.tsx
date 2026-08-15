@@ -3,9 +3,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Awareness } from "y-protocols/awareness";
+import * as Y from "yjs";
 
 import { TiptapEditor } from "./TiptapEditor";
 
+import type { NoteCollaborationBinding } from "@/lib/collaboration/note-collaboration-provider";
 import type { NoteDocument } from "@notted/shared-validators";
 import type { Editor } from "@tiptap/core";
 
@@ -230,5 +233,122 @@ describe("TiptapEditor document contract handling", () => {
     const textbox = screen.getByRole("textbox", { name: "Note content: Quarterly notes" });
     expect(textbox).toHaveAttribute("aria-multiline", "true");
     expect(textbox).toHaveAttribute("contenteditable", "true");
+  });
+});
+
+/** A real Y.Doc and awareness, so the actual Yjs plugins are exercised. */
+function collaborationBinding(): NoteCollaborationBinding {
+  const document = new Y.Doc();
+  return {
+    document,
+    awareness: new Awareness(document),
+    user: { name: "Ada Lovelace", color: "#2563eb" },
+  };
+}
+
+describe("TiptapEditor collaborative mode", () => {
+  it("never seeds the stored document into the shared type", async () => {
+    // Passing `content` alongside `Collaboration` would append the note into
+    // the Y.Doc a second time for every peer that opened it.
+    const { editor } = await renderEditor({ collaboration: collaborationBinding() });
+    expect(editor.getText()).toBe("");
+  });
+
+  it("does not replace the content when a newer note document arrives", async () => {
+    const binding = collaborationBinding();
+    const harness = await renderEditor({ collaboration: binding });
+
+    harness.rerender(
+      <TiptapEditor
+        noteId={NOTE_ID}
+        initialDocument={paragraphDocument("changed on the server")}
+        editable
+        collaboration={binding}
+      />,
+    );
+
+    // `setContent` would broadcast a delete-and-reinsert of the whole note to
+    // every peer. Reconciliation belongs to Yjs here.
+    expect(harness.editor.getText()).not.toContain("changed on the server");
+    expect(harness.editor.getText()).toBe("");
+  });
+
+  it("replaces the content in solo mode, exactly as before", async () => {
+    const harness = await renderEditor({ initialDocument: HELLO_DOCUMENT });
+
+    harness.rerender(
+      <TiptapEditor
+        noteId={NOTE_ID}
+        initialDocument={paragraphDocument("changed on the server")}
+        editable
+      />,
+    );
+
+    await waitFor(() => expect(harness.editor.getText()).toContain("changed on the server"));
+  });
+
+  it("drives neither autosave nor the contract check from a transaction", async () => {
+    const changes: NoteDocument[] = [];
+    const rejections: boolean[] = [];
+    const { editor } = await renderEditor({
+      collaboration: collaborationBinding(),
+      onDocumentChange: (document) => changes.push(document),
+      onDocumentRejected: (rejected) => rejections.push(rejected),
+    });
+
+    editor.commands.setContent(paragraphDocument("seeded by a peer"), true);
+    editor.commands.insertContent(" and typed here");
+    await waitFor(() => expect(editor.getText()).toContain("and typed here"));
+
+    // A remote transaction is indistinguishable from a local one here, so
+    // re-running the contract check would toggle `outputRejected` for content
+    // this writer never typed. The guard moves server-side to the projection.
+    expect(changes).toEqual([]);
+    expect(rejections).toEqual([]);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("hands autosave the pen back when realtime stops taking the session's writes", async () => {
+    const changes: NoteDocument[] = [];
+    const binding = collaborationBinding();
+    const { editor, rerender } = await renderEditor({
+      collaboration: binding,
+      collaborationWriteFailed: false,
+      onDocumentChange: (document) => changes.push(document),
+    });
+
+    editor.commands.insertContent("before the failure");
+    await waitFor(() => expect(editor.getText()).toContain("before the failure"));
+    expect(changes).toEqual([]);
+
+    // No remount: this instance's content lives in the shared `Y.Doc`, and
+    // reloading the note as it was when the page opened would lose it.
+    rerender(
+      <TiptapEditor
+        noteId={NOTE_ID}
+        initialDocument={HELLO_DOCUMENT}
+        editable
+        collaboration={binding}
+        collaborationWriteFailed
+        onDocumentChange={(document) => changes.push(document)}
+      />,
+    );
+
+    editor.commands.insertContent(" and after");
+    await waitFor(() => expect(changes.length).toBeGreaterThan(0));
+    expect(JSON.stringify(changes[changes.length - 1])).toContain("before the failure and after");
+  });
+
+  it("still drives autosave from a solo transaction", async () => {
+    const changes: NoteDocument[] = [];
+    const rejections: boolean[] = [];
+    const { editor } = await renderEditor({
+      onDocumentChange: (document) => changes.push(document),
+      onDocumentRejected: (rejected) => rejections.push(rejected),
+    });
+
+    editor.commands.insertContent(" and typed here");
+    await waitFor(() => expect(changes.length).toBeGreaterThan(0));
+    expect(rejections.every((rejected) => rejected === false)).toBe(true);
   });
 });

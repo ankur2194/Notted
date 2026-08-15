@@ -22,6 +22,14 @@ export const noteQueryKeys = Object.freeze({
     ["notes", workspaceId, noteId, "versions"] as const,
   version: (workspaceId: string, noteId: string, versionId: string) =>
     ["notes", workspaceId, noteId, "versions", versionId] as const,
+  /**
+   * Inline comment threads for one note (Part 60). Nested under the note for the
+   * same reason attachments and versions are: the listing endpoint is
+   * note-scoped, and a `realtime:comment:changed` frame names exactly one note,
+   * so invalidation must not reach any other.
+   */
+  comments: (workspaceId: string, noteId: string) =>
+    ["notes", workspaceId, noteId, "comments"] as const,
 });
 
 /**

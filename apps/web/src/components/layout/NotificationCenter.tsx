@@ -41,6 +41,35 @@ export function NotificationCenter({
     setPage(1);
   }, [initialUnreadCount, workspaceId]);
 
+  /*
+   * Refresh the badge when the tab comes back to the foreground.
+   *
+   * Only the COUNT is adopted: `NotificationService.list` computes `unreadCount`
+   * workspace-scoped on page 1, so one request that is already needed elsewhere
+   * doubles as the count read. The list itself is deliberately left alone — a
+   * background tab that reordered the panel under the reader's cursor would be
+   * worse than a slightly old list.
+   *
+   * ponytail: no realtime push to the bell. Ceiling: up to one
+   * visibility-change of staleness, so a notification raised while this tab is
+   * hidden is not counted until the reader returns. Upgrade path: a count-only
+   * event on the existing workspace room (~15 lines) — the room infrastructure
+   * from Part 58 is already there, this just does not justify a new frame yet.
+   */
+  useEffect(() => {
+    if (workspaceId === null) return;
+    const handleVisibility = (): void => {
+      if (document.visibilityState !== "visible") return;
+      void loadNotifications(workspaceId, 1).then((result) => {
+        if (result.ok) setUnreadCount(result.data.unreadCount);
+      });
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [workspaceId]);
+
   async function load(nextPage = 1): Promise<void> {
     if (workspaceId === null) return;
     setStatus("loading");
@@ -77,7 +106,9 @@ export function NotificationCenter({
   }
 
   async function markAll(): Promise<void> {
-    if (workspaceId === null) return;
+    // The button is `aria-disabled`, never natively `disabled` — see the comment
+    // on it below — so this is where "nothing to mark" is actually enforced.
+    if (workspaceId === null || unreadCount === 0 || status === "loading") return;
     const result = await markAllNotificationsRead(workspaceId);
     if (!result.ok) {
       setAnnouncement("Could not mark notifications read. Try again.");
@@ -96,7 +127,13 @@ export function NotificationCenter({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (next && items.length === 0) void load();
+        if (!next) return;
+        // Every open re-reads page 1. The previous "only when empty" condition
+        // meant a panel opened twice in one session showed the list as it was
+        // the first time, including a stale unread count.
+        setItems([]);
+        setPage(1);
+        void load(1);
       }}
     >
       <DialogTrigger asChild>
@@ -104,6 +141,14 @@ export function NotificationCenter({
           variant="ghost"
           size="icon"
           aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
+          /*
+           * The one control here that IS natively disabled, and deliberately.
+           * The rule it would otherwise break is about focus: a control that
+           * becomes disabled under the reader's own press drops focus onto
+           * `<body>`. This one cannot — it mutates nothing, and "no workspace
+           * selected" is a property of the page the reader arrived on, decided
+           * before this button ever renders and never toggled by pressing it.
+           */
           disabled={workspaceId === null}
           className="relative min-h-11 min-w-11"
         >
@@ -122,11 +167,18 @@ export function NotificationCenter({
         <DialogHeader className="border-b p-5 pr-12 text-left">
           <div className="flex items-center justify-between gap-3">
             <DialogTitle>Notifications</DialogTitle>
+            {/*
+             * `aria-disabled`, not `disabled`: pressing this is what empties the
+             * unread count, and a natively disabled control leaves the tab order
+             * the instant it is disabled — so the reader's own keypress would
+             * drop focus onto `<body>` inside an open dialog. It stays focusable
+             * and announced as unavailable; `markAll` refuses the action.
+             */}
             <Button
               variant="ghost"
               size="sm"
               onClick={() => void markAll()}
-              disabled={unreadCount === 0 || status === "loading"}
+              aria-disabled={unreadCount === 0 || status === "loading" ? true : undefined}
             >
               <CheckCheck aria-hidden="true" /> Mark all read
             </Button>
@@ -200,8 +252,14 @@ export function NotificationCenter({
             <Button
               variant="outline"
               className="mt-3 w-full"
-              onClick={() => void load(page + 1)}
-              disabled={status === "loading"}
+              // Same rule as "Mark all read": pressing it is what makes it
+              // unavailable, so it must not vanish from the tab order under the
+              // press. The guard here is what stops a second page request.
+              onClick={() => {
+                if (status === "loading") return;
+                void load(page + 1);
+              }}
+              aria-disabled={status === "loading" ? true : undefined}
             >
               {status === "loading" ? "Loading…" : "Load more"}
             </Button>

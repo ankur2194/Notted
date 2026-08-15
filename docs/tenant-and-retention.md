@@ -82,8 +82,9 @@ await db.insert(notes).values({
 
 **Tables without a direct `workspace_id`** (junctions and polymorphic children:
 `note_tags`, `task_tags`, `comments`, `note_versions`, `note_embeddings`,
-`project_access`, `note_shares`, `webhook_deliveries`) are scoped **by their
-parent table** via a join:
+`note_collaboration_states`, `note_collaboration_updates`, `project_access`,
+`note_shares`, `webhook_deliveries`) are scoped **by their parent table** via a
+join:
 
 ```ts
 // Comments reach workspace transitively via note_id -> notes.workspace_id.
@@ -146,8 +147,9 @@ Every table in the schema is one of:
   `project_access` (via `project_id` → `projects`), `note_shares` (via
   `note_id` → `notes`), `note_tags` (via `note_id`/`tag_id`), `comments` (via
   `note_id`), `note_versions` (via `note_id`), `note_embeddings` (via
-  `note_id`), `task_tags` (via `task_id`/`tag_id`), `webhook_deliveries` (via
-  `webhook_id`).
+  `note_id`), `note_collaboration_states` (via `note_id`),
+  `note_collaboration_updates` (via `note_id`), `task_tags` (via
+  `task_id`/`tag_id`), `webhook_deliveries` (via `webhook_id`).
 - **Global (NOT workspace-scoped, intentionally):** `users` (a user can belong
   to many workspaces), `account`, `session`, `verification`, `two_factor`,
   `passkey` (Better Auth-owned identity/session tables — ADR 0003), and

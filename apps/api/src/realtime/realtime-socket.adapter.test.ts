@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
+import { parseRealtimeConfig } from "../config/realtime.config";
+
 import { RealtimeSocketAdapter } from "./realtime-socket.adapter";
+
+/**
+ * The real parser rather than a hand-written literal. Origin admission does not
+ * read a single one of these values, so re-listing them here only bought a
+ * second copy of `RealtimeConfig` that stopped compiling every time Part 58/59
+ * added a field.
+ */
+const config = parseRealtimeConfig({});
 
 describe("RealtimeSocketAdapter origin admission", () => {
   it.each([undefined, "null", "not a url", "http://app.test:4444"])(
@@ -9,18 +19,7 @@ describe("RealtimeSocketAdapter origin admission", () => {
       const adapter = new RealtimeSocketAdapter(
         {} as never,
         { realtimeEnabled: true } as never,
-        {
-          path: "/socket.io",
-          pingIntervalMs: 30_000,
-          pingTimeoutMs: 70_000,
-          revalidationIntervalMs: 25_000,
-          maxHttpBufferSize: 262_144,
-          maxRoomsPerSocket: 32,
-          preAuthAttemptsPerMinute: 30,
-          authenticatedAttemptsPerMinute: 120,
-          joinsPerMinute: 60,
-          maxConcurrentSockets: 8,
-        },
+        config,
         { trustedOrigins: ["http://app.test"] } as never,
         { trustProxyHops: 0 } as never,
         { allow: async () => true } as never,

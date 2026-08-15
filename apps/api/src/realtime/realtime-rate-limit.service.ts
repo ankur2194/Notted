@@ -12,7 +12,14 @@ export class RealtimeRateLimitService {
     @Inject(AUTH_CONFIG) private readonly authConfig: AuthConfig,
   ) {}
 
-  async allow(tier: "ip" | "principal" | "join", value: string, limit: number): Promise<boolean> {
+  async allow(
+    // `sync` is the collaborative handshake. It reuses the JOIN ceiling but not
+    // the join BUCKET: one client operation issues both, so sharing the counter
+    // would halve the budget a legitimate reconnect gets.
+    tier: "ip" | "principal" | "join" | "sync" | "update" | "awareness" | "presence",
+    value: string,
+    limit: number,
+  ): Promise<boolean> {
     const digest = this.digest(value);
     return (
       (await this.redis.incrementWithTtl(`realtime:v1:limit:${tier}:${digest}`, 60_000)) <= limit

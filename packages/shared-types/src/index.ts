@@ -49,6 +49,18 @@ export type {
   AttachmentVariantProjection,
   AttachmentVariantSet,
 } from "./attachment";
+export { COMMENT_API_PATHS } from "./comment";
+export type {
+  CommentAnchor,
+  CommentAnchorScheme,
+  CommentAuthor,
+  CommentChangedEvent,
+  CommentDeleteResult,
+  CommentMutationResult,
+  CommentPage,
+  CommentSummary,
+  CommentThread,
+} from "./comment";
 export type {
   AttachmentId,
   FolderId,

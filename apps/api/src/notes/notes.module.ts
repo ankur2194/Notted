@@ -2,6 +2,8 @@ import { Module } from "@nestjs/common";
 
 import { AuthModule } from "../auth/auth.module";
 import { AuthorizationModule } from "../authorization/authorization.module";
+import { NotificationModule } from "../notifications/notification.module";
+import { RealtimeModule } from "../realtime/realtime.module";
 import { SearchModule } from "../search/search.module";
 
 import { NoteSharesController } from "./note-shares.controller";
@@ -14,7 +16,15 @@ import { NotesTrpcRouter } from "./notes.trpc";
 @Module({
   // SearchModule supplies the NoteSearchIndexProducer used to emit
   // `note.search.sync` intents alongside note mutations (Part 51.3).
-  imports: [AuthModule, AuthorizationModule, SearchModule],
+  // RealtimeModule supplies NoteCollaborationService so `restoreVersion` can
+  // reconcile the persisted Yjs authority with the restored projection inside
+  // its own transaction (Part 58). The arrow is one-way — RealtimeModule never
+  // imports NotesModule — so no `forwardRef` is involved.
+  // NotificationModule supplies the MentionNotificationProducer used to emit
+  // `notification.mention` intents inside the note-update transaction
+  // (Part 60). The arrow is one-way — NotificationModule never imports
+  // NotesModule — so no `forwardRef` is involved.
+  imports: [AuthModule, AuthorizationModule, NotificationModule, RealtimeModule, SearchModule],
   controllers: [NotesController, FoldersController, NoteSharesController],
   providers: [NotesService, NoteSharesService, NoteVersionsService, NotesTrpcRouter],
   exports: [NotesService, NoteSharesService, NoteVersionsService, NotesTrpcRouter],

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -173,5 +173,36 @@ describe("DashboardShell", () => {
     expect(setNotificationRead).toHaveBeenCalledWith(workspaceId, notification.id, true);
     await user.click(within(dialog).getByRole("button", { name: "Mark all read" }));
     expect(markAllNotificationsRead).toHaveBeenCalledWith(workspaceId);
+  });
+
+  /**
+   * The Part 34 rule inside a dialog, where breaking it is worst: pressing "Mark
+   * all read" is itself what makes the control unavailable, so a native
+   * `disabled` would remove it from the tab order under the reader's own
+   * keypress and drop focus onto `<body>` — inside a modal, with nothing left
+   * for `Escape` to return to.
+   */
+  it("keeps 'Mark all read' focusable and inert when there is nothing to mark", async () => {
+    vi.mocked(loadNotifications).mockResolvedValue({
+      ok: true,
+      data: { items: [], page: 1, limit: 20, hasMore: false, unreadCount: 0 },
+    });
+    const user = userEvent.setup();
+    render(
+      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+        <p>Content</p>
+      </DashboardShell>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Notifications, 1 unread/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Notifications" });
+    const markAll = within(dialog).getByRole("button", { name: "Mark all read" });
+
+    await waitFor(() => expect(markAll).toHaveAttribute("aria-disabled", "true"));
+    expect(markAll).not.toHaveAttribute("disabled");
+    markAll.focus();
+    await user.click(markAll);
+    expect(markAll).toHaveFocus();
+    expect(markAllNotificationsRead).not.toHaveBeenCalled();
   });
 });

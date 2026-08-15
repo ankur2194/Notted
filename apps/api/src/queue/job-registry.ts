@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import {
   defineOutboxJob,
   identifierPayloadSchema,
@@ -114,6 +116,32 @@ export const NOTE_EMBEDDING_GENERATE_JOB_DEFINITION = defineOutboxJob({
   authority: "system",
 });
 
+/**
+ * Part 60 — mention notification fan-out. ONE intent per recipient, so a single
+ * note update that adds three mentions commits three independent outbox rows.
+ * The payload does NOT fit `identifierPayloadSchema`: it carries a `recipientId`
+ * that is neither the actor nor a resource id, so the shape is declared inline
+ * here rather than widening the shared factory for one job type.
+ */
+export const MENTION_NOTIFY_SOURCE_QUEUE_NAME = "mention-notify" as const;
+
+export const MENTION_NOTIFY_JOB_DEFINITION = defineOutboxJob({
+  jobType: DOMAIN_JOB_TYPES.mentionNotify,
+  payloadVersion: 1,
+  payloadSchema: z
+    .object({
+      action: z.literal(DOMAIN_JOB_TYPES.mentionNotify),
+      intentId: z.string().uuid(),
+      workspaceId: z.string().uuid(),
+      noteId: z.string().uuid(),
+      recipientId: z.string().uuid(),
+      actorId: z.string().uuid(),
+    })
+    .strict(),
+  route: route(PHYSICAL_QUEUE_NAMES.default, MENTION_NOTIFY_SOURCE_QUEUE_NAME),
+  authority: "actor",
+});
+
 export const JOB_IDEMPOTENCY_CLEANUP_SOURCE_QUEUE_NAME = "queue-maintenance" as const;
 
 export const JOB_IDEMPOTENCY_CLEANUP_DEFINITION = defineOutboxJob({
@@ -165,6 +193,7 @@ const registryEntries = [
   JOB_IDEMPOTENCY_CLEANUP_DEFINITION,
   NOTE_SEARCH_SYNC_JOB_DEFINITION,
   NOTE_EMBEDDING_GENERATE_JOB_DEFINITION,
+  MENTION_NOTIFY_JOB_DEFINITION,
 ] as const satisfies readonly AnyOutboxJobDefinition[];
 
 export const JOB_REGISTRY: ReadonlyMap<DomainJobType, AnyOutboxJobDefinition> = new Map(

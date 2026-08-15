@@ -61,6 +61,12 @@ export interface NoteAutosaveHandle {
   readonly onDocumentChange: (document: NoteDocument) => void;
   readonly onDocumentBaseline: (document: NoteDocument) => void;
   readonly onDocumentRejected: (rejected: boolean) => void;
+  /**
+   * A version the server assigned outside this machine (Part 58's collaborative
+   * projection). Adopted only while nothing local is outstanding; see the
+   * `external-version` event in `autosave-machine.ts`.
+   */
+  readonly applyExternalVersion: (version: number) => void;
   readonly requestPageSize: (pageSize: PageSize) => void;
   readonly retry: () => void;
   readonly reload: () => void;
@@ -271,6 +277,10 @@ export function useNoteAutosave({
     dispatchRef.current({ type: "document-rejected", rejected });
   }, []);
 
+  const applyExternalVersion = useCallback((version: number): void => {
+    dispatchRef.current({ type: "external-version", version });
+  }, []);
+
   const requestPageSize = useCallback(
     (pageSize: PageSize): void => {
       if (!canUpdate) return;
@@ -299,6 +309,7 @@ export function useNoteAutosave({
     onDocumentChange,
     onDocumentBaseline,
     onDocumentRejected,
+    applyExternalVersion,
     requestPageSize,
     retry,
     reload,

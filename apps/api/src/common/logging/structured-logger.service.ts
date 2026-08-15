@@ -99,6 +99,19 @@ export class StructuredLogger implements LoggerService {
     this.logger.info(metadata, message);
   }
 
+  /**
+   * The warn-level sibling of `info`/`failure`.
+   *
+   * It exists because `warn` above implements Nest's `LoggerService`, whose
+   * signature is (message, ...optional): calling that with a metadata object
+   * first silently discarded every field and logged the literal string
+   * "Structured log event". Structured callers get their own name so the two
+   * shapes can never be confused again.
+   */
+  warning(metadata: LogMetadata, message: string): void {
+    this.logger.warn(metadata, message);
+  }
+
   failure(metadata: LogMetadata, message: string): void {
     this.logger.error(metadata, message);
   }

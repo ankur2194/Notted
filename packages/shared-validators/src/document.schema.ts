@@ -266,6 +266,40 @@ function mentionPlainText(node: PlainRecord): string {
   return cleaned.length === 0 ? "" : `${NOTE_DOCUMENT_MENTION_PREFIX}${cleaned}`;
 }
 
+/**
+ * Part 60 — every distinct, well-formed mention user id in a document, in
+ * first-seen order.
+ *
+ * ONE walker, both sides. `MentionNotificationProducer` diffs the previous and
+ * next document with it to derive the mentions a save ADDED; the editor uses the
+ * same function so the two can never disagree about what counts as a mention.
+ *
+ * A malformed mention (no stable UUID id, or an unusable label) is SKIPPED for
+ * the same reason `mentionPlainText` degrades it to text: it cannot address a
+ * user, so it must never become a notification recipient. Filtering here rather
+ * than at the producer keeps the "what is a mention" rule in the one file that
+ * already owns the node contract.
+ */
+export function collectNoteDocumentMentionIds(document: unknown): readonly string[] {
+  const ids = new Set<string>();
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    if (!isRecord(node)) return;
+    if (node.type === "mention") {
+      const attrs = noteDocumentMentionAttrs(node.attrs);
+      if (attrs !== null) ids.add(attrs.id);
+      // A mention is an atom: no content to descend into.
+      return;
+    }
+    visit(node.content);
+  };
+  visit(document);
+  return Object.freeze([...ids]);
+}
+
 /** How an image sits in the content column (Part 43). */
 export const NOTE_DOCUMENT_IMAGE_ALIGNMENTS = Object.freeze(["left", "center", "right"] as const);
 export type NoteDocumentImageAlign = (typeof NOTE_DOCUMENT_IMAGE_ALIGNMENTS)[number];

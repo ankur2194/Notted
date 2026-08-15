@@ -4,3 +4,6 @@ export * from "./realtime.module";
 export * from "./realtime-redis-adapter.service";
 export * from "./realtime-room.service";
 export * from "./realtime-socket.adapter";
+export * from "./yjs/note-collaboration.projection";
+export * from "./yjs/note-collaboration.repository";
+export * from "./yjs/note-collaboration.service";

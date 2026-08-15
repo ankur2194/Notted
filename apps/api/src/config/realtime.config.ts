@@ -15,6 +15,20 @@ export interface RealtimeConfig {
   readonly authenticatedAttemptsPerMinute: number;
   readonly joinsPerMinute: number;
   readonly maxConcurrentSockets: number;
+  /** Part 58 — accepted Yjs updates per minute per principal. */
+  readonly updatesPerMinute: number;
+  /** Part 58 — relayed awareness frames per minute per principal. */
+  readonly awarenessPerMinute: number;
+  /** Part 58 — ceiling on one persisted Yjs update frame. */
+  readonly maxUpdateBytes: number;
+  /** Part 58 — ceiling on one relayed (never persisted) awareness frame. */
+  readonly maxAwarenessBytes: number;
+  /** Part 58 — ceiling on the durable Yjs state of a single note. */
+  readonly maxCollaborationStateBytes: number;
+  /** Part 59 — viewers one note room will register presence for; the rest read without a roster row. */
+  readonly maxPresencePerRoom: number;
+  /** Part 59 — presence announces per minute per principal. */
+  readonly presenceAnnouncesPerMinute: number;
 }
 
 export function parseRealtimeConfig(environment: Environment): RealtimeConfig {
@@ -60,18 +74,44 @@ export function parseRealtimeConfig(environment: Environment): RealtimeConfig {
         "REALTIME_REVALIDATION_INTERVAL_MS must not exceed REALTIME_PING_INTERVAL_MS",
       );
     }
+    const maxHttpBufferSize = readInteger(
+      environment,
+      "REALTIME_MAX_HTTP_BUFFER_BYTES",
+      262_144,
+      1_024,
+      1_048_576,
+    );
+    const maxUpdateBytes = readInteger(
+      environment,
+      "REALTIME_MAX_UPDATE_BYTES",
+      131_072,
+      1_024,
+      1_048_576,
+    );
+    const maxAwarenessBytes = readInteger(
+      environment,
+      "REALTIME_MAX_AWARENESS_BYTES",
+      8_192,
+      256,
+      262_144,
+    );
+    // A frame the collaboration contract accepts but the transport drops is an
+    // update the client believes was persisted and the server never saw. Reject
+    // that configuration at boot rather than at 3am.
+    if (maxUpdateBytes >= maxHttpBufferSize) {
+      throw new Error("REALTIME_MAX_UPDATE_BYTES must be below REALTIME_MAX_HTTP_BUFFER_BYTES");
+    }
+    if (maxAwarenessBytes >= maxHttpBufferSize) {
+      throw new Error("REALTIME_MAX_AWARENESS_BYTES must be below REALTIME_MAX_HTTP_BUFFER_BYTES");
+    }
     return Object.freeze({
       path,
       pingIntervalMs,
       pingTimeoutMs,
       revalidationIntervalMs,
-      maxHttpBufferSize: readInteger(
-        environment,
-        "REALTIME_MAX_HTTP_BUFFER_BYTES",
-        262_144,
-        1_024,
-        1_048_576,
-      ),
+      maxHttpBufferSize,
+      maxUpdateBytes,
+      maxAwarenessBytes,
       maxRoomsPerSocket: readInteger(environment, "REALTIME_MAX_ROOMS_PER_SOCKET", 32, 1, 256),
       preAuthAttemptsPerMinute: readInteger(
         environment,
@@ -89,6 +129,29 @@ export function parseRealtimeConfig(environment: Environment): RealtimeConfig {
       ),
       joinsPerMinute: readInteger(environment, "REALTIME_JOINS_PER_MINUTE", 60, 1, 10_000),
       maxConcurrentSockets: readInteger(environment, "REALTIME_MAX_CONCURRENT_SOCKETS", 8, 1, 100),
+      updatesPerMinute: readInteger(environment, "REALTIME_UPDATES_PER_MINUTE", 900, 1, 100_000),
+      awarenessPerMinute: readInteger(
+        environment,
+        "REALTIME_AWARENESS_PER_MINUTE",
+        900,
+        1,
+        100_000,
+      ),
+      maxCollaborationStateBytes: readInteger(
+        environment,
+        "COLLABORATION_MAX_STATE_BYTES",
+        4_194_304,
+        65_536,
+        67_108_864,
+      ),
+      maxPresencePerRoom: readInteger(environment, "REALTIME_MAX_PRESENCE_PER_ROOM", 50, 1, 500),
+      presenceAnnouncesPerMinute: readInteger(
+        environment,
+        "REALTIME_PRESENCE_ANNOUNCES_PER_MINUTE",
+        30,
+        1,
+        10_000,
+      ),
     });
   } catch (error: unknown) {
     wrapConfigError("Invalid realtime configuration", error);

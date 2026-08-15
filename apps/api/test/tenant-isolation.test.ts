@@ -43,6 +43,8 @@
 //   │ note_tags                  │ join via notes.workspace_id  │ live: "scopes every major..."           │
 //   │ comments                   │ join via notes.workspace_id  │ live: "scopes every major..."           │
 //   │ note_versions              │ join via notes.workspace_id  │ live: "scopes every major..."           │
+//   │ note_collaboration_states  │ join via notes.workspace_id  │ live: "scopes every major..."           │
+//   │ note_collaboration_updates │ join via notes.workspace_id  │ live: "scopes every major..."           │
 //   │ task_tags                  │ join via tasks.workspace_id  │ live: "scopes every major..."           │
 //   │ note_embeddings            │ join via notes.workspace_id  │ live: "scopes every major..."           │
 //   │ webhook_deliveries         │ join via webhooks.workspace  │ live: "scopes every major..."           │
@@ -75,6 +77,8 @@ import {
   exportJobs,
   folders,
   invitations,
+  noteCollaborationStates,
+  noteCollaborationUpdates,
   noteEmbeddings,
   noteShares,
   noteTags,
@@ -266,6 +270,12 @@ const INDIRECT_TENANT_ENTITIES = [
   "comments→note",
   "noteVersions→note",
   "noteEmbeddings→note",
+  // Part 58. Neither collaboration table carries `workspace_id`, so both owe
+  // the SAME read/insert/update/delete deny proof `comments` owes — the live
+  // Yjs log is note content, and a write guard that only exists on the read
+  // path is not a guard.
+  "noteCollaborationStates→note",
+  "noteCollaborationUpdates→note",
   "taskTags→task",
   "webhookDeliveries→webhook",
 ] as const;
@@ -992,6 +1002,34 @@ describe.skipIf(!HAS_DATABASE_URL)("tenant isolation (live)", () => {
           createdById: tenantB.userId,
         },
       ]);
+      // Part 58: neither collaboration table carries `workspace_id` (they are
+      // polymorphic children of `notes`, exactly like `note_versions`), so the
+      // only thing standing between a note UUID and another tenant's Yjs log is
+      // the join through `notes.workspace_id`.
+      await db.insert(noteCollaborationStates).values([
+        { noteId: noteA.id, projectedNoteVersion: 1 },
+        { noteId: noteB.id, projectedNoteVersion: 1 },
+      ]);
+      await db.insert(noteCollaborationUpdates).values([
+        {
+          noteId: noteA.id,
+          epoch: 1,
+          revision: 1,
+          kind: "snapshot",
+          payload: new Uint8Array([1]),
+          payloadBytes: 1,
+          createdById: tenantA.userId,
+        },
+        {
+          noteId: noteB.id,
+          epoch: 1,
+          revision: 1,
+          kind: "snapshot",
+          payload: new Uint8Array([2]),
+          payloadBytes: 1,
+          createdById: tenantB.userId,
+        },
+      ]);
       await db.insert(taskTags).values([
         { taskId: taskA.id, tagId: tagA.id },
         { taskId: taskB.id, tagId: tagB.id },
@@ -1223,6 +1261,22 @@ describe.skipIf(!HAS_DATABASE_URL)("tenant isolation (live)", () => {
           .where(whereWorkspace(notes, tenantContext));
         expect(versionRows.map((row) => row.title)).toContain(versionATitle);
         expect(versionRows.map((row) => row.title)).not.toContain(versionBTitle);
+
+        const collaborationStateRows = await scopedDb
+          .select({ noteId: noteCollaborationStates.noteId })
+          .from(noteCollaborationStates)
+          .innerJoin(notes, eq(noteCollaborationStates.noteId, notes.id))
+          .where(whereWorkspace(notes, tenantContext));
+        expect(collaborationStateRows.map((row) => row.noteId)).toContain(noteA.id);
+        expect(collaborationStateRows.map((row) => row.noteId)).not.toContain(noteB.id);
+
+        const collaborationUpdateRows = await scopedDb
+          .select({ noteId: noteCollaborationUpdates.noteId })
+          .from(noteCollaborationUpdates)
+          .innerJoin(notes, eq(noteCollaborationUpdates.noteId, notes.id))
+          .where(whereWorkspace(notes, tenantContext));
+        expect(collaborationUpdateRows.map((row) => row.noteId)).toContain(noteA.id);
+        expect(collaborationUpdateRows.map((row) => row.noteId)).not.toContain(noteB.id);
 
         const taskTagRows = await scopedDb
           .select({ taskId: taskTags.taskId })

@@ -75,6 +75,35 @@ export type {
   UpdateAttachmentIntentInput,
 } from "./attachment.schema";
 export {
+  COMMENT_ANCHOR_QUOTE_MAX_LENGTH,
+  COMMENT_ANCHOR_RELATIVE_MAX_LENGTH,
+  COMMENT_ANCHOR_SCHEMA_VERSION,
+  COMMENT_ANCHOR_SCHEME_ABSOLUTE,
+  COMMENT_ANCHOR_SCHEME_YJS,
+  COMMENT_CONTENT_MAX_LENGTH,
+  commentAnchorSchema,
+  commentAnchorSchemeSchema,
+  commentAuthorSchema,
+  commentContentSchema,
+  commentDeleteResultSchema,
+  commentListQuerySchema,
+  commentMutationResultSchema,
+  commentPageSchema,
+  commentResolutionSchema,
+  commentStatusFilterSchema,
+  commentSummarySchema,
+  commentThreadSchema,
+  createCommentSchema,
+  updateCommentSchema,
+} from "./comment.schema";
+export type {
+  CommentAnchorInput,
+  CommentListQueryInput,
+  CommentResolutionInput,
+  CreateCommentInput,
+  UpdateCommentInput,
+} from "./comment.schema";
+export {
   dateRangeQuerySchema,
   explicitBooleanQuerySchema,
   idempotencyKeySchema,
@@ -141,6 +170,7 @@ export {
   type NoteDocumentNodeType,
   type NoteDocumentSafeParseResult,
   NoteDocumentMigrationError,
+  collectNoteDocumentMentionIds,
   countChecklist,
   extractNoteContentPlain,
   migrateNoteDocument,

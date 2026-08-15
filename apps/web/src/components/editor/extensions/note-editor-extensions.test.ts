@@ -7,6 +7,7 @@ import {
 import { getSchema } from "@tiptap/core";
 import { DOMParser as ProseMirrorDOMParser, DOMSerializer } from "@tiptap/pm/model";
 import { describe, expect, it } from "vitest";
+import * as Y from "yjs";
 
 import { isAllowedDocumentLink } from "../document-contract";
 
@@ -17,6 +18,8 @@ import {
   createNoteLowlight,
   isAllowedNoteFontSize,
 } from "./index";
+
+import type { NoteCollaborationBinding } from "@/lib/collaboration/note-collaboration-provider";
 
 const SAFE_LINK_ATTRS = {
   href: "https://example.com/note",
@@ -629,5 +632,47 @@ describe("Part 36 editor schema additions", () => {
     const span = container.querySelector('[data-type="mention"]');
     expect(span?.children).toHaveLength(0);
     expect(span?.textContent).toBe('@<script>alert("x")</script>');
+  });
+});
+
+describe("Part 59 remote caret rendering", () => {
+  /**
+   * The caret renderer, reached the way the editor reaches it. `configure` only
+   * stores options, so no editor, no ProseMirror view and no live socket are
+   * needed to call the function the plugin would call.
+   */
+  function cursorRenderer(): (user: Record<string, unknown>) => HTMLElement {
+    const binding = {
+      document: new Y.Doc(),
+      // The renderer reads exactly one thing off awareness: how many peers are
+      // live, which decides whether the name chip is drawn at all.
+      awareness: { getStates: () => new Map([[1, {}]]) },
+      user: { name: "Ada Lovelace", color: "var(--notted-presence-1)" },
+    } as unknown as NoteCollaborationBinding;
+    const cursor = createNoteEditorExtensions({ collaboration: binding }).find(
+      (extension) => extension.name === "collaborationCursor",
+    );
+    const render = (cursor?.options as { readonly render?: unknown }).render;
+    expect(typeof render).toBe("function");
+    return render as (user: Record<string, unknown>) => HTMLElement;
+  }
+
+  /**
+   * The caret is mounted INSIDE the contenteditable, at the peer's cursor.
+   * Without this attribute a screen reader reads the peer's display name spliced
+   * into the middle of the sentence it is reading out — "the quick brown Bob
+   * Barker fox". The name stays available where it belongs, in the presence
+   * bar's viewer roster.
+   */
+  it("hides a remote caret and its name chip from assistive technology", () => {
+    const caret = cursorRenderer()({ name: "Bob Barker", color: "var(--notted-presence-2)" });
+
+    expect(caret.getAttribute("aria-hidden")).toBe("true");
+    // One attribute on the caret hides the whole subtree, so the chip below is
+    // covered by it — but the chip must still exist and still carry the name,
+    // otherwise this test would pass on a caret that renders nothing.
+    const label = caret.querySelector(".notted-presence-caret-label");
+    expect(label?.textContent).toBe("Bob Barker");
+    expect(caret.hasAttribute("data-notted-print-hide")).toBe(true);
   });
 });

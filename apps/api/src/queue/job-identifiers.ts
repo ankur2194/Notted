@@ -43,6 +43,10 @@ export const DOMAIN_JOB_TYPES = Object.freeze({
   // authoritative PostgreSQL state so out-of-order events converge.
   noteSearchSync: "note.search.sync",
   noteEmbeddingGenerate: "note.embedding.generate",
+  // Part 60 — one intent per (note, mentioned recipient). The producer commits
+  // it inside the note-update transaction; the handler re-checks membership,
+  // re-reads the note title and actor name, and writes ONE notification row.
+  mentionNotify: "notification.mention",
 } as const);
 
 export type DomainJobType = (typeof DOMAIN_JOB_TYPES)[keyof typeof DOMAIN_JOB_TYPES];

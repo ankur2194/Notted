@@ -1044,3 +1044,99 @@ describe("NotesService.move board column", () => {
     expect(scopesToWorkspace(undefined, taskStatuses)).toBe(false);
   });
 });
+
+// --------------------------------------------------------------------------- //
+// Part 58 — restore reconciles the persisted Yjs authority
+// --------------------------------------------------------------------------- //
+
+describe("NotesService.restoreVersion collaborative reconciliation", () => {
+  const restoredDocument = {
+    type: "doc",
+    content: [{ type: "paragraph", content: [{ type: "text", text: "Restored" }] }],
+  } as NoteDocument;
+
+  it("resets the Yjs generation inside the same transaction as the notes write", async () => {
+    const versions = noOpNoteVersionsService();
+    const collaboration = { resetToDocument: vi.fn().mockResolvedValue(undefined) };
+    const order: string[] = [];
+    const tx = {
+      select: () => {
+        const builder = {
+          from: () => builder,
+          where: () => builder,
+          for: () => builder,
+          limit: () => Promise.resolve([{ ...baseNoteRow, isDeleted: false, version: 5 }]),
+        };
+        return builder;
+      },
+      update: () => ({
+        set: (values: Record<string, unknown>) => {
+          order.push("notes.update");
+          const node = {
+            where: () => node,
+            returning: () =>
+              Promise.resolve([
+                { ...baseNoteRow, ...values, content: restoredDocument, version: 6 },
+              ]),
+          };
+          return node;
+        },
+      }),
+    };
+    const service = new NotesService(
+      {
+        transaction: (run: (value: unknown) => Promise<unknown>) => run(tx),
+      } as unknown as DatabaseService,
+      {
+        authorizeUser: vi.fn().mockResolvedValue({ workspaceId, userId: principal.userId }),
+        run: (_operation: unknown, run: () => Promise<unknown>) => run(),
+      } as unknown as AuthorizationEntryService,
+      { get: () => ({ workspaceId }) } as unknown as TenantContextService,
+      noOpSearchIndexProducer(),
+      versions,
+      undefined,
+      collaboration as never,
+    );
+    Object.assign(service, {
+      assertVersion: vi.fn(),
+      readVersionRow: vi
+        .fn()
+        .mockResolvedValue({ version: 2, latestCheckpointVersion: 6, title: "Old" }),
+      migrateHistoricalContent: vi.fn().mockReturnValue(restoredDocument),
+      recordMutation: vi.fn().mockImplementation(() => {
+        order.push("recordMutation");
+        return Promise.resolve();
+      }),
+      toDetail: vi.fn().mockResolvedValue({ id: noteId }),
+      toVersionSummary: vi.fn().mockReturnValue({ version: 2 }),
+      versionSummaryForVersion: vi.fn().mockResolvedValue({ version: 6 }),
+    });
+    collaboration.resetToDocument.mockImplementation(() => {
+      order.push("resetToDocument");
+      return Promise.resolve();
+    });
+
+    await service.restoreVersion({
+      principal,
+      workspaceId,
+      noteId,
+      versionId: "20000000-0000-4000-8000-000000000001",
+      expectedVersion: 5,
+    });
+
+    // One write authority: the restored projection becomes the new Yjs epoch in
+    // the SAME transaction that wrote it, before any side-effect intent.
+    expect(collaboration.resetToDocument).toHaveBeenCalledWith(tx, {
+      noteId,
+      workspaceId,
+      document: restoredDocument,
+      noteVersion: 6,
+      actorId: principal.userId,
+    });
+    expect(order).toEqual(["notes.update", "resetToDocument", "recordMutation"]);
+    expect(versions.recordAcceptedState).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ version: 6 }),
+    );
+  });
+});

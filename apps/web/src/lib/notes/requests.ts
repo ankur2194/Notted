@@ -1,6 +1,12 @@
-import { MEMBERSHIP_API_PATHS, NOTE_API_PATHS } from "@notted/shared-types";
+import { COMMENT_API_PATHS, MEMBERSHIP_API_PATHS, NOTE_API_PATHS } from "@notted/shared-types";
 import {
+  commentDeleteResultSchema,
+  commentListQuerySchema,
+  commentMutationResultSchema,
+  commentPageSchema,
+  commentResolutionSchema,
   copyNoteSchema,
+  createCommentSchema,
   createFolderSchema,
   createNoteSchema,
   deleteFolderSchema,
@@ -28,6 +34,7 @@ import {
   permanentDeleteNoteSchema,
   restoreNoteSchema,
   restoreNoteVersionSchema,
+  updateCommentSchema,
   updateFolderSchema,
   updateNoteSchema,
   upsertNoteShareSchema,
@@ -36,6 +43,9 @@ import {
 
 import type { NoteRequestOptions, NoteRequestResult } from "@/lib/api/request-json";
 import type {
+  CommentDeleteResult,
+  CommentMutationResult,
+  CommentPage,
   FolderCreateResult,
   FolderDeleteResult,
   FolderPage,
@@ -57,13 +67,17 @@ import type {
   WorkspaceMemberPage,
 } from "@notted/shared-types";
 import type {
+  CommentListQueryInput,
+  CommentResolutionInput,
   CopyNoteInput,
+  CreateCommentInput,
   CreateFolderInput,
   CreateNoteInput,
   DeleteNoteInput,
   MoveNoteInput,
   PermanentDeleteNoteInput,
   RestoreNoteInput,
+  UpdateCommentInput,
   UpdateFolderInput,
   UpdateNoteInput,
   RestoreNoteVersionInput,
@@ -451,5 +465,103 @@ export function revokeNoteShare(
     NOTE_API_PATHS.share(workspaceId, noteId, userId),
     { method: "DELETE" },
     (value) => noteShareDeleteResultSchema.safeParse(value),
+  );
+}
+
+/* ------------------------------------------------------------------------- *
+ * Inline comments (Part 60)
+ *
+ * Identical envelope to every request above: `requestJson` supplies
+ * `credentials: "include"`, `cache: "no-store"` and the 8s abort, the browser
+ * supplies `Origin` on every cross-origin mutation (nothing here sets it by
+ * hand — a header a script can write is not a CSRF signal), and every response
+ * is validated against the shared Zod contract before a component sees it.
+ * ------------------------------------------------------------------------- */
+
+export function requestNoteComments(
+  workspaceId: string,
+  noteId: string,
+  input: CommentListQueryInput = {},
+): Promise<NoteRequestResult<CommentPage>> {
+  const parsed = commentListQuerySchema.safeParse(input);
+  if (!validIds(workspaceId, noteId) || !parsed.success)
+    return Promise.resolve({ ok: false, kind: "invalid" });
+  const query = new URLSearchParams({
+    page: String(parsed.data.page),
+    limit: String(parsed.data.limit),
+    status: parsed.data.status,
+  });
+  return requestJson(
+    `${COMMENT_API_PATHS.collection(workspaceId, noteId)}?${query.toString()}`,
+    {},
+    (value) => commentPageSchema.safeParse(value),
+  );
+}
+
+export function createNoteComment(
+  workspaceId: string,
+  noteId: string,
+  input: CreateCommentInput,
+  idempotencyKey: string,
+): Promise<NoteRequestResult<CommentMutationResult>> {
+  const parsed = createCommentSchema.safeParse(input);
+  if (!validIds(workspaceId, noteId) || !parsed.success || idempotencyKey.length < 8) {
+    return Promise.resolve({ ok: false, kind: "invalid" });
+  }
+  return requestJson(
+    COMMENT_API_PATHS.collection(workspaceId, noteId),
+    json("POST", parsed.data, { "Idempotency-Key": idempotencyKey }),
+    (value) => commentMutationResultSchema.safeParse(value),
+  );
+}
+
+export function updateNoteComment(
+  workspaceId: string,
+  noteId: string,
+  commentId: string,
+  input: UpdateCommentInput,
+): Promise<NoteRequestResult<CommentMutationResult>> {
+  const parsed = updateCommentSchema.safeParse(input);
+  if (!validIds(workspaceId, noteId, commentId) || !parsed.success)
+    return Promise.resolve({ ok: false, kind: "invalid" });
+  return requestJson(
+    COMMENT_API_PATHS.detail(workspaceId, noteId, commentId),
+    json("PATCH", parsed.data),
+    (value) => commentMutationResultSchema.safeParse(value),
+  );
+}
+
+export function deleteNoteComment(
+  workspaceId: string,
+  noteId: string,
+  commentId: string,
+): Promise<NoteRequestResult<CommentDeleteResult>> {
+  if (!validIds(workspaceId, noteId, commentId))
+    return Promise.resolve({ ok: false, kind: "invalid" });
+  return requestJson(
+    COMMENT_API_PATHS.detail(workspaceId, noteId, commentId),
+    { method: "DELETE" },
+    (value) => commentDeleteResultSchema.safeParse(value),
+  );
+}
+
+/**
+ * One idempotent transition, not two routes. The server applies it to the
+ * THREAD ROOT: resolving a reply resolves the thread it belongs to, which is
+ * why the UI only ever offers the control on a root comment.
+ */
+export function setNoteCommentResolution(
+  workspaceId: string,
+  noteId: string,
+  commentId: string,
+  input: CommentResolutionInput,
+): Promise<NoteRequestResult<CommentMutationResult>> {
+  const parsed = commentResolutionSchema.safeParse(input);
+  if (!validIds(workspaceId, noteId, commentId) || !parsed.success)
+    return Promise.resolve({ ok: false, kind: "invalid" });
+  return requestJson(
+    COMMENT_API_PATHS.resolution(workspaceId, noteId, commentId),
+    json("POST", parsed.data),
+    (value) => commentMutationResultSchema.safeParse(value),
   );
 }

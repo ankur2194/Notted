@@ -210,6 +210,14 @@ export function NoteDetailView({
             editable={canEdit}
             ariaLabel={`Note content: ${note.title}`}
             readOnlyReason={readOnlyReason}
+            /*
+             * Part 58. The identity of this editing session, taken from the
+             * note's own authorized response rather than from anything the
+             * client could choose. There is no display name to pass: the
+             * session endpoint returns `userId` only, so the surface labels an
+             * unnamed session neutrally.
+             */
+            userId={note.currentActorId}
           />
         </PageContainer>
       </section>

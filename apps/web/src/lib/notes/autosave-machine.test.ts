@@ -638,3 +638,67 @@ describe("autosave machine: status vocabulary", () => {
     expect(description.message).toMatch(/Check your connection/u);
   });
 });
+
+/**
+ * Part 58. A collaborative session writes `notes.content` through the API's
+ * projection, so this machine can learn about a version it never produced.
+ * Adopting it is only ever safe while the machine has nothing outstanding.
+ */
+describe("autosave machine: externally assigned versions", () => {
+  it("adopts the version while the machine is clean and idle, and emits nothing", () => {
+    const machine = new Harness({ version: 3 });
+    const effects = machine.send({ type: "external-version", version: 9 });
+
+    expect(machine.state.version).toBe(9);
+    expect(machine.state.status).toBe("idle");
+    expect(effects).toEqual([]);
+
+    // The next save uses the version the server actually holds, so a projected
+    // change no longer costs the writer a conflict.
+    machine.type("typed");
+    expect(machine.inputs.at(-1)).toEqual({ expectedVersion: 9, content: doc("typed") });
+  });
+
+  it("ignores the version while the document is dirty", () => {
+    const machine = new Harness({ version: 3 });
+    machine.send({ type: "document-changed", document: doc("typed") });
+
+    const effects = machine.send({ type: "external-version", version: 9 });
+    expect(effects).toEqual([]);
+    expect(machine.state.version).toBe(3);
+    expect(machine.state.status).toBe("dirty");
+
+    // The precondition this patch was queued with is the one it is sent with:
+    // a compare-and-set that moved its own expectation is a blind overwrite.
+    machine.send({ type: "debounce-elapsed" });
+    expect(machine.inputs.at(-1)).toEqual({ expectedVersion: 3, content: doc("typed") });
+  });
+
+  it("ignores the version while a save is in flight", () => {
+    const machine = new Harness({ version: 3 });
+    machine.type("typed");
+    expect(machine.state.status).toBe("saving");
+
+    const effects = machine.send({ type: "external-version", version: 9 });
+    expect(effects).toEqual([]);
+    expect(machine.state.version).toBe(3);
+
+    // Only the acknowledgement moves the cell.
+    machine.ack(1, 4);
+    expect(machine.state.version).toBe(4);
+  });
+
+  it("ignores the version while a retry is pending", () => {
+    const machine = new Harness({ version: 3 });
+    machine.type("typed");
+    machine.send({ type: "save-failed", saveId: 1, kind: "unavailable" });
+    expect(machine.state.status).toBe("retrying");
+
+    const effects = machine.send({ type: "external-version", version: 9 });
+    expect(effects).toEqual([]);
+    expect(machine.state.version).toBe(3);
+
+    machine.send({ type: "retry-elapsed" });
+    expect(machine.inputs.at(-1)).toEqual({ expectedVersion: 3, content: doc("typed") });
+  });
+});

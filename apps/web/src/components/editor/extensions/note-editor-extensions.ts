@@ -1,6 +1,8 @@
 import { normalizeNoteDocumentCodeLanguage, sanitizeDocumentUrl } from "@notted/shared-validators";
 import { Node, textblockTypeInputRule, type Extensions } from "@tiptap/core";
 import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
+import { Collaboration } from "@tiptap/extension-collaboration";
+import { CollaborationCursor } from "@tiptap/extension-collaboration-cursor";
 import { Color } from "@tiptap/extension-color";
 import { Highlight } from "@tiptap/extension-highlight";
 import { Link } from "@tiptap/extension-link";
@@ -19,6 +21,7 @@ import { Underline } from "@tiptap/extension-underline";
 import { StarterKit } from "@tiptap/starter-kit";
 
 import { createNoteLowlight } from "./code-block-languages";
+import { createCommentDecorations } from "./comment-decorations";
 import { createNoteAttachment } from "./CustomAttachment";
 import { createNoteImage } from "./CustomImage";
 import { FontSize } from "./font-size";
@@ -31,9 +34,12 @@ import type { AttachmentDirectory } from "../attachment-directory";
 import type { MentionCandidate, MentionDirectory } from "../mention-members";
 import type { SlashCommand } from "../slash-commands";
 import type { SuggestionSink } from "../suggestion-popup";
+import type { CommentAnchorTarget } from "./comment-decorations";
 import type { AttachmentFilePickerHandler, AttachmentUploadHandler } from "./CustomAttachment";
 import type { ImageFilePickerHandler, ImageUploadHandler } from "./CustomImage";
+import type { NoteCollaborationBinding } from "@/lib/collaboration/note-collaboration-provider";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { DecorationAttrs } from "@tiptap/pm/view";
 
 /** Exact copy required by the product brief for an empty note. */
 export const NOTE_EDITOR_PLACEHOLDER = "Start writing...";
@@ -237,16 +243,146 @@ export interface NoteEditorExtensionOptions {
    */
   readonly resolveAttachmentUploader?: () => AttachmentUploadHandler | null;
   readonly resolveAttachmentFilePicker?: () => AttachmentFilePickerHandler | null;
+  /**
+   * Part 58. Absent or `null` builds exactly the extension list every other part
+   * was written against: local history, no Yjs plugins, no awareness. Present
+   * hands the document over to Yjs for this editor's whole lifetime — the two
+   * modes are never mixed inside one instance.
+   */
+  readonly collaboration?: NoteCollaborationBinding | null;
+  /**
+   * Part 60, and optional for the same reason every seam above is: absent means
+   * the comment-decoration plugin is never registered and this editor builds the
+   * byte-identical extension list it always has. Present, it is read at plugin
+   * time on every redraw — a ref-backed getter keeps `TiptapEditor`'s
+   * `useMemo(…, [])` extension list on empty dependencies, so a changed comment
+   * list never rebuilds the editor.
+   */
+  readonly resolveComments?: () => readonly CommentAnchorTarget[];
+  readonly resolveActiveCommentId?: () => string | null;
+}
+
+/**
+ * What `@tiptap/extension-collaboration-cursor` v2 actually consumes.
+ *
+ * Its own option is typed `any` because it was written for the Hocuspocus
+ * provider; the plugin only ever reads `provider.awareness`, so the shape is
+ * declared here instead of casting.
+ */
+interface AwarenessProvider {
+  readonly awareness: NoteCollaborationBinding["awareness"];
+}
+
+/**
+ * Above this many live cursors, the name chips stop being labels and start
+ * being a wall of overlapping boxes across the paragraph the group is working
+ * on. Past it the carets keep their colour and the names stay reachable, one
+ * keystroke away, in the presence bar's viewer dialog (Part 59).
+ */
+const CURSOR_LABEL_LIMIT = 12;
+
+/** The only colour values this editor will paint. */
+const PRESENCE_COLOR_PATTERN = /^var\(--notted-presence-[0-7]\)$/;
+
+function readString(source: Record<string, unknown>, key: string): string {
+  const value = source[key];
+  return typeof value === "string" ? value : "";
+}
+
+/**
+ * `user.color` reaches this renderer from a *remote* peer's awareness state, so
+ * it is matched against the palette rather than trusted: an arbitrary string
+ * written into an inline style is a CSS injection. An unrecognised value falls
+ * back to the first palette slot, which is still a legible caret.
+ */
+function paletteColor(value: string): string {
+  return PRESENCE_COLOR_PATTERN.test(value) ? value : "var(--notted-presence-0)";
+}
+
+/**
+ * The remote peer's selection tint.
+ *
+ * Configured for the same reason as `render`: the stock `selectionRender`
+ * interpolates `user.color` straight into a `style` attribute, and that value is
+ * another client's unvalidated awareness state. The colour goes through
+ * `paletteColor` and is passed as a custom property, so the only thing that can
+ * ever reach the style attribute is one of the eight palette slots.
+ */
+function createSelectionRenderer(): (user: Record<string, unknown>) => DecorationAttrs {
+  return (user: Record<string, unknown>): DecorationAttrs => ({
+    class: "notted-presence-selection",
+    style: `--notted-presence-selection: ${paletteColor(readString(user, "color"))};`,
+  });
+}
+
+/**
+ * The caret and its name chip.
+ *
+ * `binding.awareness` is queried on every call and never captured, which is
+ * exactly right: `CollaborationCursor` rebuilds its decorations on every
+ * awareness change, so the size read here is always the current one and no
+ * React state, ref, or extension dependency is needed to keep it fresh.
+ */
+function createCursorRenderer(
+  binding: NoteCollaborationBinding,
+): (user: Record<string, unknown>) => HTMLElement {
+  return (user: Record<string, unknown>): HTMLElement => {
+    const color = paletteColor(readString(user, "color"));
+    const caret = document.createElement("span");
+    caret.className = "notted-presence-caret";
+    caret.style.borderLeftColor = color;
+    // Carets are live-session chrome; a printed page must not show them.
+    caret.setAttribute("data-notted-print-hide", "");
+    /*
+     * And a screen reader must not read them either. This element is spliced
+     * INTO the contenteditable at the peer's cursor, so without this the name
+     * chip below is announced in the middle of the sentence being read — "the
+     * quick brown Ada Lovelace fox". The whole subtree is hidden with one
+     * attribute: the caret is a coloured border and the chip is a name that is
+     * already available to assistive technology from `PresenceBar`'s roster,
+     * which is the surface designed to be read on demand.
+     *
+     * ponytail: `aria-hidden` only, deliberately no `contenteditable="false"`.
+     * `y-prosemirror` ships its own cursor widget without it, and a
+     * false-contenteditable island inside a contenteditable has its own
+     * caret-navigation quirks per browser. Upgrade path: add it if a peer's
+     * caret is ever observed capturing the local selection.
+     */
+    caret.setAttribute("aria-hidden", "true");
+
+    const name = readString(user, "name");
+    if (name !== "" && binding.awareness.getStates().size <= CURSOR_LABEL_LIMIT) {
+      const label = document.createElement("span");
+      label.className = "notted-presence-caret-label";
+      label.style.backgroundColor = color;
+      // A text node, never `innerHTML`: the name is another peer's input.
+      label.append(document.createTextNode(name));
+      caret.append(label);
+    }
+
+    return caret;
+  };
 }
 
 /** Build an isolated schema configuration for each editor instance. */
 export function createNoteEditorExtensions(options: NoteEditorExtensionOptions = {}): Extensions {
+  const collaboration = options.collaboration ?? null;
+  const resolveComments = options.resolveComments;
   return [
     StarterKit.configure({
       document: false,
       heading: { levels: [1, 2, 3, 4, 5, 6] },
       // Replaced by the lowlight-backed code block below.
       codeBlock: false,
+      /*
+       * Local ProseMirror history and Yjs history cannot both own undo: the
+       * local one would revert a remote peer's change. Nothing else moves —
+       * `@tiptap/extension-collaboration` v2 re-registers `undo`/`redo` as
+       * commands with the same keymap, so the declared bindings in
+       * `keyboard-shortcuts.ts` (`source: "tiptap"`, `handler: null`) and the
+       * `toolbar-commands.ts` undo/redo gate keep working unchanged.
+       */
+      ...(collaboration === null ? {} : { history: false as const }),
     }),
     NoteDocument,
     Underline.configure({}),
@@ -309,5 +445,46 @@ export function createNoteEditorExtensions(options: NoteEditorExtensionOptions =
       resolveUploader: options.resolveAttachmentUploader,
       resolveFilePicker: options.resolveAttachmentFilePicker,
     }),
+    /*
+     * Part 60's inline comment highlights. Registered only when the host supplies
+     * a comment list, so every existing caller — and every schema round-trip test
+     * — builds the exact extension list it did before. The plugin contributes
+     * decorations only: it adds no node, no mark, and nothing to `getJSON()`.
+     */
+    ...(resolveComments === undefined
+      ? []
+      : [
+          createCommentDecorations({
+            resolveComments,
+            resolveActiveCommentId: options.resolveActiveCommentId,
+          }),
+        ]),
+    /*
+     * Part 58. Appended last and only when a binding exists, so a solo editor
+     * builds the identical list it always has.
+     *
+     * `Collaboration` is used unwrapped and with no custom plugin key on
+     * purpose: it must install `ySyncPlugin` under the DEFAULT `ySyncPluginKey`,
+     * because Part 60 remaps comment anchors through
+     * `ySyncPluginKey.getState(editor.state).binding`. A private abstraction or
+     * a renamed key would silently break that lookup.
+     *
+     * `field: "default"` matches the API's `doc.getXmlFragment("default")`; the
+     * two names are one contract and must never drift apart.
+     */
+    ...(collaboration === null
+      ? []
+      : [
+          Collaboration.configure({ document: collaboration.document, field: "default" }),
+          CollaborationCursor.configure({
+            provider: { awareness: collaboration.awareness } satisfies AwarenessProvider,
+            user: { name: collaboration.user.name, color: collaboration.user.color },
+            // Part 59 replaces only the caret element. The extension itself
+            // stays: it owns the awareness-to-decoration mapping, and a
+            // hand-rolled `yCursorPlugin` would have to re-derive it.
+            render: createCursorRenderer(collaboration),
+            selectionRender: createSelectionRenderer(),
+          }),
+        ]),
   ];
 }

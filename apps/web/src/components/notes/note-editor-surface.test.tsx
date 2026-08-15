@@ -1,12 +1,35 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Awareness } from "y-protocols/awareness";
+import * as Y from "yjs";
 
 const mocks = vi.hoisted(() => ({ requestAllWorkspaceMembers: vi.fn() }));
 vi.mock("@/lib/notes/requests", () => mocks);
 
+// Part 58. Mocked at the module boundary: what this file proves is which mode
+// the surface resolves to and what that does to the Part 39 save binding, not
+// how a socket handshake behaves.
+const collaboration = vi.hoisted(() => ({ useNoteCollaboration: vi.fn() }));
+vi.mock("@/lib/collaboration/useNoteCollaboration", () => collaboration);
+
+// Part 59, mocked for the same reason and additionally to keep this file from
+// constructing the module-level Socket.io client: `useNotePresence` reaches for
+// the shared socket, and a real one built here would outlive the test.
+const presence = vi.hoisted(() => ({
+  useNotePresence: vi.fn(() => ({
+    viewers: [],
+    selfPresenceId: null,
+    viewerCount: 0,
+    overflow: false,
+  })),
+}));
+vi.mock("@/lib/realtime/presence-client", () => presence);
+
+import { NoteSaveProvider, type NoteSaveHandle } from "./note-save-context";
 import { NoteEditorSurface } from "./NoteEditorSurface";
 
+import type { NoteCollaborationState } from "@/lib/collaboration/useNoteCollaboration";
 import type { Editor } from "@tiptap/core";
 
 const WORKSPACE_ID = "30000000-0000-4000-8000-000000000001";
@@ -93,6 +116,20 @@ async function readyEditor(initialDocument: unknown): Promise<Editor> {
 async function surface(): Promise<HTMLElement> {
   return waitFor(() => screen.getByRole("textbox", { name: "Note content" }));
 }
+
+const SOLO: NoteCollaborationState = {
+  mode: "solo",
+  binding: null,
+  epoch: 0,
+  generation: 0,
+  status: "offline",
+};
+
+// Every existing test predates Part 58 and must keep behaving exactly as it
+// did, which is what "solo" means: the Part 39 autosave binding, untouched.
+beforeEach(() => {
+  collaboration.useNoteCollaboration.mockReturnValue(SOLO);
+});
 
 describe("NoteEditorSurface member data", () => {
   beforeEach(() => {
@@ -290,5 +327,126 @@ describe("NoteEditorSurface member directory completeness", () => {
       ).toBeInTheDocument(),
     );
     expect(popover.textContent).toMatch(/does not mean the person is absent/u);
+  });
+});
+
+const USER_ID = "55555555-5555-4555-8555-555555555555";
+
+function collaborativeState(): NoteCollaborationState {
+  const document = new Y.Doc();
+  return {
+    mode: "collaborative",
+    binding: {
+      document,
+      awareness: new Awareness(document),
+      user: { name: "Ada Lovelace", color: "#2563eb" },
+    },
+    epoch: 1,
+    generation: 1,
+    status: "synced",
+  };
+}
+
+/** A save handle whose every member is observable, still typed as the real one. */
+function saveSpy() {
+  return {
+    onDocumentChange: vi.fn(),
+    onDocumentBaseline: vi.fn(),
+    onDocumentRejected: vi.fn(),
+    applyExternalVersion: vi.fn(),
+    status: "idle",
+    hasUnsavedWork: false,
+  } satisfies NoteSaveHandle;
+}
+
+function collaborativeView(save: NoteSaveHandle, bindToNoteSave = true) {
+  const holder: { editor: Editor | null } = { editor: null };
+  const utils = render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <NoteSaveProvider value={save}>
+        <NoteEditorSurface
+          workspaceId={WORKSPACE_ID}
+          noteId={NOTE_ID}
+          initialDocument={{ type: "doc", content: [{ type: "paragraph" }] }}
+          editable
+          ariaLabel="Note content"
+          userId={USER_ID}
+          userName="Ada Lovelace"
+          bindToNoteSave={bindToNoteSave}
+          onEditorReady={(editor) => {
+            if (editor !== null) holder.editor = editor;
+          }}
+        />
+      </NoteSaveProvider>
+    </QueryClientProvider>,
+  );
+  return { ...utils, holder };
+}
+
+async function collaborativeEditor(save: NoteSaveHandle): Promise<Editor> {
+  const { holder } = collaborativeView(save);
+  await waitFor(() => expect(holder.editor).not.toBeNull());
+  const editor = holder.editor;
+  if (editor === null) throw new Error("editor was not created");
+  return editor;
+}
+
+describe("NoteEditorSurface collaboration mode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.requestAllWorkspaceMembers.mockResolvedValue(memberPage(WORKSPACE_ID));
+    collaboration.useNoteCollaboration.mockReturnValue(SOLO);
+  });
+
+  it("keeps autosave bound when the handshake resolves to solo", async () => {
+    const save = saveSpy();
+    const editor = await collaborativeEditor(save);
+
+    // A timed-out or refused session degrades to exactly the Part 39 behaviour:
+    // the note still saves, through the same machine, with the same baseline.
+    expect(save.onDocumentBaseline).toHaveBeenCalled();
+    editor.commands.insertContent("typed while solo");
+    await waitFor(() => expect(save.onDocumentChange).toHaveBeenCalled());
+  });
+
+  it("unbinds autosave once the session is collaborative", async () => {
+    collaboration.useNoteCollaboration.mockReturnValue(collaborativeState());
+    const save = saveSpy();
+    const editor = await collaborativeEditor(save);
+
+    editor.commands.insertContent({
+      type: "paragraph",
+      content: [{ type: "text", text: "typed while collaborating" }],
+    });
+    await waitFor(() => expect(editor.getText()).toContain("typed while collaborating"));
+
+    // One writer at a time: the API's projection owns `notes.content` while the
+    // session is live, so this editor publishes neither baseline nor changes.
+    expect(save.onDocumentChange).not.toHaveBeenCalled();
+    expect(save.onDocumentBaseline).not.toHaveBeenCalled();
+  });
+
+  it("renders a skeleton rather than an editor while the handshake is pending", () => {
+    collaboration.useNoteCollaboration.mockReturnValue({
+      mode: "pending",
+      binding: null,
+      epoch: 0,
+      generation: 0,
+      status: "connecting",
+    } satisfies NoteCollaborationState);
+    collaborativeView(saveSpy());
+
+    expect(screen.getByTestId("note-collaboration-pending")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Note content" })).not.toBeInTheDocument();
+  });
+
+  it("never opens a session for a read-only historical preview", () => {
+    collaborativeView(saveSpy(), false);
+
+    expect(collaboration.useNoteCollaboration).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false, workspaceId: WORKSPACE_ID, noteId: NOTE_ID }),
+    );
   });
 });

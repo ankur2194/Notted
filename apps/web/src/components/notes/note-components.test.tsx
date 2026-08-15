@@ -8,6 +8,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // router is mounted in jsdom, so `useRouter` needs a stub here.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
+// Part 58. An editable note now opens a collaborative session, and no socket
+// server exists in jsdom. These cases are about the detail view's own markup,
+// so the session resolves to solo — exactly the degraded path they already
+// assert against.
+vi.mock("@/lib/collaboration/useNoteCollaboration", () => ({
+  useNoteCollaboration: () => ({ mode: "solo", binding: null, epoch: 0, status: "offline" }),
+}));
+
 import { NoteCard } from "./NoteCard";
 import { NoteDetailView } from "./NoteDetailView";
 import { NoteLifecycleActions } from "./NoteLifecycleActions";
