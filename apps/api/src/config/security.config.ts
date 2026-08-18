@@ -1,6 +1,12 @@
 import { Injectable, type Provider } from "@nestjs/common";
 
-import { type Environment, readInteger, readString, wrapConfigError } from "./environment-readers";
+import {
+  type Environment,
+  readBoolean,
+  readInteger,
+  readString,
+  wrapConfigError,
+} from "./environment-readers";
 
 export const SECURITY_CONFIG = Symbol("SECURITY_CONFIG");
 
@@ -15,6 +21,27 @@ export interface SecurityConfig {
   readonly maximumUploadBytes: number;
   readonly maximumWorkspaceStorageBytes: number;
   readonly signedUrlTtlSeconds: number;
+  /**
+   * Part 66 — wall-clock ceiling on a single outbound webhook request. A
+   * receiver that never answers must not hold a queue worker for the worker's
+   * whole timeout budget, and 10s is already generous for "accept and enqueue",
+   * which is the only thing a receiver should do on the request path.
+   */
+  readonly webhookRequestTimeoutMs: number;
+  /**
+   * Part 66 — development-only relaxation of the outbound destination guard.
+   * It unblocks EXACTLY TWO things: the `http:` scheme, and LOOPBACK addresses
+   * (127.0.0.0/8, ::1, `localhost`). Nothing else moves. `10/8`,
+   * `172.16/12`, `192.168/16`, `169.254/16` (including the cloud metadata
+   * address) and every other private or reserved range stay blocked with the
+   * flag ON.
+   *
+   * That narrowness is the point: an integration test can point an endpoint at
+   * an in-process `node:http` server on 127.0.0.1 while, in the SAME run, the
+   * "private/local IP destinations are rejected" assertions still hold — the
+   * flag cannot be mistaken for "SSRF protection off".
+   */
+  readonly webhookAllowInsecureUrls: boolean;
 }
 
 const DEVELOPMENT_KEY = "1:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
@@ -78,6 +105,21 @@ export function parseSecurityConfig(environment: Environment): SecurityConfig {
         Number.MAX_SAFE_INTEGER,
       ),
       signedUrlTtlSeconds: readInteger(environment, "SIGNED_URL_TTL_SECONDS", 900, 60, 86_400),
+      webhookRequestTimeoutMs: readInteger(
+        environment,
+        "WEBHOOK_REQUEST_TIMEOUT_MS",
+        10_000,
+        1_000,
+        30_000,
+      ),
+      // FORCED FALSE IN PRODUCTION, unconditionally: the environment is not
+      // even read there, so a leaked or copy-pasted `=true` in a production
+      // deployment cannot open `http:` or loopback delivery. An operator who
+      // wants it on in production has to change this line in review, which is
+      // the only place that decision belongs.
+      webhookAllowInsecureUrls: production
+        ? false
+        : readBoolean(environment, "WEBHOOK_ALLOW_INSECURE_URLS", false),
     });
   } catch (error: unknown) {
     wrapConfigError("Invalid security configuration", error);

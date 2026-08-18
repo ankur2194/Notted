@@ -127,6 +127,10 @@ function jobContext(
   const payload = WORKSPACE_EMAIL_JOB_DEFINITION.payloadSchema.parse(intent.payload);
   return {
     outboxIntentId: intent.id,
+    // The processor always supplies these; the handler reads them to tell a
+    // retryable attempt from the final one.
+    attempt: 1,
+    maximumAttempts: 3,
     jobType: WORKSPACE_EMAIL_JOB_DEFINITION.jobType,
     idempotencyKey: intent.idempotencyKey,
     signal: new AbortController().signal,

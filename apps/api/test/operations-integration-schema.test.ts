@@ -901,16 +901,16 @@ describe.skipIf(!HAS_DATABASE_URL)("operations and integration tables schema (li
       // PostgreSQL rejects it with SQLSTATE 22P02 (invalid_text_representation).
       await expectPostgresErrorCode(
         db.execute(sql`
-          insert into webhook_deliveries (webhook_id, event, attempt, status)
-          values (${webhookId}, ${"note.created"}, 1, ${"bogus_status"})
+          insert into webhook_deliveries (webhook_id, event_id, event, attempt, status)
+          values (${webhookId}, ${crypto.randomUUID()}, ${"note.created"}, 1, ${"bogus_status"})
         `),
         PG_INVALID_TEXT_REPRESENTATION,
       );
 
       // A valid status is accepted.
       await db.execute(sql`
-        insert into webhook_deliveries (webhook_id, event, attempt, status)
-        values (${webhookId}, ${"note.created"}, 1, ${"pending"})
+        insert into webhook_deliveries (webhook_id, event_id, event, attempt, status)
+        values (${webhookId}, ${crypto.randomUUID()}, ${"note.created"}, 1, ${"pending"})
       `);
     } finally {
       await db.execute(sql`delete from workspaces where id = ${workspaceId}`);
@@ -971,6 +971,8 @@ describe.skipIf(!HAS_DATABASE_URL)("operations and integration tables schema (li
       "ai_usage_workspace_feature_idx",
       "email_deliveries_workspace_created_idx",
       "webhook_deliveries_webhook_created_idx",
+      // Part 66: groups every attempt of one event (retries and manual replays).
+      "webhook_deliveries_webhook_event_idx",
       "webhooks_workspace_id_idx",
       "api_keys_workspace_id_idx",
       "job_outbox_workspace_created_idx",

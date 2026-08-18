@@ -47,6 +47,7 @@ import {
   TenantContextService,
   whereWorkspace,
 } from "../tenant";
+import { WebhookDeliveryProducer } from "../webhooks/webhook-delivery.producer";
 
 import { NoteVersionsService } from "./note-versions.service";
 import {
@@ -302,6 +303,13 @@ export class NotesService {
     // reason as the two above: the unit tests construct this service without
     // the notification module graph.
     @Optional() private readonly mentionProducer?: MentionNotificationProducer,
+    // Part 66 — emits one `webhook.deliver` intent per subscribed endpoint
+    // inside every note-mutation transaction. Optional for the same reason as
+    // the three above: the unit tests construct this service without the
+    // webhook module graph. `NotesModule` always provides it in the running
+    // application, and the producer itself filters the events nobody can
+    // subscribe to, so this stays one unconditional call.
+    @Optional() private readonly webhookProducer?: WebhookDeliveryProducer,
   ) {}
 
   async create(input: CreateNoteServiceInput): Promise<NoteCreateResult> {
@@ -2207,6 +2215,18 @@ export class NotesService {
       payload,
       payloadHash: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
       idempotencyKey: `${NOTE_DOMAIN_EVENT_IDEMPOTENCY_PREFIX}${eventName}:${entityId}:${intentId}`,
+      correlationId: input.requestId ?? null,
+    });
+    // Part 66. Same transaction, same commit: a webhook must never announce a
+    // note change a rollback then un-did. `note.created`, `note.updated` and
+    // `note.deleted` are the subscribable subset; the producer drops the rest
+    // (`note.moved`, `folder.*`, …) before it issues any SQL.
+    await this.webhookProducer?.scheduleWebhookDeliveries(tx, {
+      event: eventName,
+      workspaceId: activeWorkspaceId(this.tenantContext),
+      resourceId: entityId,
+      actorId: input.principal.userId,
+      occurredAt: new Date(),
       correlationId: input.requestId ?? null,
     });
   }

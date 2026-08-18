@@ -184,6 +184,13 @@ export class QueueInfrastructureService {
     await queue.add(binding.definition.jobType, envelope, {
       jobId: rowId,
       priority: binding.definition.route.priority === "high" ? 1 : undefined,
+      // Stamped per job, overriding the queue's `defaultJobOptions.attempts`.
+      // Several job types share one physical lane, so the budget cannot live on
+      // the queue: raising it there would hand every neighbour the same
+      // allowance. The worker already reads `job.opts.attempts` back, so the
+      // value stamped here is the one the retry loop and the final-attempt
+      // check both use.
+      attempts: binding.definition.maximumAttempts ?? this.config.attempts,
     });
   }
 

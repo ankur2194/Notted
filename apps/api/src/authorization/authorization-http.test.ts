@@ -1,6 +1,9 @@
 import { firstValueFrom, of } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 
+import { setApiKeyActor } from "../api-keys/api-key-context";
+import { ApiHttpException } from "../common/errors/api-http.exception";
+
 import { getAuthorizedOperation, setAuthorizedOperation } from "./authorization-http.context";
 import { AuthorizationHttpGuard } from "./authorization-http.guard";
 import { AuthorizationHttpInterceptor } from "./authorization-http.interceptor";
@@ -108,6 +111,89 @@ describe("Nest authorization adapter", () => {
       }),
     );
     expect(getAuthorizedOperation(request)).toBe(operation);
+  });
+
+  /**
+   * Part 65. An API-key request carries a synthetic principal for the key's
+   * creator AND an API-key actor. The synthetic principal keeps the 401 branch
+   * unchanged, but the DECISION must come from `authorizeApiKey` so the key's
+   * scopes are enforced — routing it through `authorizeHttp` would silently
+   * grant a read-only key the creator's full workspace role.
+   */
+  it("guard decides an api-key request with authorizeApiKey, never authorizeHttp", async () => {
+    const request = {
+      params: { workspaceId: "workspace-1", noteId: "note-1" },
+    } as unknown as Request;
+    setApiKeyActor(request, {
+      kind: "api-key",
+      apiKeyId: "key-1",
+      workspaceId: "workspace-1",
+      scopes: ["read"],
+    });
+    const spec: HttpAuthorizationSpec = {
+      action: "note.read",
+      workspaceId: (value) => value.params.workspaceId,
+      resource: (value) => ({ kind: "note", id: value.params.noteId as string }),
+    };
+    const reflector = { getAllAndOverride: vi.fn(() => spec) } as unknown as Reflector;
+    // The pre-guard already installed the synthetic principal, so the guard's
+    // own authenticate() call memo-returns it and the 401 branch is untouched.
+    const auth = { authenticate: vi.fn(async () => principal) } as unknown as AuthService;
+    const authorizeHttp = vi.fn(async () => operation);
+    const authorizeApiKey = vi.fn(async () => operation);
+    const adapters = { authorizeHttp, authorizeApiKey } as unknown as AuthorizationAdaptersService;
+    const guard = new AuthorizationHttpGuard(reflector, auth, adapters);
+
+    await expect(guard.canActivate(executionContext(request))).resolves.toBe(true);
+    expect(authorizeHttp).not.toHaveBeenCalled();
+    expect(authorizeApiKey).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: expect.objectContaining({ kind: "api-key", apiKeyId: "key-1", scopes: ["read"] }),
+        action: "note.read",
+        resource: { kind: "note", id: "note-1" },
+      }),
+    );
+    expect(getAuthorizedOperation(request)).toBe(operation);
+  });
+
+  /**
+   * Part 65 regression. `authorizeApiKey` derives its tenant context from the
+   * ACTOR alone and never sees the route's workspace, so without an explicit
+   * binding check a key issued for workspace A is authorized against A while
+   * the controller then operates on workspace B. Any creator who belongs to
+   * both workspaces would carry the key across the tenant boundary. The seeded
+   * tenants have disjoint membership, so only this test covers the leak.
+   */
+  it("guard refuses an api-key request whose route workspace is not the key's workspace", async () => {
+    const request = {
+      params: { workspaceId: "workspace-2", noteId: "note-1" },
+    } as unknown as Request;
+    setApiKeyActor(request, {
+      kind: "api-key",
+      apiKeyId: "key-1",
+      workspaceId: "workspace-1",
+      scopes: ["read", "write"],
+    });
+    const spec: HttpAuthorizationSpec = {
+      action: "note.read",
+      workspaceId: (value) => value.params.workspaceId,
+      resource: (value) => ({ kind: "note", id: value.params.noteId as string }),
+    };
+    const reflector = { getAllAndOverride: vi.fn(() => spec) } as unknown as Reflector;
+    const auth = { authenticate: vi.fn(async () => principal) } as unknown as AuthService;
+    const authorizeHttp = vi.fn(async () => operation);
+    const authorizeApiKey = vi.fn(async () => operation);
+    const adapters = { authorizeHttp, authorizeApiKey } as unknown as AuthorizationAdaptersService;
+    const guard = new AuthorizationHttpGuard(reflector, auth, adapters);
+
+    const error = await guard
+      .canActivate(executionContext(request))
+      .catch((cause: unknown) => cause);
+    // 404, never 403: a foreign workspace id must leak no existence signal.
+    expect((error as ApiHttpException).getStatus()).toBe(404);
+    expect(authorizeApiKey).not.toHaveBeenCalled();
+    expect(authorizeHttp).not.toHaveBeenCalled();
+    expect(getAuthorizedOperation(request)).toBeUndefined();
   });
 
   it("interceptor cannot execute a handler without the guard's authorized operation", () => {

@@ -33,6 +33,16 @@ export type {
   UserSummary,
 } from "./auth";
 export { AUTH_API_PATHS } from "./auth";
+export { API_KEY_API_PATHS, API_KEY_SECRET_PREFIX } from "./api-key";
+export type {
+  ApiKeyCreateResult,
+  ApiKeyListQuery,
+  ApiKeyPage,
+  ApiKeyRevokeResult,
+  ApiKeyScope,
+  ApiKeySortField,
+  ApiKeySummary,
+} from "./api-key";
 export { ATTACHMENT_API_PATHS } from "./attachment";
 export type {
   AttachmentBlurPlaceholder,
@@ -247,3 +257,28 @@ export type {
   WorkspaceSummary,
   WorkspaceUpdateResult,
 } from "./workspace";
+
+// Part 66 — outbound webhooks and delivery logs.
+export {
+  WEBHOOK_API_PATHS,
+  WEBHOOK_DELIVERY_ERROR_CODES,
+  WEBHOOK_ENDPOINT_LIMIT,
+  WEBHOOK_EVENTS,
+  WEBHOOK_SECRET_PREFIX,
+  WEBHOOK_VERIFICATION_EVENT,
+} from "./webhook";
+export type {
+  WebhookCreateResult,
+  WebhookDeleteResult,
+  WebhookDelivery,
+  WebhookDeliveryErrorCode,
+  WebhookDeliveryListQuery,
+  WebhookDeliveryPage,
+  WebhookDeliveryStatus,
+  WebhookEndpoint,
+  WebhookEndpointPage,
+  WebhookEvent,
+  WebhookRetryResult,
+  WebhookSecretRotationResult,
+  WebhookVerificationResult,
+} from "./webhook";

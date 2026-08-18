@@ -571,6 +571,10 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 60 comments and mentions (live PostgreS
     for (const intent of scheduled) {
       await worker.handle({
         outboxIntentId: intent.id,
+        // The processor always supplies these; the handler reads them to tell a
+        // retryable attempt from the final one.
+        attempt: 1,
+        maximumAttempts: 3,
         jobType: MENTION_NOTIFY_JOB_DEFINITION.jobType,
         idempotencyKey: intent.idempotencyKey,
         payload: MENTION_NOTIFY_JOB_DEFINITION.payloadSchema.parse(intent.payload),
@@ -648,6 +652,10 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 60 comments and mentions (live PostgreS
     for (const intent of scheduled) {
       await worker.handle({
         outboxIntentId: intent.id,
+        // The processor always supplies these; the handler reads them to tell a
+        // retryable attempt from the final one.
+        attempt: 1,
+        maximumAttempts: 3,
         jobType: MENTION_NOTIFY_JOB_DEFINITION.jobType,
         idempotencyKey: intent.idempotencyKey,
         payload: MENTION_NOTIFY_JOB_DEFINITION.payloadSchema.parse(intent.payload),

@@ -2,11 +2,13 @@ import "reflect-metadata";
 
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { API_KEY_SECRET_PREFIX } from "@notted/shared-types";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import compression from "compression";
 import { json, urlencoded, type Express } from "express";
 import helmet from "helmet";
 
+import { ApiKeyAuthService } from "./api-keys";
 import { AppModule } from "./app.module";
 import { AuthRateLimitMiddleware } from "./auth/auth-rate-limit.middleware";
 import { AuthService } from "./auth/auth.service";
@@ -52,6 +54,7 @@ export async function createApplication(): Promise<NestExpressApplication> {
   const requestContext = app.get(RequestContextMiddleware);
   const authRateLimit = app.get(AuthRateLimitMiddleware);
   const authService = app.get(AuthService);
+  const apiKeyAuth = app.get(ApiKeyAuthService);
   const platformOperator = app.get(PlatformOperatorService);
   const rateLimit = app.get(RateLimitService);
   const bullBoard = app.get(BullBoardService);
@@ -210,20 +213,56 @@ export async function createApplication(): Promise<NestExpressApplication> {
       });
     },
   );
-  // Resolve valid cookie sessions before Nest's global rate-limit guard. A
-  // forged header can never select the authenticated tier; only this trusted
-  // Better Auth lookup installs the principal. Redis errors fail closed.
+  // Resolve credentials before Nest's global rate-limit guard. A forged header
+  // can never select a privileged tier; only these trusted lookups install a
+  // principal. Redis errors fail closed.
+  //
+  // THE ORDER BELOW IS LOAD-BEARING.
+  //   1. `ApiKeyAuthService.authenticate` installs, in this order,
+  //      `setApiKeyActor` -> `setTrustedPrincipal({ kind: "api-key" })` ->
+  //      `setAuthPrincipal(synthetic creator principal)`. The trusted principal
+  //      must exist before `RateLimitGuard` runs, which is why this middleware
+  //      sits ahead of the Nest pipeline rather than inside it.
+  //   2. The fallback `AuthService.authenticate` then memo-returns on the
+  //      already-installed synthetic principal (`getAuthPrincipal` early
+  //      return) BEFORE reaching its own `setTrustedPrincipal({ kind: "user" })`
+  //      line, so the api-key tier can never be overwritten by the user tier.
   express.use("/api/v1", (request, response, next) => {
-    void authService
-      .authenticate(request)
-      .then(() => next())
-      .catch(() => {
-        response.status(503).json({
+    void (async () => {
+      // tRPC is the first-party transport, not a compatibility promise: API-key
+      // credentials are rejected here rather than silently ignored.
+      if (
+        `${request.baseUrl}${request.path}`.startsWith(TRPC_PATH) &&
+        (request.header("authorization") ?? "").startsWith(`Bearer ${API_KEY_SECRET_PREFIX}`)
+      ) {
+        response.status(403).json({
           success: false,
-          error: { code: "SERVICE_UNAVAILABLE", message: "Authentication is unavailable." },
+          error: { code: "FORBIDDEN", message: "You are not allowed to do that." },
           requestId: response.getHeader("X-Request-Id") ?? "unknown",
         });
+        return;
+      }
+      if (!(await apiKeyAuth.authenticate(request))) {
+        await authService.authenticate(request);
+      }
+      next();
+    })().catch((error: unknown) => {
+      // An invalid API key raises a real 401. Collapsing every error into 503
+      // would report that — and every other credential failure — as an outage.
+      if (error instanceof ApiHttpException) {
+        response.status(error.getStatus()).json({
+          success: false,
+          error: error.safeResponse,
+          requestId: response.getHeader("X-Request-Id") ?? "unknown",
+        });
+        return;
+      }
+      response.status(503).json({
+        success: false,
+        error: { code: "SERVICE_UNAVAILABLE", message: "Authentication is unavailable." },
+        requestId: response.getHeader("X-Request-Id") ?? "unknown",
       });
+    });
   });
   express.use(
     TRPC_PATH,

@@ -50,6 +50,10 @@ function syncContext(
 ) {
   return {
     outboxIntentId: overrides.outboxIntentId ?? OUTBOX_INTENT_ID,
+    // The processor always supplies these; the handler reads them to tell a
+    // retryable attempt from the final one.
+    attempt: 1,
+    maximumAttempts: 3,
     jobType: DOMAIN_JOB_TYPES.noteSearchSync,
     idempotencyKey: "note-search-sync:test",
     signal: new AbortController().signal,
@@ -74,6 +78,10 @@ function purgeContext(
 ) {
   return {
     outboxIntentId: overrides.outboxIntentId ?? OUTBOX_INTENT_ID,
+    // The processor always supplies these; the handler reads them to tell a
+    // retryable attempt from the final one.
+    attempt: 1,
+    maximumAttempts: 3,
     jobType: DOMAIN_JOB_TYPES.workspaceSearchPurge,
     idempotencyKey: "workspace-search-purge:test",
     signal: new AbortController().signal,

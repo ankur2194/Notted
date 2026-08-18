@@ -104,6 +104,8 @@ describe("expired job idempotency cleanup", () => {
         jobType: "queue.idempotency.cleanup",
         idempotencyKey: "safe-test-key",
         signal: new AbortController().signal,
+        attempt: 1,
+        maximumAttempts: 3,
         payload: {
           action: "queue.idempotency.cleanup",
           intentId: "40000000-0000-4000-8000-000000000001",

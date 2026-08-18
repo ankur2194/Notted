@@ -28,6 +28,10 @@ function renderer(
 function context() {
   return {
     outboxIntentId: "00000000-0000-4000-8000-000000000023",
+    // The processor always supplies these; the handler reads them to tell a
+    // retryable attempt from the final one.
+    attempt: 1,
+    maximumAttempts: 3,
     jobType: "deliver-auth-email" as const,
     idempotencyKey: `auth-email:${intentId}`,
     signal: new AbortController().signal,

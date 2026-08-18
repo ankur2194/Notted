@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable, Optional } from "@nestjs/common";
 import { projectCoverImageUrlSchema } from "@notted/shared-validators";
 import {
   and,
@@ -53,6 +53,7 @@ import {
   TenantContextService,
   whereWorkspace,
 } from "../tenant";
+import { WebhookDeliveryProducer } from "../webhooks/webhook-delivery.producer";
 
 import {
   PROJECT_AUDIT_ACTIONS,
@@ -151,6 +152,12 @@ export class ProjectsService {
     // Part 51.3 — re-syncs every note whose `projectId` is nulled by a
     // project delete so the index's `projectId` filter field converges.
     private readonly searchIndexProducer: NoteSearchIndexProducer,
+    // Part 66 — emits one `webhook.deliver` intent per subscribed endpoint
+    // inside every project-mutation transaction. Optional so the unit tests can
+    // construct this service without the webhook module graph; `ProjectsModule`
+    // always provides it in the running application, and the producer filters
+    // the events nobody can subscribe to.
+    @Optional() private readonly webhookProducer?: WebhookDeliveryProducer,
   ) {}
 
   async list(input: ListProjectsInput): Promise<ProjectPage> {
@@ -679,6 +686,17 @@ export class ProjectsService {
       payload,
       payloadHash: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
       idempotencyKey: `${PROJECT_DOMAIN_EVENT_IDEMPOTENCY_PREFIX}${eventName}:${projectId}:${intentId}`,
+      correlationId: input.requestId ?? null,
+    });
+    // Part 66. Same transaction, same commit. `project.created` is the only
+    // subscribable project event; the producer drops `project.updated`,
+    // `project.archived` and the rest before it issues any SQL.
+    await this.webhookProducer?.scheduleWebhookDeliveries(tx, {
+      event: eventName,
+      workspaceId: activeWorkspaceId(this.tenantContext),
+      resourceId: projectId,
+      actorId: input.principal.userId,
+      occurredAt: new Date(),
       correlationId: input.requestId ?? null,
     });
   }

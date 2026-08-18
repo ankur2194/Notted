@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable, Optional } from "@nestjs/common";
 import { and, asc, desc, eq, exists, gt, isNotNull, isNull, lte, sql, type SQL } from "drizzle-orm";
 
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
@@ -27,6 +27,7 @@ import {
   TenantContextService,
   whereWorkspace,
 } from "../tenant";
+import { WebhookDeliveryProducer } from "../webhooks/webhook-delivery.producer";
 
 import { InvitationTokenService } from "./invitation-token.service";
 import {
@@ -103,6 +104,11 @@ export class MembershipsService {
     private readonly authorizationEntry: AuthorizationEntryService,
     private readonly tenantContext: TenantContextService,
     private readonly tokens: InvitationTokenService,
+    // Part 66 — emits the `member.joined` webhook intent inside the invitation
+    // acceptance transaction. Optional so the unit tests can construct this
+    // service without the webhook module graph; `MembershipsModule` always
+    // provides it in the running application.
+    @Optional() private readonly webhookProducer?: WebhookDeliveryProducer,
   ) {}
 
   async listMembers(input: PageInput): Promise<WorkspaceMemberPage> {
@@ -365,6 +371,26 @@ export class MembershipsService {
             metadata: { invitationId: invitation.id, status: "accepted", role: membership.role },
             requestId: input.requestId,
           });
+          // Part 66. ONLY on a real join: re-accepting an invitation for an
+          // existing member (`joined === false`) is not a `member.joined` event,
+          // and announcing it would make a receiver's "welcome the new member"
+          // automation fire twice. Committed in the SAME transaction as the
+          // audit row, so a rollback takes the announcement with it.
+          //
+          // There is deliberately no `DOMAIN_JOB_TYPES` entry, no membership
+          // event constant and no membership outbox plumbing behind this: the
+          // event name is just a string in `webhooks.events` and in the
+          // `webhook.deliver` payload.
+          if (joined) {
+            await this.webhookProducer?.scheduleWebhookDeliveries(tx, {
+              event: "member.joined",
+              workspaceId: invitation.workspaceId,
+              resourceId: membership.id,
+              actorId: user.id,
+              occurredAt: now,
+              correlationId: input.requestId ?? null,
+            });
+          }
           return Object.freeze({
             membership: Object.freeze(
               this.toMember({ ...membership, name: user.name, email: normalizeEmail(user.email) }),

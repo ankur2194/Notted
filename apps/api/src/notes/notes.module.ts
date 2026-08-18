@@ -5,6 +5,7 @@ import { AuthorizationModule } from "../authorization/authorization.module";
 import { NotificationModule } from "../notifications/notification.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { SearchModule } from "../search/search.module";
+import { WebhooksModule } from "../webhooks/webhooks.module";
 
 import { NoteSharesController } from "./note-shares.controller";
 import { NoteSharesService } from "./note-shares.service";
@@ -24,7 +25,19 @@ import { NotesTrpcRouter } from "./notes.trpc";
   // `notification.mention` intents inside the note-update transaction
   // (Part 60). The arrow is one-way — NotificationModule never imports
   // NotesModule — so no `forwardRef` is involved.
-  imports: [AuthModule, AuthorizationModule, NotificationModule, RealtimeModule, SearchModule],
+  // WebhooksModule supplies the WebhookDeliveryProducer used to emit
+  // `webhook.deliver` intents inside every note-mutation transaction (Part 66).
+  // The arrow is one-way — WebhooksModule imports nothing from here, because
+  // the delivery worker re-reads `notes` directly under its own system
+  // authority — so no `forwardRef` is involved.
+  imports: [
+    AuthModule,
+    AuthorizationModule,
+    NotificationModule,
+    RealtimeModule,
+    SearchModule,
+    WebhooksModule,
+  ],
   controllers: [NotesController, FoldersController, NoteSharesController],
   providers: [NotesService, NoteSharesService, NoteVersionsService, NotesTrpcRouter],
   exports: [NotesService, NoteSharesService, NoteVersionsService, NotesTrpcRouter],

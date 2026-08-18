@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { parseAppConfig } from "../../config/app.config";
 
+import { RATE_LIMIT_TIER } from "./rate-limit.decorator";
 import { RateLimitGuard } from "./rate-limit.guard";
 import { RateLimitService } from "./rate-limit.service";
 import { setTrustedPrincipal } from "./trusted-principal";
@@ -96,6 +97,43 @@ describe("RateLimitGuard", () => {
     expect(guard.canActivate(createContext(request, createResponse()))).toBe(true);
     expect(store.lastKey).toBe("actor:user:user-safe-id");
     expect(store.lastPolicy?.capacity).toBe(200);
+  });
+
+  it("selects the api-key tier from an api-key trusted principal", () => {
+    const config = parseAppConfig({
+      RATE_LIMIT_AUTHENTICATED_PER_MINUTE: "1000",
+      RATE_LIMIT_API_KEY_PER_MINUTE: "100",
+    });
+    const store = new CapturingStore();
+    const guard = new RateLimitGuard(new Reflector(), new RateLimitService(config, store));
+    const request = { headers: {}, ip: "192.0.2.10", socket: {} } as unknown as Request;
+
+    setTrustedPrincipal(request, { actorId: "key-safe-id", kind: "api-key" });
+
+    expect(guard.canActivate(createContext(request, createResponse()))).toBe(true);
+    expect(store.lastKey).toBe("actor:api-key:key-safe-id");
+    // The moderate machine tier, not the generous browser-session tier.
+    expect(store.lastPolicy?.capacity).toBe(100);
+  });
+
+  it("applies the sensitive tier and its own bucket when the route declares it", () => {
+    const config = parseAppConfig({
+      RATE_LIMIT_AUTHENTICATED_PER_MINUTE: "1000",
+      RATE_LIMIT_SENSITIVE_PER_MINUTE: "5",
+    });
+    const store = new CapturingStore();
+    // The decorator only stores metadata; what matters here is that the guard
+    // reads the RATE_LIMIT_TIER key over [handler, class] and forwards it.
+    const reflector = {
+      getAllAndOverride: (key: symbol) => (key === RATE_LIMIT_TIER ? "sensitive" : undefined),
+    } as unknown as Reflector;
+    const guard = new RateLimitGuard(reflector, new RateLimitService(config, store));
+    const request = { headers: {}, ip: "192.0.2.10", socket: {} } as unknown as Request;
+    setTrustedPrincipal(request, { actorId: "user-safe-id", kind: "user" });
+
+    expect(guard.canActivate(createContext(request, createResponse()))).toBe(true);
+    expect(store.lastKey).toBe("actor:user:user-safe-id:sensitive");
+    expect(store.lastPolicy?.capacity).toBe(5);
   });
 
   it("exposes safe 429 headers through the transport-neutral service", () => {

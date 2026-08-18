@@ -27,11 +27,12 @@ const managementAuthorization = {
   resource: (request: Request) => ({ kind: "note" as const, id: routeUuid(request, "noteId") }),
 };
 
-const readAuthorization = {
-  action: "note.read" as const,
-  workspaceId: (request: Request) => routeUuid(request, "workspaceId"),
-  resource: (request: Request) => ({ kind: "note" as const, id: routeUuid(request, "noteId") }),
-};
+// Every route here manages a delegation, so all three declare the same
+// management action. `note.share` — what `NoteSharesService.upsert` authorizes
+// underneath — cannot be declared at this layer: the policy requires delegation
+// facts (target member, requested permission) that only the service has loaded.
+// The transport action must therefore never be narrower than the mutation, or
+// an API key scoped `read` would satisfy the only scope check on the path.
 
 @Controller("workspaces/:workspaceId/notes/:noteId/shares")
 export class NoteSharesController {
@@ -47,7 +48,7 @@ export class NoteSharesController {
   }
 
   @Put(":userId")
-  @RequireAuthorization(readAuthorization)
+  @RequireAuthorization(managementAuthorization)
   upsert(@Req() request: Request, @Body() rawBody: unknown): Promise<NoteShareUpsertResult> {
     this.auth.assertTrustedMutationOrigin(request);
     const body = upsertNoteShareSchema.safeParse(rawBody);

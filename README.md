@@ -177,6 +177,7 @@ A part is not complete merely because code exists. Its stated criteria and requi
 | [`docs/decisions/`](docs/decisions/)                         | Architecture decision records                                                                              |
 | [`docs/completed-parts/`](docs/completed-parts/)             | Cross-session implementation and verification history                                                      |
 | [`docs/database-migrations.md`](docs/database-migrations.md) | Drizzle migration generation, immutability, testing, and rollback policy                                   |
+| [`docs/API.md`](docs/API.md)                                 | Public `/api/v1` REST contract: API keys, scopes, pagination, idempotency, rate limits, and error codes    |
 
 ## Local Development
 

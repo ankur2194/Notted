@@ -7,6 +7,7 @@
     "build": "tsc --build tsconfig.build.json --force",
     "dev": "node --env-file=.env ./node_modules/@nestjs/cli/bin/nest.js start --watch",
     "env:validate": "tsx scripts/validate-env.ts",
+    "openapi:generate": "node --import tsx scripts/generate-openapi.ts",
     "storage:report": "node --env-file=.env --import tsx scripts/storage-report.ts",
     "search:reindex": "node --env-file=.env --import tsx scripts/search-reindex.ts",
     "embedding:reindex": "node --env-file=.env --import tsx scripts/embedding-reindex.ts",

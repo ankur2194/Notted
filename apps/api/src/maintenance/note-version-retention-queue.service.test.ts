@@ -59,6 +59,8 @@ describe("durable note-version retention execution", () => {
       jobType: "note.version.retention.sweep",
       idempotencyKey: "period",
       signal: new AbortController().signal,
+      attempt: 1,
+      maximumAttempts: 3,
       payload: {
         action: "note.version.retention.sweep",
         intentId: "40000000-0000-4000-8000-000000000001",

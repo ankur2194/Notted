@@ -16,6 +16,7 @@ describe("parseAppConfig", () => {
       unauthenticatedRateLimitPerMinute: 60,
       authenticatedRateLimitPerMinute: 1_000,
       sensitiveRateLimitPerMinute: 10,
+      apiKeyRateLimitPerMinute: 100,
     });
     expect(config.appUrl.href).toBe("http://localhost:3000/");
     expect(config.apiUrl.href).toBe("http://localhost:3001/");
@@ -36,6 +37,7 @@ describe("parseAppConfig", () => {
       RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE: "10",
       RATE_LIMIT_AUTHENTICATED_PER_MINUTE: "200",
       RATE_LIMIT_SENSITIVE_PER_MINUTE: "5",
+      RATE_LIMIT_API_KEY_PER_MINUTE: "250",
     });
 
     expect(config.apiHost).toBe("0.0.0.0");
@@ -49,6 +51,7 @@ describe("parseAppConfig", () => {
     expect(config.unauthenticatedRateLimitPerMinute).toBe(10);
     expect(config.authenticatedRateLimitPerMinute).toBe(200);
     expect(config.sensitiveRateLimitPerMinute).toBe(5);
+    expect(config.apiKeyRateLimitPerMinute).toBe(250);
   });
 
   it.each([
@@ -63,6 +66,12 @@ describe("parseAppConfig", () => {
     [{ APP_URL: "https://example.com/path" }, "must be an origin"],
     [{ API_URL: "https://example.com/api" }, "API_URL must be an origin"],
     [{ WS_URL: "https://example.com" }, "WS_URL must use one of"],
+    [{ RATE_LIMIT_API_KEY_PER_MINUTE: "0" }, "RATE_LIMIT_API_KEY_PER_MINUTE must be an integer"],
+    [
+      { RATE_LIMIT_API_KEY_PER_MINUTE: "1000001" },
+      "RATE_LIMIT_API_KEY_PER_MINUTE must be an integer",
+    ],
+    [{ RATE_LIMIT_API_KEY_PER_MINUTE: "abc" }, "RATE_LIMIT_API_KEY_PER_MINUTE must be an integer"],
   ])("rejects invalid environment values", (environment, expectedMessage) => {
     expect(() => parseAppConfig(environment)).toThrowError(expectedMessage);
   });

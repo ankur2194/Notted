@@ -22,6 +22,10 @@ const deliveryId = "30000000-0000-4000-8000-000000000003";
 function context(overrides: { workspaceId?: string; resourceIds?: readonly string[] } = {}) {
   return {
     outboxIntentId: "30000000-0000-4000-8000-000000000004",
+    // The processor always supplies these; the handler reads them to tell a
+    // retryable attempt from the final one.
+    attempt: 1,
+    maximumAttempts: 3,
     jobType: "workspace.invitation.send" as const,
     idempotencyKey: `workspace-invitation-send:${invitationId}`,
     signal: new AbortController().signal,

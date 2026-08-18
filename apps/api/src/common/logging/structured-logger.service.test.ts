@@ -45,6 +45,31 @@ describe("StructuredLogger auth redaction", () => {
     expect(output).not.toContain("oauth-id-token");
     write.mockRestore();
   });
+
+  /**
+   * Part 65. An API key travels as `Authorization: Bearer ntd_pk_...` and is a
+   * live credential in plaintext — the one raw form of a key that exists after
+   * creation. The `authorization` redaction path predates API keys, so this
+   * pins that it covers them.
+   */
+  it("redacts a bearer API key carried on the authorization field", () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const logger = new StructuredLogger({ nodeEnv: "test", logLevel: "info" } as AppConfig);
+    const secret = "ntd_pk_abcdefghijklmnopqrstuvwxyz012345";
+    logger.info(
+      { authorization: `Bearer ${secret}`, apiKeyId: "11111111-1111-4111-8111-111111111111" },
+      "API key request",
+    );
+    const output = write.mock.calls.map(([chunk]) => String(chunk)).join("");
+
+    expect(output).not.toContain(secret);
+    expect(output).not.toContain("ntd_pk_");
+    expect(output).toContain("[REDACTED]");
+    // The non-sensitive correlation identifier still survives, so the entry
+    // remains useful for tracing a key without exposing it.
+    expect(output).toContain("11111111-1111-4111-8111-111111111111");
+    write.mockRestore();
+  });
 });
 
 /**

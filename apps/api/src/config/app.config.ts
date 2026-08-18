@@ -30,6 +30,8 @@ export interface AppConfig {
   readonly unauthenticatedRateLimitPerMinute: number;
   readonly authenticatedRateLimitPerMinute: number;
   readonly sensitiveRateLimitPerMinute: number;
+  /** Part 65 — moderate per-key tier for the public REST surface. */
+  readonly apiKeyRateLimitPerMinute: number;
 }
 
 export function parseAppConfig(environment: Environment): AppConfig {
@@ -104,6 +106,13 @@ export function parseAppConfig(environment: Environment): AppConfig {
         10,
         1,
         10_000,
+      ),
+      apiKeyRateLimitPerMinute: readInteger(
+        environment,
+        "RATE_LIMIT_API_KEY_PER_MINUTE",
+        100,
+        1,
+        1_000_000,
       ),
     });
   } catch (error: unknown) {

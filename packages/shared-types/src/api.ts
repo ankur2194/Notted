@@ -37,7 +37,16 @@ export type ApiErrorCode =
   // the opaque `unavailable` bucket.
   | "EXPORT_EXPIRED"
   | "EXPORT_OBJECT_UNAVAILABLE"
-  | "EXPORT_FORMAT_UNSUPPORTED";
+  | "EXPORT_FORMAT_UNSUPPORTED"
+  // Part 66 — webhook endpoint lifecycle. `WEBHOOK_URL_REJECTED` (422) is the
+  // server-side SSRF verdict, which syntax validation cannot reach;
+  // `WEBHOOK_NOT_VERIFIED` (409) refuses enabling an endpoint that has not
+  // echoed the challenge; `WEBHOOK_VERIFICATION_FAILED` (422) is a challenge
+  // the receiver did not echo. All three carry a specific remedy, so
+  // `request-json.ts` surfaces their codes rather than a generic bucket.
+  | "WEBHOOK_URL_REJECTED"
+  | "WEBHOOK_NOT_VERIFIED"
+  | "WEBHOOK_VERIFICATION_FAILED";
 
 export interface ApiError {
   readonly code: ApiErrorCode;

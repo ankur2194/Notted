@@ -75,3 +75,6 @@ Thumbs.db
 
 # Local sync script
 folder-sync.sh
+
+# graphify query cache — a timestamp file rewritten on every query.
+graphify-out/cache/

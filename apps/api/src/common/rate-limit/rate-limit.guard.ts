@@ -1,7 +1,7 @@
 import { type CanActivate, type ExecutionContext, Inject, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
-import { RATE_LIMIT_EXEMPT } from "./rate-limit.decorator";
+import { RATE_LIMIT_EXEMPT, RATE_LIMIT_TIER } from "./rate-limit.decorator";
 import { RateLimitService } from "./rate-limit.service";
 
 import type { Request, Response } from "express";
@@ -22,10 +22,14 @@ export class RateLimitGuard implements CanActivate {
       return true;
     }
 
+    const tier = this.reflector.getAllAndOverride<"sensitive">(RATE_LIMIT_TIER, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
     const http = context.switchToHttp();
     const request = http.getRequest<Request>();
     const response = http.getResponse<Response>();
-    this.rateLimit.enforce(request, response);
+    this.rateLimit.enforce(request, response, tier);
     return true;
   }
 }

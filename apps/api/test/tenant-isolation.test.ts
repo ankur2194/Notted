@@ -1054,8 +1054,18 @@ describe.skipIf(!HAS_DATABASE_URL)("tenant isolation (live)", () => {
       const deliveryAEvent = `event.a.${stamp}`;
       const deliveryBEvent = `event.b.${stamp}`;
       await db.insert(webhookDeliveries).values([
-        { webhookId: webhookA.id, event: deliveryAEvent, attempt: 1 },
-        { webhookId: webhookB.id, event: deliveryBEvent, attempt: 1 },
+        {
+          webhookId: webhookA.id,
+          eventId: crypto.randomUUID(),
+          event: deliveryAEvent,
+          attempt: 1,
+        },
+        {
+          webhookId: webhookB.id,
+          eventId: crypto.randomUUID(),
+          event: deliveryBEvent,
+          attempt: 1,
+        },
       ]);
 
       // Invitations (hash-only token).

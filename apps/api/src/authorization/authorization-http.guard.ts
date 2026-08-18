@@ -1,6 +1,7 @@
 import { type CanActivate, type ExecutionContext, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
+import { getApiKeyActor } from "../api-keys/api-key-context";
 import { AuthService } from "../auth/auth.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import { getRequestId } from "../common/request/request-context";
@@ -67,14 +68,41 @@ export class AuthorizationHttpGuard implements CanActivate {
         message: "The requested resource was not found.",
       });
     }
-    try {
-      const operation = await this.adapters.authorizeHttp({
-        principal,
-        workspaceId,
-        action: spec.action,
-        resource,
-        correlationId: getRequestId(request),
+    // Part 65. An API-key request carries BOTH a synthetic principal for the
+    // key's creator (installed by the pre-guard, which is why the 401 branch
+    // above is unchanged) and a separate API-key actor. Scope is decided here;
+    // the creator's live workspace role is still enforced unchanged at the
+    // service layer, so the effective permission is scope ∩ creator role.
+    const apiKeyActor = getApiKeyActor(request);
+    // A key is bound to ONE workspace (ADR 0003), and `authorizeApiKey` derives
+    // its tenant context from the actor alone — it never sees this route's
+    // workspace. Without this check a key issued for workspace A reaching a
+    // workspace-B path would be authorized against A here, and then re-checked
+    // downstream against the CREATOR's membership in B: any creator who belongs
+    // to both workspaces would carry the key across the tenant boundary.
+    // 404, never 403, so a foreign workspace id leaks no existence signal.
+    if (apiKeyActor !== undefined && apiKeyActor.workspaceId !== workspaceId) {
+      throw new ApiHttpException(404, {
+        code: "NOT_FOUND",
+        message: "The requested resource was not found.",
       });
+    }
+    try {
+      const operation =
+        apiKeyActor === undefined
+          ? await this.adapters.authorizeHttp({
+              principal,
+              workspaceId,
+              action: spec.action,
+              resource,
+              correlationId: getRequestId(request),
+            })
+          : await this.adapters.authorizeApiKey({
+              actor: apiKeyActor,
+              action: spec.action,
+              resource,
+              correlationId: getRequestId(request),
+            });
       setAuthorizedOperation(request, operation);
       return true;
     } catch (error: unknown) {

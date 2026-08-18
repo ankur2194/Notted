@@ -2,7 +2,9 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ApiKeys } from "@/components/workspaces/ApiKeys";
 import { MentionEmailPreference } from "@/components/workspaces/MentionEmailPreference";
+import { WebhookSettings } from "@/components/workspaces/WebhookSettings";
 import { WorkspaceSettings } from "@/components/workspaces/WorkspaceSettings";
 import { getServerWorkspaceDetail } from "@/lib/workspaces/server-workspaces";
 
@@ -67,6 +69,13 @@ export default async function WorkspaceSettingsPage({
         canManage={canManage}
         canDelete={canDelete}
       />
+      {canManage ? <ApiKeys workspaceId={workspace.id} /> : null}
+      {/*
+        Admin-only like the API keys above, and for the same reason: an endpoint
+        receives workspace content, and its signing secret is a credential. The
+        gate is presentational — every webhook route re-authorizes server-side.
+      */}
+      {canManage ? <WebhookSettings workspaceId={workspace.id} /> : null}
       {/*
         Rendered for EVERY member, unlike the blocks above. This is the reader's
         own mail preference — the control the mention email's footer links to —

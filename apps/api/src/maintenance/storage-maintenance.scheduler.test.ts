@@ -97,6 +97,8 @@ describe("durable storage maintenance scheduling", () => {
       jobType: "storage.maintenance.sweep",
       idempotencyKey: "ignored-by-business-handler",
       signal: new AbortController().signal,
+      attempt: 1,
+      maximumAttempts: 3,
       payload: {
         action: "storage.maintenance.sweep",
         intentId: "40000000-0000-4000-8000-000000000001",

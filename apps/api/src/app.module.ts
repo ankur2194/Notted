@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { ApiKeysModule } from "./api-keys/api-keys.module";
 import { ApiController } from "./api.controller";
 import { AttachmentsModule } from "./attachments/attachments.module";
 import { AuthModule } from "./auth/auth.module";
@@ -15,6 +16,7 @@ import { MaintenanceModule } from "./maintenance/maintenance.module";
 import { MembershipsModule } from "./memberships/memberships.module";
 import { NotesModule } from "./notes/notes.module";
 import { NotificationModule } from "./notifications/notification.module";
+import { OpenApiModule } from "./openapi/openapi.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { QueueModule } from "./queue/queue.module";
 import { RealtimeModule } from "./realtime/realtime.module";
@@ -25,6 +27,7 @@ import { TagsModule } from "./tags/tags.module";
 import { TasksModule } from "./tasks/tasks.module";
 import { TenantContextModule } from "./tenant/tenant-context.module";
 import { TrpcModule } from "./trpc/trpc.module";
+import { WebhooksModule } from "./webhooks/webhooks.module";
 import { WorkspacesModule } from "./workspaces/workspaces.module";
 
 @Module({
@@ -34,6 +37,11 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
     DatabaseModule,
     AuthModule,
     AuthorizationModule,
+    // Part 65. `ApiKeysModule` owns key issuance/revocation and the bearer
+    // authenticator the `/api/v1` pre-guard calls; `OpenApiModule` documents
+    // the public REST surface those keys reach.
+    ApiKeysModule,
+    OpenApiModule,
     AttachmentsModule,
     CommentsModule,
     // Part 61. Owns the generic template renderer, the transactional producer,
@@ -63,6 +71,10 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
     TasksModule,
     TenantContextModule,
     TrpcModule,
+    // Part 66. Owns the webhook admin surface and the delivery worker, and
+    // exports the transaction-scoped producer that NotesModule, ProjectsModule
+    // and MembershipsModule commit their intents through.
+    WebhooksModule,
     WorkspacesModule,
   ],
   controllers: [ApiController],

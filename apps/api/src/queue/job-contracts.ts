@@ -57,6 +57,16 @@ export interface OutboxJobDefinition<
   readonly payloadSchema: z.ZodType<TPayload>;
   readonly route: QueueRouteMetadata;
   readonly authority: "actor" | "system";
+  /**
+   * Per-definition BullMQ attempt budget. Omitted means the global
+   * `QUEUE_ATTEMPTS`, which is what every job type shipped before Part 66 used.
+   *
+   * Webhooks need 5 (Notted.md "max 5 attempts") while the email and mention
+   * work they share a lane with stays at 3 — and the budget must be per
+   * definition rather than global precisely so ONE dead receiver cannot spend a
+   * budget the other job types are also drawing from.
+   */
+  readonly maximumAttempts?: number;
 }
 
 /** Context supplied after Task 50.2 has loaded and validated authoritative intent. */
@@ -68,6 +78,18 @@ export interface QueueJobContext<TType extends DomainJobType, TPayload> {
   readonly payload: TPayload;
   /** Aborted when the worker's wait budget expires; handlers should pass it to cancellable adapters. */
   readonly signal: AbortSignal;
+  /**
+   * 1-based attempt number of the CURRENT invocation, read from the BullMQ job
+   * the processor already holds — no extra bookkeeping.
+   *
+   * A handler that classifies its own failures ("retry this, record that as
+   * terminal") cannot settle cleanly without knowing it is on the last attempt:
+   * it would either dead-letter work that had one try left, or re-throw on the
+   * final attempt and lose the terminal outcome it wanted to record. Every
+   * handler written before Part 66 ignores both fields.
+   */
+  readonly attempt: number;
+  readonly maximumAttempts: number;
 }
 
 export interface QueueJobHandler<TType extends DomainJobType, TPayload> {

@@ -19,7 +19,12 @@ export const AUTH_API_PATHS = Object.freeze({
   revokeOtherSessions: "/api/v1/auth/sessions/revoke-others",
 } as const);
 
-export type AuthenticationMethod = "opaque-session";
+/**
+ * `api-key` principals are synthesized by the REST API-key authenticator
+ * (Part 65) for the key's creator; they never originate from a browser
+ * session. `apps/web` still narrows to `opaque-session` on purpose.
+ */
+export type AuthenticationMethod = "api-key" | "opaque-session";
 export type AuthenticationAssurance = "single-factor";
 export type OAuthProviderId = "google" | "github" | "microsoft";
 

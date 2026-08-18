@@ -55,6 +55,22 @@ export const DOMAIN_JOB_TYPES = Object.freeze({
   // claims the row (queued -> processing), re-reads the source from
   // PostgreSQL, renders, uploads, and marks it ready.
   generateExport: "export.generate",
+  // Part 66 — outbound webhook delivery. ONE DEDICATED INTENT per
+  // (endpoint x event), deliberately NOT a subscription to the existing
+  // `note.*`/`project.*` domain job types, for two independent reasons:
+  //
+  //   1. `QueueHandlerRegistry.register` allows exactly ONE handler per job
+  //      type. Subscribing would permanently claim four shared domain types for
+  //      the webhook feature, so nothing else could ever handle them.
+  //   2. A shared job means ONE BullMQ retry budget across every endpoint: a
+  //      single dead receiver would burn the attempts belonging to the note
+  //      mutation that produced the event, and to every other subscriber.
+  //
+  // One intent per (endpoint x event) gives each endpoint its own independent
+  // 5-attempt budget. This follows the four existing precedents that made the
+  // same call — `note.search.sync`, `notification.mention`, `email.deliver`,
+  // and `export.generate`.
+  webhookDeliver: "webhook.deliver",
 } as const);
 
 export type DomainJobType = (typeof DOMAIN_JOB_TYPES)[keyof typeof DOMAIN_JOB_TYPES];

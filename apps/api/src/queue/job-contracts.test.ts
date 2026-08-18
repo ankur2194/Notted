@@ -48,6 +48,46 @@ describe("queue contracts", () => {
     expect(() => definition?.payloadSchema.parse(payload)).toThrow();
   });
 
+  it("gives webhook delivery its own 5-attempt budget without touching its lane mates", () => {
+    const webhook = registeredJobDefinition(DOMAIN_JOB_TYPES.webhookDeliver);
+    expect(webhook).toMatchObject({
+      authority: "system",
+      maximumAttempts: 5,
+      route: { physicalQueueName: PHYSICAL_QUEUE_NAMES.default },
+    });
+    // The budget is per definition precisely so one dead receiver cannot spend
+    // the attempts belonging to the email and mention work sharing that lane:
+    // those carry no override and fall back to the global QUEUE_ATTEMPTS.
+    expect(
+      registeredJobDefinition(DOMAIN_JOB_TYPES.deliverWorkspaceEmail)?.maximumAttempts,
+    ).toBeUndefined();
+    expect(
+      registeredJobDefinition(DOMAIN_JOB_TYPES.mentionNotify)?.maximumAttempts,
+    ).toBeUndefined();
+  });
+
+  it("carries occurredAt but nothing else beyond identifiers on a webhook intent", () => {
+    const definition = registeredJobDefinition(DOMAIN_JOB_TYPES.webhookDeliver);
+    const payload = {
+      action: DOMAIN_JOB_TYPES.webhookDeliver,
+      intentId: "00000000-0000-4000-8000-000000000001",
+      workspaceId: "00000000-0000-4000-8000-000000000002",
+      webhookId: "00000000-0000-4000-8000-000000000003",
+      eventId: "00000000-0000-4000-8000-000000000004",
+      event: "note.deleted",
+      resourceId: null,
+      actorId: null,
+      occurredAt: "2026-08-18T10:00:00.000Z",
+    };
+    expect(definition?.payloadSchema.parse(payload)).toEqual(payload);
+    // A body, a title, or anything else the receiver might want is rebuilt from
+    // authoritative state by the handler, never carried across the boundary.
+    expect(() => definition?.payloadSchema.parse({ ...payload, title: "leaked" })).toThrow();
+    expect(() =>
+      definition?.payloadSchema.parse({ ...payload, occurredAt: "yesterday" }),
+    ).toThrow();
+  });
+
   it("registers note-version retention as strict unscoped system maintenance", () => {
     const definition = registeredJobDefinition(DOMAIN_JOB_TYPES.noteVersionRetentionSweep);
     expect(definition).toMatchObject({

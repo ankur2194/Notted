@@ -278,6 +278,10 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 62 export job lifecycle (live PostgreSQ
     expect(intent).toBeDefined();
     await harness.worker.handle({
       outboxIntentId: (intent as { id: string }).id,
+      // The processor always supplies these; the handler reads them to tell a
+      // retryable attempt from the final one.
+      attempt: 1,
+      maximumAttempts: 3,
       jobType: EXPORT_GENERATE_JOB_DEFINITION.jobType,
       idempotencyKey: (intent as { idempotencyKey: string }).idempotencyKey,
       payload: EXPORT_GENERATE_JOB_DEFINITION.payloadSchema.parse(

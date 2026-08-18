@@ -124,6 +124,8 @@ export class QueueWorkerProcessorService {
           correlationId: row.correlationId ?? undefined,
           payload: parsed.data,
           signal: abort.signal,
+          attempt: invocation.attempt,
+          maximumAttempts: invocation.maximumAttempts,
         }),
         this.config.workers[invocation.sourceQueue].timeoutMs,
         abort,

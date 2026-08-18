@@ -10,6 +10,8 @@ const config: SecurityConfig = {
   maximumUploadBytes: 1_024,
   maximumWorkspaceStorageBytes: 2_048,
   signedUrlTtlSeconds: 60,
+  webhookRequestTimeoutMs: 10_000,
+  webhookAllowInsecureUrls: false,
 };
 
 describe("AuthEmailEncryptionService", () => {

@@ -51,6 +51,10 @@ const noteRow = {
 function context(overrides: { intentId?: string } = {}) {
   return {
     outboxIntentId: INTENT_ID,
+    // The processor always supplies these; the handler reads them to tell a
+    // retryable attempt from the final one.
+    attempt: 1,
+    maximumAttempts: 3,
     jobType: "export.generate" as const,
     idempotencyKey: `export:${EXPORT_ID}`,
     correlationId: undefined,

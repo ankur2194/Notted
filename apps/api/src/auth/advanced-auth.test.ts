@@ -5,6 +5,7 @@ import { parseAuthConfig } from "../config/auth.config";
 import { parseRetentionConfig } from "../config/retention.config";
 import { passkey as passkeyTable, twoFactor as twoFactorTable } from "../database/schema";
 
+import { setAuthPrincipal } from "./auth-principal";
 import { AuthService } from "./auth.service";
 import {
   type BetterAuthInstance,
@@ -16,6 +17,7 @@ import {
 } from "./better-auth.setup";
 
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
+import type { Request } from "express";
 
 function principal(isFresh: boolean): AuthenticatedPrincipal {
   return {
@@ -129,6 +131,22 @@ describe("advanced authentication policy", () => {
       "Confirm your identity",
     );
     expect(() => service.requireRecentAuthentication(principal(true))).not.toThrow();
+  });
+
+  // Part 65 regression. The API-key pre-guard installs a synthetic principal
+  // before this ever runs, and Better Auth is null on any deployment without
+  // Redis. Checking availability first threw that principal away and 401'd
+  // every API-key request.
+  it("returns an already-installed principal even with no Better Auth instance", async () => {
+    const service = new AuthService(null, parseAuthConfig({}), parseRetentionConfig({}));
+    expect(service.isAvailable()).toBe(false);
+
+    const request = { headers: {} } as unknown as Request;
+    expect(await service.authenticate(request)).toBeNull();
+
+    const installed = principal(false);
+    setAuthPrincipal(request, installed);
+    expect(await service.authenticate(request)).toEqual(installed);
   });
 
   it("preserves one-day intent across Better Auth TOTP management rotations", () => {

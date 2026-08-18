@@ -48,6 +48,15 @@
 // overwrite of a prior attempt — so the full attempt history is queryable for
 // the delivery logs Notted.md surfaces in workspace settings.
 //
+// EVENT IDENTITY (`event_id`, Part 66): delivery is AT-LEAST-ONCE, so the same
+// event legitimately reaches a receiver more than once — every automatic retry
+// of a failed attempt, and every manual admin replay, is another HTTP request
+// carrying the SAME logical event. `event_id` is what stays stable across all
+// of them: it is the value sent as `X-Notted-Event-Id` so a receiver can dedupe
+// on its own side, and it is the grouping key that turns N attempt rows back
+// into one event in the delivery log. See its column comment for why it carries
+// no foreign key.
+//
 // PAYLOAD REDACTION: `payload_hash` stores a hash (sha256 hex) of the delivered
 // payload body so attempts stay small and the dispatcher can dedupe identical
 // redeliveries. The FULL PAYLOAD IS NOT PERSISTED LONG-TERM: webhook payloads
@@ -132,7 +141,15 @@ export const webhooks = pgTable(
     // Subscribed event names (jsonb array of strings). Defaults to `[]`; the
     // service validates names against the event catalog and rejects delivering
     // an unsubscribed event. NOT NULL so "no events" is explicit.
-    events: jsonb("events").default([]).notNull(),
+    //
+    // `$type<string[]>()` is a COMPILE-TIME narrowing only — it emits no SQL and
+    // changes no stored value, it just stops every reader having to re-widen
+    // `unknown` before it can iterate. It deliberately narrows to `string[]`
+    // and not `WebhookEvent[]`: the database cannot enforce the catalog, so
+    // claiming the stricter type here would be a lie a stale row could break.
+    // Runtime validation stays where it can actually hold — the service checks
+    // names against `WEBHOOK_EVENTS`.
+    events: jsonb("events").$type<string[]>().default([]).notNull(),
     // Disabled until the verification challenge completes (Part 66). A disabled
     // endpoint never receives deliveries.
     isEnabled: boolean("is_enabled").default(false).notNull(),
@@ -158,6 +175,22 @@ export const webhookDeliveries = pgTable(
     webhookId: uuid("webhook_id")
       .references(() => webhooks.id, { onDelete: "cascade" })
       .notNull(),
+    // Logical event identity, STABLE across every retry attempt of this event
+    // AND across a manual admin replay of it. Three things depend on that:
+    //   1. It is the value sent as `X-Notted-Event-Id`, so a receiver that sees
+    //      the same delivery twice can dedupe without parsing the body.
+    //   2. It groups the N attempt rows of one event back together in the
+    //      delivery log (`webhook_deliveries_webhook_event_idx`).
+    //   3. A manual retry rebuilds the AUTHORITATIVE body by re-reading
+    //      `job_outbox WHERE id = delivery.event_id` rather than trusting a
+    //      stored copy — which is why no payload body is durable here.
+    //
+    // There is deliberately NO foreign key to `job_outbox`. Outbox rows are
+    // PRUNABLE (the queue-maintenance sweep reclaims settled intents) and a FK
+    // would make the delivery log pin them forever, turning a log table into a
+    // retention leak. A pruned intent is a normal, expected state: the replay
+    // path finds nothing and answers a clean 409 instead of inventing a body.
+    eventId: uuid("event_id").notNull(),
     // Event name delivered (e.g. "note.created"). varchar(100) fits the event
     // catalog names.
     event: varchar("event", { length: 100 }).notNull(),
@@ -191,6 +224,9 @@ export const webhookDeliveries = pgTable(
     // "Delivery history for endpoint X, newest first" (Notted.md workspace
     // settings delivery logs).
     index("webhook_deliveries_webhook_created_idx").on(t.webhookId, t.createdAt),
+    // "Every attempt of event E on endpoint X" — the retry/replay grouping the
+    // delivery log and the manual-retry path both read.
+    index("webhook_deliveries_webhook_event_idx").on(t.webhookId, t.eventId),
     // "Pending/retrying deliveries to resume" dispatcher scan.
     index("webhook_deliveries_status_idx").on(t.status),
   ],

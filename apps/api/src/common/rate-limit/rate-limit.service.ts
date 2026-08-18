@@ -4,7 +4,7 @@ import { APP_CONFIG, type AppConfig } from "../../config/app.config";
 import { ApiHttpException } from "../errors/api-http.exception";
 
 import { RATE_LIMIT_STORE, type RateLimitStore, type TokenBucketPolicy } from "./rate-limit.types";
-import { getTrustedPrincipal } from "./trusted-principal";
+import { getTrustedPrincipal, type TrustedPrincipal } from "./trusted-principal";
 
 import type { Request, Response } from "express";
 
@@ -18,16 +18,26 @@ export class RateLimitService {
     @Inject(RATE_LIMIT_STORE) private readonly store: RateLimitStore,
   ) {}
 
-  enforce(request: Request, response: Response): void {
+  /**
+   * Three tiers, selected only from the trusted principal an authentication
+   * adapter installed: unauthenticated (per IP), authenticated user, and API
+   * key. The bucket keys are disjoint by construction (`ip:` / `actor:user:` /
+   * `actor:api-key:`), so a tier can never drain another tier's allowance.
+   *
+   * `tierOverride` opts a single route into the sensitive limit. It gets its
+   * own `:sensitive` bucket rather than sharing the caller's general one:
+   * otherwise a handful of sign-in-grade requests would consume the caller's
+   * whole general allowance, and a caller already at their general limit could
+   * not reach a sensitive route at all.
+   */
+  enforce(request: Request, response: Response, tierOverride?: "sensitive"): void {
     const principal = getTrustedPrincipal(request);
-    const limit =
-      principal === undefined
-        ? this.config.unauthenticatedRateLimitPerMinute
-        : this.config.authenticatedRateLimitPerMinute;
-    const key =
+    const limit = this.limitFor(principal, tierOverride);
+    const bucket =
       principal === undefined
         ? `ip:${request.ip || request.socket.remoteAddress || "unknown"}`
         : `actor:${principal.kind}:${principal.actorId}`;
+    const key = tierOverride === undefined ? bucket : `${bucket}:${tierOverride}`;
     const policy: TokenBucketPolicy = {
       capacity: limit,
       refillTokensPerMillisecond: limit / MILLISECONDS_PER_MINUTE,
@@ -51,5 +61,16 @@ export class RateLimitService {
         message: "Too many requests. Try again later.",
       });
     }
+  }
+
+  private limitFor(
+    principal: TrustedPrincipal | undefined,
+    tierOverride: "sensitive" | undefined,
+  ): number {
+    if (tierOverride === "sensitive") return this.config.sensitiveRateLimitPerMinute;
+    if (principal === undefined) return this.config.unauthenticatedRateLimitPerMinute;
+    return principal.kind === "api-key"
+      ? this.config.apiKeyRateLimitPerMinute
+      : this.config.authenticatedRateLimitPerMinute;
   }
 }

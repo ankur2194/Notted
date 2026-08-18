@@ -143,6 +143,12 @@ x-api-environment: &api-environment
   # Only meaningful on `api`/`api-e2e`, which build the `workspace-chromium`
   # target; `db-init` also inherits this anchor but never reads the var.
   EXPORT_CHROMIUM_PATH: /usr/bin/chromium
+  # The container enumerates its own environment, so without this a webhook
+  # endpoint pointed at a local receiver is rejected before a request is made.
+  # It unblocks `http:` and loopback ONLY; every other private range stays
+  # blocked, and the API forces it to false under NODE_ENV=production. Inherited
+  # by `api-e2e` through `<<: *api-environment`.
+  WEBHOOK_ALLOW_INSECURE_URLS: "${WEBHOOK_ALLOW_INSECURE_URLS:-true}"
 
 # ------------------------------------------------------------------ e2e profile
 # The `e2e` profile (services suffixed `-e2e`, started only by

@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 
+import { getApiKeyActor } from "../api-keys/api-key-context";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import { setTrustedPrincipal } from "../common/rate-limit/trusted-principal";
 import { AUTH_CONFIG, type AuthConfig } from "../config/auth.config";
@@ -64,6 +65,11 @@ export class AuthService {
   }
 
   assertTrustedMutationOrigin(request: Request): void {
+    // Part 65. An API key is not ambient credential material: no browser
+    // attaches a bearer token cross-site, and integrations send no `Origin` at
+    // all. The CSRF origin check is therefore meaningless for API keys and
+    // would reject every legitimate integration mutation.
+    if (getApiKeyActor(request) !== undefined) return;
     const origin = request.header("origin");
     if (origin === undefined || !this.config.trustedOrigins.includes(origin)) {
       throw new ApiHttpException(HttpStatus.FORBIDDEN, {
@@ -83,12 +89,17 @@ export class AuthService {
   }
 
   async authenticate(request: Request): Promise<AuthenticatedPrincipal | null> {
-    if (this.auth === null) {
-      return null;
-    }
+    // THE MEMO IS CHECKED FIRST, BEFORE THE PROVIDER-AVAILABILITY GUARD. A
+    // principal already on the request was installed by something that is not
+    // Better Auth — Part 65's API-key pre-guard — and discarding it because the
+    // cookie-session provider happens to be unconfigured (no Redis) would 401
+    // every API-key request on this deployment.
     const existing = getAuthPrincipal(request);
     if (existing !== undefined) {
       return existing;
+    }
+    if (this.auth === null) {
+      return null;
     }
     const result = await this.auth.api.getSession({ headers: toWebHeaders(request) });
     if (result === null) {

@@ -33,7 +33,9 @@ supported implicit fallback.
   `WS_URL` uses WSS. Public URLs are credential-free origins without paths, queries, or
   fragments.
 - `DATABASE_URL` includes a non-placeholder application user and strong password.
-- `BETTER_AUTH_SECRET` is at least 32 bytes and is not a documented/example value.
+- `BETTER_AUTH_SECRET` is at least 32 bytes and is not a documented/example value. It is also
+  the API-key hashing pepper, so rotating it invalidates every issued API key — see
+  [BETTER_AUTH_SECRET is also the API-key pepper](#better_auth_secret-is-also-the-api-key-pepper).
 - `BETTER_AUTH_TRUSTED_ORIGINS` must include the exact `APP_URL` origin. Authentication
   requires `FEATURE_REDIS_ENABLED=true`; Redis loss fails closed and can require
   reauthentication (ADR 0010).
@@ -78,6 +80,32 @@ absent, because the Docker stack does not need them.
 `EMAIL_SMTP_HOST` at `127.0.0.1`. Those are reachable only while
 `docker/compose.debug-ports.yml` is layered in (`pnpm infra:up:ports`); the default stack
 keeps the data services off the host.
+
+## BETTER_AUTH_SECRET is also the API-key pepper
+
+`BETTER_AUTH_SECRET` has a second consumer. Part 65 stores no raw API key: a key row holds
+only an HMAC-SHA256 hash of the secret, peppered with `BETTER_AUTH_SECRET`, plus an
+eight-character display prefix. The pepper lives only in the process environment and never in
+the database, so a database-only compromise can neither verify a stolen key nor forge a new
+row.
+
+**Rotating `BETTER_AUTH_SECRET` invalidates every issued API key.** Each stored hash was
+computed under the old pepper and can no longer be reproduced, so every key begins returning
+the same `401 UNAUTHENTICATED` as an unknown key — silently, from the integration's point of
+view, because the failure is deliberately indistinguishable from revocation.
+
+Treat a rotation as a planned key-reissue event, not a routine secret change:
+
+- Announce it to every workspace that owns integrations; the keys cannot be migrated, only
+  reissued.
+- Rotate the secret and mint replacement keys in the same maintenance window. There is no
+  dual-pepper period: the hash construction is versioned (`notted:api-key:v1:`) so a future
+  scheme can coexist with `v1` rows, but a pepper change is not such a scheme.
+- The secret is Better Auth's signing secret as well, so plan for signed-in users to be
+  affected in the same window.
+
+This coupling does not apply to `DATA_ENCRYPTION_KEYS`, which is a versioned keyring designed
+for overlapping rotation.
 
 ## Portable secret generation
 
@@ -124,3 +152,57 @@ remain exact application-local paths validated by the web client and Better Auth
 origins; external or protocol-relative targets are rejected.
 Provider failures return to a generic local `/login` error state; provider error descriptions
 and credential material are never rendered.
+
+## Rate-limit values
+
+Four independent token buckets guard the API. Each value is requests per minute for one
+bucket; the buckets are keyed disjointly (client IP, user ID, API-key ID, and a per-route
+sensitive bucket), so draining one never consumes another's allowance. All four are optional
+API environment values with the defaults below.
+
+| Variable | Default | Accepted range | Bucket |
+|---|---|---|---|
+| `RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE` | `60` | 1–100000 | Per client IP, before any credential is validated |
+| `RATE_LIMIT_AUTHENTICATED_PER_MINUTE` | `1000` | 1–1000000 | Per authenticated user |
+| `RATE_LIMIT_API_KEY_PER_MINUTE` | `100` | 1–1000000 | Per API key, not per workspace or per creator |
+| `RATE_LIMIT_SENSITIVE_PER_MINUTE` | `10` | 1–10000 | Per caller, per route opted into the sensitive tier |
+
+A value outside its range fails startup rather than being clamped. The tier is selected only
+from the trusted principal an authentication adapter installed after validating a credential;
+request headers never influence it, and rate-limit identity never grants a role or a resource
+permission.
+
+The sensitive tier is layered on top of the caller's general bucket rather than replacing it,
+so a handful of sign-in-grade or credential-minting requests cannot consume a caller's whole
+general allowance, and a caller already at their general limit gains no extra capacity.
+
+The development stack raises the unauthenticated, authenticated, and sensitive values to
+effectively unlimited numbers in [`compose.yaml`](../compose.yaml) so that seeding, hot
+reload, and Playwright runs are never throttled. `RATE_LIMIT_API_KEY_PER_MINUTE` is not
+overridden there and keeps its default. Those are local values only; production uses the
+defaults above or lower.
+
+Callers see `RateLimit-Limit`, `RateLimit-Remaining`, and `RateLimit-Reset` on every response
+and `Retry-After` on `429 RATE_LIMITED`. See [`API.md`](API.md) for the client-facing
+contract.
+
+## Outbound webhook values
+
+Both variables belong to the API environment and both are optional.
+
+| Variable | Default | Accepted range | Notes |
+|---|---|---|---|
+| `WEBHOOK_REQUEST_TIMEOUT_MS` | `10000` | 1000–30000 | Wall-clock ceiling on one outbound delivery request. A receiver is expected to accept and enqueue, not to do the work on the request path. Out of range fails startup rather than being clamped. |
+| `WEBHOOK_ALLOW_INSECURE_URLS` | `false` | `true` / `false` | **Forced to `false` whenever `NODE_ENV=production`, regardless of what the environment says** — the variable is not read there at all. Outside production it unblocks the `http:` scheme and loopback IP literals (`127.0.0.0/8`, `::1`) **only**. Note it does NOT unblock the *hostname* `localhost`: that name, along with `*.localhost`, `*.local`, `*.internal` and `metadata.google.internal`, is refused by the hostname deny-list whatever this flag says, so a local receiver must be addressed as `http://127.0.0.1:<port>/…`. |
+
+`WEBHOOK_ALLOW_INSECURE_URLS` never relaxes anything beyond those two. `10.0.0.0/8`,
+`172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16` (including the cloud metadata address),
+and every other private or reserved range stay blocked with the flag on, as do destinations
+that resolve back to the deployment's own hosts. That narrowness is deliberate: an
+integration test can point an endpoint at an in-process receiver on `127.0.0.1` while, in the
+same run, the "private and link-local destinations are rejected" assertions still hold. The
+flag is not an SSRF switch and cannot be used as one.
+
+[`compose.yaml`](../compose.yaml) sets it to `true` for the development and disposable e2e
+API containers, which enumerate their own environment; override it through root `.env` if a
+local run should behave like production.

@@ -41,6 +41,10 @@ function context(
 ) {
   return {
     outboxIntentId: INTENT_ID,
+    // The processor always supplies these; the handler reads them to tell a
+    // retryable attempt from the final one.
+    attempt: 1,
+    maximumAttempts: 3,
     jobType: "email.deliver" as const,
     idempotencyKey: `email:${DELIVERY_ID}`,
     correlationId: undefined,

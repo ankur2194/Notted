@@ -25,10 +25,17 @@ export interface ApiRequestFailure {
   readonly retryAfterMs?: number;
   /**
    * The stable `ApiErrorCode` from the error envelope, when the response
-   * carried one. Present only on a 409 today, because that is the one status
-   * where a single `kind` covers genuinely different remedies: `TAG_NAME_TAKEN`
-   * asks the user to rename, `TAG_LIMIT_REACHED` asks them to delete something
-   * first, and telling one to rename is advice that can never succeed.
+   * carried one. A 409 carries one because that is a status where a single
+   * `kind` covers genuinely different remedies: `TAG_NAME_TAKEN` asks the user
+   * to rename, `TAG_LIMIT_REACHED` asks them to delete something first, and
+   * telling one to rename is advice that can never succeed.
+   *
+   * A 400/422 may now carry one too. Part 66's webhook rejections are 422 —
+   * `WEBHOOK_URL_REJECTED` (the destination is private, loopback, or the app
+   * itself) and `WEBHOOK_VERIFICATION_FAILED` (the endpoint answered but did
+   * not echo the challenge) — and both would otherwise collapse to a bare
+   * `kind: "invalid"`, leaving the UI able to say only "invalid" about a
+   * failure the admin has a specific, different fix for.
    *
    * Surfaces should keep switching on `kind` and consult `code` only where the
    * distinction changes what the user must do.
@@ -88,7 +95,22 @@ function retryAfterMs(response: Response): number | undefined {
   return Math.min(Math.max(at - Date.now(), 0), 300_000);
 }
 
-async function conflictFailure(response: Response): Promise<ApiRequestFailure> {
+/**
+ * Attach the envelope's stable `code` to a failure without changing its `kind`.
+ *
+ * `kind` stays the caller's decision because it is derived from the status, not
+ * the body: a 409 is a conflict and a 422 is invalid whatever the envelope says.
+ * The one exception is `VERSION_CONFLICT`, which promotes a 409 to its own kind
+ * — and only a 409, since an optimistic-concurrency failure has no meaning on a
+ * validation status.
+ *
+ * A missing, unparsable, or code-less envelope falls back to the bare `kind`,
+ * so a surface that ignores `code` behaves exactly as it did before.
+ */
+async function failureWithCode(
+  response: Response,
+  kind: ApiRequestFailureKind,
+): Promise<ApiRequestFailure> {
   try {
     const body: unknown = await response.json();
     const topCode =
@@ -98,12 +120,14 @@ async function conflictFailure(response: Response): Promise<ApiRequestFailure> {
     const nestedCode =
       typeof nested === "object" && nested !== null && "code" in nested ? nested.code : undefined;
     const code = typeof topCode === "string" ? topCode : nestedCode;
-    if (code === "VERSION_CONFLICT") return { ok: false, kind: "version-conflict", code };
-    if (typeof code === "string") return { ok: false, kind: "conflict", code };
+    if (kind === "conflict" && code === "VERSION_CONFLICT") {
+      return { ok: false, kind: "version-conflict", code };
+    }
+    if (typeof code === "string") return { ok: false, kind, code };
   } catch {
-    // The status remains a safe generic conflict when the error envelope is unavailable.
+    // The status remains the safe generic kind when the error envelope is unavailable.
   }
-  return { ok: false, kind: "conflict" };
+  return { ok: false, kind };
 }
 
 export async function requestJson<T>(
@@ -124,11 +148,13 @@ export async function requestJson<T>(
       ...(keepalive ? { keepalive: true } : { signal: AbortSignal.timeout(8_000) }),
     });
     if (!response.ok) {
-      if (response.status === 400 || response.status === 422) return { ok: false, kind: "invalid" };
+      if (response.status === 400 || response.status === 422) {
+        return failureWithCode(response, "invalid");
+      }
       if (response.status === 401 || response.status === 403 || response.status === 404) {
         return { ok: false, kind: "forbidden-or-not-found" };
       }
-      if (response.status === 409) return conflictFailure(response);
+      if (response.status === 409) return failureWithCode(response, "conflict");
       // Only a rate limit or a server fault is worth repeating unchanged. Every
       // other status (405, 413, 415, …) describes the request itself and would
       // fail identically forever.

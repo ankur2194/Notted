@@ -35,6 +35,23 @@ export type {
   UserProfileFilterInput,
 } from "./auth.schema";
 export {
+  API_KEY_PREFIX_LENGTH,
+  API_KEY_SECRET_PATTERN,
+  API_KEY_SECRET_PREFIX,
+  apiKeyCreateResultSchema,
+  apiKeyListQuerySchema,
+  apiKeyNameSchema,
+  apiKeyPageSchema,
+  apiKeyRevokeResultSchema,
+  apiKeyScopeSchema,
+  apiKeyScopesSchema,
+  apiKeySecretSchema,
+  apiKeySortFieldSchema,
+  apiKeySummarySchema,
+  createApiKeySchema,
+} from "./api-key.schema";
+export type { ApiKeyListQueryInput, ApiKeyScopeInput, CreateApiKeyInput } from "./api-key.schema";
+export {
   ATTACHMENT_FILE_EXTENSIONS,
   ATTACHMENT_FILE_MIME_TYPES,
   ATTACHMENT_IMAGE_MIME_TYPES,
@@ -456,3 +473,33 @@ export type {
   WorkspaceListQueryInput,
   WorkspaceStorageUsageOutput,
 } from "./workspace.schema";
+
+// Part 66 — outbound webhooks and delivery logs.
+export {
+  WEBHOOK_SECRET_PATTERN,
+  WEBHOOK_SECRET_PREFIX,
+  webhookCreateResultSchema,
+  webhookCreateSchema,
+  webhookDeleteResultSchema,
+  webhookDeliveryErrorCodeSchema,
+  webhookDeliveryListQuerySchema,
+  webhookDeliveryPageSchema,
+  webhookDeliverySchema,
+  webhookDeliveryStatusSchema,
+  webhookEndpointPageSchema,
+  webhookEndpointSchema,
+  webhookEventSchema,
+  webhookEventsSchema,
+  webhookRetryResultSchema,
+  webhookSecretRotationResultSchema,
+  webhookSecretSchema,
+  webhookUpdateSchema,
+  webhookUrlSchema,
+  webhookVerificationResultSchema,
+} from "./webhook.schema";
+export type {
+  WebhookCreateInput,
+  WebhookDeliveryListQueryInput,
+  WebhookEventInput,
+  WebhookUpdateInput,
+} from "./webhook.schema";

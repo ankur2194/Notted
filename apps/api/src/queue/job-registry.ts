@@ -209,6 +209,65 @@ export const EXPORT_GENERATE_JOB_DEFINITION = defineOutboxJob({
   authority: "system",
 });
 
+/**
+ * Part 66 — outbound webhook delivery. ONE intent per (endpoint x event),
+ * committed inside the producing transaction (ADR 0006), so a workspace with
+ * four subscribed endpoints commits four independent rows for one note update.
+ * `job-identifiers.ts` carries the reasoning for why this is a dedicated intent
+ * rather than a subscription to the shared `note.*`/`project.*` job types.
+ *
+ * Authority is "system", NOT "actor" — the same call `EXPORT_GENERATE` made.
+ * The payload GRANTS NOTHING: the handler re-reads the endpoint, takes its
+ * `created_by_id`, and re-authorizes that user against the LIVE resource with
+ * `authorizeUserJob`. An endpoint whose creator lost access, or a resource that
+ * was deleted or restricted after the intent was committed, therefore delivers
+ * nothing. Declaring "actor" would imply the payload itself carries the
+ * permission, which is exactly the inversion ADR 0006 forbids.
+ *
+ * The payload is identifiers only, with ONE deliberate exception: `occurredAt`.
+ * A deletion's timestamp is not recoverable from the row afterwards — by the
+ * time the handler runs, the thing that was deleted is gone or tombstoned, and
+ * `now()` at delivery time would misreport when the event happened to every
+ * receiver. It is schema-validated here and covered by `payload_hash`, so a
+ * tampered value fails the hash check before the handler sees it. This is a
+ * bounded, argued exception to ADR 0006's identifier-only rule, not a slip.
+ *
+ * `resourceId` and `actorId` are nullable because not every event has them:
+ * `member.joined` has no note or project resource, and a system-initiated
+ * mutation has no acting user.
+ *
+ * `maximumAttempts: 5` is Notted.md's "max 5 attempts", per endpoint rather
+ * than shared (see `job-identifiers.ts`). It rides the standard
+ * `notted-bounded-exponential` backoff the whole runtime uses: 1s -> 2s -> 4s
+ * -> 8s from the `QUEUE_BACKOFF_BASE_MS` default, +/- the jitter percentage and
+ * capped by `QUEUE_BACKOFF_MAX_MS`.
+ *
+ * // ponytail: shares the notted-default lane; give webhooks their own lane if
+ * // a noisy tenant starves email/mentions.
+ */
+export const WEBHOOK_DELIVER_SOURCE_QUEUE_NAME = "webhook-deliver" as const;
+
+export const WEBHOOK_DELIVER_JOB_DEFINITION = defineOutboxJob({
+  jobType: DOMAIN_JOB_TYPES.webhookDeliver,
+  payloadVersion: 1,
+  payloadSchema: z
+    .object({
+      action: z.literal(DOMAIN_JOB_TYPES.webhookDeliver),
+      intentId: z.string().uuid(),
+      workspaceId: z.string().uuid(),
+      webhookId: z.string().uuid(),
+      eventId: z.string().uuid(),
+      event: z.string().min(1).max(100),
+      resourceId: z.string().uuid().nullable(),
+      actorId: z.string().uuid().nullable(),
+      occurredAt: z.string().datetime({ offset: true }),
+    })
+    .strict(),
+  route: route(PHYSICAL_QUEUE_NAMES.default, WEBHOOK_DELIVER_SOURCE_QUEUE_NAME),
+  authority: "system",
+  maximumAttempts: 5,
+});
+
 export const JOB_IDEMPOTENCY_CLEANUP_SOURCE_QUEUE_NAME = "queue-maintenance" as const;
 
 export const JOB_IDEMPOTENCY_CLEANUP_DEFINITION = defineOutboxJob({
@@ -263,6 +322,7 @@ const registryEntries = [
   MENTION_NOTIFY_JOB_DEFINITION,
   WORKSPACE_EMAIL_JOB_DEFINITION,
   EXPORT_GENERATE_JOB_DEFINITION,
+  WEBHOOK_DELIVER_JOB_DEFINITION,
 ] as const satisfies readonly AnyOutboxJobDefinition[];
 
 export const JOB_REGISTRY: ReadonlyMap<DomainJobType, AnyOutboxJobDefinition> = new Map(
