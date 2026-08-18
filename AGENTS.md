@@ -34,6 +34,7 @@ Follow the current user request, then `Notted.md`, the selected numbered part in
 - Keep secrets, tokens, content, personal data, and signed URLs out of logs.
 - Review significant dependencies for need, maintenance, license, security, and cost.
 - Never run the development and `e2e` Compose stacks at the same time; pre-build `api-e2e` (the Chromium image) as its own foreground step, and keep Playwright at one worker. See `docs/standards/testing.md` → Local resource budget.
+- Do not start the `e2e` stack for the Chromium PDF suite: it is gated only on the browser binary, touches no database, and runs inside the development `api` container in seconds. Stage browser runs (focused spec, then whole suite), re-run a failing spec in isolation before calling it a defect, and reclaim Docker by name — this daemon is shared with other projects. See `docs/standards/testing.md` → Running the browser and Chromium suites efficiently.
 - Never claim a check passed unless it was run.
 
 ## Skills and Codex Agents

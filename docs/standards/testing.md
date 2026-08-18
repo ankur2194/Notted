@@ -41,6 +41,81 @@ Compose DNS (`http://mailpit:8025`, `postgres:5432`) while the application keeps
 `localhost:3010`/`localhost:3011` origins the browser, the CORS allow-list and Better Auth all agree
 on. Override `NOTTED_E2E_WEB_PORT` / `NOTTED_E2E_API_PORT` when another project holds those ports.
 
+### Running the browser and Chromium suites efficiently
+
+The order below is the one that works on a memory-capped host. It is not a
+preference; each step exists because skipping it cost a run.
+
+**1. Reclaim Docker first, by name.** Other projects share this daemon.
+`docker system prune -a`, `docker image prune -a` and an untargeted
+`docker volume prune` will destroy their images and data. Remove Notted's own
+leftovers explicitly instead — stale containers via `pnpm e2e:down`, then images
+and volumes belonging to dead Compose project names (a renamed project leaves
+`<old-name>_postgres-data` and friends behind). `docker system df` before and
+after is the measurement. Note that `docker builder prune` is global and, run
+immediately before an end-to-end session, forces a cold ~1.45 GB `api-e2e`
+rebuild at exactly the wrong moment.
+
+**2. Run the Chromium PDF suite WITHOUT the e2e stack.**
+`apps/api/test/export-pdf.integration.test.ts` is gated only on the Chromium
+binary existing and touches no database, and the development `api` container
+already runs `notted-dev-workspace-chromium:local` with `EXPORT_CHROMIUM_PATH`
+set. So it runs inside the container that is already up, in seconds, for about
+300 MB:
+
+```bash
+docker compose -p notted-dev exec -T --workdir /workspace/apps/api api \
+  pnpm exec vitest run test/export-pdf.integration.test.ts
+```
+
+Starting the `e2e` profile or the Playwright container for this suite wastes
+several gigabytes and minutes for nothing. **`5 passed` is the pass condition —
+a `skipped` result means the gate did not see the binary and must be reported as
+unproven, never as a pass.**
+
+**3. Only then the browser suite**, in the order the Local resource budget below
+requires: `pnpm infra:down`, `docker compose --profile e2e build api-e2e` as its
+own finished foreground step, `pnpm e2e:up`.
+
+**4. Stage the Playwright run.** Focused spec first, whole suite second:
+
+```bash
+pnpm e2e:test export-formats.spec.ts print-export.spec.ts   # fails fast on new code
+pnpm e2e:test                                               # then the full baseline
+```
+
+A full serial run is 7–13 minutes depending on host contention; discovering a
+broken new spec at minute 9 is avoidable.
+
+**5. `api-e2e` runs `nest start --watch`.** An `apps/api` source fix is picked up
+without restarting the stack, so a red API-side spec can be fixed and re-run
+immediately. `apps/web` is a `next dev` server, likewise.
+
+**6. Isolate before calling a failure a defect.** This suite is load-sensitive
+here: across four consecutive full runs three different tests each failed once
+and then passed in isolation in seconds. Re-run the single spec
+(`pnpm e2e:test <one>.spec.ts`) before diagnosing. A test that passes alone and
+fails only under a full run is contention, and the honest fix is either a cause
+you can name — a lost keystroke, a budget that must cover a server-side
+projection — or nothing at all. Never a bare retry, a sleep, or a weakened
+assertion.
+
+**7. Do not pipe a long run through `tail` when capturing it.** The first
+failure's message, locator and call log sit at the top of Playwright's output;
+tailing keeps only the summary and forces the whole run again to learn what
+broke. Capture in full and read selectively. `error-context.md` and the trace
+under `apps/web/test-results/playwright/` survive the run and carry the page
+snapshot.
+
+**8. Finish by restoring the development stack:** `pnpm e2e:down`, then
+`pnpm infra:up:ports`.
+
+Rough budget on an 8.7 GiB VM: development stack ~3.8 GB (`web` alone is 2.4 GB
+of Next dev server), the `e2e` stack about the same, the Playwright container a
+further 1–1.5 GB. One application stack plus Playwright fits with roughly 3 GB
+spare. Two application stacks plus a concurrent image build does not, and that
+combination is what froze the host.
+
 ### Never wait on the save indicator in a browser test
 
 `NoteEditorSurface` binds **one writer at a time**. Once a collaborative session

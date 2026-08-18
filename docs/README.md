@@ -350,7 +350,8 @@ The same pressure can take the whole machine down rather than just the suite, an
 which defaults to roughly half of host RAM with swap at a quarter of that — the symptom is
 every terminal freezing, not only Docker. That is swap thrash, not a hang. Three rules keep
 an end-to-end run inside the budget; [`standards/testing.md`](standards/testing.md) → Local
-resource budget is canonical:
+resource budget is canonical, and → Running the browser and Chromium suites efficiently
+carries the full ordered strategy:
 
 - **Never run both stacks at once.** `e2e` is a profile inside the *same* Compose project,
   so `pnpm e2e:up` starts `api-e2e` and `web-e2e` alongside a running development `api` and
@@ -364,6 +365,28 @@ resource budget is canonical:
 - **Playwright stays at one worker.** `apps/web/playwright.config.ts` pins `workers: 1` and
   `fullyParallel: false`, and only the `chromium` project runs by default. Each additional
   worker is another browser process; do not raise it on a memory-capped host.
+
+Four habits keep the cost down further:
+
+- **The Chromium PDF suite needs no `e2e` stack at all.**
+  `apps/api/test/export-pdf.integration.test.ts` is gated only on the browser binary and
+  touches no database, and the development `api` container already runs the
+  `workspace-chromium` image, so it proves itself in seconds inside a container that is
+  already up:
+  `docker compose -p notted-dev exec -T --workdir /workspace/apps/api api pnpm exec vitest
+  run test/export-pdf.integration.test.ts`. `5 passed` is the pass condition — `skipped`
+  means the gate never saw the binary, which is unproven, not passed.
+- **Stage the browser run:** focused spec first, whole suite second. A full serial run takes
+  7–13 minutes depending on host contention, so a broken new spec should surface in the
+  first minute.
+- **Reclaim Docker by name.** This daemon is shared with other projects, so
+  `docker system prune -a` and `docker image prune -a` would destroy their images and data.
+  Remove Notted's own leftovers explicitly, and note that `docker builder prune` is global —
+  run immediately beforehand it forces a cold ~1.45 GB `api-e2e` rebuild.
+- **Re-run a failing spec alone before calling it a defect.** The suite is load-sensitive
+  here: a test that passes in isolation in seconds and fails only inside a full run is
+  contention. Fix a cause you can name, or report it as contention — never a bare retry, a
+  sleep, or a weakened assertion.
 
 `pnpm build` **needs production-grade public URLs supplied on the command line.** The web
 build runs `pnpm env:validate --production` first, and production rejects `http://` and

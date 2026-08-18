@@ -31,6 +31,28 @@ recursively. Remain blocked on one finite supported wait until every started sub
 
 - Start infrastructure and apply migrations before browser tests. Build the API before a Playwright
   config starts `apps/api/dist/main.js`.
+- Never run the development and `e2e` Compose stacks at once: `e2e` is a profile in the same project,
+  so `pnpm e2e:up` adds to a running dev stack rather than replacing it. `pnpm infra:down` first,
+  `pnpm e2e:down` before returning to development.
+- Pre-build the Chromium image as its own finished foreground step,
+  `docker compose --profile e2e build api-e2e`, so the ~1.45 GB build neither competes with
+  Playwright for memory nor sits inside a runner's no-output stall watchdog.
+- Keep Playwright at one worker. `apps/web/playwright.config.ts` already pins `workers: 1` /
+  `fullyParallel: false` and injects `--project=chromium`. Standing invariant; do not raise it.
+- Do NOT start the `e2e` profile for `apps/api/test/export-pdf.integration.test.ts`. It is gated only
+  on the browser binary and touches no database, and the development `api` container already carries
+  Chromium: `docker compose -p notted-dev exec -T --workdir /workspace/apps/api api pnpm exec vitest
+  run test/export-pdf.integration.test.ts`. `5 passed` is the pass condition; `skipped` is unproven.
+- Reclaim Docker by name only. The daemon is shared with other projects, so `docker system prune -a`
+  and `image prune -a` destroy their data; `docker builder prune` is global and forces a cold
+  `api-e2e` rebuild if run just beforehand.
+- Stage the run: focused spec first, whole suite second. A full serial run is 7–13 minutes.
+- `api-e2e` runs `nest start --watch` and `web-e2e` runs `next dev`, so a source fix is live without
+  restarting the stack.
+- Re-run a failing spec alone before calling it a defect: passes isolated, fails only in the full run
+  means contention. Fix a named cause or report it; never a bare retry, sleep, or weaker assertion.
+- Capture a long run in full rather than piping it through `tail`: the first failure's message,
+  locator and call log are at the top, and tailing keeps only the summary.
 - Use finite web-server and test timeouts. Keep stateful live suites serial unless their fixtures are
   proven isolated. Do not hide failures with unbounded retries or sleeps.
 - Prewarm expensive or lazily compiled routes through `webServer.url` when first-request compilation

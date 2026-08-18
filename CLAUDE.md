@@ -13,11 +13,15 @@ All nested delegation follows the recursive Synchronous Delegation Protocol in `
 
 ## End-to-end runs (local resource budget)
 
-Full rules in [`docs/standards/testing.md`](docs/standards/testing.md) → Local resource budget. On a memory-capped host (WSL2 defaults to about half of host RAM) an e2e run can exhaust the VM and freeze every terminal, not only Docker.
+Full rules in [`docs/standards/testing.md`](docs/standards/testing.md) → Running the browser and Chromium suites efficiently, and → Local resource budget. On a memory-capped host (WSL2 defaults to about half of host RAM) an e2e run can exhaust the VM and freeze every terminal, not only Docker.
 
 - **Never run both stacks at once.** `e2e` is a profile inside the *same* Compose project, so `pnpm e2e:up` starts `api-e2e`/`web-e2e` alongside a running development `api`/`web` instead of replacing them. `pnpm infra:down` before `pnpm e2e:up`; `pnpm e2e:down` before returning to development.
 - **Pre-build the Chromium image as its own foreground step:** `docker compose --profile e2e build api-e2e`, finished before `pnpm e2e:up`. `api-e2e` extends `api`, which builds the `workspace-chromium` target (~1.45 GB vs ~493 MB lean), so the build must not race Playwright for memory — and a long silent `apt-get` must not sit inside an automated runner's no-output stall watchdog.
 - **Playwright stays at one worker.** `apps/web/playwright.config.ts` pins `workers: 1` / `fullyParallel: false` and only the `chromium` project runs. Each extra worker is another browser process; this is a standing invariant, not a default to tune.
+- **The Chromium PDF suite needs no e2e stack.** `apps/api/test/export-pdf.integration.test.ts` is gated only on the binary and touches no database, and the development `api` container already carries Chromium — so run it there, in seconds, instead of starting a second stack: `docker compose -p notted-dev exec -T --workdir /workspace/apps/api api pnpm exec vitest run test/export-pdf.integration.test.ts`. `5 passed` is the pass condition; `skipped` is unproven, not passed.
+- **Stage the browser run:** focused spec first, whole suite second. A full serial run is 7–13 minutes, so finding a broken new spec at minute 9 is avoidable.
+- **Re-run a failing spec alone before calling it a defect.** The suite is load-sensitive here — a test that passes in isolation and fails only under a full run is contention. Fix a cause you can name, or leave it and say so; never a bare retry, sleep, or weakened assertion.
+- **Docker reclaim is by name only.** Other projects share this daemon, so `docker system prune -a` / `image prune -a` would destroy their images. Remove Notted's own leftovers explicitly.
 
 ## Architecture
 

@@ -47,6 +47,21 @@ remain blocked until every started subagent is terminal.
   `fullyParallel: false`, and only the `chromium` project runs unless the caller names projects. Each
   additional worker is another browser process inside the runner container. Treat this as a standing
   invariant; do not raise it to speed a run up.
+- Do NOT start the `e2e` profile for the Chromium PDF suite.
+  `apps/api/test/export-pdf.integration.test.ts` is gated only on the browser binary existing and
+  touches no database, and the development `api` container already runs the `workspace-chromium`
+  image with `EXPORT_CHROMIUM_PATH` set. Run it inside that container —
+  `docker compose -p notted-dev exec -T --workdir /workspace/apps/api api pnpm exec vitest run
+  test/export-pdf.integration.test.ts` — in seconds, for about 300 MB. `5 passed` is the pass
+  condition; a `skipped` result means the gate never saw the binary and is unproven, not passed.
+- Reclaim Docker by name before a session, never with `docker system prune -a` or `image prune -a`:
+  the daemon is shared with other projects and those commands destroy their images and volumes.
+  `docker builder prune` is likewise global, and running it immediately beforehand forces a cold
+  ~1.45 GB `api-e2e` rebuild at the worst moment.
+- Stage the run: focused spec first (`pnpm e2e:test <new>.spec.ts`), whole suite second. A full
+  serial run is 7–13 minutes depending on host contention.
+- `api-e2e` runs `nest start --watch` and `web-e2e` runs `next dev`, so a source fix is live without
+  restarting the stack; re-run the failing spec directly.
 - Use finite web-server and test timeouts. Keep stateful live suites serial unless their fixtures are
   proven isolated. Do not hide failures with unbounded retries or sleeps.
 - Prewarm expensive or lazily compiled routes through `webServer.url` when first-request compilation
@@ -76,14 +91,24 @@ remain blocked until every started subagent is terminal.
 
 ## Diagnose Failures
 
-1. Read Playwright's error context, trace, screenshot, video, and network status once.
-2. Decide whether the failure is product behavior, test timing/hydration, server capability setup,
+1. Read Playwright's error context, trace, screenshot, video, and network status once. Capture the
+   run in full rather than piping it through `tail`: the first failure's message, locator and call
+   log sit at the TOP of Playwright's output, and tailing keeps only the summary — forcing the whole
+   run again to learn what broke. `error-context.md` and `trace.zip` under
+   `apps/web/test-results/playwright/` survive the run and carry the page snapshot.
+2. Re-run the single failing spec in isolation before calling it a defect. This suite is
+   load-sensitive on a memory-capped host: a test that passes alone in seconds and fails only inside
+   a full serial run is contention, not breakage. When it is contention, fix a cause you can name —
+   a keystroke lost because a client effect had not installed its listener, a timeout that must also
+   cover a server-side projection — or leave it and say so. Never a bare retry, a sleep, or a
+   weakened assertion.
+3. Decide whether the failure is product behavior, test timing/hydration, server capability setup,
    stale build output, infrastructure state, or an invalid fixture assumption.
-3. Inspect only the relevant database rows, Redis keys/counts, queue states, and Mailpit metadata.
+4. Inspect only the relevant database rows, Redis keys/counts, queue states, and Mailpit metadata.
    Redact tokens and message content.
-4. Fix the smallest underlying issue. Do not weaken assertions, add arbitrary sleeps, or skip a
+5. Fix the smallest underlying issue. Do not weaken assertions, add arbitrary sleeps, or skip a
    required scenario to obtain a green run.
-5. Rerun the focused failing scenario, then the complete relevant browser project.
+6. Rerun the focused failing scenario, then the complete relevant browser project.
 
 ## Completion Evidence
 
