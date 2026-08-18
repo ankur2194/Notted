@@ -16,7 +16,7 @@ export default defineConfig({
     fileParallelism: !hasDatabase,
     coverage: {
       provider: "v8",
-      include: ["src/**/*.ts"],
+      include: ["src/**/*.ts", "src/**/*.tsx"],
       exclude: ["src/main.ts"],
       reporter: ["text", "json-summary", "lcov"],
       reportsDirectory: "./coverage",

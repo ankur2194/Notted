@@ -39,6 +39,15 @@ export async function clearMailpit(request: APIRequestContext): Promise<void> {
   expect(response.ok()).toBeTruthy();
 }
 
+/**
+ * The newest message to `recipient`, optionally narrowed by subject.
+ *
+ * PASS `subjectIncludes` for anything that reads an action link. Since Part 61
+ * an account also receives a "Welcome to Notted" email, produced asynchronously
+ * through the queue, so a mailbox that used to hold exactly one message can now
+ * hold two — and whichever landed last wins the unfiltered lookup, handing back
+ * a link the test never asked for.
+ */
 export async function latestActionLink(
   request: APIRequestContext,
   recipient: string,

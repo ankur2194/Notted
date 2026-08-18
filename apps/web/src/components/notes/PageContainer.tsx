@@ -1,28 +1,6 @@
 "use client";
 
 import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
-
-import { NoteSaveProvider, type NoteSaveHandle } from "./note-save-context";
-import { PagePrintStyle } from "./PagePrintStyle";
-import { SaveStatusIndicator } from "./SaveStatusIndicator";
-import { useNoteAutosave } from "./useNoteAutosave";
-import { VersionHistory } from "./VersionHistory";
-
-import type { NoteDocument, PageSize } from "@notted/shared-types";
-
-import { PAGE_BREAK_CLASS } from "@/components/editor/extensions/page-break";
-import { FormField } from "@/components/ui/form-controls";
-import { setFocusMode, useFocusMode } from "@/lib/notes/focus-mode";
-import {
   DEFAULT_PAGE_MARGINS,
   DEFAULT_ZOOM,
   MAX_PAGE_MARGINS,
@@ -44,10 +22,35 @@ import {
   scaledPageBox,
   zoomLabel,
   zoomLevelStep,
-  type PageMargins,
-  type PixelBox,
-  type ZoomSelection,
-} from "@/lib/notes/page-geometry";
+} from "@notted/shared-types";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+
+import { NoteSaveProvider, type NoteSaveHandle } from "./note-save-context";
+import { PagePrintStyle } from "./PagePrintStyle";
+import { SaveStatusIndicator } from "./SaveStatusIndicator";
+import { useNoteAutosave } from "./useNoteAutosave";
+import { VersionHistory } from "./VersionHistory";
+
+import type {
+  NoteDocument,
+  PageMargins,
+  PageSize,
+  PixelBox,
+  ZoomSelection,
+} from "@notted/shared-types";
+
+import { PAGE_BREAK_CLASS } from "@/components/editor/extensions/page-break";
+import { FormField } from "@/components/ui/form-controls";
+import { setFocusMode, useFocusMode } from "@/lib/notes/focus-mode";
 import {
   browserStorage,
   readPagePreferences,

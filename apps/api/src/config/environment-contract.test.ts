@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseAiConfig } from "./ai.config";
 import { parseAuthConfig } from "./auth.config";
+import { parseExportConfig } from "./export.config";
 import { parseFeaturesConfig } from "./features.config";
 import { parseImageProcessingConfig } from "./image-processing.config";
 import { parseMeilisearchConfig } from "./meilisearch.config";
@@ -23,6 +24,7 @@ describe("server environment contract", () => {
       parseSecurityConfig({}),
       parseImageProcessingConfig({}),
       parseAiConfig({}),
+      parseExportConfig({}),
     ];
 
     expect(configs.every(Object.isFrozen)).toBe(true);
@@ -65,6 +67,11 @@ describe("server environment contract", () => {
         maxSourceCharacters: 24_000,
         requestTimeoutMs: 30_000,
       },
+    });
+    expect(parseExportConfig({})).toEqual({
+      chromiumPath: null,
+      renderTimeoutMs: 30_000,
+      maxArtifactBytes: 26_214_400,
     });
   });
 
@@ -195,6 +202,11 @@ describe("server environment contract", () => {
         }),
       "MAX_IMAGE_UPLOAD_BYTES must be an integer",
     ],
+    [
+      () => parseExportConfig({ EXPORT_CHROMIUM_PATH: "relative/chromium" }),
+      "EXPORT_CHROMIUM_PATH must be an absolute path",
+    ],
+    [() => parseExportConfig({ EXPORT_RENDER_TIMEOUT_MS: "999" }), "Invalid export configuration"],
   ])("rejects invalid environment input without accepting coercion", (parse, message) => {
     expect(parse).toThrowError(message);
   });

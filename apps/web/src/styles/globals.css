@@ -2,8 +2,14 @@
 /*
  * Part 38 print rules. Kept in their own plain-CSS file because Part 63 loads it
  * standalone in Puppeteer; see the header comment in `print.css`.
+ *
+ * Part 63 moved the file to `@notted/shared-validators` (package root, not
+ * `dist`) so the export renderer in `apps/api` and this stylesheet read the
+ * SAME bytes — ADR 0001 forbids `apps/api` importing `apps/web`, and the API
+ * image contains no web sources. Resolved as a bare package specifier through
+ * that package's `exports` map.
  */
-@import "./print.css";
+@import "@notted/shared-validators/print.css";
 
 @theme {
   --color-background: #ffffff;

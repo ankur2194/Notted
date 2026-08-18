@@ -94,11 +94,11 @@ export default tseslint.config(
   // or shared packages.
   ...nestjs.configs.flatRecommended.map((config) => ({
     ...config,
-    files: ["apps/api/**/*.ts"],
+    files: ["apps/api/**/*.{ts,tsx}"],
     ignores: apiConfigIgnores,
   })),
   {
-    files: ["apps/api/**/*.ts"],
+    files: ["apps/api/**/*.{ts,tsx}"],
     ignores: apiConfigIgnores,
     languageOptions: {
       parserOptions: {

@@ -36,6 +36,7 @@ import {
   schema,
 } from "../src/database/schema";
 import { SEED_IDS, seedDatabase } from "../src/database/seed";
+import { WorkspaceEmailProducerService } from "../src/email/workspace-email-producer.service";
 import { NoteVersionsService } from "../src/notes/note-versions.service";
 import { NotesService } from "../src/notes/notes.service";
 import { MentionNotificationProducer } from "../src/notifications/mention-notification.producer";
@@ -131,7 +132,7 @@ function build(db: NodePgDatabase<typeof schema>) {
       new NoteVersionsService(tenant),
       undefined,
       undefined,
-      new MentionNotificationProducer(tenant, logger),
+      new MentionNotificationProducer(tenant, logger, new WorkspaceEmailProducerService(tenant)),
     ),
     worker: new MentionNotificationWorkerService(
       database,

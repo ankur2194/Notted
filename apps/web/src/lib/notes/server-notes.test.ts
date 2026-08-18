@@ -182,7 +182,7 @@ describe("server note reads", () => {
       createdById: "10000000-0000-4000-8000-000000000001",
       updatedById: null,
       currentActorId: "10000000-0000-4000-8000-000000000001",
-      capabilities: { canUpdate: true, canDelete: true, canShare: true },
+      capabilities: { canUpdate: true, canDelete: true, canShare: true, canExport: true },
     };
     fetchMock.mockResolvedValue(jsonResponse(detail));
 

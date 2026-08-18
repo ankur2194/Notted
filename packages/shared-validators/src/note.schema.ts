@@ -295,6 +295,7 @@ export const noteDetailSchema = noteSummarySchema
         canUpdate: z.boolean(),
         canDelete: z.boolean(),
         canShare: z.boolean(),
+        canExport: z.boolean(),
       })
       .strict(),
   })

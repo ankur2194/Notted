@@ -11,6 +11,14 @@ All nested delegation follows the recursive Synchronous Delegation Protocol in `
 - `pnpm test:ci` (coverage thresholds) needs `DATABASE_URL` exported and the dev stack up (`pnpm infra:up:ports`). Without it 17 API suites skip silently and branch coverage lands around 62%, which reads as a real regression but is not one. `turbo.json` documents the passthrough.
 - `pnpm lint:fix` / `pnpm format` autofix and rewrite. A pre-commit hook (husky + lint-staged) runs the same ESLint/Prettier fixes on staged files; skip with `git commit --no-verify`, disable in CI with `HUSKY=0`. Hooks are optional and always reproducible through the pnpm commands above.
 
+## End-to-end runs (local resource budget)
+
+Full rules in [`docs/standards/testing.md`](docs/standards/testing.md) → Local resource budget. On a memory-capped host (WSL2 defaults to about half of host RAM) an e2e run can exhaust the VM and freeze every terminal, not only Docker.
+
+- **Never run both stacks at once.** `e2e` is a profile inside the *same* Compose project, so `pnpm e2e:up` starts `api-e2e`/`web-e2e` alongside a running development `api`/`web` instead of replacing them. `pnpm infra:down` before `pnpm e2e:up`; `pnpm e2e:down` before returning to development.
+- **Pre-build the Chromium image as its own foreground step:** `docker compose --profile e2e build api-e2e`, finished before `pnpm e2e:up`. `api-e2e` extends `api`, which builds the `workspace-chromium` target (~1.45 GB vs ~493 MB lean), so the build must not race Playwright for memory — and a long silent `apt-get` must not sit inside an automated runner's no-output stall watchdog.
+- **Playwright stays at one worker.** `apps/web/playwright.config.ts` pins `workers: 1` / `fullyParallel: false` and only the `chromium` project runs. Each extra worker is another browser process; this is a standing invariant, not a default to tune.
+
 ## Architecture
 
 - Monorepo (pnpm + Turborepo): `apps/web` (Next.js App Router), `apps/api` (NestJS), `packages/shared-types`, `packages/shared-validators`. See ADR 0001 for the dependency direction (apps → packages, never the reverse).

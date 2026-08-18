@@ -22,6 +22,7 @@ import type { AuthConfig } from "../config/auth.config";
 import type { FeaturesConfig } from "../config/features.config";
 import type { RetentionConfig } from "../config/retention.config";
 import type { DatabaseService } from "../database/database.service";
+import type { WorkspaceEmailProducerService } from "../email/workspace-email-producer.service";
 import type { Auth } from "better-auth";
 
 export const RECENT_AUTHENTICATION_PATHS = Object.freeze([
@@ -93,6 +94,7 @@ export interface BetterAuthSetupDependencies {
   readonly database: DatabaseService;
   readonly redisStorage: BetterAuthRedisStorage;
   readonly emailProducer: AuthEmailProducerService;
+  readonly workspaceEmailProducer: WorkspaceEmailProducerService;
   readonly authConfig: AuthConfig;
   readonly appConfig: AppConfig;
   readonly retention: RetentionConfig;
@@ -445,10 +447,25 @@ export async function setupBetterAuth(dependencies: BetterAuthSetupDependencies)
         });
       },
       afterEmailVerification: async (user) => {
-        await database.db
-          .update(users)
-          .set({ emailVerifiedAt: new Date(), updatedAt: new Date() })
-          .where(eq(users.id, user.id));
+        // Registration COMPLETES here: `requireEmailVerification` is on, so this
+        // is the first moment the account is usable. Better Auth owns the user
+        // INSERT inside its own adapter transaction and exposes no hook into
+        // it, so the welcome intent commits atomically with the verification
+        // write instead (ADR 0006). The idempotency key is derived from
+        // (welcome, address, user), so a re-verification never re-sends.
+        await database.transaction(async (tx) => {
+          await tx
+            .update(users)
+            .set({ emailVerifiedAt: new Date(), updatedAt: new Date() })
+            .where(eq(users.id, user.id));
+          await dependencies.workspaceEmailProducer.queue(tx, {
+            templateKey: "welcome",
+            recipient: user.email,
+            workspaceId: null,
+            relatedEntityType: "user",
+            relatedEntityId: user.id,
+          });
+        });
       },
     },
     session: {

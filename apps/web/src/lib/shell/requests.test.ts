@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  loadMentionEmailPreference,
   loadNotifications,
   markAllNotificationsRead,
+  setMentionEmailPreference,
   selectWorkspace,
   setNotificationRead,
 } from "@/lib/shell/requests";
@@ -117,6 +119,57 @@ describe("shell requests", () => {
       `/api/v1/workspaces/${workspaceId}/notifications/read-all`,
     );
     expect(init?.method).toBe("POST");
+  });
+
+  it("reads the mention email preference with a GET and no body", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ mentionEmail: false }));
+
+    await expect(loadMentionEmailPreference(workspaceId)).resolves.toEqual({
+      ok: true,
+      data: { mentionEmail: false },
+    });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(new URL(String(url)).pathname).toBe(
+      `/api/v1/workspaces/${workspaceId}/notifications/email-preference`,
+    );
+    expect(init?.method).toBe("GET");
+    expect(init?.body).toBeUndefined();
+  });
+
+  it("writes the mention email preference to the same route as a POST", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ mentionEmail: true }));
+
+    await expect(setMentionEmailPreference(workspaceId, true)).resolves.toEqual({
+      ok: true,
+      data: { mentionEmail: true },
+    });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(new URL(String(url)).pathname).toBe(
+      `/api/v1/workspaces/${workspaceId}/notifications/email-preference`,
+    );
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual({ mentionEmail: true });
+  });
+
+  it("rejects a preference response that does not match the contract", async () => {
+    // A body the toggle would otherwise render as an arbitrary truthy value.
+    fetchMock.mockResolvedValue(jsonResponse({ mentionEmail: "yes" }));
+
+    await expect(loadMentionEmailPreference(workspaceId)).resolves.toEqual({
+      ok: false,
+      kind: "invalid",
+    });
+  });
+
+  it("reports a forbidden preference read as forbidden, not as a network failure", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ code: "FORBIDDEN" }, 403));
+
+    await expect(loadMentionEmailPreference(workspaceId)).resolves.toEqual({
+      ok: false,
+      kind: "forbidden",
+    });
   });
 
   it("refuses a malformed workspace selector before issuing a request", async () => {

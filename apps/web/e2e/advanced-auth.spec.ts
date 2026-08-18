@@ -25,7 +25,7 @@ async function registerAndVerify(page: Page, user: ReturnType<typeof identity>) 
   await page.getByLabel("Password", { exact: true }).fill(user.password);
   await page.getByLabel("Confirm password").fill(user.password);
   await page.getByRole("button", { name: "Create account" }).click();
-  const link = await latestActionLink(page.request, user.email);
+  const link = await latestActionLink(page.request, user.email, "Verify your Notted email");
   await page.goto(link);
   await expect(page.getByRole("heading", { name: "Email verified" })).toBeVisible();
 }

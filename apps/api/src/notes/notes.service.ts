@@ -1352,7 +1352,7 @@ export class NotesService {
 
   private authorizeNote(
     input: NoteSelector,
-    action: "note.read" | "note.update" | "note.delete" | "note.tag",
+    action: "note.read" | "note.update" | "note.delete" | "note.tag" | "export.create",
   ) {
     return this.authorizationEntry.authorizeUser({
       principal: input.principal,
@@ -1972,11 +1972,12 @@ export class NotesService {
   }
 
   private async toDetail(row: NoteRow, input: NoteSelector): Promise<NoteDetail> {
-    const [tagIds, taskProgress, canUpdate, canDelete] = await Promise.all([
+    const [tagIds, taskProgress, canUpdate, canDelete, canExport] = await Promise.all([
       this.loadTagIds(this.database.db, row.id),
       this.loadTaskProgress(this.database.db, row.id),
       this.can(input, "note.update"),
       this.can(input, "note.delete"),
+      this.can(input, "export.create"),
     ]);
     return Object.freeze({
       ...this.toSummary(row, tagIds, taskProgress),
@@ -1985,7 +1986,7 @@ export class NotesService {
       createdById: row.createdById,
       updatedById: row.updatedById,
       currentActorId: input.principal.userId,
-      capabilities: Object.freeze({ canUpdate, canDelete, canShare: canUpdate }),
+      capabilities: Object.freeze({ canUpdate, canDelete, canShare: canUpdate, canExport }),
     });
   }
 
@@ -2247,7 +2248,10 @@ export class NotesService {
     });
   }
 
-  private async can(input: NoteSelector, action: "note.update" | "note.delete"): Promise<boolean> {
+  private async can(
+    input: NoteSelector,
+    action: "note.update" | "note.delete" | "export.create",
+  ): Promise<boolean> {
     try {
       await this.authorizeNote(input, action);
       return true;

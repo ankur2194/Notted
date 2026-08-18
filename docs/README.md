@@ -346,6 +346,25 @@ gigabytes and starve the host, at which point page loads and hydration stretch p
 reasonable timeout. `docker compose restart web` reclaims it and is safe; no data lives in
 that container.
 
+The same pressure can take the whole machine down rather than just the suite, and on WSL2 —
+which defaults to roughly half of host RAM with swap at a quarter of that — the symptom is
+every terminal freezing, not only Docker. That is swap thrash, not a hang. Three rules keep
+an end-to-end run inside the budget; [`standards/testing.md`](standards/testing.md) → Local
+resource budget is canonical:
+
+- **Never run both stacks at once.** `e2e` is a profile inside the *same* Compose project,
+  so `pnpm e2e:up` starts `api-e2e` and `web-e2e` alongside a running development `api` and
+  `web` rather than replacing them. Run `pnpm infra:down` first, and `pnpm e2e:down` before
+  returning to development.
+- **Pre-build the Chromium image as its own foreground step:**
+  `docker compose --profile e2e build api-e2e`, finished before `pnpm e2e:up`. `api-e2e`
+  extends `api`, which builds the `workspace-chromium` target and installs Debian
+  `chromium` (~1.45 GB against ~493 MB for the lean image), so the build must not compete
+  with Playwright for memory.
+- **Playwright stays at one worker.** `apps/web/playwright.config.ts` pins `workers: 1` and
+  `fullyParallel: false`, and only the `chromium` project runs by default. Each additional
+  worker is another browser process; do not raise it on a memory-capped host.
+
 `pnpm build` **needs production-grade public URLs supplied on the command line.** The web
 build runs `pnpm env:validate --production` first, and production rejects `http://` and
 `ws://` because Next.js embeds `NEXT_PUBLIC_*` into the browser bundle at build time. The

@@ -47,6 +47,14 @@ export const DOMAIN_JOB_TYPES = Object.freeze({
   // it inside the note-update transaction; the handler re-checks membership,
   // re-reads the note title and actor name, and writes ONE notification row.
   mentionNotify: "notification.mention",
+  // Part 61 — generic workspace email delivery. One intent per
+  // `email_deliveries` row; the handler re-reads the row and its subject entity
+  // from PostgreSQL and renders the template.
+  deliverWorkspaceEmail: "email.deliver",
+  // Part 62 — export generation. One intent per `exports` row; the handler
+  // claims the row (queued -> processing), re-reads the source from
+  // PostgreSQL, renders, uploads, and marks it ready.
+  generateExport: "export.generate",
 } as const);
 
 export type DomainJobType = (typeof DOMAIN_JOB_TYPES)[keyof typeof DOMAIN_JOB_TYPES];

@@ -256,7 +256,7 @@ test.describe.serial("Part 32 real-stack note management", () => {
       await expect(folderItem).toHaveText(/Journey folder/u);
       await folderItem.getByRole("button", { name: "Rename" }).click();
       await folderItem.getByLabel("New folder name").fill("Renamed journey folder");
-      await folderItem.getByRole("button", { name: "Save" }).click();
+      await folderItem.getByRole("button", { name: "Save", exact: true }).click();
       await expect(owner.getByText("Folder renamed.")).toBeVisible();
       await expect(folderItem).toHaveText(/Renamed journey folder/u);
       await folderItem.getByRole("button", { name: "Delete" }).click();
@@ -306,7 +306,7 @@ test.describe.serial("Part 32 real-stack note management", () => {
        */
       await editorCard.getByRole("button", { name: "Rename", exact: true }).click();
       await editorCard.getByLabel("New note title").fill("View grant cannot edit");
-      await editorCard.getByRole("button", { name: "Save" }).click();
+      await editorCard.getByRole("button", { name: "Save", exact: true }).click();
       await expect(editor.getByText(/Rename was denied/u)).toBeVisible();
 
       await owner.goto(`/workspaces/${workspaceId}/notes/${firstNote.id}`);
@@ -321,7 +321,7 @@ test.describe.serial("Part 32 real-stack note management", () => {
         .locator("xpath=ancestor::article");
       await editorCard.getByRole("button", { name: "Rename", exact: true }).click();
       await editorCard.getByLabel("New note title").fill("Editor shared rename");
-      await editorCard.getByRole("button", { name: "Save" }).click();
+      await editorCard.getByRole("button", { name: "Save", exact: true }).click();
       await expect(
         editor.getByRole("main").getByRole("link", { name: "Editor shared rename" }),
       ).toBeVisible();
@@ -339,7 +339,7 @@ test.describe.serial("Part 32 real-stack note management", () => {
         .locator("xpath=ancestor::article");
       await editorCard.getByRole("button", { name: "Rename", exact: true }).click();
       await editorCard.getByLabel("New note title").fill("Revoked edit");
-      await editorCard.getByRole("button", { name: "Save" }).click();
+      await editorCard.getByRole("button", { name: "Save", exact: true }).click();
       await expect(editor.getByText(/Rename was denied/u)).toBeVisible();
 
       await viewer.goto(`/workspaces/${workspaceId}/notes`);

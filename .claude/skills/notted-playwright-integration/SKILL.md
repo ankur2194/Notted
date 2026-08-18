@@ -32,6 +32,21 @@ remain blocked until every started subagent is terminal.
 
 - Start infrastructure and apply migrations before browser tests. Build the API before a Playwright
   config starts `apps/api/dist/main.js`.
+- Never run the development and `e2e` Compose stacks at the same time. `e2e` is a profile inside the
+  same Compose project, so `pnpm e2e:up` starts `api-e2e`/`web-e2e` **alongside** a running
+  development `api`/`web` instead of replacing them. Run `pnpm infra:down` first and `pnpm e2e:down`
+  before returning to development. Two application stacks on a memory-capped host (WSL2 especially)
+  can exhaust the VM and freeze every terminal, not just Docker.
+- Pre-build the Chromium image as its own foreground step: `docker compose --profile e2e build
+  api-e2e`, finished before `pnpm e2e:up`. `api-e2e` extends `api`, which builds the
+  `workspace-chromium` target and installs Debian `chromium` (~1.45 GB against ~493 MB for the lean
+  image). Keeping it separate stops the build competing with Playwright for memory and keeps a long
+  silent `apt-get` out of any automated runner's no-output stall watchdog, which would otherwise kill
+  the run mid-build.
+- Keep Playwright at one worker. `apps/web/playwright.config.ts` pins `workers: 1` with
+  `fullyParallel: false`, and only the `chromium` project runs unless the caller names projects. Each
+  additional worker is another browser process inside the runner container. Treat this as a standing
+  invariant; do not raise it to speed a run up.
 - Use finite web-server and test timeouts. Keep stateful live suites serial unless their fixtures are
   proven isolated. Do not hide failures with unbounded retries or sleeps.
 - Prewarm expensive or lazily compiled routes through `webServer.url` when first-request compilation

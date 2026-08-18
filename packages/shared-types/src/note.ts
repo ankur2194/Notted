@@ -116,6 +116,8 @@ export interface NoteCapabilities {
   readonly canUpdate: boolean;
   readonly canDelete: boolean;
   readonly canShare: boolean;
+  /** Computed from the `export.create` authorization policy, never from a role. */
+  readonly canExport: boolean;
 }
 
 export interface NoteVersionSummary {

@@ -62,7 +62,7 @@ describe("note requests", () => {
             createdById: noteId,
             updatedById: noteId,
             currentActorId: noteId,
-            capabilities: { canUpdate: true, canDelete: true, canShare: true },
+            capabilities: { canUpdate: true, canDelete: true, canShare: true, canExport: true },
           },
         }),
         { status: 201, headers: { "Content-Type": "application/json" } },

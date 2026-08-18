@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { StructuredLogger } from "../common/logging/structured-logger.service";
-import { jobOutbox } from "../database/schema";
+import { emailDeliveries, jobOutbox } from "../database/schema";
+import { WorkspaceEmailProducerService } from "../email/workspace-email-producer.service";
 import { DOMAIN_JOB_TYPES } from "../queue/job-identifiers";
 import {
   MENTION_NOTIFY_JOB_DEFINITION,
@@ -64,7 +65,28 @@ interface FakeTx {
  * membership `select(...)` from a fixed member set. No database involved; the
  * producer touches nothing else on the transaction.
  */
-function fakeTx(members: readonly string[]): FakeTx {
+/** One save now writes TWO independent kinds of outbox intent; split them. */
+function outboxRows(fake: FakeTx, action: string): readonly InsertedRow[] {
+  return fake.inserts.filter(
+    (row) =>
+      row.table === jobOutbox &&
+      (row.values.payload as { readonly action?: string }).action === action,
+  );
+}
+
+const mentionRows = (fake: FakeTx): readonly InsertedRow[] =>
+  outboxRows(fake, DOMAIN_JOB_TYPES.mentionNotify);
+const emailRows = (fake: FakeTx): readonly InsertedRow[] =>
+  outboxRows(fake, DOMAIN_JOB_TYPES.deliverWorkspaceEmail);
+const deliveryRows = (fake: FakeTx): readonly InsertedRow[] =>
+  fake.inserts.filter((row) => row.table === emailDeliveries);
+
+/** `<id>@example.test`, so a recipient address is derivable from its id. */
+function emailFor(userId: string): string {
+  return `${userId}@example.test`;
+}
+
+function fakeTx(members: readonly string[], suppressed = false): FakeTx {
   const inserts: InsertedRow[] = [];
   const selects: { readonly ids: readonly string[] }[] = [];
   const memberSet = new Set(members);
@@ -79,18 +101,34 @@ function fakeTx(members: readonly string[]): FakeTx {
         return {
           onConflictDoNothing: () => {
             row.conflictDoNothing = true;
-            return Promise.resolve(undefined);
+            return {
+              // `WorkspaceEmailProducerService` needs the surviving outbox row;
+              // `MentionNotificationProducer` just awaits the statement.
+              returning: () => Promise.resolve([{ id: values.id }]),
+              then: (resolve: (value: unknown) => unknown) => resolve(undefined),
+            };
           },
+          then: (resolve: (value: unknown) => unknown) => resolve(undefined),
         };
       },
     }),
     select: () => ({
-      from: () => ({
-        where: () => {
+      from: (table: unknown) => {
+        // The suppression lookup reads `email_deliveries`; every other select
+        // here is the single membership lookup.
+        if (table === emailDeliveries) {
+          return {
+            where: () => ({ limit: () => Promise.resolve(suppressed ? [{ id: "sentinel" }] : []) }),
+          };
+        }
+        const answer = () => {
           selects.push({ ids: [...memberSet] });
-          return Promise.resolve([...memberSet].map((userId) => ({ userId })));
-        },
-      }),
+          return Promise.resolve(
+            [...memberSet].map((userId) => ({ userId, email: emailFor(userId) })),
+          );
+        };
+        return { innerJoin: () => ({ where: answer }), where: answer };
+      },
     }),
   };
   return { tx: tx as unknown as DatabaseTransaction, inserts, selects };
@@ -102,7 +140,16 @@ function producerFor(): {
 } {
   const tenant = new TenantContextService();
   const logger = { info: () => undefined } as unknown as StructuredLogger;
-  return { producer: new MentionNotificationProducer(tenant, logger), tenant };
+  return {
+    // The real email producer: its suppression check and its two writes are
+    // exactly what this integration point has to get right.
+    producer: new MentionNotificationProducer(
+      tenant,
+      logger,
+      new WorkspaceEmailProducerService(tenant),
+    ),
+    tenant,
+  };
 }
 
 async function runInTenant<T>(
@@ -159,8 +206,8 @@ describe("MentionNotificationProducer", () => {
         correlationId: REQUEST_ID,
       }),
     );
-    expect(fake.inserts).toHaveLength(1);
-    const row = fake.inserts[0]!;
+    expect(mentionRows(fake)).toHaveLength(1);
+    const row = mentionRows(fake)[0]!;
     expect(row.table).toBe(jobOutbox);
     expect(row.values.queueName).toBe(MENTION_NOTIFY_SOURCE_QUEUE_NAME);
     expect(row.values.jobType).toBe(DOMAIN_JOB_TYPES.mentionNotify);
@@ -194,7 +241,7 @@ describe("MentionNotificationProducer", () => {
         actorId: ACTOR_ID,
       }),
     );
-    const recipients = fake.inserts.map(
+    const recipients = mentionRows(fake).map(
       (row) => (row.values.payload as { readonly recipientId: string }).recipientId,
     );
     expect(recipients).toEqual([MEMBER_A]);
@@ -229,7 +276,7 @@ describe("MentionNotificationProducer", () => {
     );
     // Exactly one membership lookup for the whole fan-out.
     expect(fake.selects).toHaveLength(1);
-    const recipients = fake.inserts.map(
+    const recipients = mentionRows(fake).map(
       (row) => (row.values.payload as { readonly recipientId: string }).recipientId,
     );
     expect(recipients).toEqual([MEMBER_A]);
@@ -285,10 +332,63 @@ describe("MentionNotificationProducer", () => {
         actorId: ACTOR_ID,
       }),
     );
-    expect(fake.inserts).toHaveLength(2);
+    expect(mentionRows(fake)).toHaveLength(2);
     // The unique index collapses a duplicate to a no-op only because the insert
     // carries this clause; without it a retry would abort the note update.
-    expect(fake.inserts.every((row) => row.conflictDoNothing)).toBe(true);
+    expect(mentionRows(fake).every((row) => row.conflictDoNothing)).toBe(true);
+  });
+
+  it("emits an independent email intent alongside each in-app mention intent", async () => {
+    const { producer, tenant } = producerFor();
+    const fake = fakeTx([MEMBER_A]);
+    await runInTenant(tenant, WORKSPACE_ID, () =>
+      producer.scheduleMentionNotifications(fake.tx, WORKSPACE_ID, {
+        noteId: NOTE_ID,
+        previousContent: EMPTY_DOCUMENT,
+        nextContent: documentMentioning(MEMBER_A),
+        actorId: ACTOR_ID,
+        correlationId: REQUEST_ID,
+      }),
+    );
+    // Two intents, two handlers, two failure domains — plus exactly one
+    // authoritative `email_deliveries` row for the message.
+    expect(mentionRows(fake)).toHaveLength(1);
+    expect(emailRows(fake)).toHaveLength(1);
+    expect(deliveryRows(fake)).toHaveLength(1);
+
+    const delivery = deliveryRows(fake)[0]!.values;
+    expect(delivery.templateKey).toBe("mention");
+    expect(delivery.status).toBe("queued");
+    expect(delivery.workspaceId).toBe(WORKSPACE_ID);
+    expect(delivery.recipient).toBe(emailFor(MEMBER_A));
+    expect(delivery.relatedEntityType).toBe("note");
+    expect(delivery.relatedEntityId).toBe(NOTE_ID);
+
+    const emailPayload = emailRows(fake)[0]!.values.payload as Record<string, unknown>;
+    expect(emailPayload.actorId).toBe(ACTOR_ID);
+    expect(emailPayload.deliveryId).toBe(delivery.id);
+    // Identifiers only: no recipient address and no note content in Redis.
+    expect(emailPayload).not.toHaveProperty("recipient");
+    expect(emailRows(fake)[0]!.values.correlationId).toBe(REQUEST_ID);
+  });
+
+  it("keeps the in-app mention intent when the recipient suppressed mention email", async () => {
+    const { producer, tenant } = producerFor();
+    const fake = fakeTx([MEMBER_A], true);
+    await runInTenant(tenant, WORKSPACE_ID, () =>
+      producer.scheduleMentionNotifications(fake.tx, WORKSPACE_ID, {
+        noteId: NOTE_ID,
+        previousContent: EMPTY_DOCUMENT,
+        nextContent: documentMentioning(MEMBER_A),
+        actorId: ACTOR_ID,
+      }),
+    );
+    expect(mentionRows(fake)).toHaveLength(1);
+    // No outbox intent means nothing can ever send it; the `suppressed` delivery
+    // row is the durable record that it was withheld on purpose.
+    expect(emailRows(fake)).toHaveLength(0);
+    expect(deliveryRows(fake)).toHaveLength(1);
+    expect(deliveryRows(fake)[0]!.values.status).toBe("suppressed");
   });
 });
 

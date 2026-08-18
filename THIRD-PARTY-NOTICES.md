@@ -68,6 +68,19 @@ Two consequences worth recording, because both are easy to get wrong:
 
 `lightningcss@1.33.0` and `lightningcss-linux-x64-gnu@1.33.0` are **MPL-2.0** and appear in the re-audit output. They are reached only through frontend build and test tooling (`@tailwindcss/postcss`, `vite`, `vitest`); they are not imported by `apps/api`, not loaded at run time, and not part of the deployed artifact. They surface in the audit because the command errs toward over-inclusion (see the note under the command). MPL-2.0 is **file-level** copyleft: the obligation attaches only to modified MPL-covered files, and Notted modifies none. Recorded here so a future auditor does not have to re-triage it.
 
+### Dual-licensed: `jszip@3.10.1` — `(MIT OR GPL-3.0-or-later)`, MIT elected (Part 64)
+
+`jszip@3.10.1` is the **fifth** hit in the re-audit output and is new as of Part 64. It was returned by the copyleft regex because its SPDX expression *contains* `GPL-3.0-or-later`, not because it imposes a copyleft obligation: the expression is a disjunction, `OR`, and the licensee chooses. **Notted elects MIT.** No GPL obligation attaches, and there is nothing to reproduce beyond the MIT notice the package already ships in `node_modules/jszip/LICENSE.markdown`.
+
+| Field | Value |
+|---|---|
+| **Package** | `jszip` |
+| **Version** | `3.10.1` |
+| **Declared licence** | `(MIT OR GPL-3.0-or-later)` — **MIT elected** |
+| **How it enters the tree** | Transitively, and only transitively: `@notted/api` → `docx@9.7.1` (MIT) → **`jszip@3.10.1`**. It is a dependency of the DOCX writer's own packaging step. |
+
+**Worth stating plainly, because it looks like a contradiction.** Part 64 deliberately rejected `jszip` as the *direct* ZIP library for the `zip` export format and chose `fflate@0.8.3` (plain MIT, zero dependencies) instead, partly to keep a dual-licensed package out of the direct dependency set. `docx` then pulls `jszip` in anyway, one level down, to write the OOXML container. That does **not** invalidate the choice: the direct dependency Notted controls, versions, and calls is still `fflate`, and `jszip` arrives as an implementation detail of a package whose own licence is MIT. The alternative — dropping `docx` — would mean hand-writing OOXML, which `Notted.md` does not ask for.
+
 ---
 
 ## Ongoing obligations

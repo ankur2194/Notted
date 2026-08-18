@@ -33,6 +33,8 @@ export const notificationListQuerySchema = paginationQuerySchema
 
 export const notificationReadStateSchema = z.object({ isRead: z.boolean() }).strict();
 
+export const notificationEmailPreferenceSchema = z.object({ mentionEmail: z.boolean() }).strict();
+
 export const workspaceSelectorSchema = z.object({ workspaceId: uuidSchema }).strict();
 
 export const shellWorkspaceMembershipSchema = z
@@ -103,4 +105,5 @@ export const notificationsMarkAllResultSchema = z
 export type ShellBootstrapQueryInput = z.input<typeof shellBootstrapQuerySchema>;
 export type NotificationListQueryInput = z.input<typeof notificationListQuerySchema>;
 export type NotificationReadStateInput = z.input<typeof notificationReadStateSchema>;
+export type NotificationEmailPreferenceInput = z.input<typeof notificationEmailPreferenceSchema>;
 export type WorkspaceSelectorInput = z.input<typeof workspaceSelectorSchema>;

@@ -8,6 +8,8 @@ import { FEATURES_CONFIG, type FeaturesConfig } from "../config/features.config"
 import { RETENTION_CONFIG, type RetentionConfig } from "../config/retention.config";
 import { DatabaseModule } from "../database/database.module";
 import { DatabaseService } from "../database/database.service";
+import { EmailRendererService } from "../email/email-renderer.service";
+import { WorkspaceEmailProducerService } from "../email/workspace-email-producer.service";
 import { RedisModule } from "../infrastructure/redis/redis.module";
 import { SmtpModule } from "../infrastructure/smtp/smtp.module";
 import { QueueModule } from "../queue/queue.module";
@@ -35,6 +37,12 @@ import { PlatformOperatorService } from "./platform-operator.service";
   providers: [
     BetterAuthRedisStorage,
     AuthEmailEncryptionService,
+    // EmailModule is NOT imported here: it imports AuthorizationModule, which
+    // imports this module, so the module arrow would be circular. Both services
+    // are pure and stateless (a renderer and a transaction-scoped writer), so a
+    // second instance is equivalent and keeps `forwardRef` out of the graph.
+    EmailRendererService,
+    WorkspaceEmailProducerService,
     AuthEmailQueueHandler,
     AuthEmailProducerService,
     {
@@ -43,6 +51,7 @@ import { PlatformOperatorService } from "./platform-operator.service";
         DatabaseService,
         BetterAuthRedisStorage,
         AuthEmailProducerService,
+        WorkspaceEmailProducerService,
         AUTH_CONFIG,
         APP_CONFIG,
         RETENTION_CONFIG,
@@ -53,6 +62,7 @@ import { PlatformOperatorService } from "./platform-operator.service";
         database: DatabaseService,
         redisStorage: BetterAuthRedisStorage,
         emailProducer: AuthEmailProducerService,
+        workspaceEmailProducer: WorkspaceEmailProducerService,
         authConfig: AuthConfig,
         appConfig: AppConfig,
         retention: RetentionConfig,
@@ -70,6 +80,7 @@ import { PlatformOperatorService } from "./platform-operator.service";
           database,
           redisStorage,
           emailProducer,
+          workspaceEmailProducer,
           authConfig,
           appConfig,
           retention,

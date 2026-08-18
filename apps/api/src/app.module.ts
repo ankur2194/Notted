@@ -8,6 +8,8 @@ import { CommentsModule } from "./comments/comments.module";
 import { CommonModule } from "./common/common.module";
 import { ConfigModule } from "./config/config.module";
 import { DatabaseModule } from "./database/database.module";
+import { EmailModule } from "./email/email.module";
+import { ExportModule } from "./export/export.module";
 import { HealthModule } from "./health/health.module";
 import { MaintenanceModule } from "./maintenance/maintenance.module";
 import { MembershipsModule } from "./memberships/memberships.module";
@@ -34,6 +36,12 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
     AuthorizationModule,
     AttachmentsModule,
     CommentsModule,
+    // Part 61. Owns the generic template renderer, the transactional producer,
+    // and the `email.deliver` queue handler.
+    EmailModule,
+    // Part 62. Owns the export REST transport, job rows, and the `export.generate`
+    // queue handler.
+    ExportModule,
     HealthModule,
     // Part 45. `StorageModule` already imports `MaintenanceModule`; both are
     // listed so the scheduler is instantiated even if the storage transport is

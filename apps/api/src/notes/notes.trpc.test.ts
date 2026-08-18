@@ -42,7 +42,7 @@ const noteDetail = Object.freeze({
   createdById: userId,
   updatedById: userId,
   currentActorId: userId,
-  capabilities: { canUpdate: true, canDelete: true, canShare: true },
+  capabilities: { canUpdate: true, canDelete: true, canShare: true, canExport: true },
 });
 
 function request(authenticated = true): Request {

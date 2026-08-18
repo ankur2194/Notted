@@ -2,6 +2,7 @@ import { eq, sql, type SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
 
+import { AuthorizationDeniedError } from "../authorization/authorization.errors";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import { notes, taskStatuses } from "../database/schema";
 import { createTenantContext, TenantContextService } from "../tenant";
@@ -1138,5 +1139,77 @@ describe("NotesService.restoreVersion collaborative reconciliation", () => {
       tx,
       expect.objectContaining({ version: 6 }),
     );
+  });
+});
+
+describe("NotesService detail capabilities", () => {
+  function denial(): AuthorizationDeniedError {
+    return new AuthorizationDeniedError({
+      allowed: false,
+      code: "forbidden",
+      httpStatus: 403,
+      safeMessage: "concealed",
+      audit: {},
+    } as unknown as AuthorizationDeniedError["decision"]);
+  }
+
+  /** Builds a detail-only harness whose policy answer is driven per action. */
+  function detailService(allows: (action: string) => boolean): NotesService {
+    const service = new NotesService(
+      {} as DatabaseService,
+      {
+        authorizeUser: vi.fn(({ action }: { action: string }) =>
+          allows(action)
+            ? Promise.resolve({ workspaceId, userId: principal.userId })
+            : Promise.reject(denial()),
+        ),
+      } as unknown as AuthorizationEntryService,
+      {} as TenantContextService,
+      noOpSearchIndexProducer(),
+      noOpNoteVersionsService(),
+    );
+    Object.assign(service, {
+      loadTagIds: vi.fn().mockResolvedValue([]),
+      loadTaskProgress: vi.fn().mockResolvedValue({ done: 0, total: 0 }),
+      toSummary: () => ({ id: noteId }),
+    });
+    return service;
+  }
+
+  const row = {
+    id: noteId,
+    content: { type: "doc", content: [] },
+    contentPlain: "",
+    createdById: principal.userId,
+    updatedById: null,
+  };
+
+  // A workspace VIEWER can export a note it can read but cannot edit it, so
+  // `canExport` must come from the `export.create` policy on its own and never
+  // be aliased to `canUpdate` the way `canShare` is.
+  it("reports canExport from the export.create policy, independent of canUpdate", async () => {
+    const service = detailService((action) => action === "export.create");
+
+    const detail = await service["toDetail"](row as never, { principal, workspaceId, noteId });
+
+    expect(detail.capabilities).toEqual({
+      canUpdate: false,
+      canDelete: false,
+      canShare: false,
+      canExport: true,
+    });
+  });
+
+  it("reports canExport false when the export.create policy denies, without throwing", async () => {
+    const service = detailService((action) => action !== "export.create");
+
+    const detail = await service["toDetail"](row as never, { principal, workspaceId, noteId });
+
+    expect(detail.capabilities).toEqual({
+      canUpdate: true,
+      canDelete: true,
+      canShare: true,
+      canExport: false,
+    });
   });
 });

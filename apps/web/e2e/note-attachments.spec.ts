@@ -225,8 +225,27 @@ async function pickAttachments(
   await chooser.setFiles(files.map((file) => ({ ...file })));
 }
 
-async function waitForSaved(page: Page): Promise<void> {
-  await expect(page.getByTestId("note-save-status")).toHaveText(/Saved\./u, { timeout: UPLOAD_MS });
+/**
+ * Wait until the note's PERSISTED document satisfies `expectation`.
+ *
+ * Not the save indicator. A synced collaborative session is the single writer
+ * (`NoteEditorSurface` binds one at a time), so the Part 39 autosave machine is
+ * deliberately left unbound and the indicator never leaves "No unsaved
+ * changes." — content durability is owned by the server-side Yjs projection.
+ * Reading the row back is therefore the only honest proof, and it is stronger
+ * than the string it replaces.
+ */
+async function waitForStored(
+  page: Page,
+  workspaceId: string,
+  noteId: string,
+  expectation: (document: string) => boolean,
+): Promise<void> {
+  await expect
+    .poll(async () => expectation(await storedDocument(page.request, workspaceId, noteId)), {
+      timeout: UPLOAD_MS,
+    })
+    .toBe(true);
 }
 
 test.describe.serial("Part 44 generic attachments in a real browser", () => {
@@ -277,7 +296,15 @@ test.describe.serial("Part 44 generic attachments in a real browser", () => {
       await expect(cards(page)).toHaveCount(3, { timeout: UPLOAD_MS });
       // Placeholders are decorations, so they leave nothing behind.
       await expect(page.locator(".notted-image-upload")).toHaveCount(0, { timeout: UPLOAD_MS });
-      await waitForSaved(page);
+      await waitForStored(
+        page,
+        workspaceId,
+        noteId,
+        (document) =>
+          document.includes("report.pdf") &&
+          document.includes("bundle.zip") &&
+          document.includes("notes.txt"),
+      );
 
       // Each card names its file and states its kind and size in text.
       await expect(cards(page).filter({ hasText: "report.pdf" })).toHaveCount(1);
@@ -320,7 +347,14 @@ test.describe.serial("Part 44 generic attachments in a real browser", () => {
       await expect(images(page)).toHaveCount(1, { timeout: UPLOAD_MS });
       // …and produced no attachment card, which is what keeps the two flows apart.
       await expect(cards(page)).toHaveCount(3);
-      await waitForSaved(page);
+      // An image node stores only its `attachmentId` — never the filename, and
+      // never a `src` — so the fourth reference is what proves it persisted.
+      await waitForStored(
+        page,
+        workspaceId,
+        noteId,
+        (document) => (document.match(/"attachmentId"/gu) ?? []).length === 4,
+      );
 
       // ------------------------------------------------- survives a reload
       await page.reload();
@@ -352,7 +386,12 @@ test.describe.serial("Part 44 generic attachments in a real browser", () => {
       await page.getByTestId("attachment-delete-confirm").click();
       await expect(cards(page)).toHaveCount(2, { timeout: UPLOAD_MS });
       await expect(cards(page).filter({ hasText: "bundle.zip" })).toHaveCount(0);
-      await waitForSaved(page);
+      await waitForStored(
+        page,
+        workspaceId,
+        noteId,
+        (document) => !document.includes("bundle.zip"),
+      );
 
       const afterDelete = await storedDocument(page.request, workspaceId, noteId);
       expect(afterDelete).not.toContain("bundle.zip");

@@ -110,7 +110,7 @@ describe("note components", () => {
             createdById: note.id,
             updatedById: null,
             currentActorId: note.id,
-            capabilities: { canUpdate: false, canDelete: false, canShare: false },
+            capabilities: { canUpdate: false, canDelete: false, canShare: false, canExport: false },
           }}
           workspaceName="Alpha"
         />,
@@ -143,7 +143,7 @@ describe("note components", () => {
             createdById: note.id,
             updatedById: null,
             currentActorId: note.id,
-            capabilities: { canUpdate: true, canDelete: true, canShare: true },
+            capabilities: { canUpdate: true, canDelete: true, canShare: true, canExport: true },
           }}
           workspaceName="Alpha"
         />,
@@ -170,7 +170,7 @@ describe("note components", () => {
             createdById: note.id,
             updatedById: null,
             currentActorId: note.id,
-            capabilities: { canUpdate: false, canDelete: false, canShare: false },
+            capabilities: { canUpdate: false, canDelete: false, canShare: false, canExport: false },
           }}
           workspaceName="Alpha"
         />,
@@ -191,7 +191,7 @@ describe("note components", () => {
             createdById: note.id,
             updatedById: null,
             currentActorId: note.id,
-            capabilities: { canUpdate: false, canDelete: false, canShare: false },
+            capabilities: { canUpdate: false, canDelete: false, canShare: false, canExport: false },
           }}
           workspaceName="Alpha"
         />,
@@ -218,7 +218,7 @@ describe("note components", () => {
             createdById: note.id,
             updatedById: null,
             currentActorId: note.id,
-            capabilities: { canUpdate: true, canDelete: true, canShare: true },
+            capabilities: { canUpdate: true, canDelete: true, canShare: true, canExport: true },
           }}
           workspaceName="Alpha"
         />,

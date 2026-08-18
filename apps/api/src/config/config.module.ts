@@ -4,6 +4,7 @@ import { AI_CONFIG, AiConfigProvider, aiConfigProvider } from "./ai.config";
 import { APP_CONFIG, AppConfigProvider, appConfigProvider } from "./app.config";
 import { AUTH_CONFIG, AuthConfigProvider, authConfigProvider } from "./auth.config";
 import { DATABASE_CONFIG, DatabaseConfigProvider, databaseConfigProvider } from "./database.config";
+import { EXPORT_CONFIG, ExportConfigProvider, exportConfigProvider } from "./export.config";
 import { FEATURES_CONFIG, FeaturesConfigProvider, featuresConfigProvider } from "./features.config";
 import {
   IMAGE_PROCESSING_CONFIG,
@@ -39,6 +40,8 @@ import { STORAGE_CONFIG, StorageConfigProvider, storageConfigProvider } from "./
     authConfigProvider,
     DatabaseConfigProvider,
     databaseConfigProvider,
+    ExportConfigProvider,
+    exportConfigProvider,
     FeaturesConfigProvider,
     featuresConfigProvider,
     ImageProcessingConfigProvider,
@@ -67,6 +70,7 @@ import { STORAGE_CONFIG, StorageConfigProvider, storageConfigProvider } from "./
     APP_CONFIG,
     AUTH_CONFIG,
     DATABASE_CONFIG,
+    EXPORT_CONFIG,
     FEATURES_CONFIG,
     IMAGE_PROCESSING_CONFIG,
     MEILISEARCH_CONFIG,

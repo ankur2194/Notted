@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ConvertNoteTypeControl } from "./ConvertNoteTypeControl";
+import { ExportNoteDialog } from "./ExportNoteDialog";
 import { NoteEditorSurface } from "./NoteEditorSurface";
 import { PageContainer } from "./PageContainer";
 import { ShareModal } from "./ShareModal";
@@ -136,6 +137,11 @@ export function NoteDetailView({
                 You can view this note, but you do not have permission to manage sharing.
               </p>
             )}
+            <ExportNoteDialog
+              workspaceId={note.workspaceId}
+              noteId={note.id}
+              canExport={note.capabilities.canExport}
+            />
             {canEdit ? (
               <ConvertNoteTypeControl
                 workspaceId={note.workspaceId}

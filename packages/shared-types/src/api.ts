@@ -31,7 +31,13 @@ export type ApiErrorCode =
   | "ORDER_CONFLICT"
   | "FOLDER_HIERARCHY_INVALID"
   | "FOLDER_DEPTH_EXCEEDED"
-  | "NOTE_SHARE_SELF_DENIED";
+  | "NOTE_SHARE_SELF_DENIED"
+  // Part 62 — export lifecycle. All three map to 409/422 so `request-json.ts`
+  // surfaces them through its `conflict` / `invalid` failure kinds rather than
+  // the opaque `unavailable` bucket.
+  | "EXPORT_EXPIRED"
+  | "EXPORT_OBJECT_UNAVAILABLE"
+  | "EXPORT_FORMAT_UNSUPPORTED";
 
 export interface ApiError {
   readonly code: ApiErrorCode;

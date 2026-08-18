@@ -33,6 +33,7 @@ Follow the current user request, then `Notted.md`, the selected numbered part in
 - Keep object storage private and use authorized streaming or expiring signed URLs.
 - Keep secrets, tokens, content, personal data, and signed URLs out of logs.
 - Review significant dependencies for need, maintenance, license, security, and cost.
+- Never run the development and `e2e` Compose stacks at the same time; pre-build `api-e2e` (the Chromium image) as its own foreground step, and keep Playwright at one worker. See `docs/standards/testing.md` → Local resource budget.
 - Never claim a check passed unless it was run.
 
 ## Skills and Codex Agents

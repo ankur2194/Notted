@@ -264,6 +264,46 @@ Both stated criteria were performed in Chromium on 2026-08-06 by `apps/web/e2e/p
   Add the attribute to new chrome rather than adding a component-specific selector to
   either stylesheet.
 
+## Amendment — 2026-08-16: `print.css` and page geometry relocated for Part 63
+
+Part 63 (PDF and HTML export) needed the same `@page` rule and the same print stylesheet
+this part built, rendered server-side in `apps/api` rather than in the browser. Two files
+this record lists under **Files and Components** moved out of `apps/web` as a direct
+consequence:
+
+- **`apps/web/src/styles/print.css`** moved, via `git mv`, to
+  **`packages/shared-validators/print.css`** at that package's root — not under `src/`,
+  since it is a plain CSS asset, not TypeScript source to compile. It is exposed through
+  the package's `exports` map as `"./print.css"` (alongside the package's normal `"."`
+  entry) and listed in `files` so it ships in the published package contents. `globals.css`
+  now imports it by the bare specifier `@import "@notted/shared-validators/print.css";`
+  rather than a relative path, so the one stylesheet has exactly one location regardless of
+  which app resolves it.
+- **`apps/web/src/lib/notes/page-geometry.ts`**, and its colocated test, moved to
+  **`packages/shared-types/src/page-geometry.ts`** and is re-exported from that package's
+  barrel (`export * from "./page-geometry"`). This is the pure, framework-free arithmetic
+  this record's Implemented Work section describes (`PAGE_SIZES`, `pageRuleCss`,
+  `clampMargins`, `pageBoxPx`, `exactPx`, and the rest) — no DOM, no React, no Zod — so the
+  move is a relocation, not a rewrite.
+
+**Why it had to move rather than being imported in place:** ADR 0001 forbids one app
+importing another app's source, and the production API container image contains no
+`apps/web` sources at all — there is nothing there for `apps/api` to reach into even if the
+architecture allowed it. `packages/shared-types` and `packages/shared-validators` are the
+one place both `apps/web` and `apps/api` already depend on, so that is where code needed by
+both belongs.
+
+**Consequence for a future reader:** the print stylesheet and the page geometry now have
+**two consumers**, not one. A change to either affects both the editor's on-screen print
+output (`PagePrintStyle`, `globals.css`) **and** every PDF/HTML artifact Part 63's export
+renderer produces (`apps/api/src/export/export-html.ts`, which reads `print.css` verbatim
+through `printStylesheet()` and builds the same `@page` rule through `pageRuleCss()`). This
+record's existing **Files and Components** table and the `print.css` path referenced
+throughout **Implemented Work** and **Important Decisions** above describe the file at its
+original `apps/web` location as it stood when this part was completed on 2026-08-06; they
+are left as written, per this repository's append-only convention for completed-part
+records, rather than edited to chase the move.
+
 ## Revision History
 
 | Date | Author | Change |
@@ -271,3 +311,4 @@ Both stated criteria were performed in Chromium on 2026-08-06 by `apps/web/e2e/p
 | 2026-08-06 | frontend-editor-engineer (Claude Opus 5) | Initial record, state In progress |
 | 2026-08-06 | frontend-editor-engineer (Review #1 fix pass) | Recorded four accepted limitations (read-only `Mod+Shift+F` and the dialog advertising it unconditionally, the portalled toolbar's tab-order position, the `EditorToolbar` remount on toggle, and the break-guide margin drift versus print); fixed the ESLint ignore gap that made `pnpm lint` unrunnable after a local Playwright run; recorded the gates actually run. Print/PDF snapshots still unverified. |
 | 2026-08-06 | Claude Opus 5 (browser verification pass) | Produced the A4 and Letter PDF snapshots in Chromium for the first time via `apps/web/e2e/print-export.spec.ts`, run inside the official Playwright container. Found and fixed a real defect the browser alone could expose: `setPageBreak()` left the break node-selected, so the next typed character deleted it — the caret now lands in the block after the break, with a regression test proven to fail against the old command. State moved to `Complete`. |
+| 2026-08-16 | backend-platform-engineer agent (Claude Sonnet 5) | Amendment: recorded `print.css`'s move to `packages/shared-validators/print.css` and `page-geometry.ts`'s move to `packages/shared-types/src/page-geometry.ts`, both made by Part 63 so the API's PDF/HTML export renderer can reuse them without an app importing an app (ADR 0001). No behavioural change to this part's own scope. |

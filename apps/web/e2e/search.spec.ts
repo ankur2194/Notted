@@ -164,9 +164,23 @@ test.describe.serial("Part 52 full-text search UI", () => {
     await expect(page.getByRole("button", { name: "Open command menu and search" })).toBeVisible();
 
     // Ctrl+K (Control on CI Linux). Meta+K is exercised on macOS runners.
-    await page.keyboard.press("Control+K");
+    //
+    // Pressed on a poll rather than once. The trigger being VISIBLE only proves
+    // the server-rendered markup arrived; the document keydown listener is
+    // installed by `TopBar`'s effect, which under load can still be pending, and
+    // a chord pressed before then is simply lost — no later timeout recovers it.
+    // Repeating is safe because the handler returns early while the palette is
+    // open (`if (commandOpen) return`), so it can never toggle back closed.
     const palette = page.getByRole("dialog", { name: "Search notes" });
-    await expect(palette).toBeVisible();
+    await expect
+      .poll(
+        async () => {
+          await page.keyboard.press("Control+K");
+          return palette.isVisible();
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(true);
     const combobox = palette.getByRole("combobox", { name: "Search notes" });
     await expect(combobox).toBeFocused();
 

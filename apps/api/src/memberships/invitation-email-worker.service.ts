@@ -8,6 +8,8 @@ import { APP_CONFIG, type AppConfig } from "../config/app.config";
 import { FEATURES_CONFIG, type FeaturesConfig } from "../config/features.config";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import { emailDeliveries, invitations, workspaces } from "../database/schema";
+import { resolveBranding } from "../email/email-branding";
+import { EmailRendererService } from "../email/email-renderer.service";
 import { SmtpService } from "../infrastructure/smtp/smtp.service";
 import { defineQueueJobRegistration, type QueueJobContext } from "../queue/job-contracts";
 import { WORKSPACE_INVITATION_EMAIL_JOB_DEFINITION } from "../queue/job-registry";
@@ -17,15 +19,9 @@ import { TenantContextService, whereWorkspace } from "../tenant";
 
 import { InvitationTokenService } from "./invitation-token.service";
 
-const invitationResourceIdsSchema = z.tuple([z.string().uuid(), z.string().uuid()]).readonly();
+import type { BrandingWorkspaceRow } from "../email/email-branding";
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
+const invitationResourceIdsSchema = z.tuple([z.string().uuid(), z.string().uuid()]).readonly();
 
 type InvitationQueueContext = QueueJobContext<
   typeof WORKSPACE_INVITATION_EMAIL_JOB_DEFINITION.jobType,
@@ -49,6 +45,7 @@ export class InvitationEmailQueueHandler implements OnModuleInit, OnModuleDestro
     private readonly authorizationEntry: AuthorizationEntryService,
     private readonly tenantContext: TenantContextService,
     private readonly tokens: InvitationTokenService,
+    private readonly renderer: EmailRendererService,
     private readonly smtp: SmtpService,
     private readonly logger: StructuredLogger,
     private readonly registry: QueueHandlerRegistry,
@@ -115,15 +112,21 @@ export class InvitationEmailQueueHandler implements OnModuleInit, OnModuleDestro
       const token = this.tokens.derive(identifiers.invitationId);
       const actionUrl = new URL("/invitations/accept", this.appConfig.appUrl);
       actionUrl.searchParams.set("token", token);
-      const workspaceName = escapeHtml(claim.workspaceName);
-      const escapedUrl = escapeHtml(actionUrl.toString());
       let providerMessageId: string;
       try {
+        // Rendering shares the send's catch on purpose: a template bug must land
+        // as `reconciliation_required` for an operator, exactly like an
+        // ambiguous provider failure.
+        const message = await this.renderer.render("invitation", {
+          branding: resolveBranding(claim.workspace, this.appConfig),
+          workspaceName: claim.workspaceName,
+          actionUrl: actionUrl.toString(),
+        });
         providerMessageId = await this.smtp.send({
           to: claim.recipient,
-          subject: `Join ${claim.workspaceName} on Notted`,
-          text: `You were invited to join ${claim.workspaceName} on Notted: ${actionUrl.toString()}\n\nThis link is single-use and expires in seven days.`,
-          html: `<p>You were invited to join <strong>${workspaceName}</strong> on Notted.</p><p><a href="${escapedUrl}">Accept workspace invitation</a></p><p>This link is single-use and expires in seven days.</p>`,
+          subject: message.subject,
+          text: message.text,
+          html: message.html,
         });
       } catch {
         await this.database.db
@@ -178,7 +181,12 @@ export class InvitationEmailQueueHandler implements OnModuleInit, OnModuleDestro
   private async claim(
     tx: DatabaseTransaction,
     identifiers: InvitationIdentifiers,
-  ): Promise<{ readonly recipient: string; readonly workspaceName: string } | null> {
+  ): Promise<{
+    readonly recipient: string;
+    readonly workspaceName: string;
+    /** Branding columns from the workspace join this query already performs. */
+    readonly workspace: BrandingWorkspaceRow;
+  } | null> {
     await tx.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${`invitation-id:${identifiers.invitationId}`}, 0))`,
     );
@@ -187,6 +195,8 @@ export class InvitationEmailQueueHandler implements OnModuleInit, OnModuleDestro
         recipient: emailDeliveries.recipient,
         deliveryStatus: emailDeliveries.status,
         workspaceName: workspaces.name,
+        workspaceLogoUrl: workspaces.logoUrl,
+        workspaceSettings: workspaces.settings,
       })
       .from(invitations)
       .innerJoin(workspaces, eq(workspaces.id, invitations.workspaceId))
@@ -249,6 +259,14 @@ export class InvitationEmailQueueHandler implements OnModuleInit, OnModuleDestro
           eq(emailDeliveries.status, "queued"),
         ),
       );
-    return Object.freeze({ recipient: row.recipient, workspaceName: row.workspaceName });
+    return Object.freeze({
+      recipient: row.recipient,
+      workspaceName: row.workspaceName,
+      workspace: Object.freeze({
+        name: row.workspaceName,
+        logoUrl: row.workspaceLogoUrl,
+        settings: row.workspaceSettings,
+      }),
+    });
   }
 }

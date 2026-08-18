@@ -1,8 +1,8 @@
 "use client";
 
-import type { PageSize } from "@notted/shared-types";
+import { pageRuleCss } from "@notted/shared-types";
 
-import { pageRuleCss, type PageMargins } from "@/lib/notes/page-geometry";
+import type { PageMargins, PageSize } from "@notted/shared-types";
 
 export interface PagePrintStyleProps {
   readonly size: PageSize;

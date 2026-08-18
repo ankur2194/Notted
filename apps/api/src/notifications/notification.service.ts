@@ -3,10 +3,17 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
-import { notifications } from "../database/schema";
-import { assertActiveWorkspace, TenantContextService, whereWorkspace } from "../tenant";
+import { emailDeliveries, notifications, users } from "../database/schema";
+import { normalizeRecipient, UNSUBSCRIBE_RELATED_ENTITY_TYPE } from "../email/email-suppression";
+import {
+  activeWorkspaceId,
+  assertActiveWorkspace,
+  TenantContextService,
+  whereWorkspace,
+} from "../tenant";
 
 import type {
+  NotificationEmailPreference,
   NotificationKind,
   NotificationPage,
   NotificationReadResult,
@@ -146,6 +153,122 @@ export class NotificationService {
         .returning({ id: notifications.id });
       return Object.freeze({ updatedCount: updated.length, unreadCount: 0 as const });
     });
+  }
+
+  /**
+   * Switch mention email on or off for the caller in the ACTIVE workspace.
+   *
+   * The address is resolved from `users` by the authenticated id — a
+   * client-supplied address would let anyone mute anyone else's mail.
+   */
+  async setEmailPreference(input: {
+    readonly recipientUserId: string;
+    readonly mentionEmail: boolean;
+  }): Promise<NotificationEmailPreference> {
+    const workspaceId = activeWorkspaceId(this.tenantContext);
+    return this.database.transaction(async (tx) => {
+      const [user] = await tx
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, input.recipientUserId))
+        .limit(1);
+      if (user === undefined) this.notFound();
+      const recipient = normalizeRecipient(user.email);
+
+      // ponytail: suppression is a sentinel email_deliveries row, not a preference table. Upgrade path: an email_preferences table when Part 72 adds real per-user settings.
+      const sentinel = this.mentionSuppressionSentinel(
+        workspaceId,
+        recipient,
+        input.recipientUserId,
+      );
+
+      if (input.mentionEmail) {
+        await tx.delete(emailDeliveries).where(sentinel);
+        return Object.freeze({ mentionEmail: true });
+      }
+
+      // Insert only when absent so repeated "off" calls never pile up rows.
+      const [existing] = await tx
+        .select({ id: emailDeliveries.id })
+        .from(emailDeliveries)
+        .where(sentinel)
+        .limit(1);
+      if (existing === undefined) {
+        await tx.insert(emailDeliveries).values({
+          workspaceId,
+          recipient,
+          templateKey: "mention",
+          status: "suppressed",
+          errorMessage: "Recipient disabled this template",
+          relatedEntityType: UNSUBSCRIBE_RELATED_ENTITY_TYPE,
+          relatedEntityId: input.recipientUserId,
+        });
+      }
+      return Object.freeze({ mentionEmail: false });
+    });
+  }
+
+  /**
+   * Read the caller's mention-email preference in the ACTIVE workspace.
+   *
+   * The write path shipped without a read path, which left the preference
+   * unrenderable: a toggle cannot show its own state, and the mention email
+   * links to a settings page. Same address resolution as `setEmailPreference`
+   * — from `users` by authenticated id, never from the client.
+   */
+  async getEmailPreference(input: {
+    readonly recipientUserId: string;
+  }): Promise<NotificationEmailPreference> {
+    const workspaceId = activeWorkspaceId(this.tenantContext);
+    const [user] = await this.database.db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, input.recipientUserId))
+      .limit(1);
+    if (user === undefined) this.notFound();
+
+    const [existing] = await this.database.db
+      .select({ id: emailDeliveries.id })
+      .from(emailDeliveries)
+      .where(
+        this.mentionSuppressionSentinel(
+          workspaceId,
+          normalizeRecipient(user.email),
+          input.recipientUserId,
+        ),
+      )
+      .limit(1);
+    // Absent sentinel means mail is ON. Opt-out, not opt-in: a member who has
+    // never touched the toggle still gets mentioned-in-a-note email.
+    return Object.freeze({ mentionEmail: existing === undefined });
+  }
+
+  /**
+   * The ONE definition of "this user has muted mention email here".
+   *
+   * Shared by the read and the write so they can never drift apart — a reader
+   * matching a different row set than the writer deletes is exactly how a user
+   * ends up unable to re-subscribe.
+   */
+  private mentionSuppressionSentinel(
+    workspaceId: string,
+    normalizedRecipient: string,
+    recipientUserId: string,
+  ) {
+    return and(
+      eq(emailDeliveries.workspaceId, workspaceId),
+      // `lower(...)` on BOTH sides, matching `isSuppressed` in
+      // `email/email-suppression.ts` exactly. A raw `eq` here would read one
+      // set of rows and delete another: a mixed-case row written before
+      // `normalizeRecipient` existed would still suppress mail while being
+      // invisible to "turn mention email back on", stranding that user
+      // unsubscribed with no way back.
+      sql`lower(${emailDeliveries.recipient}) = ${normalizedRecipient}`,
+      eq(emailDeliveries.templateKey, "mention"),
+      eq(emailDeliveries.status, "suppressed"),
+      eq(emailDeliveries.relatedEntityType, UNSUBSCRIBE_RELATED_ENTITY_TYPE),
+      eq(emailDeliveries.relatedEntityId, recipientUserId),
+    );
   }
 
   private async countUnread(

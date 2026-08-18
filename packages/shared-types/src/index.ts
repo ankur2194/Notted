@@ -82,6 +82,16 @@ export type {
   UserId,
   WorkspaceId,
 } from "./common";
+export { EXPORT_API_PATHS, SUPPORTED_EXPORT_FORMATS, SUPPORTED_EXPORT_SOURCES } from "./export";
+export type {
+  ExportCancelResult,
+  ExportFormat,
+  ExportJob,
+  ExportOptions,
+  ExportPage,
+  ExportSource,
+  ExportStatus,
+} from "./export";
 export { NOTE_API_PATHS } from "./note";
 export type {
   FolderCreateResult,
@@ -118,6 +128,16 @@ export type {
   NoteUpdateResult,
   PageSize,
 } from "./note";
+/**
+ * Physical page geometry (Part 37/38, moved here by Part 63).
+ *
+ * It lived in `apps/web` until the PDF/HTML export renderer in `apps/api` had
+ * to emit the SAME `@page` rule the editor prints with. ADR 0001 forbids an
+ * app importing an app, and the API image contains no `apps/web` sources, so
+ * the arithmetic moved to the one place both apps already depend on. It is
+ * pure, framework-free and unit-agnostic — no DOM, no React, no Zod.
+ */
+export * from "./page-geometry";
 export { PROJECT_API_PATHS } from "./project";
 export type {
   ProjectCreateResult,
@@ -138,6 +158,7 @@ export type {
 } from "./project";
 export { SHELL_API_PATHS } from "./shell";
 export type {
+  NotificationEmailPreference,
   NotificationKind,
   NotificationPage,
   NotificationReadResult,

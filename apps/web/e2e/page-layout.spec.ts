@@ -305,7 +305,15 @@ test.describe.serial("Part 37 real-stack page container", () => {
         // Every formatting control must be reachable and fully painted once
         // scrolled to — that is what "does not clip" means for a control that
         // legitimately lives inside a scrollable region.
-        const buttons = owner.getByRole("toolbar", { name: "Note formatting" }).getByRole("button");
+        // `count()` does not auto-wait, and the toolbar only carries the
+        // "Note formatting" name once the editor is editable — which a
+        // collaborative session reaches only after its handshake syncs. Waiting
+        // for the toolbar, then for its first button, is what stops a plain
+        // hydration race from being read as "the controls are missing".
+        const toolbar = owner.getByRole("toolbar", { name: "Note formatting" });
+        await expect(toolbar).toBeVisible();
+        const buttons = toolbar.getByRole("button");
+        await expect(buttons.first()).toBeVisible();
         const total = await buttons.count();
         expect(total).toBeGreaterThan(0);
         for (let index = 0; index < total; index += 1) {

@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpStatus, Param, Patch, Post, Query, Req } from "@nestjs/common";
 import {
+  notificationEmailPreferenceSchema,
   notificationListQuerySchema,
   notificationReadStateSchema,
   uuidSchema,
@@ -13,6 +14,7 @@ import { ApiHttpException } from "../common/errors/api-http.exception";
 import { NotificationService } from "./notification.service";
 
 import type {
+  NotificationEmailPreference,
   NotificationPage,
   NotificationReadResult,
   NotificationsMarkAllResult,
@@ -54,6 +56,31 @@ export class NotificationController {
   markAllRead(@Req() request: Request): Promise<NotificationsMarkAllResult> {
     this.auth.assertTrustedMutationOrigin(request);
     return this.notifications.markAllRead(this.userId(request));
+  }
+
+  // GET as well as POST: the mention email links members to a settings page,
+  // and a toggle that cannot read its own state is not a control. Same
+  // `WORKSPACE_READ_AUTHORIZATION` as the rest — the preference is the
+  // caller's own, resolved from the authenticated id, never from the client.
+  @Get("email-preference")
+  @RequireAuthorization(WORKSPACE_READ_AUTHORIZATION)
+  getEmailPreference(@Req() request: Request): Promise<NotificationEmailPreference> {
+    return this.notifications.getEmailPreference({ recipientUserId: this.userId(request) });
+  }
+
+  @Post("email-preference")
+  @RequireAuthorization(WORKSPACE_READ_AUTHORIZATION)
+  setEmailPreference(
+    @Req() request: Request,
+    @Body() rawBody: unknown,
+  ): Promise<NotificationEmailPreference> {
+    this.auth.assertTrustedMutationOrigin(request);
+    const body = notificationEmailPreferenceSchema.safeParse(rawBody);
+    if (!body.success) this.invalid();
+    return this.notifications.setEmailPreference({
+      recipientUserId: this.userId(request),
+      mentionEmail: body.data.mentionEmail,
+    });
   }
 
   @Patch(":notificationId")

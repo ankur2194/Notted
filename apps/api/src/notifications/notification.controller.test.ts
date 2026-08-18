@@ -60,4 +60,66 @@ describe("NotificationController", () => {
     ).toThrow("The request is invalid.");
     expect(assertTrustedMutationOrigin).toHaveBeenCalledOnce();
   });
+
+  it("reads the email preference for the authenticated caller only, with no origin check", async () => {
+    const assertTrustedMutationOrigin = vi.fn();
+    const getEmailPreference = vi.fn().mockResolvedValue({ mentionEmail: true });
+    const controller = new NotificationController(
+      { getEmailPreference } as unknown as NotificationService,
+      { assertTrustedMutationOrigin } as unknown as AuthService,
+    );
+
+    await expect(controller.getEmailPreference(request())).resolves.toEqual({ mentionEmail: true });
+    // A GET mutates nothing, so it must NOT be gated on the mutation-origin
+    // check — doing so would make the toggle unreadable from a plain navigation.
+    expect(assertTrustedMutationOrigin).not.toHaveBeenCalled();
+    // The recipient is the authenticated id, never anything from the request.
+    expect(getEmailPreference).toHaveBeenCalledWith({ recipientUserId: userId });
+  });
+
+  it("passes only the authenticated recipient to the email preference toggle", async () => {
+    const assertTrustedMutationOrigin = vi.fn();
+    const setEmailPreference = vi.fn().mockResolvedValue({ mentionEmail: false });
+    const controller = new NotificationController(
+      { setEmailPreference } as unknown as NotificationService,
+      { assertTrustedMutationOrigin } as unknown as AuthService,
+    );
+
+    await expect(
+      controller.setEmailPreference(request(), { mentionEmail: false }),
+    ).resolves.toEqual({ mentionEmail: false });
+    expect(assertTrustedMutationOrigin).toHaveBeenCalledOnce();
+    expect(setEmailPreference).toHaveBeenCalledWith({
+      recipientUserId: userId,
+      mentionEmail: false,
+    });
+  });
+
+  it("rejects a malformed email preference body as a validation error", () => {
+    const setEmailPreference = vi.fn();
+    const controller = new NotificationController(
+      { setEmailPreference } as unknown as NotificationService,
+      { assertTrustedMutationOrigin: vi.fn() } as unknown as AuthService,
+    );
+    expect(() => controller.setEmailPreference(request(), { mentionEmail: "no" })).toThrow(
+      "The request is invalid.",
+    );
+    expect(setEmailPreference).not.toHaveBeenCalled();
+  });
+
+  it("rejects an untrusted mutation origin before touching the service", () => {
+    const setEmailPreference = vi.fn();
+    const controller = new NotificationController(
+      { setEmailPreference } as unknown as NotificationService,
+      {
+        assertTrustedMutationOrigin: vi.fn(() => {
+          throw new Error("The request origin is not allowed.");
+        }),
+      } as unknown as AuthService,
+    );
+    expect(() => controller.setEmailPreference(request(), { mentionEmail: true })).toThrow(
+      "The request origin is not allowed.",
+    );
+    expect(setEmailPreference).not.toHaveBeenCalled();
+  });
 });

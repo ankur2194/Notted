@@ -24,7 +24,11 @@ async function registerAndVerify(page: Page, identity: ReturnType<typeof freshId
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
 
-  const verificationLink = await latestActionLink(page.request, identity.email);
+  const verificationLink = await latestActionLink(
+    page.request,
+    identity.email,
+    "Verify your Notted email",
+  );
   await page.goto(verificationLink);
   await expect(page).toHaveURL(/\/verify-email/u);
   await expect(page.getByRole("heading", { name: "Email verified" })).toBeVisible();
@@ -124,7 +128,11 @@ test("forgot and reset password remain generic, handle invalid links, revoke old
   await page.getByLabel("Email").fill(identity.email);
   await page.getByRole("button", { name: "Request password reset" }).click();
   await expect(page.getByRole("status")).toContainText("If an account exists");
-  const resetLink = await latestActionLink(page.request, identity.email);
+  const resetLink = await latestActionLink(
+    page.request,
+    identity.email,
+    "Reset your Notted password",
+  );
 
   await page.goto("/reset-password?token=invalid");
   await expect(page.getByRole("heading", { name: /invalid or expired/i })).toBeVisible();
@@ -160,7 +168,7 @@ test("magic-link request has generic result states and one-time links", async ({
   await page.getByRole("button", { name: "Send sign-in link" }).click();
   await expect(page.getByRole("status")).toContainText("If an account can use this address");
 
-  const magicLink = await latestActionLink(page.request, identity.email);
+  const magicLink = await latestActionLink(page.request, identity.email, "Your Notted magic link");
   await page.goto(magicLink);
   await expect(page.getByRole("heading", { name: "Signed in securely" })).toBeVisible();
   await page.getByRole("link", { name: "Continue to Notted" }).click();

@@ -64,6 +64,10 @@ export interface NotificationReadResult {
   readonly unreadCount: number;
 }
 
+export interface NotificationEmailPreference {
+  readonly mentionEmail: boolean;
+}
+
 export interface NotificationsMarkAllResult {
   readonly updatedCount: number;
   readonly unreadCount: 0;

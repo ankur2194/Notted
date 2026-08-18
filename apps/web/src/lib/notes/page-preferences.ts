@@ -4,9 +4,9 @@ import {
   clampMargins,
   isValidMargin,
   isZoomSelection,
-  type PageMargins,
-  type ZoomSelection,
-} from "./page-geometry";
+} from "@notted/shared-types";
+
+import type { PageMargins, ZoomSelection } from "@notted/shared-types";
 
 /**
  * Local, per-browser viewing preferences for the note page container.

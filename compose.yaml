@@ -30,6 +30,7 @@ x-workspace-image: &workspace-image
   build:
     context: .
     dockerfile: docker/Dockerfile.dev
+    target: workspace
   image: notted-dev-workspace:local
   init: true
 
@@ -139,6 +140,9 @@ x-api-environment: &api-environment
   BETTER_AUTH_URL: http://localhost:${NOTTED_API_PORT:-3001}
   BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:${NOTTED_WEB_PORT:-3000}
   DATA_ENCRYPTION_KEYS: ${DATA_ENCRYPTION_KEYS:-1:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=}
+  # Only meaningful on `api`/`api-e2e`, which build the `workspace-chromium`
+  # target; `db-init` also inherits this anchor but never reads the var.
+  EXPORT_CHROMIUM_PATH: /usr/bin/chromium
 
 # ------------------------------------------------------------------ e2e profile
 # The `e2e` profile (services suffixed `-e2e`, started only by
@@ -434,6 +438,15 @@ services:
   # namespace (see its `network_mode`), so both ports belong here.
   api:
     <<: *workspace-image
+    # Own `build`/`image` (not `*workspace-image`'s) because it needs the
+    # Chromium-carrying target; a distinct image tag keeps it from
+    # overwriting the lean `notted-dev-workspace:local` tag other services
+    # build to. `api-e2e` inherits both via `extends`.
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+      target: workspace-chromium
+    image: notted-dev-workspace-chromium:local
     depends_on:
       db-init:
         condition: service_completed_successfully

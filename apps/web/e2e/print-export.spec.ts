@@ -77,6 +77,12 @@ async function createWorkspace(page: Page, name: string): Promise<string> {
   return new URL(page.url()).pathname.split("/").at(-1)!;
 }
 
+async function apiGet(request: APIRequestContext, path: string) {
+  const response = await request.get(`${apiUrl}${path}`, { headers: { Origin: appUrl } });
+  expect(response.ok()).toBeTruthy();
+  return response.json() as Promise<Record<string, unknown>>;
+}
+
 async function apiPost(
   request: APIRequestContext,
   path: string,
@@ -177,9 +183,24 @@ test.describe.serial("Part 38 real-stack print and page breaks", () => {
       await owner.keyboard.press("Control+Shift+Enter");
       await owner.keyboard.type("Content after the break.");
       await expect(owner.locator(".notted-editor-content .notted-page-break")).toHaveCount(1);
-      await expect(owner.getByTestId("note-save-status")).toHaveText(/Saved\./u, {
-        timeout: 15_000,
-      });
+      // NOT the save indicator. `NoteEditorSurface` binds one writer at a time,
+      // and a synced collaborative session is the writer here: the API's Yjs
+      // projection owns `notes.content` and the Part 39 autosave machine is
+      // deliberately left unbound, so the indicator stays "No unsaved changes."
+      // forever. Poll the persisted row instead, which is the thing the save
+      // status was only ever standing in for.
+      await expect
+        .poll(
+          async () => {
+            const detail = await apiGet(
+              owner.request,
+              `/api/v1/workspaces/${workspaceId}/notes/${note.id}`,
+            );
+            return JSON.stringify(detail.content ?? null);
+          },
+          { timeout: 20_000 },
+        )
+        .toContain('"pageBreak"');
 
       // -------------------------------------- the print DOM carries only note content
       await owner.emulateMedia({ media: "print" });

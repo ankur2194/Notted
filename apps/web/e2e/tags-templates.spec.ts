@@ -150,8 +150,33 @@ function editorBody(page: Page) {
   return page.getByRole("textbox", { name: /Note content/u });
 }
 
-async function waitForSaved(page: Page): Promise<void> {
-  await expect(page.getByTestId("note-save-status")).toHaveText(/Saved\./u, { timeout: SAVE_MS });
+/**
+ * Wait until the note's PERSISTED content contains `needle`.
+ *
+ * Not the save indicator. A synced collaborative session is the single writer
+ * (`NoteEditorSurface` binds one at a time), so the Part 39 autosave machine is
+ * deliberately left unbound and the indicator never leaves "No unsaved
+ * changes." — content durability is owned by the server-side Yjs projection,
+ * and reading the row back is the only honest proof that the typing landed.
+ */
+async function waitForStored(
+  page: Page,
+  workspaceId: string,
+  noteId: string,
+  needle: string,
+): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const detail = await apiGet<{ content?: unknown }>(
+          page.request,
+          `/api/v1/workspaces/${workspaceId}/notes/${noteId}`,
+        );
+        return JSON.stringify(detail.content ?? null).includes(needle);
+      },
+      { timeout: SAVE_MS },
+    )
+    .toBe(true);
 }
 
 test.describe.serial("Part 46 real-stack tags and templates", () => {
@@ -286,7 +311,7 @@ test.describe.serial("Part 46 real-stack tags and templates", () => {
     await expect(editorBody(owner)).toBeVisible({ timeout: ROUTE_COMPILE_MS });
     await editorBody(owner).click();
     await owner.keyboard.type("Original body.");
-    await waitForSaved(owner);
+    await waitForStored(owner, workspaceId, sourceId, "Original body.");
 
     // ------------------------------------------------------ save as template
     await owner.goto(`/workspaces/${workspaceId}/notes`);
@@ -335,7 +360,7 @@ test.describe.serial("Part 46 real-stack tags and templates", () => {
     await editorBody(owner).click();
     await owner.keyboard.press("End");
     await owner.keyboard.type(" Edited copy.");
-    await waitForSaved(owner);
+    await waitForStored(owner, workspaceId, copy.id, "Edited copy.");
 
     await owner.goto(`/workspaces/${workspaceId}/notes/${templateId}`);
     await owner.reload();

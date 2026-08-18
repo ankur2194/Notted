@@ -142,6 +142,73 @@ export const MENTION_NOTIFY_JOB_DEFINITION = defineOutboxJob({
   authority: "actor",
 });
 
+/**
+ * Part 61 — generic workspace email delivery. It REUSES the existing
+ * `transactional-email` source queue rather than opening a new lane: operators
+ * already watch that name, and invitation mail has always travelled on it.
+ *
+ * The payload does NOT fit `identifierPayloadSchema` (nor the platform variant):
+ * `workspaceId` is NULLABLE here, because `welcome` is sent before the recipient
+ * belongs to any workspace, and both shared factories require a uuid. Declared
+ * inline for the same reason `MENTION_NOTIFY_JOB_DEFINITION` is.
+ *
+ * There is deliberately NO subject identifier in the payload.
+ * `email_deliveries.related_entity_type`/`related_entity_id` are the
+ * authoritative subject reference and the handler re-reads them from the claimed
+ * row, so a tampered payload cannot redirect a send at a different entity.
+ */
+export const WORKSPACE_EMAIL_SOURCE_QUEUE_NAME = "transactional-email" as const;
+
+export const WORKSPACE_EMAIL_JOB_DEFINITION = defineOutboxJob({
+  jobType: DOMAIN_JOB_TYPES.deliverWorkspaceEmail,
+  payloadVersion: 1,
+  payloadSchema: z
+    .object({
+      action: z.literal(DOMAIN_JOB_TYPES.deliverWorkspaceEmail),
+      intentId: z.string().uuid(),
+      deliveryId: z.string().uuid(),
+      workspaceId: z.string().uuid().nullable(),
+      actorId: z.string().uuid().optional(),
+    })
+    .strict(),
+  route: route(PHYSICAL_QUEUE_NAMES.default, WORKSPACE_EMAIL_SOURCE_QUEUE_NAME, "high"),
+  authority: "system",
+});
+
+/**
+ * Part 62 — export generation. ONE intent per `exports` row, committed inside
+ * the same transaction as the row itself (ADR 0006).
+ *
+ * The payload is declared inline for the same reason
+ * `MENTION_NOTIFY_JOB_DEFINITION` is: it carries an `exportId` AND a
+ * `requestedById`, and neither shared factory models that pair — the identifier
+ * schemas expect a resource id plus an optional actor, not a requester the
+ * handler must re-authorize.
+ *
+ * Authority is "system", NOT "actor". The requester travels in the payload only
+ * as an identifier to re-authorize with: the handler re-checks them against the
+ * LIVE source via `authorizeUserJob`, so a tampered or stale payload grants
+ * nothing on its own. Declaring "actor" would imply the payload itself carries
+ * the permission, which is exactly the inversion ADR 0006 forbids.
+ */
+export const EXPORT_GENERATE_SOURCE_QUEUE_NAME = "export-generate" as const;
+
+export const EXPORT_GENERATE_JOB_DEFINITION = defineOutboxJob({
+  jobType: DOMAIN_JOB_TYPES.generateExport,
+  payloadVersion: 1,
+  payloadSchema: z
+    .object({
+      action: z.literal(DOMAIN_JOB_TYPES.generateExport),
+      intentId: z.string().uuid(),
+      workspaceId: z.string().uuid(),
+      exportId: z.string().uuid(),
+      requestedById: z.string().uuid(),
+    })
+    .strict(),
+  route: route(PHYSICAL_QUEUE_NAMES.export, EXPORT_GENERATE_SOURCE_QUEUE_NAME),
+  authority: "system",
+});
+
 export const JOB_IDEMPOTENCY_CLEANUP_SOURCE_QUEUE_NAME = "queue-maintenance" as const;
 
 export const JOB_IDEMPOTENCY_CLEANUP_DEFINITION = defineOutboxJob({
@@ -194,6 +261,8 @@ const registryEntries = [
   NOTE_SEARCH_SYNC_JOB_DEFINITION,
   NOTE_EMBEDDING_GENERATE_JOB_DEFINITION,
   MENTION_NOTIFY_JOB_DEFINITION,
+  WORKSPACE_EMAIL_JOB_DEFINITION,
+  EXPORT_GENERATE_JOB_DEFINITION,
 ] as const satisfies readonly AnyOutboxJobDefinition[];
 
 export const JOB_REGISTRY: ReadonlyMap<DomainJobType, AnyOutboxJobDefinition> = new Map(

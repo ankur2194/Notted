@@ -65,3 +65,15 @@ RUN corepack enable \
 
 WORKDIR /workspace
 USER node
+
+# Adds a distro Chromium for PDF/HTML export (Part 63) on top of `workspace`,
+# without adding it to every other service's image (measured ~957 MB: 493 MB
+# `workspace` vs 1.45 GB here). Only `api` builds this target; `deps`,
+# `contracts`, `db-init` and `web` stay on `workspace`.
+FROM workspace AS workspace-chromium
+
+USER root
+RUN apt-get update \
+    && apt-get install --no-install-recommends --yes chromium fonts-liberation fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+USER node

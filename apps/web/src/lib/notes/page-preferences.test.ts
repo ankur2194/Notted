@@ -1,6 +1,6 @@
+import { DEFAULT_PAGE_MARGINS, MAX_PAGE_MARGINS } from "@notted/shared-types";
 import { describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_PAGE_MARGINS, MAX_PAGE_MARGINS } from "./page-geometry";
 import {
   DEFAULT_PAGE_PREFERENCES,
   PAGE_PREFERENCES_KEY,

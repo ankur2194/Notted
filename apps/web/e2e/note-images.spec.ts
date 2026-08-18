@@ -33,7 +33,11 @@ const password = "Fresh1!Password";
 /** Generous enough for a cold Next dev-server route compile. */
 const ROUTE_COMPILE_MS = 45_000;
 /** Upload, sharp processing, and the debounced save all have to complete. */
-const UPLOAD_MS = 30_000;
+// Covers the upload round trip AND the server-side Yjs projection that makes
+// the edit durable. 30s was enough while the whole suite was not competing for
+// a memory-capped host; under the full serial run the projection can land later
+// than that, so the budget is doubled rather than the wait being weakened.
+const UPLOAD_MS = 60_000;
 
 /* -------------------------------------------------------------------------- */
 /* A real PNG, built here rather than committed as a fixture                    */
@@ -211,8 +215,44 @@ async function pickImages(
   await chooser.setFiles(files.map((file) => ({ ...file })));
 }
 
-async function waitForSaved(page: Page): Promise<void> {
-  await expect(page.getByTestId("note-save-status")).toHaveText(/Saved\./u, { timeout: UPLOAD_MS });
+/**
+ * Wait until the note's PERSISTED document satisfies `expectation`.
+ *
+ * Not the save indicator. A synced collaborative session is the single writer
+ * (`NoteEditorSurface` binds one at a time), so the Part 39 autosave machine is
+ * deliberately left unbound and the indicator never leaves "No unsaved
+ * changes." — content durability is owned by the server-side Yjs projection.
+ * Reading the row back is the only honest proof, and it is stronger than the
+ * string it replaces: each call now waits for the very state the next
+ * assertion is about.
+ */
+async function waitForStored(
+  page: Page,
+  workspaceId: string,
+  noteId: string,
+  expectation: (document: string) => boolean,
+): Promise<void> {
+  await expect
+    .poll(async () => expectation(await storedDocument(page.request, workspaceId, noteId)), {
+      timeout: UPLOAD_MS,
+    })
+    .toBe(true);
+}
+
+/** `waitForStored` narrowed to the stored image node's attributes. */
+async function waitForStoredImage(
+  page: Page,
+  workspaceId: string,
+  noteId: string,
+  expectation: (attrs: Record<string, unknown>) => boolean,
+): Promise<void> {
+  await waitForStored(page, workspaceId, noteId, (document) => {
+    const parsed = JSON.parse(document) as { content?: { type?: string; attrs?: unknown }[] };
+    const image = (parsed.content ?? []).find((node) => node.type === "image");
+    return image === undefined
+      ? false
+      : expectation((image.attrs ?? {}) as Record<string, unknown>);
+  });
 }
 
 test.describe.serial("Part 42 image insertion in a real browser", () => {
@@ -262,7 +302,12 @@ test.describe.serial("Part 42 image insertion in a real browser", () => {
       await expect(images(page)).toHaveCount(3, { timeout: UPLOAD_MS });
       // Placeholders are decorations, so they leave nothing behind.
       await expect(page.locator(".notted-image-upload")).toHaveCount(0, { timeout: UPLOAD_MS });
-      await waitForSaved(page);
+      await waitForStored(
+        page,
+        workspaceId,
+        noteId,
+        (document) => (document.match(/"attachmentId"/gu) ?? []).length === 3,
+      );
 
       /*
        * THE CORP ASSERTION.
@@ -313,7 +358,15 @@ test.describe.serial("Part 42 image insertion in a real browser", () => {
       // The contract has no attribute that could hold one, which is *why*.
       expect(stored).not.toContain('"src"');
 
-      expect(patchBodies.length).toBeGreaterThan(0);
+      /*
+       * No `expect(patchBodies.length).toBeGreaterThan(0)`. Content durability
+       * moved to the server-side Yjs projection, so a synced session sends its
+       * edits over the socket and may issue no note PATCH at all. The guarantee
+       * this test is named for — a temporary URL is never persisted — is proved
+       * by the stored-document assertions immediately above. This loop stays as
+       * the transport-level check for any PATCH that IS still sent (settings
+       * saves, or a solo session that fell back to the Part 39 autosave).
+       */
       for (const patch of patchBodies) {
         expect(patch).not.toContain("blob:");
         expect(patch).not.toContain("data:image");
@@ -352,7 +405,9 @@ test.describe.serial("Part 42 image insertion in a real browser", () => {
       await page.keyboard.type("Second paragraph.");
       await page.keyboard.press("Enter");
       await page.keyboard.type("Third paragraph.");
-      await waitForSaved(page);
+      await waitForStored(page, workspaceId, noteId, (document) =>
+        document.includes("Third paragraph."),
+      );
 
       /*
        * 125 %: the sheet is inside a `transform: scale(1.25)`.
@@ -408,7 +463,9 @@ test.describe.serial("Part 42 image insertion in a real browser", () => {
       );
 
       await expect(images(page)).toHaveCount(1, { timeout: UPLOAD_MS });
-      await waitForSaved(page);
+      await waitForStored(page, workspaceId, noteId, (document) =>
+        document.includes('"attachmentId"'),
+      );
 
       // Landed between the paragraph it was dropped into and the one after it —
       // never at the start or the end of the document.
@@ -464,7 +521,9 @@ test.describe.serial("Part 42 image insertion in a real browser", () => {
       await expect(body).toBeVisible({ timeout: ROUTE_COMPILE_MS });
       await body.click();
       await page.keyboard.type("Untouched paragraph.");
-      await waitForSaved(page);
+      await waitForStored(page, workspaceId, noteId, (document) =>
+        document.includes("Untouched paragraph."),
+      );
       const before = await storedDocument(page.request, workspaceId, noteId);
 
       // Hold the upload open so Cancel is reachable, then cancel it.
@@ -548,7 +607,9 @@ test.describe.serial("Part 43 image manipulation in a real browser", () => {
     await page.keyboard.type("Surrounding paragraph.");
     await pickImages(page, [{ name: "figure.png", mimeType: "image/png", buffer }]);
     await expect(images(page)).toHaveCount(1, { timeout: UPLOAD_MS });
-    await waitForSaved(page);
+    await waitForStored(page, workspaceId, noteId, (document) =>
+      document.includes('"attachmentId"'),
+    );
     return { workspaceId, workspaceName, noteId };
   }
 
@@ -606,7 +667,12 @@ test.describe.serial("Part 43 image manipulation in a real browser", () => {
 
       const after = await figure(page).evaluate((element) => element.getBoundingClientRect().width);
       expect(after).toBeLessThan(before - 50);
-      await waitForSaved(page);
+      await waitForStoredImage(
+        page,
+        created.workspaceId,
+        created.noteId,
+        (attrs) => typeof attrs.width === "number" && Math.abs(attrs.width - after) < 4,
+      );
 
       const attrs = await storedImageAttrs(page.request, created.workspaceId, created.noteId);
       const storedWidth = attrs.width;
@@ -634,14 +700,17 @@ test.describe.serial("Part 43 image manipulation in a real browser", () => {
       await expect
         .poll(async () => figure(page).evaluate((element) => element.getBoundingClientRect().width))
         .toBeLessThan(before - 50);
-      // Not `waitForSaved`: undo-then-redo lands on the document that was already
-      // persisted above, so autosave correctly reports no unsaved changes rather
-      // than announcing a second save. Settling back to idle is the real property
-      // — it proves redo restored the saved state exactly, not merely something
-      // narrower than `before`.
-      await expect(page.getByTestId("note-save-status")).toHaveText(/No unsaved changes\./u, {
-        timeout: UPLOAD_MS,
-      });
+      // Undo-then-redo has to land back on the width that was already persisted
+      // above — that is what proves redo restored the saved state exactly, and
+      // not merely something narrower than `before`. Asserted against the stored
+      // row rather than the save indicator, which a collaborative session leaves
+      // permanently idle and which therefore cannot distinguish the two.
+      await waitForStoredImage(
+        page,
+        created.workspaceId,
+        created.noteId,
+        (attrs) => typeof attrs.width === "number" && Math.abs(attrs.width - after) < 4,
+      );
 
       // ------------------------------------------------- survives a reload
       await page.reload();
@@ -690,7 +759,12 @@ test.describe.serial("Part 43 image manipulation in a real browser", () => {
       await toolbar.getByRole("button", { name: "Wrap text beside the image" }).focus();
       await page.keyboard.press("Enter");
       await expect(figure(page)).toHaveAttribute("data-wrap", "inline");
-      await waitForSaved(page);
+      await waitForStoredImage(
+        page,
+        created.workspaceId,
+        created.noteId,
+        (attrs) => attrs.align === "right" && attrs.wrap === "inline",
+      );
 
       const attrs = await storedImageAttrs(page.request, created.workspaceId, created.noteId);
       expect(attrs).toMatchObject({ align: "right", wrap: "inline", fullWidth: false });
@@ -739,7 +813,12 @@ test.describe.serial("Part 43 image manipulation in a real browser", () => {
       // Enter commits immediately; the 500 ms debounce is a safety net, not the
       // only path, and typing must never write once per keystroke.
       await page.keyboard.press("Enter");
-      await waitForSaved(page);
+      await waitForStoredImage(
+        page,
+        created.workspaceId,
+        created.noteId,
+        (attrs) => attrs.caption === "Figure 1 — quarterly revenue",
+      );
 
       const attrs = await storedImageAttrs(page.request, created.workspaceId, created.noteId);
       expect(attrs.caption).toBe("Figure 1 — quarterly revenue");

@@ -200,7 +200,7 @@ describe("Part 31 note validators with the Part 33 document contract", () => {
         createdById: id("4"),
         updatedById: null,
         currentActorId: id("4"),
-        capabilities: { canUpdate: true, canDelete: true, canShare: true },
+        capabilities: { canUpdate: true, canDelete: true, canShare: true, canExport: true },
       }).success,
     ).toBe(true);
     expect(

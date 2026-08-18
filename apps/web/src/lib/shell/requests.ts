@@ -1,5 +1,6 @@
 import { SHELL_API_PATHS } from "@notted/shared-types";
 import {
+  notificationEmailPreferenceSchema,
   notificationPageSchema,
   notificationReadResultSchema,
   notificationsMarkAllResultSchema,
@@ -7,6 +8,7 @@ import {
 } from "@notted/shared-validators";
 
 import type {
+  NotificationEmailPreference,
   NotificationPage,
   NotificationReadResult,
   NotificationsMarkAllResult,
@@ -86,6 +88,44 @@ export function markAllNotificationsRead(
     new URL(`${notificationsPath(workspaceId)}/read-all`, publicEnvironment.NEXT_PUBLIC_API_URL),
     { method: "POST", headers: { "Content-Type": "application/json" } },
     (value) => notificationsMarkAllResultSchema.safeParse(value),
+  );
+}
+
+/**
+ * Mention-email opt-out, the control the mention email's footer links to.
+ *
+ * Read and write share one response schema because the preference IS its own
+ * result — `{mentionEmail}` in, `{mentionEmail}` out — so a drift between the
+ * toggle's optimistic value and the server's answer is impossible to express.
+ */
+export function loadMentionEmailPreference(
+  workspaceId: string,
+): Promise<ShellRequestResult<NotificationEmailPreference>> {
+  return requestJson(
+    new URL(
+      `${notificationsPath(workspaceId)}/email-preference`,
+      publicEnvironment.NEXT_PUBLIC_API_URL,
+    ),
+    { method: "GET" },
+    (value) => notificationEmailPreferenceSchema.safeParse(value),
+  );
+}
+
+export function setMentionEmailPreference(
+  workspaceId: string,
+  mentionEmail: boolean,
+): Promise<ShellRequestResult<NotificationEmailPreference>> {
+  return requestJson(
+    new URL(
+      `${notificationsPath(workspaceId)}/email-preference`,
+      publicEnvironment.NEXT_PUBLIC_API_URL,
+    ),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mentionEmail }),
+    },
+    (value) => notificationEmailPreferenceSchema.safeParse(value),
   );
 }
 

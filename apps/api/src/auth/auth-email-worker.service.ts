@@ -2,9 +2,12 @@ import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from "@ne
 import { and, eq, sql } from "drizzle-orm";
 
 import { StructuredLogger } from "../common/logging/structured-logger.service";
+import { APP_CONFIG, type AppConfig } from "../config/app.config";
 import { FEATURES_CONFIG, type FeaturesConfig } from "../config/features.config";
 import { DatabaseService } from "../database/database.service";
 import { authEmailIntents, emailDeliveries, type AuthEmailPurpose } from "../database/schema";
+import { resolveBranding } from "../email/email-branding";
+import { EmailRendererService } from "../email/email-renderer.service";
 import { SmtpService } from "../infrastructure/smtp/smtp.service";
 import { defineQueueJobRegistration, type QueueJobContext } from "../queue/job-contracts";
 import { AUTH_EMAIL_JOB_DEFINITION } from "../queue/job-registry";
@@ -13,36 +16,8 @@ import { QueueHandlerRegistry } from "../queue/queue-handler-registry.service";
 
 import { AuthEmailEncryptionService } from "./auth-email-encryption.service";
 
+import type { EmailMessage } from "../email/email-templates";
 import type { z } from "zod";
-
-function renderAuthEmail(
-  purpose: AuthEmailPurpose,
-  actionUrl: string | undefined,
-): { readonly subject: string; readonly text: string; readonly html: string } {
-  const labels: Record<AuthEmailPurpose, string> = {
-    registration_verification: "Verify your Notted email",
-    verification_resend: "Verify your Notted email",
-    magic_link: "Your Notted magic link",
-    password_reset_request: "Reset your Notted password",
-    password_reset_confirmation: "Your Notted password was reset",
-  };
-  const subject = labels[purpose];
-  if (actionUrl === undefined) {
-    const text = "Your Notted password was reset. If this was not you, contact your administrator.";
-    return { subject, text, html: `<p>${text}</p>` };
-  }
-  const text = `${subject}: ${actionUrl}\n\nThis link is single-use and expires soon.`;
-  const escapedUrl = actionUrl
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-  return {
-    subject,
-    text,
-    html: `<p>${subject}</p><p><a href="${escapedUrl}">Continue to Notted</a></p><p>This link is single-use and expires soon.</p>`,
-  };
-}
 
 type AuthEmailJobContext = QueueJobContext<
   typeof AUTH_EMAIL_JOB_DEFINITION.jobType,
@@ -57,9 +32,11 @@ export class AuthEmailQueueHandler implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly database: DatabaseService,
     private readonly encryption: AuthEmailEncryptionService,
+    private readonly renderer: EmailRendererService,
     private readonly smtp: SmtpService,
     private readonly logger: StructuredLogger,
     private readonly registry: QueueHandlerRegistry,
+    @Inject(APP_CONFIG) private readonly appConfig: AppConfig,
     @Inject(FEATURES_CONFIG) private readonly features: FeaturesConfig,
   ) {}
 
@@ -121,7 +98,17 @@ export class AuthEmailQueueHandler implements OnModuleInit, OnModuleDestroy {
       },
       { intentId: row.intent.id, purpose: row.intent.purpose, expiresAt: row.intent.expiresAt },
     );
-    const message = renderAuthEmail(row.intent.purpose, decrypted.actionUrl);
+
+    let message: EmailMessage;
+    try {
+      message = await this.renderMessage(row.intent.purpose, decrypted.actionUrl);
+    } catch {
+      // Nothing was handed to the provider, so no attempt is counted. A template
+      // bug is still permanent business state an operator resolves, never a
+      // retry that could re-enter the claim.
+      await this.markReconciliationRequired(row.intent.id, row.delivery.id);
+      throw new PermanentQueueJobError("reconciliation_required");
+    }
 
     try {
       const providerMessageId = await this.smtp.send({
@@ -164,6 +151,25 @@ export class AuthEmailQueueHandler implements OnModuleInit, OnModuleDestroy {
       await this.markReconciliationRequired(row.intent.id, row.delivery.id, true);
       throw new PermanentQueueJobError("reconciliation_required");
     }
+  }
+
+  /**
+   * The five `AuthEmailPurpose` values ARE the template keys, so the purpose
+   * indexes straight into the renderer. Auth mail is workspace-less: it always
+   * carries platform branding.
+   */
+  private renderMessage(
+    purpose: AuthEmailPurpose,
+    actionUrl: string | undefined,
+  ): Promise<EmailMessage> {
+    const branding = resolveBranding(null, this.appConfig);
+    if (purpose === "password_reset_confirmation") {
+      return this.renderer.render("password_reset_confirmation", { branding });
+    }
+    // The remaining four purposes are action mail by definition; a missing URL
+    // is a corrupt intent, not a renderable message.
+    if (actionUrl === undefined) throw new Error("Auth email action URL is missing");
+    return this.renderer.render(purpose, { branding, actionUrl });
   }
 
   private async markReconciliationRequired(

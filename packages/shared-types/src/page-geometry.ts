@@ -1,4 +1,4 @@
-import type { PageSize } from "@notted/shared-types";
+import type { PageSize } from "./note";
 
 /**
  * Physical page geometry for the note page container (Part 37).

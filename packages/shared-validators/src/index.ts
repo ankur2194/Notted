@@ -126,6 +126,20 @@ export type {
   SortInput,
   UuidInput,
 } from "./common.schema";
+export {
+  exportCreateSchema,
+  exportFormatSchema,
+  exportListQuerySchema,
+  exportOptionsSchema,
+  exportSourceSchema,
+  exportStatusSchema,
+} from "./export.schema";
+export type {
+  ExportCreateInput,
+  ExportListQueryInput,
+  ExportOptionsInput,
+  ExportOptionsOutput,
+} from "./export.schema";
 export { exactByteLabel, formatBinaryBytes } from "./format-bytes";
 export {
   noteVersionCursorSchema,
@@ -304,6 +318,7 @@ export type {
   SearchSuggestionQueryInput,
 } from "./search.schema";
 export {
+  notificationEmailPreferenceSchema,
   notificationKindSchema,
   notificationListQuerySchema,
   notificationPageSchema,
@@ -318,6 +333,7 @@ export {
   workspaceSelectorSchema,
 } from "./shell.schema";
 export type {
+  NotificationEmailPreferenceInput,
   NotificationListQueryInput,
   NotificationReadStateInput,
   ShellBootstrapQueryInput,

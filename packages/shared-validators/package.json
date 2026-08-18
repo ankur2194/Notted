@@ -10,10 +10,12 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./print.css": "./print.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "print.css"
   ],
   "dependencies": {
     "zod": "4.4.3"

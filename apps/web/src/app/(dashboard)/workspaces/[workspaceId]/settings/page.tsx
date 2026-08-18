@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { MentionEmailPreference } from "@/components/workspaces/MentionEmailPreference";
 import { WorkspaceSettings } from "@/components/workspaces/WorkspaceSettings";
 import { getServerWorkspaceDetail } from "@/lib/workspaces/server-workspaces";
 
@@ -66,6 +67,12 @@ export default async function WorkspaceSettingsPage({
         canManage={canManage}
         canDelete={canDelete}
       />
+      {/*
+        Rendered for EVERY member, unlike the blocks above. This is the reader's
+        own mail preference — the control the mention email's footer links to —
+        not a workspace-admin setting, so `canManage` deliberately does not gate it.
+      */}
+      <MentionEmailPreference workspaceId={workspace.id} />
     </div>
   );
 }

@@ -12,6 +12,7 @@ import type { StructuredLogger } from "../common/logging/structured-logger.servi
 import type { AppConfig } from "../config/app.config";
 import type { FeaturesConfig } from "../config/features.config";
 import type { DatabaseService } from "../database/database.service";
+import type { EmailRendererService } from "../email/email-renderer.service";
 import type { SmtpService } from "../infrastructure/smtp/smtp.service";
 
 const workspaceId = "30000000-0000-4000-8000-000000000001";
@@ -43,19 +44,23 @@ function build(database: unknown) {
   };
   const smtp = { send: vi.fn() };
   const tokens = { derive: vi.fn() };
+  const render = vi
+    .fn()
+    .mockResolvedValue({ subject: "Join Alpha on Notted", html: "<p>h</p>", text: "t" });
   const registry = new QueueHandlerRegistry();
   const handler = new InvitationEmailQueueHandler(
     database as DatabaseService,
     authorization as unknown as AuthorizationEntryService,
     tenant,
     tokens as unknown as InvitationTokenService,
+    { render } as unknown as EmailRendererService,
     smtp as unknown as SmtpService,
     { info: vi.fn(), failure: vi.fn() } as unknown as StructuredLogger,
     registry,
     { appUrl: new URL("https://app.notted.test") } as AppConfig,
     { emailEnabled: true } as FeaturesConfig,
   );
-  return { handler, authorization, smtp, tokens, registry };
+  return { handler, authorization, smtp, tokens, render, registry };
 }
 
 describe("InvitationEmailQueueHandler", () => {
@@ -179,6 +184,8 @@ describe("InvitationEmailQueueHandler", () => {
                     deliveryStatus: "queued",
                     recipient: "u@example.test",
                     workspaceName: "Alpha",
+                    workspaceLogoUrl: null,
+                    workspaceSettings: null,
                   },
                 ],
               }),
@@ -209,5 +216,69 @@ describe("InvitationEmailQueueHandler", () => {
       expect.objectContaining({ status: "reconciliation_required" }),
     );
     expect(subject.smtp.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends the rendered invitation template with workspace branding", async () => {
+    const claimTx = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      update: vi
+        .fn()
+        .mockReturnValue({ set: () => ({ where: vi.fn().mockResolvedValue(undefined) }) }),
+      select: () => ({
+        from: () => ({
+          innerJoin: () => ({
+            innerJoin: () => ({
+              where: () => ({
+                limit: () => [
+                  {
+                    deliveryStatus: "queued",
+                    recipient: "u@example.test",
+                    workspaceName: "Alpha",
+                    workspaceLogoUrl: "https://cdn.notted.test/alpha.png",
+                    workspaceSettings: { accentColor: "#ff0000" },
+                  },
+                ],
+              }),
+            }),
+          }),
+        }),
+      }),
+    };
+    const database = {
+      db: {
+        select: () => ({
+          from: () => ({
+            innerJoin: () => ({ where: () => ({ limit: () => [{ workspaceId }] }) }),
+          }),
+        }),
+        update: vi
+          .fn()
+          .mockReturnValue({ set: () => ({ where: vi.fn().mockResolvedValue(undefined) }) }),
+      },
+      transaction: (work: (tx: typeof claimTx) => unknown) => work(claimTx),
+    };
+    const subject = build(database);
+    subject.tokens.derive.mockReturnValue("opaque-token");
+    subject.smtp.send.mockResolvedValue("provider-message-id");
+
+    await subject.handler.handle(context());
+
+    // Branding comes from the columns the claim already selected — no extra query.
+    expect(subject.render).toHaveBeenCalledWith("invitation", {
+      branding: expect.objectContaining({
+        name: "Alpha",
+        logoUrl: "https://cdn.notted.test/alpha.png",
+        accentColor: "#ff0000",
+      }),
+      workspaceName: "Alpha",
+      actionUrl: "https://app.notted.test/invitations/accept?token=opaque-token",
+    });
+    // The subject is unchanged by the migration; the body is the rendered one.
+    expect(subject.smtp.send).toHaveBeenCalledWith({
+      to: "u@example.test",
+      subject: "Join Alpha on Notted",
+      html: "<p>h</p>",
+      text: "t",
+    });
   });
 });

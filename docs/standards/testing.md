@@ -25,10 +25,13 @@ nuisance rather than a correctness problem, and it is why no spec should assert 
 itself send.
 
 ```bash
+pnpm infra:down                                  # stop the development stack FIRST; never run both at once
+docker compose --profile e2e build api-e2e       # pre-build the Chromium image in the foreground
 pnpm e2e:up      # start the profile; drops and recreates the database, migrates, seeds, flushes Redis db 1
 pnpm e2e:test    # run the Playwright chromium project against it
 pnpm e2e:test --grep "note"                      # arguments pass to Playwright verbatim (no `--`)
-pnpm e2e:down    # remove the profile's containers; the development stack keeps running
+pnpm e2e:down    # remove the profile's containers
+pnpm infra:up:ports                              # bring the development stack back afterwards
 ```
 
 `pnpm e2e:up` starts every run from the same state. `pnpm e2e:test` runs Playwright in the official
@@ -37,6 +40,60 @@ that namespace `127.0.0.1` is the API container, so Mailpit and PostgreSQL must 
 Compose DNS (`http://mailpit:8025`, `postgres:5432`) while the application keeps the same
 `localhost:3010`/`localhost:3011` origins the browser, the CORS allow-list and Better Auth all agree
 on. Override `NOTTED_E2E_WEB_PORT` / `NOTTED_E2E_API_PORT` when another project holds those ports.
+
+### Never wait on the save indicator in a browser test
+
+`NoteEditorSurface` binds **one writer at a time**. Once a collaborative session
+syncs — which a lone user does, since the socket connects for a single peer too —
+the Part 39 autosave machine is deliberately left unbound and the server-side Yjs
+projection owns `notes.content`. The save indicator therefore stays on
+"No unsaved changes." forever, and `toHaveText(/Saved\./)` can never pass for a
+**content** change. (A **settings** change, such as the page size, still goes
+through autosave and does show "Saved.")
+
+Wait on the persisted row instead: read the note back through
+`GET /api/v1/workspaces/:workspaceId/notes/:noteId` and poll until the stored
+document carries the state the next assertion is about. That is both honest and
+stronger than the string it replaces — it waits for the exact thing being
+asserted rather than for a proxy. `note-images.spec.ts` (`waitForStored` /
+`waitForStoredImage`), `note-attachments.spec.ts` and `tags-templates.spec.ts`
+show the pattern.
+
+For the same reason, do not assert that a note **PATCH** was sent. A synced
+session ships its edits over the socket and may issue no note PATCH at all, so
+"every PATCH body is clean" is a transport check that no longer proves
+persistence. Assert on the stored document.
+
+### Local resource budget
+
+On a memory-capped host — WSL2 in particular, which defaults to roughly half of host RAM with swap at
+a quarter of that — an end-to-end run can exhaust the VM and take every terminal down with it, not
+just Docker. The symptom is a machine that looks hung but is actually thrashing swap. Three rules keep
+the run inside the budget.
+
+**Never run both stacks at once.** `e2e` is a *profile* inside the same Compose project as
+development, not a separate project, so `pnpm e2e:up` starts `api-e2e` and `web-e2e` **alongside** a
+running development `api` and `web` rather than replacing them. That is two application stacks, two
+Next.js servers and two NestJS servers against one shared infrastructure set. Run `pnpm infra:down`
+before `pnpm e2e:up`, and `pnpm e2e:down` before returning to development. Only one stack is up at any
+moment. The profile's targeted startup deliberately does not *build or start* the development
+services, but it does not stop ones that are already running either.
+
+**Pre-build the Chromium image as its own foreground step.** `api-e2e` extends `api`, which since
+Part 63 builds the `workspace-chromium` target of `docker/Dockerfile.dev` and installs Debian
+`chromium` — `notted-dev-workspace-chromium:local` is about 1.45 GB against about 493 MB for the lean
+`notted-dev-workspace:local`. Run `docker compose --profile e2e build api-e2e` on its own and let it
+finish before `pnpm e2e:up`, so the image build is never competing with Playwright for memory. It also
+keeps a long, silent `apt-get` out of any automated runner's no-output stall watchdog, which
+otherwise kills the run mid-build and leaves the tree in an unknown state.
+
+**Playwright stays at one worker.** `apps/web/playwright.config.ts` pins `workers: 1` with
+`fullyParallel: false`, and `playwrightTestArguments` injects `--project=chromium` unless the caller
+names projects. Every additional worker is another browser process inside the runner container, and
+every additional project multiplies the suite. This is a standing invariant, not a default to tune:
+do not raise the worker count or widen the project list on a memory-capped host. `docker stats` is the
+check before blaming the tests, and `PLAYWRIGHT_LIGHTWEIGHT_MODE=true` drops traces, screenshots,
+videos and the HTML report when diagnosing under pressure.
 
 **Why it exists.** `PLAYWRIGHT_DISPOSABLE_TEST_RUN=true` used to gate specs without creating
 anything: the suite ran against `notted_dev` and every run left users, workspaces, projects and notes
