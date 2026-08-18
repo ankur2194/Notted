@@ -7,9 +7,9 @@ All nested delegation follows the recursive Synchronous Delegation Protocol in `
 ## Quality gates (run before every push)
 
 - `pnpm lint` (ESLint, fails on any warning via `--max-warnings 0`), `pnpm format:check` (Prettier), `pnpm type-check`, `pnpm test`, `pnpm build`.
-- `pnpm build` validates the web environment as production and rejects the loopback `http://`/`ws://` values in `apps/web/.env.local`. Prefix the command with `NEXT_PUBLIC_APP_URL=https://app.local.notted.invalid NEXT_PUBLIC_API_URL=https://api.local.notted.invalid NEXT_PUBLIC_WS_URL=wss://api.local.notted.invalid`, exactly as CI does. See `docs/README.md` → Quality commands.
+- `pnpm build` validates the web environment as production and rejects the loopback `http://`/`ws://` values in `apps/web/.env.local`. Prefix the command with `NEXT_PUBLIC_APP_URL=https://app.local.notted.invalid NEXT_PUBLIC_API_URL=https://api.local.notted.invalid NEXT_PUBLIC_WS_URL=wss://api.local.notted.invalid`. See `docs/README.md` → Quality commands.
 - `pnpm test:ci` (coverage thresholds) needs `DATABASE_URL` exported and the dev stack up (`pnpm infra:up:ports`). Without it 17 API suites skip silently and branch coverage lands around 62%, which reads as a real regression but is not one. `turbo.json` documents the passthrough.
-- `pnpm lint:fix` / `pnpm format` autofix and rewrite. A pre-commit hook (husky + lint-staged) runs the same ESLint/Prettier fixes on staged files; skip with `git commit --no-verify`, disable in CI with `HUSKY=0`. Hooks are optional and always reproducible through the pnpm commands above.
+- `pnpm lint:fix` / `pnpm format` autofix and rewrite. A pre-commit hook (husky + lint-staged) runs the same ESLint/Prettier fixes on staged files; skip with `git commit --no-verify`, disable with `HUSKY=0`. Hooks are optional and always reproducible through the pnpm commands above.
 
 ## End-to-end runs (local resource budget)
 

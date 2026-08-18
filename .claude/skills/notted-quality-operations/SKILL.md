@@ -1,6 +1,6 @@
 ---
 name: notted-quality-operations
-description: Independently review and verify Notted changes for architecture, quality, testing, accessibility, tenant isolation, security, dependency risk, observability, containers, deployment, backups, and release readiness. Use for reviews, verification, CI or operations work, and before completing high-risk plan parts.
+description: Independently review and verify Notted changes for architecture, quality, testing, accessibility, tenant isolation, security, dependency risk, observability, containers, deployment, backups, and release readiness. Use for reviews, verification or operations work, and before completing high-risk plan parts.
 ---
 
 # Assure Notted Quality and Operations

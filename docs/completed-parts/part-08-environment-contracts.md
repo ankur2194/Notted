@@ -106,7 +106,7 @@ Evidence below applies to the current Phase 2 worktree audited on 2026-07-27.
 | Focused API/web contract tests | Pass | Development defaults, complete production contracts, invalid URL/port/key/secret cases, display-name email, 50 MiB limit, redaction, and public allow-list passed. |
 | `pnpm env:check` | Pass | Example-derived local files were typed and mutually consistent. |
 | API `--production` with missing configuration | Pass (rejected) | Exited non-zero at `API_HOST is required`, proving forced production semantics without reading ignored local values. |
-| Production build | Pass | API and web contracts accepted explicit secure CI configuration. |
+| Production build | Pass | API and web contracts accepted explicit secure production configuration. |
 | Broad repository gates | Pass | Frozen install, formatting, lint, type-check, tests/coverage, build, and production audit passed. |
 
 ## Known Limitations and Follow-up Work

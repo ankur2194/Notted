@@ -175,7 +175,7 @@ anything: the suite ran against `notted_dev` and every run left users, workspace
 behind, so specs that assume a near-empty tenant failed on the previous run's rows. The flag now
 names a stack that really is disposable. The development database is never written by a browser
 test, and that is now enforced rather than merely documented: `playwright.config.ts` refuses to start
-when `PLAYWRIGHT_APP_URL` is unset outside CI, so a bare `playwright test` fails closed with an
+when `PLAYWRIGHT_APP_URL` is unset, so a bare `playwright test` fails closed with an
 instruction instead of silently targeting `localhost:3000`. Set `PLAYWRIGHT_APP_URL` explicitly to
 aim at some other stack on purpose.
 
@@ -192,8 +192,7 @@ report are not needed, opt into the lightweight runner explicitly:
 PLAYWRIGHT_LIGHTWEIGHT_MODE=true pnpm e2e:test version-history.spec.ts
 ```
 
-List output and assertions remain unchanged. CI ignores lightweight mode and retains the default
-failure artifacts and HTML report.
+List output and assertions remain unchanged.
 
 Only the chromium project runs unless you pass your own `--project`. A `--grep` filter therefore
 narrows the run without also widening it to firefox and webkit, which are not part of the maintained

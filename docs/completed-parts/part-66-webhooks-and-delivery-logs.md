@@ -92,7 +92,7 @@ Implementation-wave checks are listed first (what the implementers actually ran)
 |---|---|---|
 | `pnpm format:check` / `pnpm lint` / `pnpm type-check` | **Pass** | Lint at `--max-warnings 0` |
 | `pnpm test` | **Pass** | api 178 / web 133 / validators 14 / types 4 |
-| `pnpm build` | **Pass** | CI `NEXT_PUBLIC_*` production values |
+| `pnpm build` | **Pass** | `NEXT_PUBLIC_*` production values |
 | `pnpm test:ci` | **Pass** | Exit 0; all coverage thresholds met (api 84.48% stmts / 76.11% branch) |
 | `apps/api/test/webhooks.integration.test.ts` | **Pass** | 10/10 with the dev `api` container running (the very exposure that caused the round-1 duplicate-row failure); silent-receiver test stable across 3 runs |
 | `apps/api/test/webhooks.e2e.test.ts` | **Pass** | 11/11 — editor/viewer 403, cross-tenant 404, secret shown exactly once, `WEBHOOK_NOT_VERIFIED`, freshness-gate 403 for api-key mutations |

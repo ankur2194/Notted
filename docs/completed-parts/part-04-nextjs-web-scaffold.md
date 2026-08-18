@@ -104,7 +104,7 @@ The dependency audit, production HTTP smoke, and manual browser accessibility ch
 |---|---|---|
 | `pnpm install --frozen-lockfile --strict-peer-dependencies` | Pass | The integrated Parts 4–7 lockfile is reproducible with strict peers. |
 | `pnpm --filter @notted/web test` | Pass | 14 files and 50 tests passed after shared-contract integration. |
-| Web CI coverage suite | Partial / environment-limited | Assertions and thresholds passed for the files that ran, but jsdom workers intermittently timed out starting from the mounted Windows filesystem. Runner experiments were reverted; hosted native-Linux proof remains with Part 7. |
+| Web coverage suite | Partial / environment-limited | Assertions and thresholds passed for the files that ran, but jsdom workers intermittently timed out starting from the mounted Windows filesystem. Runner experiments were reverted. |
 | Web lint | Pass | The final repository lint attempt completed the web workspace with zero warnings before the unchanged root self-check stalled. |
 | `pnpm type-check` | Pass | All 6 integrated tasks passed, including web. |
 | `pnpm build` | Pass | All 4 production builds passed; Next statically generated `/`, `/_not-found`, and `/login`. |
@@ -118,8 +118,8 @@ The dependency audit, production HTTP smoke, and manual browser accessibility ch
 |---|---|---|
 | Frozen strict install | Pass | `pnpm install --frozen-lockfile --strict-peer-dependencies`. |
 | Formatting, lint, and type-check | Pass | Current integrated source passed the applicable repository gates. The final root configuration lint fix also passed a focused zero-warning check. |
-| Web tests and CI coverage | Pass | All current web tests and configured coverage thresholds passed. |
-| Production build | Pass | Next.js 16.2.11 statically generated `/`, `/_not-found`, and `/login` with committed CI-safe public URLs. |
+| Web tests and coverage | Pass | All current web tests and configured coverage thresholds passed. |
+| Production build | Pass | Next.js 16.2.11 statically generated `/`, `/_not-found`, and `/login` with committed placeholder public URLs. |
 | Production HTTP smoke | Pass | `/` and `/login` returned 200 with expected content; an unknown route returned the custom 404 state. |
 | Production dependency audit | Pass | No high-severity production dependency finding. |
 

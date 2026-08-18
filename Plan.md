@@ -36,7 +36,7 @@ Create the root `package.json`, `pnpm-workspace.yaml`, `turbo.json`, shared Type
 
 ### Part 3 — Establish formatting, linting, and commit quality gates
 
-Configure ESLint for Next.js, NestJS, TypeScript, accessibility, and import ordering; configure Prettier consistently; add scripts that fail on warnings in CI. Add optional pre-commit checks for staged formatting and linting, but keep them documented and reproducible through normal pnpm commands. Create the project coding-conventions file described in the brief and reconcile filename/component naming rules with the proposed structure.
+Configure ESLint for Next.js, NestJS, TypeScript, accessibility, and import ordering; configure Prettier consistently; add scripts that fail on warnings. Add optional pre-commit checks for staged formatting and linting, but keep them documented and reproducible through normal pnpm commands. Create the project coding-conventions file described in the brief and reconcile filename/component naming rules with the proposed structure.
 
 **Verify:** deliberately malformed sample code is caught, then remove it and confirm all checks pass.
 
@@ -57,12 +57,6 @@ Create the NestJS entry point and root module, enable strict TypeScript, configu
 Build the two shared packages with stable public exports. Define common identifiers, pagination, sorting, error, user, workspace, project, note, attachment, search, task, and API response contracts. Add Zod schemas for create/update/filter operations and infer TypeScript types from schemas where practical. Keep database-only and secret-bearing fields out of client contracts.
 
 **Verify:** both applications import the packages through workspace dependencies and package-level unit tests cover valid, invalid, boundary, and coercion cases.
-
-### Part 7 — Add continuous integration
-
-Create a CI workflow that installs with a frozen lockfile, restores safe caches, then runs formatting checks, lint, type-check, unit tests, builds, and migration consistency checks. Add PostgreSQL, Redis, Meilisearch, and MinIO service containers only to jobs that need them. Publish coverage and test artifacts without exposing environment secrets.
-
-**Verify:** CI succeeds on the initial repository and fails for a deliberately broken type or test before that change is reverted.
 
 ## Phase 2 — Local Infrastructure and Configuration
 
@@ -596,7 +590,7 @@ Enable one advanced area at a time in this order: standalone task board/calendar
 
 ## Milestone Checkpoints
 
-1. **Foundation ready (Parts 1–11):** monorepo, applications, CI, typed configuration, and local infrastructure are reproducible.
+1. **Foundation ready (Parts 1–11):** monorepo, applications, typed configuration, and local infrastructure are reproducible.
 2. **Secure data layer ready (Parts 12–20):** complete schema, migrations, tenant enforcement, and seed data exist.
 3. **Usable account shell (Parts 21–25):** users can authenticate and enter an authorized workspace shell.
 4. **Core organization ready (Parts 26–32):** workspaces, members, projects, and note hierarchy work end to end.

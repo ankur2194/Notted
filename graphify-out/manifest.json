@@ -4265,8 +4265,8 @@
     "semantic_hash": ""
   },
   ".agents/skills/notted-quality-operations/SKILL.md": {
-    "mtime": 1787051358.075212,
-    "ast_hash": "846015c973e256527ed50287935457f5",
+    "mtime": 1787085713.0965497,
+    "ast_hash": "3ab1878d73505187da46d5474743f122",
     "semantic_hash": ""
   },
   ".agents/skills/notted-quality-operations/agents/openai.yaml": {
@@ -4385,13 +4385,8 @@
     "semantic_hash": ""
   },
   ".claude/skills/notted-quality-operations/SKILL.md": {
-    "mtime": 1787051358.0750804,
-    "ast_hash": "ee4682104a8d38c991261e11b14e0b77",
-    "semantic_hash": ""
-  },
-  ".github/workflows/ci.yml": {
-    "mtime": 1785782954.5980961,
-    "ast_hash": "c7441045a1b71eb58f7d9b04ff942086",
+    "mtime": 1787085713.096414,
+    "ast_hash": "838f43dcd9328f67cb8db421597fd758",
     "semantic_hash": ""
   },
   ".opencode/agent/backend-platform-engineer.md": {
@@ -4475,13 +4470,13 @@
     "semantic_hash": ""
   },
   "AGENTS.md": {
-    "mtime": 1787051382.1464818,
-    "ast_hash": "3514f3486227907c2bd346b1b432e307",
+    "mtime": 1787085697.089333,
+    "ast_hash": "cd7b3f7c0bd656c24f3ef2b25804a687",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1787051303.4222655,
-    "ast_hash": "f98f169ef9306f49e8e9872f4c75673c",
+    "mtime": 1787085667.4726827,
+    "ast_hash": "307d0cbfdf3607ee953a89a20f10b93b",
     "semantic_hash": ""
   },
   "Notted.md": {
@@ -4490,8 +4485,8 @@
     "semantic_hash": ""
   },
   "Plan.md": {
-    "mtime": 1785822363.1319985,
-    "ast_hash": "aba7a1ba87e91e2afdbf4b31dbba9d17",
+    "mtime": 1787085702.2976682,
+    "ast_hash": "98d073936c3119c2f7da47334b4cdaaa",
     "semantic_hash": ""
   },
   "README.md": {
@@ -4520,8 +4515,8 @@
     "semantic_hash": ""
   },
   "docs/README.md": {
-    "mtime": 1787051382.1458247,
-    "ast_hash": "7375bd385794043edb8dfe02e9529353",
+    "mtime": 1787085679.7635887,
+    "ast_hash": "b7370ad19a6072f204fa093239da8783",
     "semantic_hash": ""
   },
   "docs/authorization.md": {
@@ -4530,8 +4525,8 @@
     "semantic_hash": ""
   },
   "docs/completed-parts/README.md": {
-    "mtime": 1787082068.6313782,
-    "ast_hash": "83725ac56a3029e329807819abe4b2c4",
+    "mtime": 1787085795.17278,
+    "ast_hash": "66732cd51a4c564a5c06acf4ec54d1cc",
     "semantic_hash": ""
   },
   "docs/completed-parts/TEMPLATE.md": {
@@ -4545,13 +4540,13 @@
     "semantic_hash": ""
   },
   "docs/completed-parts/coverage-remediation-2026-08-04.md": {
-    "mtime": 1785783797.652652,
-    "ast_hash": "dfcf689ca8c7c02c63ad3c36b9526fca",
+    "mtime": 1787085763.5812814,
+    "ast_hash": "2faf90a0e926eaec7495c0a53a475263",
     "semantic_hash": ""
   },
   "docs/completed-parts/disposable-e2e-stack-2026-08-07.md": {
-    "mtime": 1786469672.5807211,
-    "ast_hash": "1d98737822c72945bf6fd75cb1f03d74",
+    "mtime": 1787085813.439826,
+    "ast_hash": "f16ce0334d0dca4ed4883c3f83049f09",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-01-architecture-decisions.md": {
@@ -4560,38 +4555,33 @@
     "semantic_hash": ""
   },
   "docs/completed-parts/part-02-monorepo-initialization.md": {
-    "mtime": 1784788178.8432124,
-    "ast_hash": "026ba3fb324e6b9512540278607d0725",
+    "mtime": 1787085831.0700514,
+    "ast_hash": "f5c5a9cfdc80f1eee87cd0dda4ae0644",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-03-formatting-linting-commit-gates.md": {
-    "mtime": 1784790134.7221992,
-    "ast_hash": "fa185229520f7d9beb815974c582a4d6",
+    "mtime": 1787085780.9133685,
+    "ast_hash": "8971ac113dcd4034f4c281b957722d7f",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-04-nextjs-web-scaffold.md": {
-    "mtime": 1785182278.103695,
-    "ast_hash": "d23e7b9a8036bd8844b0513abfa721d9",
+    "mtime": 1787085822.6258376,
+    "ast_hash": "c9338651998d437a0c7cf10f0b62bfcc",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-05-nestjs-api-scaffold.md": {
-    "mtime": 1785182278.1205578,
-    "ast_hash": "2cde05a6f018b17eb2b01dbfdb903464",
+    "mtime": 1787085809.8939898,
+    "ast_hash": "127741f57aae39560f5865205c407272",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-06-shared-types-validators.md": {
-    "mtime": 1784911189.905559,
-    "ast_hash": "a928031462513286cd3f02176a6f9f2a",
-    "semantic_hash": ""
-  },
-  "docs/completed-parts/part-07-continuous-integration.md": {
-    "mtime": 1785783819.9217596,
-    "ast_hash": "b988d81942fb75087d70e2bad5479d53",
+    "mtime": 1787085816.2495668,
+    "ast_hash": "15000c6d8ecc0da2b28acf0597be6098",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-08-environment-contracts.md": {
-    "mtime": 1785786539.282736,
-    "ast_hash": "fb4e7e9e3e05f3cf903af9ee5f6e4ca2",
+    "mtime": 1787085824.0339506,
+    "ast_hash": "676892776b19e8b29de4754b96108b32",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-09-development-compose-stack.md": {
@@ -4610,8 +4600,8 @@
     "semantic_hash": ""
   },
   "docs/completed-parts/part-12-drizzle-migration-tooling.md": {
-    "mtime": 1785182278.2336159,
-    "ast_hash": "5c85f080f312113020343013b260b891",
+    "mtime": 1787085811.4140675,
+    "ast_hash": "f6d387b51232ead0000c6c24f60b4e11",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-13-identity-authentication-tables.md": {
@@ -4735,8 +4725,8 @@
     "semantic_hash": ""
   },
   "docs/completed-parts/part-37-page-container.md": {
-    "mtime": 1786012839.8994431,
-    "ast_hash": "56a866eb7f45693401a38143bf333c12",
+    "mtime": 1787085825.7657554,
+    "ast_hash": "6bfb058c75de77d58f433bdbbb4011fb",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-38-page-breaks-focus-print.md": {
@@ -4755,8 +4745,8 @@
     "semantic_hash": ""
   },
   "docs/completed-parts/part-41-image-ingestion-processing.md": {
-    "mtime": 1786088932.4672835,
-    "ast_hash": "7b70fddcfa1253c0f1bfdb17dd896da9",
+    "mtime": 1787085834.7527883,
+    "ast_hash": "9949d89ee8c12d720f4bad12c74596bf",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-42-editor-image-insertion.md": {
@@ -4850,8 +4840,8 @@
     "semantic_hash": ""
   },
   "docs/decisions/0008-runtime-and-package-compatibility.md": {
-    "mtime": 1786862596.666648,
-    "ast_hash": "3277a5c6010d773ce803d149d38416de",
+    "mtime": 1787085695.7412465,
+    "ast_hash": "0f11e23ae7cff6ebe389ff04a4758871",
     "semantic_hash": ""
   },
   "docs/decisions/0009-tenant-protection-strategy.md": {
@@ -4925,8 +4915,8 @@
     "semantic_hash": ""
   },
   "docs/standards/testing.md": {
-    "mtime": 1787051286.8904917,
-    "ast_hash": "63e81050a3dff148935cb1bd60fe37f1",
+    "mtime": 1787085690.019385,
+    "ast_hash": "8cc4d52304255959f7345f87e87a5649",
     "semantic_hash": ""
   },
   "docs/tenant-and-retention.md": {
@@ -6355,13 +6345,13 @@
     "semantic_hash": ""
   },
   "docs/completed-parts/part-65-public-rest-api-api-keys.md": {
-    "mtime": 1787082068.6322548,
-    "ast_hash": "902ca3d6956f10dd24bf705b835be6f0",
+    "mtime": 1787085832.4862614,
+    "ast_hash": "2cdada0813ff4788da2733620bab8dc4",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-66-webhooks-and-delivery-logs.md": {
-    "mtime": 1787082068.632544,
-    "ast_hash": "cf9bf3e76cc00cd11b0a478573b675a7",
+    "mtime": 1787085835.6126962,
+    "ast_hash": "d7a80630e6f80bf1e0b9cd0e04940958",
     "semantic_hash": ""
   },
   "docs/decisions/0013-rest-success-payload-shape.md": {

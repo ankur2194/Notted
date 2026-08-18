@@ -117,7 +117,7 @@ Current immutable-surface hashes:
 | Pre-existing data preservation | Pass | A deterministic probe row survived migration and was removed after assertion. |
 | Extension query | Pass | Returned `uuid-ossp` and `vector`. |
 | API database health query | Pass | Built API readiness returned database `up`; dependency outage/recovery also passed. |
-| Unit/E2E and CI coverage suites | Pass | Database service/readiness tests and the broad repository suites passed. |
+| Unit/E2E and coverage suites | Pass | Database service/readiness tests and the broad repository suites passed. |
 | Frozen install, format, lint, type-check, build | Pass | Exact package graph and all repository quality gates passed. |
 
 ## Known Limitations and Follow-up Work

@@ -42,7 +42,7 @@ Follow the current user request, then `Notted.md`, the selected numbered part in
 - `$notted-part-delivery`: every numbered plan part.
 - `$notted-frontend-editor`: Next.js, UI, TipTap, print, or browser work.
 - `$notted-backend-data`: NestJS, API, database, queues, storage, search, or realtime work.
-- `$notted-quality-operations`: review, security, testing, CI/CD, Docker, observability, and release work.
+- `$notted-quality-operations`: review, security, testing, Docker, observability, and release work.
 - `$notted-playwright-integration`: Playwright authoring, live browser integration, fixture setup, failure diagnosis, and browser verification.
 
 Codex custom agents are configured in `.codex/agents/*.toml`, with concurrency settings in `.codex/config.toml`. Apply `.agents/checklists/part-completion.md` before handoff.

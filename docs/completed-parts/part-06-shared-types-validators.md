@@ -63,7 +63,7 @@ The coordinating parent reconciled the implementation and ran focused and broad 
 
 | Check | Result | Notes |
 |---|---|---|
-| Shared-types unit tests | Pass | 1 file and 3 tests passed; CI coverage reported 100% for executable barrel code. |
+| Shared-types unit tests | Pass | 1 file and 3 tests passed; coverage reported 100% for executable barrel code. |
 | Shared-validators unit tests | Pass | 2 files and 28 boundary/strictness tests passed; aggregate coverage exceeded every 70% threshold. |
 | API shared-contract smoke test | Pass | The API production adapter test passed as part of the 26-test API suite. |
 | Web shared-contract smoke test | Pass | Included in the full web suite: 14 files and 50 tests passed. |
@@ -75,7 +75,7 @@ The coordinating parent reconciled the implementation and ran focused and broad 
 ## Known Limitations and Follow-up Work
 
 - The packages define transport contracts, not authorization. Later backend services must continue proving actor, workspace, and resource scope rather than trusting shared identifiers.
-- The full root coverage command remains locally environment-limited by web jsdom worker startup on the mounted Windows filesystem; the ordinary 50-test web suite and both shared-package coverage suites pass, and Part 7 retains hosted CI proof as a blocker.
+- The full root coverage command remains locally environment-limited by web jsdom worker startup on the mounted Windows filesystem; the ordinary 50-test web suite and both shared-package coverage suites pass.
 - Authorization, cross-tenant resource validation, database constraints, TipTap/Yjs content validation, signed-download issuance, and Better Auth account inputs belong to their later numbered parts.
 
 ## Handoff Notes

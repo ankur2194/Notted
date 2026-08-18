@@ -60,7 +60,7 @@ None. Part 2 creates no schema, migration, or seed. The `db:migrate`/`db:generat
 
 - No runtime routes, ports, or deployable services. No application boot or environment variables are introduced.
 - New operational scripts: `pnpm dev|build|type-check|lint|format|test`, `pnpm db:migrate|db:generate|db:studio|db:seed` (placeholders), `pnpm clean` (removes `dist`/`.turbo`/`coverage` repo-wide), `pnpm clean:deps` (removes `node_modules`). Defaults are safe for development; nothing runs automatically.
-- Tooling versions are pinned exact and recorded above. Container and CI pins must use Node `22.23.1` and pnpm `10.34.5` unless a later part revalidates and records a newer patch (ADR 0008).
+- Tooling versions are pinned exact and recorded above. Container pins must use Node `22.23.1` and pnpm `10.34.5` unless a later part revalidates and records a newer patch (ADR 0008).
 
 ## Security and Tenant-Isolation Notes
 
@@ -92,12 +92,12 @@ All commands run from the repository root with Node `v22.23.1` and pnpm `10.34.5
 
 ## Known Limitations and Follow-up Work
 
-- **Part 3** installs ESLint and Prettier and replaces the placeholder `lint`/`format` scripts with real enforcement (and CI-failing-on-warning). Until then `pnpm lint`/`pnpm format` are explicit no-op placeholders, not real checks.
+- **Part 3** installs ESLint and Prettier and replaces the placeholder `lint`/`format` scripts with real enforcement (failing on warnings). Until then `pnpm lint`/`pnpm format` are explicit no-op placeholders, not real checks.
 - **Parts 4 and 5** replace `apps/web` and `apps/api` placeholder `build`/`src/index.ts` with the real Next.js App Router and NestJS module graph from `Notted.md`, and add real turbo build outputs (`.next/**` and `dist/**` respectively) to silence the two benign scaffold warnings.
 - **Part 6** adds Zod to `packages/shared-validators` and the full shared contract set to `packages/shared-types`.
 - **Part 12** wires `db:migrate`/`db:generate`/`db:studio` to Drizzle; **Part 20** wires `db:seed`.
 - **Non-blocking turbo nits (from review)**: (a) the `build` task hashes `*.test.ts` files even though they are excluded from compilation (minor cache efficiency only); (b) the `test` task lists a forward-looking `vitest.config.ts` input that does not exist yet (turbo is lenient). Both are acceptable at scaffold stage and can be refined when Part 3+ restructures turbo inputs.
-- **Environment-specific note**: on this WSL `/mnt/d` (drvfs) filesystem, re-runs of `pnpm install` can emit transient `WARN Failed to create bin ... ENOENT chmod` messages; the binaries are nonetheless created and functional (`tsc 5.9.3`, `vitest 4.1.10` resolve from each workspace). Native Linux CI (Part 7) is unaffected.
+- **Environment-specific note**: on this WSL `/mnt/d` (drvfs) filesystem, re-runs of `pnpm install` can emit transient `WARN Failed to create bin ... ENOENT chmod` messages; the binaries are nonetheless created and functional (`tsc 5.9.3`, `vitest 4.1.10` resolve from each workspace). Native Linux filesystems are unaffected.
 
 ## Handoff Notes
 

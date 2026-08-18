@@ -87,7 +87,7 @@ docker run --rm \
   npx playwright test --project=chromium page-layout.spec.ts print-export.spec.ts
 ```
 
-`PLAYWRIGHT_REUSE_EXISTING_SERVER` was added to `playwright.config.ts` for this: a disposable run otherwise refuses to attach to a server it did not start, which made the real-stack specs unrunnable against Compose. It is opt-in, so CI is unchanged.
+`PLAYWRIGHT_REUSE_EXISTING_SERVER` was added to `playwright.config.ts` for this: a disposable run otherwise refuses to attach to a server it did not start, which made the real-stack specs unrunnable against Compose. It is opt-in.
 
 **Measured results.** The expected figures are written longhand in the spec and deliberately *not* imported from `page-geometry.ts` — importing the module under test would only prove the browser agrees with itself.
 

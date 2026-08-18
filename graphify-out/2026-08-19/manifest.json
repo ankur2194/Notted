@@ -2155,7 +2155,7 @@
     "semantic_hash": ""
   },
   "apps/web/next-env.d.ts": {
-    "mtime": 1787069306.3097024,
+    "mtime": 1787080217.5122647,
     "ast_hash": "2a74d3909800ca5467fa83b0ab4a4890",
     "semantic_hash": ""
   },
@@ -4530,8 +4530,8 @@
     "semantic_hash": ""
   },
   "docs/completed-parts/README.md": {
-    "mtime": 1787078770.5247,
-    "ast_hash": "dd52fb2b4a8d661490ef5839b06a5394",
+    "mtime": 1787082068.6313782,
+    "ast_hash": "83725ac56a3029e329807819abe4b2c4",
     "semantic_hash": ""
   },
   "docs/completed-parts/TEMPLATE.md": {
@@ -6210,13 +6210,13 @@
     "semantic_hash": ""
   },
   "apps/api/src/webhooks/webhook-url-guard.test.ts": {
-    "mtime": 1787078263.5927706,
-    "ast_hash": "9633f417e8713edb37f8406c09c97680",
+    "mtime": 1787081309.9034574,
+    "ast_hash": "7a41bc3d3e2e52432f7e5f71c1f589b4",
     "semantic_hash": ""
   },
   "apps/api/src/webhooks/webhook-url-guard.ts": {
-    "mtime": 1787078235.9553645,
-    "ast_hash": "33b18b311dd7b57e29c36e52444d59ea",
+    "mtime": 1787081514.3687327,
+    "ast_hash": "e36fce8ab97f6a00a56d2cd6a22734a9",
     "semantic_hash": ""
   },
   "apps/api/src/webhooks/webhooks.constants.ts": {
@@ -6250,8 +6250,8 @@
     "semantic_hash": ""
   },
   "apps/api/test/api-keys.e2e.test.ts": {
-    "mtime": 1787079007.0442908,
-    "ast_hash": "7c8c0855df2dddd811e4425e632b7c0b",
+    "mtime": 1787081221.8836122,
+    "ast_hash": "0133bfec4c640f282255c0ab42e03e7f",
     "semantic_hash": ""
   },
   "apps/api/test/openapi.contract.test.ts": {
@@ -6260,8 +6260,8 @@
     "semantic_hash": ""
   },
   "apps/api/test/webhooks.e2e.test.ts": {
-    "mtime": 1787060964.6925344,
-    "ast_hash": "59f9c0addf2717e6a4fb4c25fc8e0ef6",
+    "mtime": 1787081226.0223045,
+    "ast_hash": "348ed775b7c9390deb60b7d1f09c6a0d",
     "semantic_hash": ""
   },
   "apps/api/test/webhooks.integration.test.ts": {
@@ -6315,8 +6315,8 @@
     "semantic_hash": ""
   },
   "docs/openapi.json": {
-    "mtime": 1787079011.4127033,
-    "ast_hash": "700b370b3bd39316abdfe00b8a1ed29e",
+    "mtime": 1787081338.4071631,
+    "ast_hash": "b2c5a0ae5f24f3a5c0c03a36cea45f53",
     "semantic_hash": ""
   },
   "packages/shared-types/src/api-key.ts": {
@@ -6350,18 +6350,23 @@
     "semantic_hash": ""
   },
   "docs/API.md": {
-    "mtime": 1787078813.302339,
-    "ast_hash": "1f6bc0377a12a3fc27675373fb5bd24f",
+    "mtime": 1787081244.3075635,
+    "ast_hash": "0783920e3fbb6db640f97e2c1ff26781",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-65-public-rest-api-api-keys.md": {
-    "mtime": 1787078702.2698574,
-    "ast_hash": "4991eaa502b08c789d7b0817b7bcd03a",
+    "mtime": 1787082068.6322548,
+    "ast_hash": "902ca3d6956f10dd24bf705b835be6f0",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-66-webhooks-and-delivery-logs.md": {
-    "mtime": 1787078739.6345112,
-    "ast_hash": "49f412657c30e8ad154de86589cf9b60",
+    "mtime": 1787082068.632544,
+    "ast_hash": "cf9bf3e76cc00cd11b0a478573b675a7",
+    "semantic_hash": ""
+  },
+  "docs/decisions/0013-rest-success-payload-shape.md": {
+    "mtime": 1787081263.823278,
+    "ast_hash": "7af87922db2112d3eeb355b205b5cfd7",
     "semantic_hash": ""
   }
 }

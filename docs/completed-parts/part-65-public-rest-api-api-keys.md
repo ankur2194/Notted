@@ -88,7 +88,7 @@ Two independent review rounds ran the full gate serially. Round 1 (2026-08-18) f
 | `pnpm lint` | **Pass** | 0 warnings (`--max-warnings 0`) |
 | `pnpm type-check` | **Pass** | 6/6 tasks |
 | `pnpm test` | **Pass** | api 178 passed / 23 DB-gated skipped; web 133; validators 14; types 4 |
-| `pnpm build` | **Pass** | With the CI `NEXT_PUBLIC_*` production values |
+| `pnpm build` | **Pass** | With the `NEXT_PUBLIC_*` production values |
 | `pnpm test:ci` | **Pass** | Exit 0. Coverage: api 84.48% stmts / 76.11% branch; web 79.31/72.29; validators 86.87/79.07; types 95.6/95.69 — all thresholds met |
 | `apps/api/test/api-keys.e2e.test.ts` | **Pass** | 16/16, incl. REST-vs-service parity, read-key-cannot-write (with row-count proof), revoked-key-immediate-401, raw-key-never-in-database, per-tier 429, freshness-gate 403, share-PUT regression |
 | `apps/api/test/openapi.contract.test.ts` | **Pass** | 9/9 — route↔document bijection, bearer scheme, no `keyHash`/`encryptedSecret` leak, `secret` only on minting routes |

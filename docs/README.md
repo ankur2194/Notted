@@ -298,12 +298,11 @@ own migrations and seed against it. Without one they all skip, and `apps/api` la
 55% — well under the threshold — so the command fails with only coverage numbers to
 explain why. Run `pnpm infra:up:ports` first so PostgreSQL is reachable from the host;
 `apps/api/.env` already points `DATABASE_URL` at the published instance. Plain `pnpm test`
-has no threshold and needs no database. CI provisions its own throwaway `pgvector` service
-for this reason.
+has no threshold and needs no database.
 
 Those suites commit rather than rolling back, because their barrier-synchronized races need
 genuinely independent transactions. They clean up their own committed rows on the next run,
-so a long-lived development database stays usable, but a truly clean run is what CI gets.
+so a long-lived development database stays usable.
 
 `pnpm test:e2e` uses exact `@playwright/test@1.62.0` and expects the running stack — it
 drives `http://localhost:3000`, `http://localhost:3001`, and Mailpit on
@@ -336,8 +335,7 @@ docker run --rm \
 Mounting the repository at its own absolute path keeps the pnpm symlinks in `node_modules`
 valid, and matching the host UID keeps report artifacts out of root ownership.
 `PLAYWRIGHT_REUSE_EXISTING_SERVER=true` is required here: a disposable run otherwise
-refuses to attach to servers it did not start, and Compose is already serving them. Leave
-it unset in CI, which owns its own stack.
+refuses to attach to servers it did not start, and Compose is already serving them.
 
 If the browser suite starts timing out on navigations that clearly succeed, check
 `docker stats` before suspecting the tests. The `web` container runs `next dev`, which
@@ -403,7 +401,6 @@ NEXT_PUBLIC_WS_URL=wss://api.local.notted.invalid \
 pnpm build
 ```
 
-CI does exactly this through workflow-level `env` in [`ci.yml`](../.github/workflows/ci.yml).
 `turbo.json` declares all three in the `build` task's `env`, so changing them correctly
 invalidates the build cache. Use your real origins when producing a deployable bundle.
 

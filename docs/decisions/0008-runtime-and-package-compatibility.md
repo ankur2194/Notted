@@ -11,7 +11,7 @@
 
 ## Decision
 
-The evaluated baseline is Node.js `22.23.1` and pnpm `10.34.5`. Node `22.12.0` is the minimum supported runtime and Node 23 or newer is outside this baseline. Part 2 will pin the evaluated versions in the version file and `packageManager`; CI and containers must use those same pins unless that part revalidates and records a newer patch.
+The evaluated baseline is Node.js `22.23.1` and pnpm `10.34.5`. Node `22.12.0` is the minimum supported runtime and Node 23 or newer is outside this baseline. Part 2 will pin the evaluated versions in the version file and `packageManager`; containers must use those same pins unless that part revalidates and records a newer patch.
 
 Use this foundation matrix, with exact patch versions resolved and locked during the part that first installs each package:
 
@@ -225,7 +225,7 @@ The matrix is mutually compatible at the documented engine and peer-resolution l
 ## Alternatives considered
 
 - Use every current latest package: rejected because TipTap 3 and NestJS newer than 10 would silently override the product brief; Drizzle is upgraded only to the minimum stable line required by the selected stable Better Auth adapter.
-- Use Node 20: rejected in favor of the currently evaluated Node 22 LTS operational baseline, which provides one runtime for the web, API, auth tooling, workers, CI, and containers.
+- Use Node 20: rejected in favor of the currently evaluated Node 22 LTS operational baseline, which provides one runtime for the web, API, auth tooling, workers, and containers.
 - Retain Drizzle ORM `0.30.10` by downgrading Better Auth: rejected because no stable Better Auth release was found with verified support for Drizzle ORM `0.30.x`; historical releases were developed against at least Drizzle ORM `0.33.0`, and downgrading authentication to obsolete releases would conflict with `Notted.md`'s `latest` selection and the project's security posture.
 - Adopt Better Auth 1.7 prereleases: rejected because authentication is security-sensitive and stable 1.6.24 satisfies the required integration with Drizzle ORM `0.45.2`.
 
@@ -235,4 +235,4 @@ Part 2 records the evaluated runtime/package-manager pins. Part 12 must validate
 
 ## Migration and rollback
 
-There is no package graph yet. Runtime or major-line changes require synchronized CI/container updates and an ADR; rolling back restores the lockfile and runtime pins together.
+There is no package graph yet. Runtime or major-line changes require synchronized container updates and an ADR; rolling back restores the lockfile and runtime pins together.

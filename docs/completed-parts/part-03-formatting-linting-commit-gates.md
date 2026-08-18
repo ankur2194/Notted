@@ -10,7 +10,7 @@
 
 ## Objective
 
-Replace Part 2's placeholder `lint`/`format` scripts with real, repo-wide enforcement and add the surrounding quality gates: ESLint (Next.js, NestJS, TypeScript, accessibility, import ordering, Prettier compatibility), consistent Prettier, scripts that fail on warnings for CI, an optional but reproducible pre-commit hook, and the project coding-conventions file (`CLAUDE.md`) with the filename/component naming rules reconciled against the canonical `Notted.md` structure. Part 3 owns tooling only; its framework-aware rules are scoped to the existing app boundaries without implementing the application scaffolds owned by Parts 4 and 5.
+Replace Part 2's placeholder `lint`/`format` scripts with real, repo-wide enforcement and add the surrounding quality gates: ESLint (Next.js, NestJS, TypeScript, accessibility, import ordering, Prettier compatibility), consistent Prettier, scripts that fail on warnings, an optional but reproducible pre-commit hook, and the project coding-conventions file (`CLAUDE.md`) with the filename/component naming rules reconciled against the canonical `Notted.md` structure. Part 3 owns tooling only; its framework-aware rules are scoped to the existing app boundaries without implementing the application scaffolds owned by Parts 4 and 5.
 
 ## Implemented Work
 
@@ -20,7 +20,7 @@ Replace Part 2's placeholder `lint`/`format` scripts with real, repo-wide enforc
 - **Real per-workspace scripts** (replaced Part 2 placeholders in `apps/web`, `apps/api`, `packages/shared-types`, `packages/shared-validators`): `lint` = `eslint . --max-warnings 0`, `lint:fix` = `eslint . --fix`, `format` = `prettier --write .`, `format:check` = `prettier --check .`. The `eslint`/`prettier` binaries resolve from each workspace via pnpm's PATH augmentation to the root `node_modules/.bin` (verified), so no duplicate tool declarations are needed in workspace `devDependencies`.
 - **Root aggregator scripts** (`package.json`): `lint`/`lint:fix`/`format`/`format:check` each run the turbo task across the four workspaces **and then** a root-level check (`eslint eslint.config.mjs` / `prettier --check` on the root config files). This closes the gap where root config files were outside the turbo gate. Confirmed `turbo run <task>` excludes the root package (no recursion).
 - **Turborepo** (`turbo.json`): added `eslint.config.mjs`, `.prettierrc.json`, `.prettierignore` to `globalDependencies` (config edits invalidate downstream caches); added uncached `lint:fix` and `format` tasks and a cached `format:check` task; `lint` inputs now include `tsconfig*.json`.
-- **Pre-commit hook** (husky v9 + lint-staged): `.husky/pre-commit` runs `pnpm lint-staged`; `.lintstagedrc.json` runs `eslint --fix` then `prettier --write` on staged JS/TS/JSX/TSX and `prettier --write` on staged JSON/YAML. husky's `core.hooksPath=.husky/_`; the internal `.husky/_/` is gitignored (`*`) so only `.husky/pre-commit` is tracked. `prepare: husky` wires hooks on `pnpm install`; `HUSKY=0` skips in CI (verified), and `git commit --no-verify` skips locally. The checks are always reproducible via `pnpm lint`/`pnpm format`.
+- **Pre-commit hook** (husky v9 + lint-staged): `.husky/pre-commit` runs `pnpm lint-staged`; `.lintstagedrc.json` runs `eslint --fix` then `prettier --write` on staged JS/TS/JSX/TSX and `prettier --write` on staged JSON/YAML. husky's `core.hooksPath=.husky/_`; the internal `.husky/_/` is gitignored (`*`) so only `.husky/pre-commit` is tracked. `prepare: husky` wires hooks on `pnpm install`; `HUSKY=0` skips hooks entirely (verified), and `git commit --no-verify` skips locally. The checks are always reproducible via `pnpm lint`/`pnpm format`.
 - **Coding-conventions file** (`CLAUDE.md`): rewritten to reconcile the brief's naming contradiction against the canonical `Notted.md` structure — PascalCase React component files (`NoteCard.tsx`, `TiptapEditor.tsx`), kebab-case non-component source (`workspaces.service.ts`, `auth.schema.ts`), camelCase hook files (`useWorkspace.ts`), plus the brief's architecture/code-style/database/API/frontend/security/testing/ops guidance, deferring exact versions to ADR 0008 and boundaries to ADR 0001/0002 to prevent drift.
 
 ## Important Decisions
@@ -55,7 +55,7 @@ None. Part 3 introduces no schema, migration, seed, runtime route, port, or envi
 ## API, Configuration, and Operational Changes
 
 - New operational scripts: `pnpm lint` (fails on any warning), `pnpm lint:fix`, `pnpm format`, `pnpm format:check`, plus the existing `pnpm type-check`/`test`/`build`. `pnpm lint`/`pnpm format:check` now cover both workspaces and root config files.
-- Pre-commit hook auto-installs via `pnpm install` (`prepare: husky`). CI (Part 7) should set `HUSKY=0` to skip hook execution and run `pnpm lint`/`pnpm format:check`/`pnpm type-check`/`pnpm test`/`pnpm build` directly.
+- Pre-commit hook auto-installs via `pnpm install` (`prepare: husky`). Automated environments should set `HUSKY=0` to skip hook execution and run `pnpm lint`/`pnpm format:check`/`pnpm type-check`/`pnpm test`/`pnpm build` directly.
 - Defaults are safe for development; nothing runs automatically beyond the optional pre-commit hook, which is bypassable with `--no-verify`.
 
 ## Security and Tenant-Isolation Notes
@@ -78,7 +78,7 @@ All commands run from the repository root with Node `v22.23.1` and pnpm `10.34.5
 | **Next.js verify gate:** temporary malformed TSX using `<img>` | Pass (caught) | `pnpm --filter @notted/web lint` failed on `@next/next/no-img-element` under `--max-warnings 0`; sample removed; filtered web lint passed. |
 | **NestJS verify gate:** temporary duplicate `@Injectable()` decorators | Pass (caught) | Direct ESLint invocation failed on `@darraghor/nestjs-typed/no-duplicate-decorators`; sample removed; filtered API lint passed. |
 | **Fail-on-warning proof** | Pass | `eslint _warn-demo.js --rule '{"no-console":"warn"}' --max-warnings 0` → exit 1, "ESLint found too many warnings (maximum: 0)"; with `--max-warnings 1` → exit 0. |
-| **Pre-commit hook end-to-end** | Pass | Staged `export const hookTest=()=>"x";` → `sh .husky/_/pre-commit` ran lint-staged (`eslint --fix` + `prettier --write`), auto-formatted to `export const hookTest = () => "x";`, re-staged, exit 0. `HUSKY=0 sh .husky/_/pre-commit` → exit 0, no formatting (CI escape confirmed). |
+| **Pre-commit hook end-to-end** | Pass | Staged `export const hookTest=()=>"x";` → `sh .husky/_/pre-commit` ran lint-staged (`eslint --fix` + `prettier --write`), auto-formatted to `export const hookTest = () => "x";`, re-staged, exit 0. `HUSKY=0 sh .husky/_/pre-commit` → exit 0, no formatting (escape hatch confirmed). |
 | **Root-config coverage (low-finding fix)** | Pass | Injecting bad formatting into `.lintstagedrc.json` → `pnpm format:check` exit 1; injecting an unused var into `eslint.config.mjs` → `pnpm lint` exit 1 (`no-unused-vars`). Both restored; gate green again. |
 | Clean → full rebuild (`pnpm clean` then build/type-check/test/lint/format:check) | Pass | All exit 0 from a clean cache; reproducible. |
 | Boundary/scope scan | Pass | Framework lint plugins are root dev-only tooling scoped to `apps/web` and `apps/api`; no Next.js or NestJS runtime/application scaffold was added. |
@@ -97,14 +97,14 @@ known no-output warnings.
 - **Framework scaffolds remain in Parts 4/5.** Part 4 may adopt `eslint-config-next` when Next.js itself is installed, but must preserve or equivalently cover the existing Core Web Vitals rules. Part 5 must reassess and enable `@darraghor/nestjs-typed/injectable-should-be-provided` after genuine Nest modules exist.
 - **NestJS type-aware lint is comparatively slow** on this WSL `/mnt/d` filesystem (observed around 90–110 seconds for an uncached API lint). This is a known local performance cost, not a skipped rule set; Part 5 should measure it again with the real source tree.
 - **`import/no-unresolved` not enabled** (no resolver installed). Enabling it later requires `eslint-import-resolver-typescript` and approving the `unrs-resolver` build script (`pnpm approve-builds`).
-- **`pnpm test`/`pnpm lint` cold start** on this WSL `/mnt/d` (drvfs) filesystem can take ~1 min for the first typescript-eslint run per workspace; subsequent turbo runs are cached (~0.3s). Native Linux CI (Part 7) is unaffected.
-- **Root-config Prettier list is explicit.** The root `format`/`format:check` scripts list root config files by name (because fast-glob excludes dotfiles). If new root config files are added, extend the list, or generalize in Part 7 CI.
+- **`pnpm test`/`pnpm lint` cold start** on this WSL `/mnt/d` (drvfs) filesystem can take ~1 min for the first typescript-eslint run per workspace; subsequent turbo runs are cached (~0.3s). Native Linux filesystems are unaffected.
+- **Root-config Prettier list is explicit.** The root `format`/`format:check` scripts list root config files by name (because fast-glob excludes dotfiles). If new root config files are added, extend the list.
 
 ## Handoff Notes
 
 - The shared ESLint flat config lives at the repo root; do not add per-workspace `.eslintrc`/`eslint.config.*` files — extend the root config with `files:`-scoped blocks instead. Workspace `lint` scripts rely on ESLint discovering the root config by walking up from the linted file.
 - `pnpm lint` (and `format:check`) now cover root config files via chained commands; preserve the `turbo run <task> && <root check>` shape and remember `turbo run <task>` excludes the root package (no recursion).
-- Pre-commit is optional and reproducible: `pnpm lint`/`pnpm format` run the same checks; `HUSKY=0` disables hooks (use in CI); `--no-verify` skips a single commit.
+- Pre-commit is optional and reproducible: `pnpm lint`/`pnpm format` run the same checks; `HUSKY=0` disables hooks; `--no-verify` skips a single commit.
 - Treat the pinned ESLint toolchain as a constraint; record any version change with fresh strict-peer evidence (jsx-a11y currently caps ESLint at 9).
 - When Parts 4/5 install the framework runtimes or change their lint integration, run `pnpm install --frozen-lockfile --strict-peer-dependencies`, preserve app-scoped framework rules, and run the full gate before accepting the combination.
 

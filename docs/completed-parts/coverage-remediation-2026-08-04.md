@@ -6,11 +6,11 @@
 - **Completed on:** 2026-08-04
 - **Implemented by:** Follow-up session to the Parts 34–36 delivery
 - **Plan reference:** Not a numbered `Plan.md` part. Remediation of the follow-up item recorded in Part 34.
-- **Related records:** Parts 07, 33, 34, 35, and 36
+- **Related records:** Parts 33, 34, 35, and 36
 
 ## Objective
 
-`pnpm test:ci` failed. Make it pass — locally and in CI — with every workspace genuinely at
+`pnpm test:ci` failed. Make it pass with every workspace genuinely at
 or above its 70% coverage thresholds, without lowering a threshold or excluding a source
 file from measurement.
 
@@ -27,15 +27,12 @@ workspace showed three of four failing:
 | `@notted/api` | **53.64** | **45.33** | **60.79** | **55.30** | **Fail** |
 | `@notted/web` | 70.05 | **63.31** | 73.28 | 72.52 | **Fail** |
 
-`.github/workflows/ci.yml` runs `pnpm test:ci`, so CI was red for the same reasons.
-
 Each package failed for a different reason:
 
 - **shared-types** — the 10 `NOTE_API_PATHS` builder arrows in `src/note.ts` were never
   called by that package's own tests, which put the whole package at 0% functions.
 - **api** — 16 test files gate themselves on `DATABASE_URL` via `describe.skipIf`. Without a
   database ~54 tests skipped and `src/notes/notes.service.ts` (493 statements) sat at 3.04%.
-  CI had no service containers, so those tests had never run there.
 - **web** — genuinely untested `src/lib` modules, several at 0%.
 
 ## Implemented Work
@@ -45,13 +42,8 @@ Each package failed for a different reason:
 This was the decisive change. The suites already existed and already ran their own
 migrations and seed; they only needed an empty database.
 
-- Added a `services:` block to the `quality` job in `.github/workflows/ci.yml`: a
-  digest-pinned `pgvector/pgvector:0.8.5-pg16` (**not** stock `postgres` — migration
-  `0000_enable_extensions.sql` enables the `vector` extension), `pg_isready` health options,
-  and throwaway credentials. `DATABASE_URL` is set on the test step only, so `pnpm build`
-  and `pnpm db:check` keep their own configuration.
 - Declared `"env": ["DATABASE_URL"]` on the `test` and `test:ci` tasks in `turbo.json`.
-  **Without this the workflow change does nothing**: Turbo filters the environment strictly,
+  **Without this the passthrough does nothing**: Turbo filters the environment strictly,
   so the variable never reached vitest, every gated suite skipped, and coverage collapsed
   back to 55.78% with only threshold numbers to explain why. This was caught by running the
   real command rather than the per-package one.
@@ -105,7 +97,6 @@ intact. Covered by a named regression test.
 
 | Path | Change |
 |---|---|
-| `.github/workflows/ci.yml` | pgvector service container; `DATABASE_URL` scoped to the test step |
 | `turbo.json` | `env: ["DATABASE_URL"]` on `test` and `test:ci` |
 | `apps/api/vitest.config.ts` | `fileParallelism: !hasDatabase` |
 | `apps/api/test/notes.integration.test.ts` | `CONCURRENCY_FIXTURE` tagging and self-cleanup |
@@ -114,7 +105,7 @@ intact. Covered by a named regression test.
 
 ## Database and Data Changes
 
-No schema, migration, or seed change. CI now provisions an ephemeral database per run.
+No schema, migration, or seed change.
 26 leaked notes and 23 leaked folders left by earlier runs of the concurrency suite were
 deleted from the local development database; the suite no longer accumulates them.
 
@@ -124,8 +115,7 @@ No authorization, tenant-scoping, or secret-handling behaviour changed. Several 
 pin existing security properties that were previously unasserted: 403 and 404 collapsing to
 one client-visible outcome so workspace existence is not disclosed, three-id validation on
 share routes before any request, the stale workspace-selection retry, refusal to revoke
-another user's session, and `Error` messages never being logged verbatim. The CI database
-credentials are throwaway values for a runner-local, ephemeral container.
+another user's session, and `Error` messages never being logged verbatim.
 
 ## Verification Evidence
 
@@ -139,8 +129,8 @@ Run serially against live infrastructure.
 | `pnpm format:check` | Pass | |
 | `pnpm exec turbo run type-check --concurrency=1 --force` | Pass | 6/6 |
 | **`pnpm test:ci`** | **Pass** | 6/6 turbo tasks + 4 script tests, exit 0 |
-| `pnpm test:ci` with `pnpm infra:down` | **Fail (expected)** | `apps/api` 55.78% statements; the gated suites skip. This is the condition the CI service container removes |
-| api suite vs. an empty database | Pass | 635 passed, 3 skipped — the exact CI condition, verified with a throwaway database created without the dev init script |
+| `pnpm test:ci` with `pnpm infra:down` | **Fail (expected)** | `apps/api` 55.78% statements; the gated suites skip without a reachable database |
+| api suite vs. an empty database | Pass | 635 passed, 3 skipped — verified with a throwaway database created without the dev init script |
 | notes concurrency suite × 3 against a reused database | Pass | Confirms the leak fix |
 | Production-env `turbo run build --concurrency=1 --force` | Pass | 4/4 |
 | `pnpm db:check` | Pass | |
@@ -157,30 +147,22 @@ Final coverage, all four workspaces above every threshold:
 
 ## Known Limitations and Follow-up Work
 
-- **The CI workflow change itself is unverified.** It cannot be exercised from a local
-  checkout. The evidence for it is indirect but specific: the API suite was run against a
-  throwaway database created without the development init script, which is what a GitHub
-  service container provides, and it passed with the numbers above. The first CI run on this
-  branch is still the real test.
 - **`pnpm test:ci` now requires a local database.** Without one it fails with only coverage
   numbers, which is a poor error message. Documented in `docs/README.md`; plain `pnpm test`
   still needs nothing.
 - Branch coverage is the tightest metric in both apps (~2.4 points of headroom). The
   remaining large gaps are `apps/api/src/auth/better-auth.setup.ts` (88 uncovered branches,
   reachable only through the `AUTH_E2E` suites) and several 0%-covered web components.
-- Adding Redis/Mailpit containers and `AUTH_E2E=true` to CI was considered and deliberately
-  not done — the thresholds are met without that much CI surface.
 
 ## Handoff Notes
 
-- **`turbo.json` and the workflow are a pair.** Removing `env: ["DATABASE_URL"]` from
+- Removing `env: ["DATABASE_URL"]` from
   `turbo.json` silently reverts the API to skipping its integration suites; the failure looks
   like a coverage regression, not a configuration one.
 - Adding a new test file that calls `seedDatabase()` is safe — files run serially whenever a
   database is configured.
 - A new suite that commits rather than rolls back must clean up after itself, or it will
   degrade every later run against the same database.
-- The CI image is pinned by digest and must stay a pgvector build.
 
 ## Revision History
 

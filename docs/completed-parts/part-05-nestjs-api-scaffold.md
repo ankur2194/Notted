@@ -75,7 +75,7 @@ The coordinating parent reconciled the parallel implementation and ran the integ
 | Strict type-check | Pass | `pnpm type-check`: 6 tasks passed. |
 | Production build | Pass | `pnpm build`: all 4 workspace builds passed. |
 | API start and HTTP behavior | Pass through E2E | The E2E suite creates the real Nest application, initializes its HTTP adapter, exercises all three routes and failure/security behavior, and closes it cleanly. A separate built-process/curl smoke was not run. |
-| CI coverage command | Partial / environment-limited | API coverage passed 26/26 tests and every configured 70% threshold. The root run failed only when web jsdom workers timed out starting from the mounted Windows filesystem. |
+| Coverage command | Partial / environment-limited | API coverage passed 26/26 tests and every configured 70% threshold. The root run failed only when web jsdom workers timed out starting from the mounted Windows filesystem. |
 | Dependency audit | Historical fail; production issue remediated later | This 2026-07-24 run included Nest CLI/tooling findings and Multer `2.0.2`. Phase 2 later applied the reviewed `multer@2.2.0` override; the 2026-07-27 production audit has no high finding, while the full development audit still reports six high tooling advisories. |
 | Migration sentinel | Pass | `pnpm db:check` confirmed no premature Drizzle surface. |
 | Diff integrity | Pass | `git diff --check` passed before the completion-record update and is rerun at handoff. |
