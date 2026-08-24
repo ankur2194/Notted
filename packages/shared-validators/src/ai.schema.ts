@@ -398,3 +398,113 @@ export const aiTagSuggestionResultSchema = z
       .readonly(),
   })
   .strict();
+
+/**
+ * Part 70 — grammar and style assistance.
+ *
+ * `text` IS NOT TRIMMED, AND THAT IS THE WHOLE POINT. Every other text field in
+ * this file trims, because every other one is a value. This one is a coordinate
+ * system: the answer's `start`/`end` are offsets into exactly this string, so
+ * silently removing a leading space here would shift every offset by one and
+ * move each correction one character to the left. `.min(1)` still rejects the
+ * empty segment, which is a client bug rather than a blank block — the caller
+ * skips those before batching.
+ *
+ * THE ID IS OPAQUE AND UNUSED SERVER-SIDE. It is a key the browser chose (a
+ * content hash, as it happens) and the server only ever echoes it back, so it is
+ * bounded rather than parsed: nothing here indexes on it, and nothing here can
+ * be addressed through it.
+ *
+ * It DOES trim, unlike `text` and for the opposite reason: an id is a value, not
+ * a coordinate system, so there is nothing to shift. Trimming here is what keeps
+ * it symmetric with `aiGrammarModelSuggestionSchema.segmentId`, which trims the
+ * model's echo of the same string. Without the pair, an id sent with stray
+ * whitespace would come back trimmed, miss the service's segment lookup, and be
+ * dropped for a reason no reader would ever guess.
+ */
+export const AI_GRAMMAR_SEGMENT_MAX = 20;
+export const AI_GRAMMAR_SEGMENT_TEXT_MAX_CHARS = 2_000;
+export const AI_GRAMMAR_SEGMENT_ID_MAX_CHARS = 64;
+export const AI_GRAMMAR_SUGGESTION_MAX = 200;
+/** One sentence of explanation. Longer than this is an essay in a popover. */
+export const AI_GRAMMAR_MESSAGE_MAX_CHARS = 300;
+
+export const aiGrammarCategorySchema = z.enum(["grammar", "style", "spelling"]);
+
+export const aiGrammarSegmentSchema = z
+  .object({
+    id: z.string().trim().min(1).max(AI_GRAMMAR_SEGMENT_ID_MAX_CHARS),
+    text: z.string().min(1).max(AI_GRAMMAR_SEGMENT_TEXT_MAX_CHARS),
+  })
+  .strict();
+
+export const aiGrammarCheckRequestSchema = z
+  .object({
+    segments: z.array(aiGrammarSegmentSchema).min(1).max(AI_GRAMMAR_SEGMENT_MAX),
+  })
+  .strict();
+
+export type AiGrammarCheckRequestInput = z.input<typeof aiGrammarCheckRequestSchema>;
+
+/**
+ * One correction, as the RESPONSE states it. `.strict()` and fully bounded: by
+ * the time a suggestion reaches here the service has already dropped everything
+ * out of bounds, inverted, or identical to the text it claims to replace.
+ *
+ * `replacement` has no lower bound because deleting a stray word is a real
+ * correction, and `end` is exclusive — the pair describes a half-open range.
+ */
+export const aiGrammarSuggestionSchema = z
+  .object({
+    segmentId: z.string().min(1).max(AI_GRAMMAR_SEGMENT_ID_MAX_CHARS),
+    start: z.number().int().min(0).max(AI_GRAMMAR_SEGMENT_TEXT_MAX_CHARS),
+    end: z.number().int().min(0).max(AI_GRAMMAR_SEGMENT_TEXT_MAX_CHARS),
+    replacement: z.string().max(AI_GRAMMAR_SEGMENT_TEXT_MAX_CHARS),
+    message: z.string().trim().min(1).max(AI_GRAMMAR_MESSAGE_MAX_CHARS),
+    category: aiGrammarCategorySchema,
+  })
+  .strict();
+
+export const aiGrammarCheckResultSchema = z
+  .object({
+    suggestions: z.array(aiGrammarSuggestionSchema).max(AI_GRAMMAR_SUGGESTION_MAX).readonly(),
+  })
+  .strict();
+
+/**
+ * The shape the MODEL answers with — lenient for the same reason
+ * {@link aiMeetingExtractionSchema} is, and then some.
+ *
+ * `category` uses `.catch`: a model that answers `"punctuation"` has understood
+ * the task and mislabelled the bucket, and paying for a second billed provider
+ * call to be told that would be absurd. It lands in `grammar`, which is what a
+ * punctuation fix is.
+ *
+ * `start`/`end` are `coerce`d because a model writes `"12"` as often as `12`,
+ * and a string offset is a formatting slip rather than a wrong answer. What is
+ * NOT forgiven here is the range itself: nothing in this schema knows how long
+ * the segment was, so `grammar.service.ts` re-checks every pair against the
+ * real text and drops what does not fit. Being lenient here would be unsafe if
+ * this were the last check — it is not.
+ */
+export const aiGrammarModelSuggestionSchema = z.object({
+  segmentId: z.string().trim().min(1).max(AI_GRAMMAR_SEGMENT_ID_MAX_CHARS),
+  start: z.coerce.number().int().min(0),
+  end: z.coerce.number().int().min(0),
+  replacement: z.preprocess(
+    (value) => (value === null || value === undefined ? "" : value),
+    z.string().max(AI_GRAMMAR_SEGMENT_TEXT_MAX_CHARS),
+  ),
+  message: z.string().trim().min(1).max(AI_GRAMMAR_MESSAGE_MAX_CHARS),
+  category: aiGrammarCategorySchema.catch("grammar"),
+});
+
+export const aiGrammarModelSchema = z.object({
+  suggestions: z
+    .preprocess(
+      (value) => (value === null || value === undefined ? [] : value),
+      z.array(aiGrammarModelSuggestionSchema),
+    )
+    .transform((items) => items.slice(0, AI_GRAMMAR_SUGGESTION_MAX))
+    .default([]),
+});

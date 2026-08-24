@@ -10,6 +10,8 @@ import { useQuery } from "@tanstack/react-query";
 import { ClipboardCopy, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { GrammarToggle } from "./GrammarToggle";
+
 import type { AiSummaryLength, AiTone } from "@notted/shared-types";
 import type { Editor, JSONContent } from "@tiptap/core";
 import type { ReactNode } from "react";
@@ -743,6 +745,17 @@ export function AiPanel({ workspaceId, noteId, editor, editable }: AiPanelProps)
               Extract meeting notes
             </Button>
           </div>
+
+          {/*
+           * Part 70. The toggle is handed NOTHING: it reads the control off a
+           * module store, exactly as "Continue writing" reaches this panel
+           * through `lib/ai/continue-request.ts`. The checking hook lives in
+           * `NoteEditorSurface` so a note keeps being checked whether or not
+           * this panel is open, and neither component is an ancestor of the
+           * other — there is no prop to thread. It renders its own section
+           * wrapper, or nothing at all when no control is registered.
+           */}
+          <GrammarToggle />
 
           {streaming ? (
             <div className="flex items-center gap-2 border-t pt-3" data-testid="note-ai-streaming">

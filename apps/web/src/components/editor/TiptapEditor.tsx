@@ -26,6 +26,7 @@ import type {
   AttachmentUploadHandler,
 } from "./extensions/CustomAttachment";
 import type { ImageFilePickerHandler, ImageUploadHandler } from "./extensions/CustomImage";
+import type { GrammarSuggestionTarget } from "./extensions/grammar-decorations";
 import type { MentionCandidate, MentionDirectory } from "./mention-members";
 import type { SlashCommand } from "./slash-commands";
 import type { NoteCollaborationBinding } from "@/lib/collaboration/note-collaboration-provider";
@@ -137,6 +138,15 @@ export interface TiptapEditorProps {
   readonly resolveComments?: () => readonly CommentAnchorTarget[];
   /** Part 60 seam: the thread the reader currently has open, or `null`. */
   readonly resolveActiveCommentId?: () => string | null;
+  /**
+   * Part 70 seam, and the exact counterpart of `resolveComments`: anchored
+   * grammar and style suggestions to underline, read at redraw time so a new
+   * suggestion list never rebuilds the editor. Absent registers no plugin at
+   * all, and the host calls `refreshGrammarDecorations` when the list changes.
+   * A suggestion is only ever an underline here — accepting one is the host's
+   * own editor transaction.
+   */
+  readonly resolveGrammarSuggestions?: () => readonly GrammarSuggestionTarget[];
 }
 
 type PreparedDocument =
@@ -203,6 +213,7 @@ export function TiptapEditor({
   collaborationWriteFailed,
   resolveComments,
   resolveActiveCommentId,
+  resolveGrammarSuggestions,
 }: TiptapEditorProps) {
   const prepared = useMemo(() => prepare(initialDocument), [initialDocument]);
 
@@ -240,6 +251,7 @@ export function TiptapEditor({
       collaborationWriteFailed={collaborationWriteFailed}
       resolveComments={resolveComments}
       resolveActiveCommentId={resolveActiveCommentId}
+      resolveGrammarSuggestions={resolveGrammarSuggestions}
     />
   );
 }
@@ -267,6 +279,7 @@ interface EditorSurfaceProps {
   readonly collaborationWriteFailed?: boolean;
   readonly resolveComments?: () => readonly CommentAnchorTarget[];
   readonly resolveActiveCommentId?: () => string | null;
+  readonly resolveGrammarSuggestions?: () => readonly GrammarSuggestionTarget[];
 }
 
 function EditorSurface({
@@ -292,6 +305,7 @@ function EditorSurface({
   collaborationWriteFailed = false,
   resolveComments,
   resolveActiveCommentId,
+  resolveGrammarSuggestions,
 }: EditorSurfaceProps) {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -438,6 +452,13 @@ function EditorSurface({
   resolveActiveCommentIdRef.current = resolveActiveCommentId;
   const commentsEnabledRef = useRef(resolveComments !== undefined);
 
+  // Part 70, identical discipline for identical reasons: the suggestion list is
+  // read through a ref at redraw time, and whether the plugin exists at all is
+  // decided once from the props this instance was created with.
+  const resolveGrammarSuggestionsRef = useRef(resolveGrammarSuggestions);
+  resolveGrammarSuggestionsRef.current = resolveGrammarSuggestions;
+  const grammarEnabledRef = useRef(resolveGrammarSuggestions !== undefined);
+
   const extensions = useMemo(
     () => [
       ...createNoteEditorExtensions({
@@ -460,7 +481,21 @@ function EditorSurface({
               resolveActiveCommentId: () => resolveActiveCommentIdRef.current?.() ?? null,
             }
           : {}),
+        // Spread for the same reason as the comment pair above: the key must be
+        // absent, not `undefined`, for a host that never checks grammar to
+        // produce the pre-Part-70 extension list.
+        ...(grammarEnabledRef.current
+          ? {
+              resolveGrammarSuggestions: () => resolveGrammarSuggestionsRef.current?.() ?? [],
+            }
+          : {}),
       }),
+      /*
+       * `EditorShortcuts` stays LAST. It is the lowest-priority keymap by
+       * position, so every extension above — the table keymap, `NoteBlockTab`,
+       * the suggestion popups — gets first refusal on a key before the declared
+       * shortcut table sees it. Nothing may be appended after this entry.
+       */
       EditorShortcuts.configure({ resolveHandlers: () => handlersRef.current }),
     ],
     [],

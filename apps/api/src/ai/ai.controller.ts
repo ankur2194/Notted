@@ -24,6 +24,7 @@ import { Body, Controller, Get, HttpStatus, Post, Put, Query, Req, Res } from "@
 import {
   aiConfigUpdateSchema,
   aiContinueRequestSchema,
+  aiGrammarCheckRequestSchema,
   aiMeetingExtractionRequestSchema,
   aiRewriteRequestSchema,
   aiSummarizeRequestSchema,
@@ -42,6 +43,7 @@ import { getRequestId } from "../common/request/request-context";
 import { buildContinuePrompt, buildRewritePrompt, buildSummarizePrompt } from "./ai-prompts";
 import { AiStreamService } from "./ai-stream.service";
 import { AiService } from "./ai.service";
+import { GrammarService } from "./grammar.service";
 import { MeetingExtractionService } from "./meeting-extraction.service";
 
 import type { AiPromptPlan } from "./ai-prompts";
@@ -50,6 +52,7 @@ import type {
   AiStatus,
   AiUsageSummary,
   AuthenticatedPrincipal,
+  GrammarCheckResult,
   MeetingExtractionResult,
   TagSuggestionResult,
 } from "@notted/shared-types";
@@ -73,6 +76,7 @@ export class AiController {
     private readonly auth: AuthService,
     private readonly stream: AiStreamService,
     private readonly meetings: MeetingExtractionService,
+    private readonly grammar: GrammarService,
   ) {}
 
   @Get("config")
@@ -211,6 +215,25 @@ export class AiController {
     // `noteId` is authorized for `note.read` inside the service — the route's
     // own spec addresses the workspace, not the note.
     return this.meetings.suggestTags({ ...this.scope(request), ...body.data });
+  }
+
+  /**
+   * Part 70 — the grammar check. A third JSON route, and the same shape as the
+   * two above: ordinary serialisation, `sensitive` tier, trusted origin, `ai.use`.
+   *
+   * No note is named and none is authorized. The request carries its own
+   * segments — blocks the browser batched, possibly from a document that has not
+   * been saved — so the workspace-level spec on this handler is the tenancy
+   * proof, exactly as it is for `meeting-extraction`.
+   */
+  @Post("grammar-check")
+  @RateLimitTier("sensitive")
+  @RequireAuthorization(workspaceAuthorization("ai.use"))
+  checkGrammar(@Req() request: Request, @Body() rawBody: unknown): Promise<GrammarCheckResult> {
+    this.auth.assertTrustedMutationOrigin(request);
+    const body = aiGrammarCheckRequestSchema.safeParse(rawBody);
+    if (!body.success) this.invalid();
+    return this.grammar.check({ ...this.scope(request), segments: body.data.segments });
   }
 
   private run(

@@ -23,6 +23,7 @@ import { AiController } from "./ai.controller";
 
 import type { AiStreamService } from "./ai-stream.service";
 import type { AiService } from "./ai.service";
+import type { GrammarService } from "./grammar.service";
 import type { MeetingExtractionService } from "./meeting-extraction.service";
 import type { AuthService } from "../auth/auth.service";
 import type { Request, Response } from "express";
@@ -63,6 +64,7 @@ function controller(
   origin = vi.fn(),
   run = vi.fn().mockResolvedValue(undefined),
   meetings: Partial<MeetingExtractionService> = {},
+  grammar: Partial<GrammarService> = {},
 ): AiController {
   return new AiController(
     service as AiService,
@@ -71,6 +73,7 @@ function controller(
     } as unknown as AuthService,
     { run } as unknown as AiStreamService,
     meetings as MeetingExtractionService,
+    grammar as GrammarService,
   );
 }
 
@@ -106,6 +109,9 @@ describe("AiController routing and authorization", () => {
     expect(AI_API_PATHS.tagSuggestions(":workspaceId")).toBe(
       "/api/v1/workspaces/:workspaceId/ai/tag-suggestions",
     );
+    expect(AI_API_PATHS.grammarCheck(":workspaceId")).toBe(
+      "/api/v1/workspaces/:workspaceId/ai/grammar-check",
+    );
     expect(Reflect.getMetadata(PATH_METADATA, AiController)).toBe("workspaces/:workspaceId/ai");
   });
 
@@ -120,6 +126,7 @@ describe("AiController routing and authorization", () => {
     ["rewrite", RequestMethod.POST, "ai.use"],
     ["extractMeeting", RequestMethod.POST, "ai.use"],
     ["suggestTags", RequestMethod.POST, "ai.use"],
+    ["checkGrammar", RequestMethod.POST, "ai.use"],
   ] as const)("binds %s to its verb and authorization action", (handler, method, action) => {
     expect(Reflect.getMetadata(METHOD_METADATA, AiController.prototype[handler])).toBe(method);
     expect(specFor(handler).action).toBe(action);
@@ -311,11 +318,12 @@ describe("AiController streaming routes", () => {
 });
 
 /**
- * Part 69 — the two JSON routes. Ordinary handlers this time: they return a
- * value, so a refusal or a bad reply is still an error envelope.
+ * Parts 69 and 70 — the three JSON routes. Ordinary handlers this time: they
+ * return a value, so a refusal or a bad reply is still an error envelope.
  */
 describe("AiController JSON routes", () => {
   const TRANSCRIPT = "Ana: we ship Friday. Ben: I will write the migration.";
+  const SEGMENTS = [{ id: "seg-1", text: "Their going to the store" }];
 
   it("enforces a trusted origin and forwards the parsed transcript", async () => {
     const extract = vi.fn().mockResolvedValue({ extraction: { attendees: [] } });
@@ -353,6 +361,25 @@ describe("AiController JSON routes", () => {
     });
   });
 
+  it("enforces a trusted origin and forwards the parsed segments for a grammar check", async () => {
+    const check = vi.fn().mockResolvedValue({ suggestions: [] });
+    const origin = vi.fn();
+
+    await controller({}, origin, vi.fn(), {}, { check }).checkGrammar(request(), {
+      segments: SEGMENTS,
+    });
+
+    expect(origin).toHaveBeenCalledOnce();
+    // No `noteId`: a batch of segments names no note, so the route's own
+    // workspace-level `ai.use` spec is the tenancy proof.
+    expect(check).toHaveBeenCalledWith({
+      principal: expect.objectContaining({ userId: USER_ID }),
+      workspaceId: WORKSPACE_ID,
+      requestId: null,
+      segments: SEGMENTS,
+    });
+  });
+
   it.each([
     ["extractMeeting", {}],
     ["extractMeeting", { transcript: "" }],
@@ -364,10 +391,25 @@ describe("AiController JSON routes", () => {
     ["suggestTags", { noteId: NOTE_ID, content: "" }],
     ["suggestTags", { noteId: NOTE_ID, content: "x".repeat(50_001) }],
     ["suggestTags", { noteId: NOTE_ID, content: "note", extra: true }],
+    ["checkGrammar", {}],
+    ["checkGrammar", { segments: [] }],
+    ["checkGrammar", { segments: [{ id: "seg-1", text: "" }] }],
+    ["checkGrammar", { segments: [{ id: "seg-1", text: "x".repeat(2_001) }] }],
+    [
+      "checkGrammar",
+      { segments: Array.from({ length: 21 }, (_, index) => ({ id: `seg-${index}`, text: "ok" })) },
+    ],
+    ["checkGrammar", { segments: SEGMENTS, extra: 1 }],
   ] as const)("%s refuses a malformed body before it spends anything", (handler, body) => {
     const spy = vi.fn();
     const origin = vi.fn();
-    const instance = controller({}, origin, vi.fn(), { extract: spy, suggestTags: spy });
+    const instance = controller(
+      {},
+      origin,
+      vi.fn(),
+      { extract: spy, suggestTags: spy },
+      { check: spy },
+    );
 
     expect(() => instance[handler](request(), body)).toThrow("The request is invalid.");
     // The origin check runs first, and deliberately.
@@ -375,8 +417,8 @@ describe("AiController JSON routes", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("puts both on the sensitive rate-limit tier", () => {
-    for (const handler of ["extractMeeting", "suggestTags"] as const) {
+  it("puts all three on the sensitive rate-limit tier", () => {
+    for (const handler of ["extractMeeting", "suggestTags", "checkGrammar"] as const) {
       expect(Reflect.getMetadata(RATE_LIMIT_TIER, AiController.prototype[handler])).toBe(
         "sensitive",
       );

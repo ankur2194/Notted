@@ -28,6 +28,9 @@ export const AI_API_PATHS = Object.freeze({
   meetingExtraction: (workspaceId: string) =>
     `/api/v1/workspaces/${workspaceId}/ai/meeting-extraction`,
   tagSuggestions: (workspaceId: string) => `/api/v1/workspaces/${workspaceId}/ai/tag-suggestions`,
+  // Part 70. JSON as well, and deliberately SEGMENT-SHAPED rather than
+  // note-shaped: the browser sends the blocks that changed, not the document.
+  grammarCheck: (workspaceId: string) => `/api/v1/workspaces/${workspaceId}/ai/grammar-check`,
 } as const);
 
 /**
@@ -285,4 +288,66 @@ export interface TagSuggestionProposedTag {
 export interface TagSuggestionResult {
   readonly existing: readonly TagSuggestionExistingTag[];
   readonly proposed: readonly TagSuggestionProposedTag[];
+}
+
+/**
+ * Part 70 — grammar and style assistance.
+ *
+ * THE SERVER NEVER SEES A DOCUMENT POSITION. A request carries segments, each
+ * with an OPAQUE client key and its own plain text; every offset in the answer
+ * is relative to that segment's own string. The browser is the only thing that
+ * knows where a segment lives in the document, and it re-derives that at draw
+ * time from a Part 60 anchor — so a suggestion computed against a paragraph
+ * that has since been edited resolves to nothing rather than to the wrong text.
+ *
+ * NOTHING HERE IS PERSISTED, on either side. A check is computed, returned, and
+ * forgotten (ADR 0007 leaves no column it could go in), and a suggestion becomes
+ * an edit only when the author presses Accept — an ordinary editor transaction,
+ * like every other AI accept path in this product.
+ */
+
+/** Blocks per request. The debounce batches; it never floods. */
+export const GRAMMAR_SEGMENT_MAX = 20;
+/** A block longer than this is skipped whole rather than split — see the hook. */
+export const GRAMMAR_SEGMENT_TEXT_MAX_CHARS = 2_000;
+/** A ceiling on how much a model may claim is wrong with 20 blocks of prose. */
+export const GRAMMAR_SUGGESTION_MAX = 200;
+
+/**
+ * What kind of correction this is. Three, because they carry different weights:
+ * a spelling fix is nearly always right, a style note is an opinion, and the
+ * underline colour is what tells the writer which they are looking at.
+ */
+export const GRAMMAR_CATEGORIES = Object.freeze(["grammar", "style", "spelling"] as const);
+
+export type GrammarCategory = (typeof GRAMMAR_CATEGORIES)[number];
+
+/** One block of text to check. `id` is the browser's key and means nothing here. */
+export interface GrammarSegment {
+  readonly id: string;
+  readonly text: string;
+}
+
+/**
+ * One proposed correction.
+ *
+ * `start`/`end` are offsets into `GrammarSegment.text` — a half-open range, so
+ * `end` is exclusive — and the server has already dropped anything out of
+ * bounds, anything inverted, and anything that replaces text with itself. The
+ * browser still re-checks against the live document before touching it: the
+ * segment those offsets described may be several keystrokes old by then.
+ */
+export interface GrammarSuggestion {
+  readonly segmentId: string;
+  readonly start: number;
+  readonly end: number;
+  /** May be empty — deleting a stray word is a correction. */
+  readonly replacement: string;
+  readonly message: string;
+  readonly category: GrammarCategory;
+}
+
+/** Wrapped in an object so the response can grow a sibling field without a break. */
+export interface GrammarCheckResult {
+  readonly suggestions: readonly GrammarSuggestion[];
 }

@@ -229,6 +229,73 @@
   }
 
   /*
+   * Grammar and style suggestion underlines (Part 70).
+   *
+   * Painted by the decoration plugin in `extensions/grammar-decorations.ts`,
+   * which owns the class names — that module and this block are the single pair
+   * that has to agree.
+   *
+   * `text-decoration` rather than the `border-bottom` the comment highlight
+   * above uses, and deliberately: the two annotations can cover the same words,
+   * and a dotted text-decoration composes with a comment's solid border instead
+   * of overwriting it. It is also the squiggle writers already recognise from
+   * every other spell-checker.
+   *
+   * WCAG 1.4.1: colour is NOT the only way to know what kind of correction this
+   * is. Three hues that also differ in lightness (red / blue / grey) keep the
+   * three telling apart even for a reader who cannot separate them by hue, and
+   * the meaning itself is carried in words — the popover names the category and
+   * states the correction. The underline only says "there is something here".
+   *
+   * Each colour is drawn on the paper (#ffffff, `.notted-page-paper`); the
+   * measured contrast is recorded beside it and clears the 3:1 that WCAG 2.2
+   * SC 1.4.11 asks of a non-text indicator. The text itself keeps `--color-
+   * foreground`, so nothing here changes body-text contrast.
+   *
+   * Dark theme: this stylesheet declares none, anywhere (see the presence
+   * palette in `@layer base` — the paper is white in every theme), so there is
+   * no dark variant to mirror and no fourth mechanism is introduced here.
+   *
+   * No transition and no animation is declared, so there is nothing for
+   * `prefers-reduced-motion` to suppress.
+   */
+  .notted-grammar-suggestion {
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
+
+  /* A rule violation: stated, not merely suggested. */
+  .notted-grammar-suggestion-grammar {
+    text-decoration-color: var(--color-info); /* #2563eb, 5.17:1 on #ffffff */
+  }
+
+  /* An opinion about phrasing, so the quietest of the three. */
+  .notted-grammar-suggestion-style {
+    text-decoration-color: var(--color-muted-foreground); /* #475569, 7.58:1 on #ffffff */
+  }
+
+  /* Nearly always right, so it carries the strongest signal. */
+  .notted-grammar-suggestion-spelling {
+    text-decoration-color: var(--color-destructive); /* #dc2626, 4.53:1 on #ffffff */
+  }
+
+  /*
+   * A suggestion is live-session chrome, for the same reason a comment is:
+   * nobody wants a model's opinion of their prose printed into the PDF. The
+   * standalone export path (`print.css` in Puppeteer) never sees these classes
+   * at all, because a decoration is view state and is not part of the
+   * document's HTML.
+   */
+  @media print {
+    .notted-grammar-suggestion {
+      text-decoration: none;
+    }
+  }
+
+  /*
    * Note editor content styles (Part 34).
    *
    * Tailwind's preflight resets headings, lists, and quotes, so the editable

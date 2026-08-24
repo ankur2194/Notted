@@ -25,6 +25,7 @@ import { createCommentDecorations } from "./comment-decorations";
 import { createNoteAttachment } from "./CustomAttachment";
 import { createNoteImage } from "./CustomImage";
 import { FontSize } from "./font-size";
+import { createGrammarDecorations } from "./grammar-decorations";
 import { createNoteMention } from "./Mention";
 import { NoteBlockTab } from "./note-block-tab";
 import { createPageBreakExtension } from "./page-break";
@@ -37,6 +38,7 @@ import type { SuggestionSink } from "../suggestion-popup";
 import type { CommentAnchorTarget } from "./comment-decorations";
 import type { AttachmentFilePickerHandler, AttachmentUploadHandler } from "./CustomAttachment";
 import type { ImageFilePickerHandler, ImageUploadHandler } from "./CustomImage";
+import type { GrammarSuggestionTarget } from "./grammar-decorations";
 import type { NoteCollaborationBinding } from "@/lib/collaboration/note-collaboration-provider";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { DecorationAttrs } from "@tiptap/pm/view";
@@ -260,6 +262,15 @@ export interface NoteEditorExtensionOptions {
    */
   readonly resolveComments?: () => readonly CommentAnchorTarget[];
   readonly resolveActiveCommentId?: () => string | null;
+  /**
+   * Part 70, optional for the same reason: absent means the grammar-decoration
+   * plugin is never registered and this editor builds the byte-identical
+   * extension list it always has. Present, it is read at plugin time on every
+   * redraw, so a ref-backed getter keeps `TiptapEditor`'s `useMemo(…, [])`
+   * extension list on empty dependencies and a changed suggestion list never
+   * rebuilds the editor.
+   */
+  readonly resolveGrammarSuggestions?: () => readonly GrammarSuggestionTarget[];
 }
 
 /**
@@ -368,6 +379,7 @@ function createCursorRenderer(
 export function createNoteEditorExtensions(options: NoteEditorExtensionOptions = {}): Extensions {
   const collaboration = options.collaboration ?? null;
   const resolveComments = options.resolveComments;
+  const resolveGrammarSuggestions = options.resolveGrammarSuggestions;
   return [
     StarterKit.configure({
       document: false,
@@ -459,6 +471,19 @@ export function createNoteEditorExtensions(options: NoteEditorExtensionOptions =
             resolveActiveCommentId: options.resolveActiveCommentId,
           }),
         ]),
+    /*
+     * Part 70's grammar and style underlines. Registered on the same terms as
+     * the comment highlights directly above — only when the host supplies a
+     * suggestion list — and, like them, contributing decorations only: no node,
+     * no mark, and nothing in `getJSON()`.
+     *
+     * Placed AFTER the comment decorations and BEFORE `Collaboration`: a comment
+     * highlight is the older, more authoritative annotation, so its background
+     * paints under the suggestion's underline rather than the reverse.
+     */
+    ...(resolveGrammarSuggestions === undefined
+      ? []
+      : [createGrammarDecorations({ resolveGrammarSuggestions })]),
     /*
      * Part 58. Appended last and only when a binding exists, so a solo editor
      * builds the identical list it always has.

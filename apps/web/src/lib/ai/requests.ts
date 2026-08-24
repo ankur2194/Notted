@@ -2,6 +2,8 @@ import { AI_API_PATHS } from "@notted/shared-types";
 import {
   aiConfigUpdateSchema,
   aiConfigViewSchema,
+  aiGrammarCheckRequestSchema,
+  aiGrammarCheckResultSchema,
   aiMeetingExtractionRequestSchema,
   aiMeetingExtractionResultSchema,
   aiStatusSchema,
@@ -16,11 +18,13 @@ import type {
   AiConfigView,
   AiStatus,
   AiUsageSummary,
+  GrammarCheckResult,
   MeetingExtractionResult,
   TagSuggestionResult,
 } from "@notted/shared-types";
 import type {
   AiConfigUpdateInput,
+  AiGrammarCheckRequestInput,
   AiMeetingExtractionRequestInput,
   AiTagSuggestionRequestInput,
 } from "@notted/shared-validators";
@@ -171,5 +175,42 @@ export function requestTagSuggestions(
     json("POST", parsed.data),
     (value) => aiTagSuggestionResultSchema.safeParse(value),
     { timeoutMs: TAG_SUGGESTION_TIMEOUT_MS, signal: options.signal },
+  );
+}
+
+/* ------------------------------------------------------------------------- *
+ * Part 70 — grammar and style checking.
+ *
+ * Same shape as tag suggestions, and for the same reasons: one structured
+ * answer, `safeParse`d as a whole, under a ceiling the CRUD default does not
+ * give it. Nothing here knows what a document position is — the request carries
+ * opaque segment ids and plain text, and the browser is the only thing that can
+ * turn an answer back into a range.
+ * ------------------------------------------------------------------------- */
+
+/** A note's changed blocks; the answer is a handful of small spans. */
+const GRAMMAR_CHECK_TIMEOUT_MS = 30_000;
+
+/**
+ * Check a batch of prose blocks (at most `AI_GRAMMAR_SEGMENT_MAX` of them).
+ *
+ * The caller batches, dedupes, and decides what has changed since the last
+ * check; this function only proves the batch against the shared contract before
+ * it is allowed to leave the browser.
+ */
+export function requestGrammarCheck(
+  workspaceId: string,
+  input: AiGrammarCheckRequestInput,
+  options: AiRequestOptions = {},
+): Promise<ApiRequestResult<GrammarCheckResult>> {
+  const parsed = aiGrammarCheckRequestSchema.safeParse(input);
+  if (!validIds(workspaceId) || !parsed.success) {
+    return Promise.resolve({ ok: false, kind: "invalid" });
+  }
+  return requestJson(
+    AI_API_PATHS.grammarCheck(workspaceId),
+    json("POST", parsed.data),
+    (value) => aiGrammarCheckResultSchema.safeParse(value),
+    { timeoutMs: GRAMMAR_CHECK_TIMEOUT_MS, signal: options.signal },
   );
 }

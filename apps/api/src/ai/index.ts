@@ -19,6 +19,7 @@ export {
   AI_PROMPT_FEATURES,
   AI_PROMPT_GUARDRAILS,
   buildContinuePrompt,
+  buildGrammarCheckPrompt,
   buildJsonRepairPrompt,
   buildMeetingExtractionPrompt,
   buildRewritePrompt,
@@ -45,6 +46,7 @@ export {
 export { AiController } from "./ai.controller";
 export { AiModule } from "./ai.module";
 export { AiService } from "./ai.service";
+export { GrammarService } from "./grammar.service";
 export { parseJsonWithRepair, stripJsonFences } from "./json-repair";
 export { MeetingExtractionService } from "./meeting-extraction.service";
 export * from "./providers";

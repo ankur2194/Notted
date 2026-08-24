@@ -14,8 +14,10 @@ import type { CommentAnchorTarget } from "@/components/editor/extensions/comment
 import type { Editor } from "@tiptap/core";
 
 import { AiPanel } from "@/components/ai/AiPanel";
+import { GrammarPopover } from "@/components/ai/GrammarPopover";
 import { MeetingExtractionDialog } from "@/components/ai/MeetingExtractionDialog";
 import { TagSuggestions } from "@/components/ai/TagSuggestions";
+import { useGrammarCheck } from "@/components/ai/useGrammarCheck";
 import {
   createAttachmentDirectory,
   documentHasAttachment,
@@ -407,6 +409,15 @@ export function NoteEditorSurface({
     [effectiveSaveBinding, onEditorReady, save],
   );
 
+  /*
+   * Part 70. Called unconditionally — the hook manages its own inertness, so a
+   * viewer, a preview, or a workspace with AI off costs a no-op rather than a
+   * conditional hook. Everything it returns is stable for the lifetime of this
+   * component, which is what lets `resolveGrammarSuggestions` be captured once
+   * into `TiptapEditor`'s `useMemo(…, [])` extension list.
+   */
+  const grammar = useGrammarCheck({ workspaceId, editor: editorInstance, editable, userId });
+
   return (
     <>
       {/*
@@ -482,6 +493,7 @@ export function NoteEditorSurface({
           onEditorReady={handleEditorReady}
           resolveComments={commentsEnabled ? resolveComments : undefined}
           resolveActiveCommentId={commentsEnabled ? resolveActiveCommentId : undefined}
+          resolveGrammarSuggestions={aiEnabled ? grammar.resolveSuggestions : undefined}
         />
       )}
       {commentsEnabled ? (
@@ -534,6 +546,12 @@ export function NoteEditorSurface({
        * projection, so the row can be behind), and the note list has no editor
        * to read. Both share `AiPanel`'s `GET /ai/status` query key, so the
        * three of them cost exactly one status request between them.
+       *
+       * Part 70's `GrammarPopover` joins them for the second reason and one of
+       * its own: it hangs off the live editor's DOM, and the underline it
+       * explains is drawn by a decoration rather than by React, so it must
+       * exist whether or not the AI panel is open. It renders nothing until a
+       * suggestion is actually selected.
        */}
       {aiEnabled ? (
         <>
@@ -548,6 +566,12 @@ export function NoteEditorSurface({
             noteId={noteId}
             editor={editorInstance}
             editable={editable}
+          />
+          <GrammarPopover
+            editor={editorInstance}
+            getSuggestion={grammar.getSuggestion}
+            accept={grammar.accept}
+            dismiss={grammar.dismiss}
           />
         </>
       ) : null}

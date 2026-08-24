@@ -14,8 +14,9 @@
 // rows. Part 68 adds `AiStreamService` — one streamed generation from
 // authorization to the metered row — so a later non-HTTP caller (a queue
 // worker, say) can reuse it. Part 69 adds `MeetingExtractionService`, the two
-// JSON features built on `AiStreamService.complete()`. Nothing else leaves this
-// module.
+// JSON features built on `AiStreamService.complete()`. Part 70 adds
+// `GrammarService`, a third one — same pipeline, no database, and it re-checks
+// the model's offsets before anyone sees them. Nothing else leaves this module.
 //
 // STILL NO EDGE ONTO `TagsModule`. The tag-suggestion feature reads two columns
 // of the `tags` table directly, under an explicit `workspace_id` predicate — see
@@ -34,6 +35,7 @@ import { AiGovernanceService } from "./ai-governance.service";
 import { AiStreamService } from "./ai-stream.service";
 import { AiController } from "./ai.controller";
 import { AiService } from "./ai.service";
+import { GrammarService } from "./grammar.service";
 import { MeetingExtractionService } from "./meeting-extraction.service";
 import { AiChatProviderRegistry, AnthropicChatProvider, OpenAiChatProvider } from "./providers";
 
@@ -53,6 +55,7 @@ import { AiChatProviderRegistry, AnthropicChatProvider, OpenAiChatProvider } fro
     AiCredentialService,
     AiStreamService,
     MeetingExtractionService,
+    GrammarService,
     OpenAiChatProvider,
     AnthropicChatProvider,
     AiChatProviderRegistry,
@@ -64,6 +67,7 @@ import { AiChatProviderRegistry, AnthropicChatProvider, OpenAiChatProvider } fro
     AiStreamService,
     AiChatProviderRegistry,
     MeetingExtractionService,
+    GrammarService,
   ],
 })
 export class AiModule {}

@@ -549,6 +549,47 @@
         }
       }
     },
+    "/api/v1/workspaces/{workspaceId}/ai/grammar-check": {
+      "post": {
+        "summary": "Check segments of note text for grammar, spelling and style problems.",
+        "tags": [
+          "AI"
+        ],
+        "description": "Nothing is persisted: the segments are never stored, and the suggestions are computed, returned and forgotten. Applying one is a separate, explicit action by the author. `start` and `end` are character offsets into that segment's own `text`, counted from 0, with `end` exclusive — they are never document positions, and the caller is expected to re-validate them against its live document before applying anything. Every suggestion is re-checked server-side against the text that was sent: one addressing an unknown `segmentId`, describing an out-of-range or inverted span, or replacing text with itself is dropped from the response rather than failing it. An unreadable model reply is retried once and then answered with AI_OUTPUT_INVALID.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiGrammarCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Check segments of note text for grammar, spelling and style problems.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiGrammarCheckResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workspaces/{workspaceId}/ai/meeting-extraction": {
       "post": {
         "summary": "Extract attendees, agenda, decisions and action items from a transcript.",
@@ -5592,6 +5633,109 @@
         "required": [
           "noteId",
           "context"
+        ],
+        "additionalProperties": false
+      },
+      "AiGrammarCategory": {
+        "type": "string",
+        "enum": [
+          "grammar",
+          "style",
+          "spelling"
+        ]
+      },
+      "AiGrammarCheckRequest": {
+        "type": "object",
+        "properties": {
+          "segments": {
+            "minItems": 1,
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiGrammarSegment"
+            }
+          }
+        },
+        "required": [
+          "segments"
+        ],
+        "additionalProperties": false
+      },
+      "AiGrammarCheckResult": {
+        "type": "object",
+        "properties": {
+          "suggestions": {
+            "readOnly": true,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiGrammarSuggestion"
+            }
+          }
+        },
+        "required": [
+          "suggestions"
+        ],
+        "additionalProperties": false
+      },
+      "AiGrammarSegment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "AiGrammarSuggestion": {
+        "type": "object",
+        "properties": {
+          "segmentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2000
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2000
+          },
+          "replacement": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "category": {
+            "$ref": "#/components/schemas/AiGrammarCategory"
+          }
+        },
+        "required": [
+          "segmentId",
+          "start",
+          "end",
+          "replacement",
+          "message",
+          "category"
         ],
         "additionalProperties": false
       },

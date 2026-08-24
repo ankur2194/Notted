@@ -30,7 +30,7 @@
 // `ai_usage.feature` is `varchar(50)`; every id here is far inside that.
 
 import type { AiChatMessage } from "./providers/ai-chat-provider";
-import type { AiSummaryLength, AiTone } from "@notted/shared-types";
+import type { AiSummaryLength, AiTone, GrammarSegment } from "@notted/shared-types";
 
 /**
  * The feature ids. The value is simultaneously the `ai_usage.feature` string
@@ -41,6 +41,7 @@ import type { AiSummaryLength, AiTone } from "@notted/shared-types";
  * Part 69 adds the two JSON features. A repair pass meters under the SAME id as
  * the attempt it is repairing (see `buildJsonRepairPrompt`), so a usage report
  * reads "meeting extraction cost two calls", not "some unnamed feature did".
+ * Part 70 adds a third, on the same terms.
  */
 export const AI_PROMPT_FEATURES = Object.freeze({
   summarize: "summarize.v1",
@@ -48,6 +49,7 @@ export const AI_PROMPT_FEATURES = Object.freeze({
   rewrite: "rewrite.v1",
   meetingExtraction: "meeting_extraction.v1",
   autoTag: "auto_tag.v1",
+  grammar: "grammar.v1",
 } as const);
 
 export type AiPromptFeature = (typeof AI_PROMPT_FEATURES)[keyof typeof AI_PROMPT_FEATURES];
@@ -150,6 +152,16 @@ const MEETING_EXTRACTION_OUTPUT_TOKENS = 2_000;
 
 /** At most five tag names, so a generous budget is still a tiny one. */
 const TAG_SUGGESTION_OUTPUT_TOKENS = 200;
+
+/**
+ * ~50 corrections' worth of JSON. The schema's 200-suggestion cap is a safety
+ * ceiling on a model that has lost the plot, not a target: twenty paragraphs of
+ * ordinary prose produce a handful of suggestions, and a check that genuinely
+ * needs more than fifty is one the writer will not read past anyway. As with the
+ * extraction budget, too small does not truncate the answer — it produces
+ * unparseable JSON, a repair pass and then a 422.
+ */
+const GRAMMAR_CHECK_OUTPUT_TOKENS = 2_000;
 
 const SUMMARY_INSTRUCTION: Readonly<Record<AiSummaryLength, string>> = Object.freeze({
   brief: "Write a summary of two or three sentences that captures only the main point.",
@@ -316,6 +328,64 @@ export function buildTagSuggestionPrompt(input: {
     ].join("\n\n"),
     TAG_SUGGESTION_OUTPUT_TOKENS,
     jsonGuardrails("note_content"),
+  );
+}
+
+/**
+ * Part 70 — grammar and style assistance.
+ *
+ * THE OFFSET RULE IS THE WHOLE PROMPT. Everything else here is ordinary
+ * proofreading instruction; the part a model gets wrong, and the part that makes
+ * a wrong answer dangerous rather than merely unhelpful, is where a correction
+ * is anchored. So it is stated three ways — relative to the segment, zero-based,
+ * `end` exclusive — and then not trusted: `grammar.service.ts` re-checks every
+ * range against the real text and drops what does not fit.
+ *
+ * "SMALLEST SPAN" IS ALSO A SAFETY RULE, not a style preference. A model asked
+ * to fix a comma will happily return the whole paragraph rewritten, and an
+ * Accept button on that is a silent rewrite of the author's prose.
+ */
+const GRAMMAR_CHECK_SHAPE = [
+  "Reply with a JSON object of exactly this shape:",
+  '{"suggestions": [{"segmentId": "…", "start": 0, "end": 0, "replacement": "…", "message": "…", "category": "grammar"}]}',
+  '"segmentId" is the id printed above the segment the correction applies to, copied exactly. Never invent one, and never address a segment that is not listed below.',
+  '"start" and "end" are CHARACTER OFFSETS INTO THAT SEGMENT\'S OWN TEXT. Position 0 is the first character of the text inside that segment\'s delimiters; offsets are never counted across segments and never include the delimiters themselves. "end" is EXCLUSIVE: the text being replaced is the characters from "start" up to but not including "end".',
+  "Propose the SMALLEST span that fixes the problem — the misspelt word, the missing comma, the one clumsy clause. Do NOT rewrite whole segments, and do not return a span that covers a segment's entire text.",
+  '"replacement" is the text that should stand in that span instead. An empty string deletes the span, which is the right answer for a repeated word.',
+  '"message" is one short sentence telling the writer what is wrong.',
+  '"category" is exactly one of "grammar", "style" or "spelling".',
+  'Return {"suggestions": []} when the text is already correct. An empty array is a good answer; never invent a correction in order to have one.',
+  "Return the JSON object alone: no prose before or after it, and no markdown code fence.",
+].join("\n");
+
+/**
+ * Segments are numbered for the model's benefit and keyed by their opaque id for
+ * the server's.
+ *
+ * The id is STRIPPED AND THEN JSON-QUOTED, and deliberately: it is the one
+ * caller-supplied string in this prompt that lands in INSTRUCTION space rather
+ * than inside a delimiter, where the usual wrapping guarantee does not apply.
+ * `stripDelimiter` removes a forged `</segment>` exactly as it would inside the
+ * data region, and `JSON.stringify` escapes the newlines and quotes that would
+ * otherwise let a crafted id occupy a line of its own. The schema's 64-character
+ * bound does the rest.
+ */
+export function buildGrammarCheckPrompt(input: {
+  readonly segments: readonly GrammarSegment[];
+}): AiPromptPlan {
+  const listed = input.segments
+    .map(
+      (segment, index) =>
+        `${index + 1}. segment id: ${JSON.stringify(stripDelimiter(segment.id, "segment"))}\n${wrapIn("segment", segment.text)}`,
+    )
+    .join("\n\n");
+
+  return plan(
+    AI_PROMPT_FEATURES.grammar,
+    `You proofread prose a writer has typed into a note. You find real mistakes — grammar, spelling, and phrasing that is clumsy or unclear — and propose the smallest edit that fixes each one. You never change what the text means, never impose a house style the writer did not ask for, never flag a deliberate choice as an error, and never comment on the subject matter. ${GRAMMAR_CHECK_SHAPE}`,
+    `Proofread each segment below.\n\n${listed}`,
+    GRAMMAR_CHECK_OUTPUT_TOKENS,
+    jsonGuardrails("segment"),
   );
 }
 

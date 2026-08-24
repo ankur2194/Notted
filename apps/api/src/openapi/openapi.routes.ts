@@ -3,6 +3,8 @@ import {
   aiConfigUpdateSchema,
   aiConfigViewSchema,
   aiContinueRequestSchema,
+  aiGrammarCheckRequestSchema,
+  aiGrammarCheckResultSchema,
   aiMeetingExtractionRequestSchema,
   aiMeetingExtractionResultSchema,
   aiRewriteRequestSchema,
@@ -877,5 +879,16 @@ export const OPENAPI_ROUTES: Record<string, OpenApiRouteDoc> = {
       "Nothing is persisted and no tag is created or attached; applying a suggestion is a separate, explicit action. The model is shown tag NAMES only and never an id: every tagId in `existing` was matched server-side against this workspace's own tag pool, so a suggestion can never name a tag from another workspace. Names the pool does not contain come back under `proposed`, which the caller must create explicitly.",
     body: aiTagSuggestionRequestSchema,
     response: aiTagSuggestionResultSchema,
+  },
+
+  // AI proofreading. Part 70. JSON as well, and the only route on this surface
+  // that answers with coordinates rather than prose.
+  "POST /workspaces/{workspaceId}/ai/grammar-check": {
+    summary: "Check segments of note text for grammar, spelling and style problems.",
+    tags: ["AI"],
+    description:
+      "Nothing is persisted: the segments are never stored, and the suggestions are computed, returned and forgotten. Applying one is a separate, explicit action by the author. `start` and `end` are character offsets into that segment's own `text`, counted from 0, with `end` exclusive — they are never document positions, and the caller is expected to re-validate them against its live document before applying anything. Every suggestion is re-checked server-side against the text that was sent: one addressing an unknown `segmentId`, describing an out-of-range or inverted span, or replacing text with itself is dropped from the response rather than failing it. An unreadable model reply is retried once and then answered with AI_OUTPUT_INVALID.",
+    body: aiGrammarCheckRequestSchema,
+    response: aiGrammarCheckResultSchema,
   },
 };

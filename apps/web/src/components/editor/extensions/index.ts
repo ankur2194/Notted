@@ -83,6 +83,16 @@ export {
 } from "./editor-shortcuts";
 export { FontSize, NOTE_FONT_SIZES, isAllowedNoteFontSize, type NoteFontSize } from "./font-size";
 export {
+  GRAMMAR_CATEGORY_CLASSES,
+  GRAMMAR_SUGGESTION_CLASS,
+  GRAMMAR_SUGGESTION_ID_ATTRIBUTE,
+  createGrammarDecorations,
+  grammarDecorationsPluginKey,
+  refreshGrammarDecorations,
+  type GrammarDecorationOptions,
+  type GrammarSuggestionTarget,
+} from "./grammar-decorations";
+export {
   IMAGE_DROP_ACTIVE_CLASS,
   IMAGE_UPLOAD_PLACEHOLDER_CLASS,
   IMAGE_UPLOAD_PLACEHOLDER_KEY,
