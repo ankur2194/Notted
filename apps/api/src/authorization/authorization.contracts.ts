@@ -58,6 +58,13 @@ export const AUTHORIZATION_ACTIONS = [
   "tag.delete",
   "session.list",
   "session.revoke",
+  // Part 67. Both address the `workspace` resource: AI is configured once per
+  // workspace, and using it spends that workspace's quota against that
+  // workspace's credential. `ai.configure` writes provider key material, so it
+  // is admin-only AND high-risk; `ai.use` reaches editors but never viewers,
+  // who have no authority to spend the workspace's AI budget.
+  "ai.configure",
+  "ai.use",
 ] as const;
 
 export type AuthorizationAction = (typeof AUTHORIZATION_ACTIONS)[number];

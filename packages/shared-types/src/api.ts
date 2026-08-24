@@ -46,7 +46,22 @@ export type ApiErrorCode =
   // `request-json.ts` surfaces their codes rather than a generic bucket.
   | "WEBHOOK_URL_REJECTED"
   | "WEBHOOK_NOT_VERIFIED"
-  | "WEBHOOK_VERIFICATION_FAILED";
+  | "WEBHOOK_VERIFICATION_FAILED"
+  // Part 67 — AI governance. These are the UPPER_SNAKE spelling of the
+  // `AI_FAILURE_CODES` vocabulary in `ai.ts`: the same refusal appears here as
+  // the envelope `code` and in `ai_usage.error_code` in its lowercase form.
+  // They are minted rather than folded into `FORBIDDEN`/`CONFLICT`/
+  // `RATE_LIMITED` because each one has a DIFFERENT remedy — turn the feature
+  // on, configure a provider, accept the data notice, wait for the quota to
+  // reset, slow down — and the client renders that remedy, not the status.
+  // `AI_CREDENTIAL_REQUIRED` (422) is the configuration-write counterpart: the
+  // admin must supply a new key before this write can be applied.
+  | "AI_DISABLED"
+  | "AI_NOT_CONFIGURED"
+  | "AI_CONSENT_REQUIRED"
+  | "AI_QUOTA_EXCEEDED"
+  | "AI_RATE_LIMITED"
+  | "AI_CREDENTIAL_REQUIRED";
 
 export interface ApiError {
   readonly code: ApiErrorCode;

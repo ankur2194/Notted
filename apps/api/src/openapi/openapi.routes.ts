@@ -1,5 +1,10 @@
 import {
   acceptWorkspaceInvitationSchema,
+  aiConfigUpdateSchema,
+  aiConfigViewSchema,
+  aiStatusSchema,
+  aiUsageQuerySchema,
+  aiUsageSummarySchema,
   apiKeyCreateResultSchema,
   apiKeyListQuerySchema,
   apiKeyPageSchema,
@@ -783,5 +788,37 @@ export const OPENAPI_ROUTES: Record<string, OpenApiRouteDoc> = {
     description:
       "Replays the same event with the same event id under a fresh attempt budget, so a receiver deduplicating on it sees a repeat rather than a new event.",
     response: webhookRetryResultSchema,
+  },
+
+  // AI. Part 67 provider configuration, governance, and usage reporting.
+  "GET /workspaces/{workspaceId}/ai/config": {
+    summary: "Read the workspace's AI provider configuration.",
+    tags: ["AI"],
+    description:
+      "The stored provider credential is never returned; the response says only whether one is configured. A workspace that has never been configured reads as disabled rather than 404.",
+    response: aiConfigViewSchema,
+  },
+  "PUT /workspaces/{workspaceId}/ai/config": {
+    summary: "Replace the workspace's AI provider configuration.",
+    tags: ["AI"],
+    description:
+      "The whole desired configuration, applied as a replacement. Omitting apiKey keeps the stored credential; switching providers, or enabling AI with none stored, requires a new one. The credential is never returned by this or any other route.",
+    body: aiConfigUpdateSchema,
+    response: aiConfigViewSchema,
+  },
+  "GET /workspaces/{workspaceId}/ai/usage": {
+    summary: "Roll up AI token usage and cost over a bounded window.",
+    tags: ["AI"],
+    description:
+      "Token counts, cost and per-feature totals only. Prompts, note excerpts and model output are never retained, so no route can return them.",
+    query: aiUsageQuerySchema,
+    response: aiUsageSummarySchema,
+  },
+  "GET /workspaces/{workspaceId}/ai/status": {
+    summary: "Whether AI features should be offered to the caller.",
+    tags: ["AI"],
+    description:
+      "The member-facing view: enabled, provider and model only. It carries no quota, no consent flag and nothing about the stored credential.",
+    response: aiStatusSchema,
   },
 };

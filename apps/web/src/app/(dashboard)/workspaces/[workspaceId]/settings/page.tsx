@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import AiSettings from "@/components/workspaces/AiSettings";
 import { ApiKeys } from "@/components/workspaces/ApiKeys";
 import { MentionEmailPreference } from "@/components/workspaces/MentionEmailPreference";
 import { WebhookSettings } from "@/components/workspaces/WebhookSettings";
@@ -76,6 +77,12 @@ export default async function WorkspaceSettingsPage({
         gate is presentational — every webhook route re-authorizes server-side.
       */}
       {canManage ? <WebhookSettings workspaceId={workspace.id} /> : null}
+      {/*
+        Admin-only for the same two reasons again: the provider API key is a
+        credential, and the quota is workspace spend. The gate is presentational
+        — the config and usage routes both re-authorize server-side.
+      */}
+      {canManage ? <AiSettings workspaceId={workspace.id} /> : null}
       {/*
         Rendered for EVERY member, unlike the blocks above. This is the reader's
         own mail preference — the control the mention email's footer links to —

@@ -33,6 +33,17 @@ export type {
   UserSummary,
 } from "./auth";
 export { AUTH_API_PATHS } from "./auth";
+export { AI_API_PATHS, AI_FAILURE_CODES, AI_PROVIDER_ERROR_CODES, AI_PROVIDER_NAMES } from "./ai";
+export type {
+  AiConfigView,
+  AiFailureCode,
+  AiProviderErrorCode,
+  AiProviderName,
+  AiStatus,
+  AiUsageFeatureSummary,
+  AiUsageStatus,
+  AiUsageSummary,
+} from "./ai";
 export { API_KEY_API_PATHS, API_KEY_SECRET_PREFIX } from "./api-key";
 export type {
   ApiKeyCreateResult,

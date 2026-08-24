@@ -35,6 +35,22 @@ export type {
   UserProfileFilterInput,
 } from "./auth.schema";
 export {
+  AI_DEFAULT_DAILY_TOKEN_QUOTA,
+  AI_DEFAULT_RATE_LIMIT_PER_MINUTE,
+  AI_MAX_DAILY_TOKEN_QUOTA,
+  AI_MAX_RATE_LIMIT_PER_MINUTE,
+  aiApiKeySchema,
+  aiConfigUpdateSchema,
+  aiConfigViewSchema,
+  aiModelSchema,
+  aiProviderNameSchema,
+  aiStatusSchema,
+  aiUsageFeatureSummarySchema,
+  aiUsageQuerySchema,
+  aiUsageSummarySchema,
+} from "./ai.schema";
+export type { AiConfigUpdateInput, AiUsageQueryInput } from "./ai.schema";
+export {
   API_KEY_PREFIX_LENGTH,
   API_KEY_SECRET_PATTERN,
   API_KEY_SECRET_PREFIX,

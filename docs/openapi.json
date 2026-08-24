@@ -445,6 +445,156 @@
         }
       }
     },
+    "/api/v1/workspaces/{workspaceId}/ai/config": {
+      "get": {
+        "summary": "Read the workspace's AI provider configuration.",
+        "tags": [
+          "AI"
+        ],
+        "description": "The stored provider credential is never returned; the response says only whether one is configured. A workspace that has never been configured reads as disabled rather than 404.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Read the workspace's AI provider configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConfigView"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Replace the workspace's AI provider configuration.",
+        "tags": [
+          "AI"
+        ],
+        "description": "The whole desired configuration, applied as a replacement. Omitting apiKey keeps the stored credential; switching providers, or enabling AI with none stored, requires a new one. The credential is never returned by this or any other route.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiConfigUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Replace the workspace's AI provider configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConfigView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/ai/status": {
+      "get": {
+        "summary": "Whether AI features should be offered to the caller.",
+        "tags": [
+          "AI"
+        ],
+        "description": "The member-facing view: enabled, provider and model only. It carries no quota, no consent flag and nothing about the stored credential.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Whether AI features should be offered to the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/ai/usage": {
+      "get": {
+        "summary": "Roll up AI token usage and cost over a bounded window.",
+        "tags": [
+          "AI"
+        ],
+        "description": "Token counts, cost and per-feature totals only. Prompts, note excerpts and model output are never retained, so no route can return them.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9]\\d*)$"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Roll up AI token usage and cost over a bounded window.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiUsageSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workspaces/{workspaceId}/api-keys": {
       "get": {
         "summary": "List the workspace's API keys.",
@@ -5123,6 +5273,284 @@
         },
         "required": [
           "token"
+        ],
+        "additionalProperties": false
+      },
+      "AiApiKey": {
+        "type": "string",
+        "minLength": 20,
+        "maxLength": 400
+      },
+      "AiConfigUpdate": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/AiProviderName"
+          },
+          "model": {
+            "default": null,
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "apiKey": {
+            "$ref": "#/components/schemas/AiApiKey"
+          },
+          "isEnabled": {
+            "default": false,
+            "type": "boolean"
+          },
+          "dailyTokenQuota": {
+            "default": 50000,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000
+          },
+          "rateLimitPerMinute": {
+            "default": 10,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600
+          },
+          "contentConsent": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "additionalProperties": false
+      },
+      "AiConfigView": {
+        "type": "object",
+        "properties": {
+          "workspaceId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/AiProviderName"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "isEnabled": {
+            "type": "boolean"
+          },
+          "hasCredentials": {
+            "type": "boolean"
+          },
+          "dailyTokenQuota": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "rateLimitPerMinute": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "contentConsent": {
+            "type": "boolean"
+          },
+          "updatedById": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/IsoTimestamp"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "provider",
+          "model",
+          "isEnabled",
+          "hasCredentials",
+          "dailyTokenQuota",
+          "rateLimitPerMinute",
+          "contentConsent",
+          "updatedById",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "AiModel": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      },
+      "AiProviderName": {
+        "type": "string",
+        "enum": [
+          "openai",
+          "anthropic",
+          "disabled"
+        ]
+      },
+      "AiStatus": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/AiProviderName"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "enabled",
+          "provider",
+          "model"
+        ],
+        "additionalProperties": false
+      },
+      "AiUsageFeatureSummary": {
+        "type": "object",
+        "properties": {
+          "feature": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "requests": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "totalTokens": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "costMicros": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "feature",
+          "requests",
+          "totalTokens",
+          "costMicros"
+        ],
+        "additionalProperties": false
+      },
+      "AiUsageSummary": {
+        "type": "object",
+        "properties": {
+          "workspaceId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "since": {
+            "$ref": "#/components/schemas/IsoTimestamp"
+          },
+          "until": {
+            "$ref": "#/components/schemas/IsoTimestamp"
+          },
+          "totalRequests": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "successfulRequests": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "failedRequests": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "rateLimitedRequests": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "promptTokens": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "completionTokens": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "totalTokens": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "costMicros": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "dailyTokenQuota": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "tokensUsedToday": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "features": {
+            "readOnly": true,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiUsageFeatureSummary"
+            }
+          }
+        },
+        "required": [
+          "workspaceId",
+          "since",
+          "until",
+          "totalRequests",
+          "successfulRequests",
+          "failedRequests",
+          "rateLimitedRequests",
+          "promptTokens",
+          "completionTokens",
+          "totalTokens",
+          "costMicros",
+          "dailyTokenQuota",
+          "tokensUsedToday",
+          "features"
         ],
         "additionalProperties": false
       },

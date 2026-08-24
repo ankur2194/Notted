@@ -27,6 +27,9 @@ const HIGH_RISK_ACTIONS = new Set<AuthorizationAction>([
   "webhook.update",
   "webhook.delete",
   "session.revoke",
+  // Part 67: writes a provider API key. Same class as `apiKey.create` —
+  // long-lived credential material entering the system on a stolen session.
+  "ai.configure",
 ]);
 const MAX_FACT_AGE_MS = 30_000;
 
@@ -88,6 +91,8 @@ const RESOURCE_KINDS_BY_ACTION: Readonly<Record<AuthorizationAction, readonly st
   "tag.delete": ["tag"],
   "session.list": ["session"],
   "session.revoke": ["session"],
+  "ai.configure": ["workspace"],
+  "ai.use": ["workspace"],
 };
 
 const NOTE_PERMISSION_RANK: Readonly<Record<NoteSharePermission, number>> = {
@@ -419,6 +424,13 @@ export class AuthorizationPolicyService {
     if (actor.workspaceId !== resource.workspaceId) {
       return deny(evaluation, "authorization.concealed", "api_key_workspace_mismatch");
     }
+    // Part 67: NO `ai.*` action is ever reachable by an API key, at any scope.
+    // Configuring AI writes provider key material, and using AI spends money
+    // against a credential the key's holder did not supply — neither belongs on
+    // a long-lived integration token that no human is watching.
+    if (action.startsWith("ai.")) {
+      return deny(evaluation, "authorization.forbidden", "api_key_ai_denied");
+    }
     const readAction =
       action.endsWith(".read") || action.endsWith(".list") || action === "export.download";
     const adminAction =
@@ -481,11 +493,15 @@ export class AuthorizationPolicyService {
       action.startsWith("webhook.") ||
       action === "workspace.delete" ||
       action === "settings.update" ||
+      action === "ai.configure" ||
       (action.startsWith("member.") && action !== "member.list")
     ) {
       return false;
     }
     if (["workspace.read", "settings.read", "member.list"].includes(action)) return true;
+    // Editors write notes, so they may spend the workspace's AI budget on the
+    // notes they write. They may not point that budget at a different provider.
+    if (action === "ai.use") return true;
     if (action.endsWith(".read") || action.endsWith(".list") || action === "export.download") {
       if (resource.kind === "export") {
         return resource.requestedById === actorId && exportSourceReadable(resource);
@@ -539,6 +555,10 @@ export class AuthorizationPolicyService {
       action.startsWith("webhook.") ||
       action === "workspace.delete" ||
       action === "settings.update" ||
+      // Viewers read; they never spend the workspace's AI budget, and the
+      // prefix (not the two names) is denied so a future `ai.*` action cannot
+      // slip in through the `.read`/`.list` suffix rule below.
+      action.startsWith("ai.") ||
       (action.startsWith("member.") && action !== "member.list")
     ) {
       return false;

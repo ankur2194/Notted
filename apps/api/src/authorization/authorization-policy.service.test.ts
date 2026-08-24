@@ -39,6 +39,10 @@ function kindForAction(action: AuthorizationAction): AuthorizationResourceKind {
       "webhook.create",
       "folder.create",
       "tag.create",
+      // Part 67: AI is configured once per workspace and spends that
+      // workspace's quota, so both AI actions address the workspace itself.
+      "ai.configure",
+      "ai.use",
     ].includes(action)
   )
     return "workspace";
@@ -196,6 +200,9 @@ const EDITOR_ALLOWED = new Set<AuthorizationAction>([
   "tag.read",
   "tag.create",
   "tag.update",
+  // Editors may spend the workspace's AI budget on notes they write, but
+  // `ai.configure` (provider key material) is deliberately absent.
+  "ai.use",
   "session.list",
   "session.revoke",
 ]);
@@ -490,6 +497,33 @@ describe("AuthorizationPolicyService", () => {
     expect(policy.decide({ ...base, actor: readKey, action: "note.update" }, NOW).allowed).toBe(
       false,
     );
+  });
+
+  it("never lets an API key reach an AI action, at any scope", () => {
+    const base = evaluation("owner", "ai.use", resourceFor("ai.use"));
+    for (const scopes of [["read"], ["write"], ["admin"], ["read", "write", "admin"]] as const) {
+      const key = {
+        kind: "api-key" as const,
+        apiKeyId: "key-1",
+        workspaceId: WORKSPACE_ID,
+        scopes,
+      };
+      expect(policy.decide({ ...base, actor: key }, NOW).allowed).toBe(false);
+      expect(policy.decide({ ...base, actor: key, action: "ai.configure" }, NOW).allowed).toBe(
+        false,
+      );
+    }
+  });
+
+  it("requires a fresh session to write AI provider credentials", () => {
+    const stale: UserAuthorizationActor = { ...actor, isFresh: false };
+    expect(
+      policy.decide(evaluation("owner", "ai.configure", resourceFor("ai.configure"), stale), NOW),
+    ).toMatchObject({ allowed: false, code: "authorization.recent_authentication_required" });
+    // Using AI is not credential material, so it does not demand re-auth.
+    expect(
+      policy.decide(evaluation("editor", "ai.use", resourceFor("ai.use"), stale), NOW).allowed,
+    ).toBe(true);
   });
 
   it("rechecks user-requested jobs without granting freshness", () => {

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { AiModule } from "./ai/ai.module";
 import { ApiKeysModule } from "./api-keys/api-keys.module";
 import { ApiController } from "./api.controller";
 import { AttachmentsModule } from "./attachments/attachments.module";
@@ -42,6 +43,10 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
     // the public REST surface those keys reach.
     ApiKeysModule,
     OpenApiModule,
+    // Part 67. Owns the workspace AI configuration surface, the encrypted
+    // provider credential, and the fail-closed governance gate every AI
+    // request passes through.
+    AiModule,
     AttachmentsModule,
     CommentsModule,
     // Part 61. Owns the generic template renderer, the transactional producer,
