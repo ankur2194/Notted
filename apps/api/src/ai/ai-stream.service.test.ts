@@ -10,7 +10,7 @@ import { HttpStatus } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 
 import { AiGovernanceRefusal } from "./ai-governance.service";
-import { buildSummarizePrompt } from "./ai-prompts";
+import { buildMeetingExtractionPrompt, buildSummarizePrompt } from "./ai-prompts";
 import { AiStreamService } from "./ai-stream.service";
 import { AiChatProviderError, type AiChatEvent } from "./providers";
 
@@ -174,6 +174,16 @@ function input(response: Response) {
     requestId: null,
     prompt: buildSummarizePrompt({ text: "a note worth summarising", length: "brief" }),
     response,
+  };
+}
+
+function completionInput(overrides: { readonly noteId?: string | null } = {}) {
+  return {
+    principal,
+    workspaceId: WORKSPACE_ID,
+    requestId: null,
+    prompt: buildMeetingExtractionPrompt({ transcript: "Ana: we ship Friday." }),
+    ...overrides,
   };
 }
 
@@ -423,5 +433,148 @@ describe("AiStreamService failure paths", () => {
       // 400 streamed characters at the documented four-characters-per-token estimate.
       completionTokens: 100,
     });
+  });
+});
+
+/**
+ * Part 69 — `complete()`, the non-streaming seam the JSON features are built on.
+ *
+ * It shares `run()`'s prologue and its `finally`, so what is worth asserting
+ * here is that sharing: one usage row per call whatever happens, the last usage
+ * event winning, and note authorization that runs if and only if a note was
+ * named. The last one is the tenancy proof for the tag-suggestion route.
+ */
+describe("AiStreamService.complete", () => {
+  it("aggregates deltas into one string and reports the last usage event", async () => {
+    const { recordUsage, grant } = grantStub();
+    const { instance } = service({
+      acquire: vi.fn().mockResolvedValue(grant),
+      provider: providerStub([
+        { type: "delta", text: '{"attendees":' },
+        { type: "usage", promptTokens: 1, completionTokens: 1 },
+        { type: "delta", text: '["Ana"]}' },
+        { type: "usage", promptTokens: 900, completionTokens: 12 },
+      ]),
+    });
+
+    await expect(instance.complete(completionInput())).resolves.toEqual({
+      text: '{"attendees":["Ana"]}',
+      promptTokens: 900,
+      completionTokens: 12,
+    });
+
+    expect(recordUsage).toHaveBeenCalledTimes(1);
+    expect(recordUsage).toHaveBeenCalledWith({
+      status: "success",
+      promptTokens: 900,
+      completionTokens: 12,
+    });
+  });
+
+  it("returns empty output as an empty string, metered as the success it was", async () => {
+    // Deliberate: `json-repair` spends its one repair pass on this and usually
+    // recovers. Failing here would burn the same provider call to less effect.
+    const { recordUsage, grant } = grantStub();
+    const { instance } = service({
+      acquire: vi.fn().mockResolvedValue(grant),
+      provider: providerStub([]),
+    });
+
+    await expect(instance.complete(completionInput())).resolves.toMatchObject({ text: "" });
+    expect(recordUsage).toHaveBeenCalledTimes(1);
+    expect(recordUsage).toHaveBeenCalledWith(expect.objectContaining({ status: "success" }));
+  });
+
+  it("meters one failed row and throws AI_PROVIDER_ERROR on a provider failure", async () => {
+    const { recordUsage, grant } = grantStub();
+    const { instance } = service({
+      acquire: vi.fn().mockResolvedValue(grant),
+      provider: providerStub([{ type: "delta", text: "partial" }], {
+        throwAfter: new AiChatProviderError("overloaded", true),
+      }),
+    });
+
+    await expect(instance.complete(completionInput())).rejects.toMatchObject({
+      status: HttpStatus.BAD_GATEWAY,
+      safeResponse: {
+        code: "AI_PROVIDER_ERROR",
+        message: "The AI provider is busy. Try again shortly.",
+      },
+    });
+
+    expect(recordUsage).toHaveBeenCalledTimes(1);
+    expect(recordUsage).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "failed", errorCode: "overloaded" }),
+    );
+  });
+
+  it("aborts and fails rather than returning half a JSON document", async () => {
+    const { recordUsage, grant } = grantStub();
+    const box: SignalBox = { signal: null };
+    const prompt = buildMeetingExtractionPrompt({ transcript: "Ana: hello." });
+    const { instance } = service({
+      acquire: vi.fn().mockResolvedValue(grant),
+      provider: providerStub(
+        [
+          { type: "delta", text: "x".repeat(8_000) },
+          { type: "delta", text: "y" },
+        ],
+        { box },
+      ),
+    });
+
+    await expect(instance.complete({ ...completionInput(), prompt })).rejects.toMatchObject({
+      status: HttpStatus.BAD_GATEWAY,
+      safeResponse: { code: "AI_PROVIDER_ERROR" },
+    });
+
+    expect(prompt.maxOutputChars).toBe(8_000);
+    expect(box.signal?.aborted).toBe(true);
+    expect(recordUsage).toHaveBeenCalledTimes(1);
+    expect(recordUsage).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "failed", errorCode: "ai_output_truncated" }),
+    );
+  });
+
+  it("authorizes note.read only when a note is named", async () => {
+    const { grant } = grantStub();
+    const withoutNote = service({
+      acquire: vi.fn().mockResolvedValue(grant),
+      provider: providerStub([{ type: "delta", text: "{}" }]),
+    });
+
+    await withoutNote.instance.complete(completionInput());
+    expect(withoutNote.authorizeUser).not.toHaveBeenCalled();
+
+    // …and an explicit null is the same thing as omitting it.
+    await withoutNote.instance.complete(completionInput({ noteId: null }));
+    expect(withoutNote.authorizeUser).not.toHaveBeenCalled();
+
+    const withNote = service({
+      acquire: vi.fn().mockResolvedValue(grant),
+      provider: providerStub([{ type: "delta", text: "{}" }]),
+    });
+    await withNote.instance.complete(completionInput({ noteId: NOTE_ID }));
+
+    expect(withNote.authorizeUser).toHaveBeenCalledTimes(1);
+    expect(withNote.authorizeUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: WORKSPACE_ID,
+        action: "note.read",
+        resource: { kind: "note", id: NOTE_ID },
+      }),
+    );
+  });
+
+  it("never reaches the provider when note.read is denied", async () => {
+    const denied = new Error("denied");
+    const acquire = vi.fn();
+    const { instance } = service({
+      authorizeUser: vi.fn().mockRejectedValue(denied),
+      acquire,
+    });
+
+    await expect(instance.complete(completionInput({ noteId: NOTE_ID }))).rejects.toBe(denied);
+    expect(acquire).not.toHaveBeenCalled();
   });
 });

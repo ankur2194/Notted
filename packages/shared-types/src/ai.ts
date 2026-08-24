@@ -1,4 +1,4 @@
-import type { IsoTimestamp, UserId, WorkspaceId } from "./common";
+import type { IsoTimestamp, TagId, UserId, WorkspaceId } from "./common";
 
 /**
  * Part 67 — provider-neutral AI configuration, governance, and usage.
@@ -22,6 +22,12 @@ export const AI_API_PATHS = Object.freeze({
   summarize: (workspaceId: string) => `/api/v1/workspaces/${workspaceId}/ai/summarize`,
   continue: (workspaceId: string) => `/api/v1/workspaces/${workspaceId}/ai/continue`,
   rewrite: (workspaceId: string) => `/api/v1/workspaces/${workspaceId}/ai/rewrite`,
+  // Part 69. These two answer ORDINARY JSON, not an event stream: their value is
+  // a structured object the client reviews as a whole, and there is nothing
+  // useful to show a reader halfway through a half-parsed extraction.
+  meetingExtraction: (workspaceId: string) =>
+    `/api/v1/workspaces/${workspaceId}/ai/meeting-extraction`,
+  tagSuggestions: (workspaceId: string) => `/api/v1/workspaces/${workspaceId}/ai/tag-suggestions`,
 } as const);
 
 /**
@@ -201,3 +207,82 @@ export type AiStreamEvent =
       readonly completionTokens: number | null;
     }
   | { readonly type: "error"; readonly code: AiStreamErrorCode; readonly message: string };
+
+/**
+ * Part 69 — meeting extraction and tag suggestion.
+ *
+ * BOTH OF THESE ARE PROPOSALS, NOT WRITES. Nothing described below is persisted
+ * anywhere by the server: an extraction is computed, returned, and forgotten,
+ * and a tag suggestion assigns nothing. The note document is only ever changed
+ * by an editor transaction the author started from the review screen, and a tag
+ * is only ever created or attached by an explicit "Apply". The transcript itself
+ * is never stored — there is no column it could go in (ADR 0007).
+ *
+ * WHY EVERY LIST IS BOUNDED. A model asked for "the action items" can return
+ * four hundred of them, and every one of those becomes a checkbox a human is
+ * expected to review. A review screen nobody can finish reading is not a
+ * safeguard, so the caps below are part of the contract rather than a rendering
+ * detail — the server truncates to them before the browser ever sees the list.
+ */
+export const MEETING_EXTRACTION_LIST_MAX = 100;
+export const MEETING_EXTRACTION_AGENDA_MAX = 50;
+/** Existing workspace tags a single suggestion may name. */
+export const TAG_SUGGESTION_EXISTING_MAX = 10;
+/** Brand-new tag names a single suggestion may propose. */
+export const TAG_SUGGESTION_PROPOSED_MAX = 5;
+
+/**
+ * One extracted action item.
+ *
+ * `assignee` is FREE TEXT, deliberately: it is a name the transcript used, not a
+ * workspace member id. Resolving "Sam" to a `UserId` would be a guess about who
+ * is accountable for something, made by a model, from a transcript — exactly the
+ * kind of inference that must stay a human's to make. The review screen shows
+ * the name; whoever accepts the item assigns the task themselves.
+ *
+ * `dueDate` is a plain `YYYY-MM-DD` calendar date rather than an instant: a
+ * meeting says "by Friday", which has no time and no timezone.
+ */
+export interface MeetingActionItem {
+  readonly text: string;
+  readonly assignee?: string;
+  readonly dueDate?: string;
+}
+
+export interface MeetingExtraction {
+  readonly attendees: readonly string[];
+  readonly agenda: readonly string[];
+  readonly discussionPoints: readonly string[];
+  readonly decisions: readonly string[];
+  readonly actionItems: readonly MeetingActionItem[];
+}
+
+/** Wrapped in an object so the response can grow a sibling field without a break. */
+export interface MeetingExtractionResult {
+  readonly extraction: MeetingExtraction;
+}
+
+/**
+ * A tag the workspace ALREADY has. `tagId` is real and was matched server-side
+ * against the workspace's own tag pool — a model never invents one, and never
+ * sees an id at all.
+ */
+export interface TagSuggestionExistingTag {
+  readonly tagId: TagId;
+  readonly name: string;
+}
+
+/**
+ * A tag that does NOT exist yet. It is kept in its own list rather than mixed
+ * into `existing` with a null id, because "select this" and "create this" are
+ * different consequences and the UI must be able to say so without inspecting a
+ * nullable field.
+ */
+export interface TagSuggestionProposedTag {
+  readonly name: string;
+}
+
+export interface TagSuggestionResult {
+  readonly existing: readonly TagSuggestionExistingTag[];
+  readonly proposed: readonly TagSuggestionProposedTag[];
+}

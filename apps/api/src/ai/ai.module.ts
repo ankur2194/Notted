@@ -13,7 +13,14 @@
 // `AiCredentialService` because a future rotation job will need to re-encrypt
 // rows. Part 68 adds `AiStreamService` — one streamed generation from
 // authorization to the metered row — so a later non-HTTP caller (a queue
-// worker, say) can reuse it. Nothing else leaves this module.
+// worker, say) can reuse it. Part 69 adds `MeetingExtractionService`, the two
+// JSON features built on `AiStreamService.complete()`. Nothing else leaves this
+// module.
+//
+// STILL NO EDGE ONTO `TagsModule`. The tag-suggestion feature reads two columns
+// of the `tags` table directly, under an explicit `workspace_id` predicate — see
+// `meeting-extraction.service.ts`. A module import for that one read would point
+// an arrow out of this module for the first time, and buy nothing.
 
 import { Module } from "@nestjs/common";
 
@@ -27,6 +34,7 @@ import { AiGovernanceService } from "./ai-governance.service";
 import { AiStreamService } from "./ai-stream.service";
 import { AiController } from "./ai.controller";
 import { AiService } from "./ai.service";
+import { MeetingExtractionService } from "./meeting-extraction.service";
 import { AiChatProviderRegistry, AnthropicChatProvider, OpenAiChatProvider } from "./providers";
 
 @Module({
@@ -44,6 +52,7 @@ import { AiChatProviderRegistry, AnthropicChatProvider, OpenAiChatProvider } fro
     AiGovernanceService,
     AiCredentialService,
     AiStreamService,
+    MeetingExtractionService,
     OpenAiChatProvider,
     AnthropicChatProvider,
     AiChatProviderRegistry,
@@ -54,6 +63,7 @@ import { AiChatProviderRegistry, AnthropicChatProvider, OpenAiChatProvider } fro
     AiCredentialService,
     AiStreamService,
     AiChatProviderRegistry,
+    MeetingExtractionService,
   ],
 })
 export class AiModule {}

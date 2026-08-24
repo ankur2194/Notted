@@ -16,6 +16,10 @@ import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { setAiContinueHandler } from "@/lib/ai/continue-request";
+import {
+  openMeetingExtraction,
+  useMeetingExtractionAvailable,
+} from "@/lib/ai/meeting-extraction-request";
 import { aiQueryKeys } from "@/lib/ai/query-keys";
 import { fetchAiStatus } from "@/lib/ai/requests";
 import { AI_FAILURE_MESSAGES } from "@/lib/ai/stream";
@@ -151,6 +155,15 @@ function inlineOrParagraphNodes(text: string): JSONContent[] {
 
 export function AiPanel({ workspaceId, noteId, editor, editable }: AiPanelProps) {
   const stream = useAiStream();
+
+  /*
+   * Part 69's meeting extraction is a LAUNCHER here and nothing more. It never
+   * streams — its answer is one structured object a human reviews as a whole —
+   * so it owns its own dialog, its own request, and its own live region, and
+   * deliberately does not join `AiFeature`, `renderPreviewActions`, or
+   * `regenerate`. This panel only knows whether the dialog is mounted.
+   */
+  const meetingExtractionAvailable = useMeetingExtractionAvailable();
 
   const [open, setOpen] = useState(false);
   const [feature, setFeature] = useState<AiFeature | null>(null);
@@ -701,6 +714,33 @@ export function AiPanel({ workspaceId, noteId, editor, editable }: AiPanelProps)
               }}
             >
               Rewrite selection
+            </Button>
+          </div>
+
+          <div className="space-y-2 border-t pt-3">
+            <h3 className="text-sm font-semibold">Meeting notes</h3>
+            <p className="text-xs text-muted-foreground" id="note-ai-meeting-hint">
+              {meetingExtractionAvailable
+                ? "Paste a transcript and review the attendees, decisions, and action items before anything is added."
+                : "Meeting extraction is not ready on this note yet. Try again in a moment."}
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              data-testid="ai-meeting-extraction"
+              // Same posture as "Rewrite selection": never natively disabled, so
+              // the control keeps its place in the tab order and the hint above
+              // is what explains why it is unavailable.
+              aria-disabled={meetingExtractionAvailable ? undefined : true}
+              aria-describedby="note-ai-meeting-hint"
+              onClick={() => {
+                // `openMeetingExtraction` returns false when no dialog is
+                // registered; the hint has already said so, so there is nothing
+                // further to announce.
+                openMeetingExtraction();
+              }}
+            >
+              Extract meeting notes
             </Button>
           </div>
 

@@ -36,7 +36,7 @@ import {
 } from "./ai-governance.service";
 import { AiChatProviderError, AiChatProviderRegistry } from "./providers";
 
-import type { AiPromptPlan } from "./ai-prompts";
+import type { AiPromptFeature, AiPromptPlan } from "./ai-prompts";
 import type {
   AiProviderErrorCode,
   AiStreamErrorCode,
@@ -52,6 +52,36 @@ export interface AiStreamRunInput {
   readonly requestId: string | null;
   readonly prompt: AiPromptPlan;
   readonly response: Response;
+}
+
+/**
+ * Part 69 — the same generation, collected instead of streamed.
+ *
+ * WHY A SECOND ENTRY POINT AND NOT A SECOND SERVICE. Authorization, the
+ * fail-closed governance gate, provider resolution and "exactly one `ai_usage`
+ * row on every path" are the same four obligations whether the answer is
+ * streamed to a browser or parsed into an object. A second service would be a
+ * second place for one of them to be forgotten.
+ */
+export interface AiCompletionInput {
+  readonly principal: AuthenticatedPrincipal;
+  readonly workspaceId: string;
+  /**
+   * Authorized for `note.read` when present, which is what proves the caller may
+   * work in this tenant on this note. Omitted (or null) when the request names
+   * no note at all — a pasted meeting transcript belongs to nothing yet — in
+   * which case the route's own `ai.use` workspace authorization is the only
+   * tenancy proof, and it is sufficient: nothing note-scoped is read.
+   */
+  readonly noteId?: string | null;
+  readonly requestId: string | null;
+  readonly prompt: AiPromptPlan;
+}
+
+export interface AiCompletion {
+  readonly text: string;
+  readonly promptTokens: number | null;
+  readonly completionTokens: number | null;
 }
 
 /**
@@ -117,7 +147,12 @@ export class AiStreamService {
     });
 
     // 2. The fail-closed governance gate. Still pre-SSE, deliberately.
-    const grant = await this.acquire(input);
+    const grant = await this.acquire({
+      workspaceId: input.workspaceId,
+      userId: input.principal.userId,
+      feature: prompt.feature,
+      response,
+    });
 
     // 3. The adapter. `null` means the stored provider is `disabled`, which the
     // gate should already have refused — reaching here means the row changed
@@ -296,19 +331,186 @@ export class AiStreamService {
   }
 
   /**
+   * One generation, collected into a string.
+   *
+   * THE PROLOGUE IS `run()`'S, IN THE SAME ORDER, AND FOR THE SAME REASON:
+   * authorize, acquire the grant, resolve the provider, and only then talk to
+   * anyone. Nothing here is streamed, so there is no "past this line an
+   * exception cannot be a JSON envelope" boundary — but the ordering is what
+   * keeps a refusal cheap (no provider call) and correct (no grant consumed by a
+   * request the authorization layer was going to deny anyway).
+   *
+   * EXACTLY ONE `ai_usage` ROW, in a `finally`, exactly as `run()` does it. A
+   * caller that runs a repair pass therefore produces TWO rows under one feature
+   * id, which is the honest description of what it spent.
+   */
+  async complete(input: AiCompletionInput): Promise<AiCompletion> {
+    const { prompt } = input;
+
+    // 1. Note-level tenancy, when the request names a note. `suggestTags` does;
+    // `extract` does not, because a pasted transcript belongs to no note yet.
+    // The empty-string check is not paranoia about types: an accidental `""`
+    // from a caller must not silently skip an authorization step.
+    if (typeof input.noteId === "string" && input.noteId.length > 0) {
+      await this.authorization.authorizeUser({
+        principal: input.principal,
+        workspaceId: input.workspaceId,
+        action: "note.read",
+        resource: { kind: "note", id: input.noteId },
+        requestId: input.requestId,
+      });
+    }
+
+    // 2. The fail-closed governance gate. No `response`, so no `Retry-After` —
+    // see the note on `acquire`.
+    const grant = await this.acquire({
+      workspaceId: input.workspaceId,
+      userId: input.principal.userId,
+      feature: prompt.feature,
+    });
+
+    // 3. Same fail-closed answer as `run()` when the row changed under us.
+    const provider = this.providers.resolve(grant.provider);
+    if (provider === null) {
+      await grant.recordUsage({ status: "failed", errorCode: "ai_not_configured" });
+      throw new ApiHttpException(HttpStatus.CONFLICT, {
+        code: "AI_NOT_CONFIGURED",
+        message: "AI is not configured for this workspace.",
+      });
+    }
+
+    const controller = new AbortController();
+    let text = "";
+    let usage: StreamUsage | null = null;
+    let streamError: AiStreamErrorCode | null = null;
+    let providerCode: AiProviderErrorCode | null = null;
+
+    try {
+      for await (const event of provider.stream(
+        {
+          model: grant.model,
+          apiKey: grant.apiKey,
+          system: prompt.system,
+          messages: prompt.messages,
+          maxOutputTokens: prompt.maxOutputTokens,
+        },
+        controller.signal,
+      )) {
+        if (event.type === "usage") {
+          // The LAST usage event wins: Anthropic splits it across two frames.
+          usage = { promptTokens: event.promptTokens, completionTokens: event.completionTokens };
+          continue;
+        }
+        // 4. The server's own ceiling. A JSON document cut off at the limit is
+        // not a shorter answer, it is an unparseable one — so this is a failure
+        // rather than a truncated success, and the caller never sees half an
+        // object it might mistake for a whole one.
+        if (text.length + event.text.length > prompt.maxOutputChars) {
+          streamError = "ai_output_truncated";
+          controller.abort();
+          break;
+        }
+        text += event.text;
+      }
+    } catch (error) {
+      // `streamError === null` guards the same overwrite `run()` guards: a
+      // provider generator cleaning up an aborted body can throw from its
+      // `return()`, which would land here after the truncation branch already
+      // decided what happened.
+      if (streamError === null) {
+        streamError = "ai_provider_error";
+        providerCode = error instanceof AiChatProviderError ? error.code : "network";
+      }
+    } finally {
+      /*
+       * Empty output is NOT an error here, deliberately — unlike `run()`, where
+       * an empty stream is all the client will ever get. A JSON caller hands the
+       * empty string to `json-repair`, which spends the one repair pass it was
+       * always allowed and usually gets an answer. Metering it as `success` is
+       * accurate: the provider completed, it simply said nothing, and the
+       * workspace was charged for the prompt tokens either way.
+       */
+      const outcome = this.outcome({
+        cancelled: false,
+        streamError,
+        providerCode,
+        usage,
+        streamedChars: text.length,
+      });
+      try {
+        await grant.recordUsage(outcome);
+      } catch {
+        // Deliberately swallowed: a metering failure must not become the
+        // caller's error. The log line below still records the outcome.
+      }
+      this.logger.info(
+        {
+          workspaceId: input.workspaceId,
+          feature: prompt.feature,
+          status: outcome.status,
+          errorCode: outcome.errorCode ?? undefined,
+        },
+        "AI completion finished",
+      );
+    }
+
+    if (streamError === "ai_output_truncated") {
+      throw new ApiHttpException(HttpStatus.BAD_GATEWAY, {
+        code: "AI_PROVIDER_ERROR",
+        message: STREAM_MESSAGE.ai_output_truncated,
+      });
+    }
+    if (streamError !== null) {
+      // Copy from the CODE, never from a provider response body — the body
+      // quotes the request back, and the request is the note or the transcript.
+      throw new ApiHttpException(HttpStatus.BAD_GATEWAY, {
+        code: "AI_PROVIDER_ERROR",
+        message: PROVIDER_MESSAGE[providerCode ?? "network"],
+      });
+    }
+
+    return {
+      text,
+      promptTokens: usage?.promptTokens ?? null,
+      completionTokens: usage?.completionTokens ?? null,
+    };
+  }
+
+  /**
    * `Retry-After` is set here and nowhere else: `AiGovernanceRefusal` carries
    * `retryAfterMs` for exactly this, and the header must land on the response
    * before the exception filter serialises it. Nothing is written to the body.
+   *
+   * `response` is OPTIONAL because `complete()` never holds one — Nest owns the
+   * response object for an ordinary JSON handler, and reaching for it would mean
+   * taking `@Res()` on a route that has no reason to. The consequence is
+   * deliberate and worth stating: the two Part 69 JSON routes answer a rate-limit
+   * refusal with the correct 429 envelope and `retryAfterMs` inside it, but
+   * WITHOUT the `Retry-After` header the three streaming routes carry.
+   *
+   * ponytail: the ceiling is that a generic HTTP client backing off on the
+   * header alone gets no hint on those two routes; every Notted client reads the
+   * refusal body. Upgrade path: move the header onto the exception filter, where
+   * it belongs for every route at once, rather than threading a `Response` here.
    */
-  private async acquire(input: AiStreamRunInput): Promise<AiRuntimeGrant> {
+  private async acquire(input: {
+    readonly workspaceId: string;
+    readonly userId: string;
+    readonly feature: AiPromptFeature;
+    readonly response?: Response;
+  }): Promise<AiRuntimeGrant> {
     try {
       return await this.governance.acquire({
         workspaceId: input.workspaceId,
-        userId: input.principal.userId,
-        feature: input.prompt.feature,
+        userId: input.userId,
+        feature: input.feature,
       });
     } catch (error) {
-      if (error instanceof AiGovernanceRefusal && error.retryAfterMs !== null) {
+      if (
+        input.response !== undefined &&
+        error instanceof AiGovernanceRefusal &&
+        error.retryAfterMs !== null
+      ) {
         input.response.setHeader("Retry-After", String(Math.ceil(error.retryAfterMs / 1_000)));
       }
       throw error;

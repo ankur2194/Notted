@@ -14,6 +14,8 @@ import type { CommentAnchorTarget } from "@/components/editor/extensions/comment
 import type { Editor } from "@tiptap/core";
 
 import { AiPanel } from "@/components/ai/AiPanel";
+import { MeetingExtractionDialog } from "@/components/ai/MeetingExtractionDialog";
+import { TagSuggestions } from "@/components/ai/TagSuggestions";
 import {
   createAttachmentDirectory,
   documentHasAttachment,
@@ -514,6 +516,40 @@ export function NoteEditorSurface({
            */
           editable={editable}
         />
+      ) : null}
+      {/*
+       * Part 69, mounted as siblings of the panel rather than inside it, for
+       * two different reasons.
+       *
+       * `MeetingExtractionDialog` renders no trigger of its own: it registers a
+       * handler on a one-slot module store, and the AI panel's button and the
+       * `/meeting-extraction` slash command both reach it through that store.
+       * Living inside the panel would tie its existence to the panel being
+       * OPEN, and the slash command must work whether or not it is — the same
+       * reason Part 68's continuation handler is a store and not a prop.
+       *
+       * `TagSuggestions` needs the live editor, which is why it is here and not
+       * beside the note list's tag picker: the text it sends is the document as
+       * the author currently sees it (Part 58 hands `notes.content` to the Yjs
+       * projection, so the row can be behind), and the note list has no editor
+       * to read. Both share `AiPanel`'s `GET /ai/status` query key, so the
+       * three of them cost exactly one status request between them.
+       */}
+      {aiEnabled ? (
+        <>
+          <MeetingExtractionDialog
+            workspaceId={workspaceId}
+            noteId={noteId}
+            editor={editorInstance}
+            editable={editable}
+          />
+          <TagSuggestions
+            workspaceId={workspaceId}
+            noteId={noteId}
+            editor={editorInstance}
+            editable={editable}
+          />
+        </>
       ) : null}
       {/*
        * The picker lives here rather than inside the editor: a file input is a

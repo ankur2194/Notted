@@ -19,9 +19,13 @@ export {
   AI_PROMPT_FEATURES,
   AI_PROMPT_GUARDRAILS,
   buildContinuePrompt,
+  buildJsonRepairPrompt,
+  buildMeetingExtractionPrompt,
   buildRewritePrompt,
   buildSummarizePrompt,
+  buildTagSuggestionPrompt,
   stripContentDelimiter,
+  stripDelimiter,
   type AiPromptFeature,
   type AiPromptPlan,
 } from "./ai-prompts";
@@ -32,8 +36,15 @@ export {
   type AiRuntimeGrant,
   type AiUsageOutcome,
 } from "./ai-governance.service";
-export { AiStreamService, type AiStreamRunInput } from "./ai-stream.service";
+export {
+  AiStreamService,
+  type AiCompletion,
+  type AiCompletionInput,
+  type AiStreamRunInput,
+} from "./ai-stream.service";
 export { AiController } from "./ai.controller";
 export { AiModule } from "./ai.module";
 export { AiService } from "./ai.service";
+export { parseJsonWithRepair, stripJsonFences } from "./json-repair";
+export { MeetingExtractionService } from "./meeting-extraction.service";
 export * from "./providers";

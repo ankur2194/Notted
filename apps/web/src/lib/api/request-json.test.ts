@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { requestJson } from "./request-json";
+import { DEFAULT_TIMEOUT_MS, requestJson } from "./request-json";
 
 const parser = (value: unknown) => ({ success: true as const, data: value });
 
@@ -60,5 +60,93 @@ describe("requestJson error bucketing", () => {
     expect(await requestJson("/x", {}, parser)).toEqual({ ok: false, kind: "invalid" });
     respond(409, { detail: "no code here" });
     expect(await requestJson("/x", {}, parser)).toEqual({ ok: false, kind: "conflict" });
+  });
+});
+
+/**
+ * Answers 200 and records the `RequestInit` the caller actually handed `fetch`,
+ * honouring an already-aborted signal the way a real `fetch` does — that
+ * rejection is exactly what the `unavailable` bucket is asserted on below.
+ */
+function captureInit(): { readonly calls: RequestInit[] } {
+  const calls: RequestInit[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_input: unknown, init: RequestInit = {}) => {
+      calls.push(init);
+      if (init.signal?.aborted === true) throw new DOMException("Aborted", "AbortError");
+      return new Response(JSON.stringify({ ok: 1 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }),
+  );
+  return { calls };
+}
+
+describe("requestJson cancellation", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("applies the house default when no timeout is asked for", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    captureInit();
+
+    await requestJson("/x", {}, parser);
+
+    expect(timeout).toHaveBeenCalledWith(DEFAULT_TIMEOUT_MS);
+  });
+
+  it("uses a caller's timeout instead", async () => {
+    // Part 69's meeting extraction: a model reading a 100 000-character
+    // transcript runs well past eight seconds, and aborting it would report a
+    // working request as a network fault.
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    captureInit();
+
+    await requestJson("/x", {}, parser, { timeoutMs: 120_000 });
+
+    expect(timeout).toHaveBeenCalledWith(120_000);
+    expect(timeout).not.toHaveBeenCalledWith(DEFAULT_TIMEOUT_MS);
+  });
+
+  it("fails as a retryable outage when the caller's signal is already aborted", async () => {
+    captureInit();
+
+    expect(await requestJson("/x", {}, parser, { signal: AbortSignal.abort() })).toEqual({
+      ok: false,
+      kind: "unavailable",
+      retryable: true,
+    });
+  });
+
+  it("still gives a keepalive request no abort timer", async () => {
+    // A timer on a page that is going away either never fires or kills the very
+    // flush it was scheduled for, so the keepalive rule is unconditional.
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const { calls } = captureInit();
+
+    await requestJson("/x", { method: "POST", body: "{}" }, parser, {
+      keepalive: true,
+      timeoutMs: 500,
+    });
+
+    expect(timeout).not.toHaveBeenCalled();
+    expect(calls[0]?.keepalive).toBe(true);
+    expect(calls[0]?.signal).toBeUndefined();
+  });
+
+  it("honours a caller's signal alone on a keepalive request", async () => {
+    const { calls } = captureInit();
+
+    const result = await requestJson("/x", { method: "POST", body: "{}" }, parser, {
+      keepalive: true,
+      signal: AbortSignal.abort(),
+    });
+
+    expect(calls[0]?.signal).toBeDefined();
+    expect(result).toEqual({ ok: false, kind: "unavailable", retryable: true });
   });
 });

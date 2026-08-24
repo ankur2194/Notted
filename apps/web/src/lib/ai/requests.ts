@@ -2,14 +2,28 @@ import { AI_API_PATHS } from "@notted/shared-types";
 import {
   aiConfigUpdateSchema,
   aiConfigViewSchema,
+  aiMeetingExtractionRequestSchema,
+  aiMeetingExtractionResultSchema,
   aiStatusSchema,
+  aiTagSuggestionRequestSchema,
+  aiTagSuggestionResultSchema,
   aiUsageQuerySchema,
   aiUsageSummarySchema,
 } from "@notted/shared-validators";
 
 import type { ApiRequestResult } from "@/lib/api/request-json";
-import type { AiConfigView, AiStatus, AiUsageSummary } from "@notted/shared-types";
-import type { AiConfigUpdateInput } from "@notted/shared-validators";
+import type {
+  AiConfigView,
+  AiStatus,
+  AiUsageSummary,
+  MeetingExtractionResult,
+  TagSuggestionResult,
+} from "@notted/shared-types";
+import type {
+  AiConfigUpdateInput,
+  AiMeetingExtractionRequestInput,
+  AiTagSuggestionRequestInput,
+} from "@notted/shared-validators";
 
 import { json, requestJson, validIds } from "@/lib/api/request-json";
 
@@ -84,5 +98,78 @@ export function fetchAiUsage(
   }
   return requestJson(`${AI_API_PATHS.usage(workspaceId)}?${search.toString()}`, {}, (value) =>
     aiUsageSummarySchema.safeParse(value),
+  );
+}
+
+/* ------------------------------------------------------------------------- *
+ * Part 69 — meeting extraction and tag suggestion.
+ *
+ * Unlike Part 68's three features these answer ORDINARY JSON rather than an
+ * event stream, so they go through `requestJson` like every other typed client
+ * in this app: one structured object, `safeParse`d as a whole, with nothing
+ * useful to show a reader halfway through a half-parsed extraction.
+ *
+ * BOTH NEED A TIMEOUT THE HOUSE DEFAULT DOES NOT GIVE THEM. `requestJson`
+ * aborts at 8 seconds, which is right for a CRUD round trip and wrong for a
+ * provider call: a model reading a 100 000-character transcript routinely runs
+ * past a minute, and the 8s abort would land in the `unavailable` bucket and
+ * tell the author their network failed while the request was working perfectly.
+ * The ceilings below are generous rather than tight for the same reason — an
+ * over-long wait is visible and cancellable, a false "try again" is neither.
+ * ------------------------------------------------------------------------- */
+
+/** Roughly a two-hour transcript's worth of model time, plus provider latency. */
+const MEETING_EXTRACTION_TIMEOUT_MS = 120_000;
+/** A note is at most 50 000 characters and the answer is a handful of tags. */
+const TAG_SUGGESTION_TIMEOUT_MS = 30_000;
+
+/** Cancellation the caller owns: a closed dialog, an unmounted panel. */
+export interface AiRequestOptions {
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * Structure pulled out of a pasted transcript, for a human to review.
+ *
+ * Nothing here is written anywhere: the response is a proposal, and the review
+ * screen is what turns any of it into note content or tasks.
+ */
+export function requestMeetingExtraction(
+  workspaceId: string,
+  input: AiMeetingExtractionRequestInput,
+  options: AiRequestOptions = {},
+): Promise<ApiRequestResult<MeetingExtractionResult>> {
+  const parsed = aiMeetingExtractionRequestSchema.safeParse(input);
+  if (!validIds(workspaceId) || !parsed.success) {
+    return Promise.resolve({ ok: false, kind: "invalid" });
+  }
+  return requestJson(
+    AI_API_PATHS.meetingExtraction(workspaceId),
+    json("POST", parsed.data),
+    (value) => aiMeetingExtractionResultSchema.safeParse(value),
+    { timeoutMs: MEETING_EXTRACTION_TIMEOUT_MS, signal: options.signal },
+  );
+}
+
+/**
+ * Tags for a note: workspace tags matched server-side against the real tag pool
+ * (`existing`, with real ids) kept apart from names that do not exist yet
+ * (`proposed`). Selecting one and creating one are different consequences, so
+ * the contract never mixes them into one nullable-id list.
+ */
+export function requestTagSuggestions(
+  workspaceId: string,
+  input: AiTagSuggestionRequestInput,
+  options: AiRequestOptions = {},
+): Promise<ApiRequestResult<TagSuggestionResult>> {
+  const parsed = aiTagSuggestionRequestSchema.safeParse(input);
+  if (!validIds(workspaceId) || !parsed.success) {
+    return Promise.resolve({ ok: false, kind: "invalid" });
+  }
+  return requestJson(
+    AI_API_PATHS.tagSuggestions(workspaceId),
+    json("POST", parsed.data),
+    (value) => aiTagSuggestionResultSchema.safeParse(value),
+    { timeoutMs: TAG_SUGGESTION_TIMEOUT_MS, signal: options.signal },
   );
 }

@@ -1,14 +1,41 @@
 import { safeParseNoteDocument } from "@notted/shared-validators";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { SLASH_COMMANDS } from "./slash-commands";
 
 import type { Editor } from "@tiptap/core";
 
+import { setMeetingExtractionHandler } from "@/lib/ai/meeting-extraction-request";
 import { renderEditor } from "@/test/editor-harness";
 
 const EMPTY_DOCUMENT = { type: "doc", content: [{ type: "paragraph" }] };
+
+/**
+ * Part 69's `/meeting-extraction` is offered only while a dialog is mounted to
+ * serve it — `isAvailable` reads the one-slot handler store, exactly as the
+ * `Mod-Enter` continuation does.
+ *
+ * Registering a handler here is therefore not a convenience: without it the
+ * entry is filtered out of the menu and every `SLASH_COMMANDS.length`
+ * assertion in this file would be off by one, which would read as a broken
+ * menu rather than as an unmounted dialog. The counter is what the command's
+ * expectation asserts against, since the command's whole contract is that it
+ * reaches the host and leaves the document alone.
+ */
+let meetingExtractionOpens = 0;
+
+beforeEach(() => {
+  meetingExtractionOpens = 0;
+  setMeetingExtractionHandler(() => {
+    meetingExtractionOpens += 1;
+    return true;
+  });
+});
+
+afterEach(() => {
+  setMeetingExtractionHandler(null);
+});
 
 function paragraphs(...texts: readonly string[]) {
   return {
@@ -217,6 +244,19 @@ const COMMAND_EXPECTATIONS: Readonly<Record<string, (context: CommandContext) =>
     // The two pickers are distinct: `/attachment` must never open the image one.
     expect(imageFileRequests).toHaveLength(0);
     expect(nodeTypes(editor)).not.toContain("attachment");
+    expect(editor.state.doc.toJSON()).toEqual({
+      type: "doc",
+      content: [{ type: "paragraph", attrs: { textAlign: null } }],
+    });
+  },
+  meetingExtraction: ({ editor }) => {
+    // Part 69, and the strongest form of the `/image` statement: the command
+    // asks the host to open the extraction dialog and touches the document not
+    // at all. Nothing may be inserted here — the whole point of the feature is
+    // that a transcript becomes note content only after a human has reviewed
+    // it — so the assertion is that the trigger text was consumed and the
+    // document is byte-identical to the empty one it started as.
+    expect(meetingExtractionOpens).toBe(1);
     expect(editor.state.doc.toJSON()).toEqual({
       type: "doc",
       content: [{ type: "paragraph", attrs: { textAlign: null } }],

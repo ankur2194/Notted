@@ -24,8 +24,10 @@ import { Body, Controller, Get, HttpStatus, Post, Put, Query, Req, Res } from "@
 import {
   aiConfigUpdateSchema,
   aiContinueRequestSchema,
+  aiMeetingExtractionRequestSchema,
   aiRewriteRequestSchema,
   aiSummarizeRequestSchema,
+  aiTagSuggestionRequestSchema,
   aiUsageQuerySchema,
   uuidSchema,
 } from "@notted/shared-validators";
@@ -40,6 +42,7 @@ import { getRequestId } from "../common/request/request-context";
 import { buildContinuePrompt, buildRewritePrompt, buildSummarizePrompt } from "./ai-prompts";
 import { AiStreamService } from "./ai-stream.service";
 import { AiService } from "./ai.service";
+import { MeetingExtractionService } from "./meeting-extraction.service";
 
 import type { AiPromptPlan } from "./ai-prompts";
 import type {
@@ -47,6 +50,8 @@ import type {
   AiStatus,
   AiUsageSummary,
   AuthenticatedPrincipal,
+  MeetingExtractionResult,
+  TagSuggestionResult,
 } from "@notted/shared-types";
 import type { Request, Response } from "express";
 
@@ -67,6 +72,7 @@ export class AiController {
     private readonly ai: AiService,
     private readonly auth: AuthService,
     private readonly stream: AiStreamService,
+    private readonly meetings: MeetingExtractionService,
   ) {}
 
   @Get("config")
@@ -167,6 +173,44 @@ export class AiController {
     const body = aiRewriteRequestSchema.safeParse(rawBody);
     if (!body.success) this.invalid();
     return this.run(request, response, body.data.noteId, buildRewritePrompt(body.data));
+  }
+
+  /**
+   * Part 69 — the two JSON features.
+   *
+   * NO `@Res()` HERE, deliberately. These answer with a value, so they go
+   * through Nest's ordinary serialisation and the global exception filter can
+   * still turn a governance refusal, a provider failure or an unreadable model
+   * reply into a normal error envelope — the thing the streaming routes give up
+   * in exchange for streaming (ADR 0013).
+   *
+   * Same tier and the same trusted-origin check as the streaming three, and for
+   * the same reason: both spend a workspace's money at a third party, and both
+   * may run TWO provider calls when the first reply needs repairing.
+   */
+  @Post("meeting-extraction")
+  @RateLimitTier("sensitive")
+  @RequireAuthorization(workspaceAuthorization("ai.use"))
+  extractMeeting(
+    @Req() request: Request,
+    @Body() rawBody: unknown,
+  ): Promise<MeetingExtractionResult> {
+    this.auth.assertTrustedMutationOrigin(request);
+    const body = aiMeetingExtractionRequestSchema.safeParse(rawBody);
+    if (!body.success) this.invalid();
+    return this.meetings.extract({ ...this.scope(request), transcript: body.data.transcript });
+  }
+
+  @Post("tag-suggestions")
+  @RateLimitTier("sensitive")
+  @RequireAuthorization(workspaceAuthorization("ai.use"))
+  suggestTags(@Req() request: Request, @Body() rawBody: unknown): Promise<TagSuggestionResult> {
+    this.auth.assertTrustedMutationOrigin(request);
+    const body = aiTagSuggestionRequestSchema.safeParse(rawBody);
+    if (!body.success) this.invalid();
+    // `noteId` is authorized for `note.read` inside the service — the route's
+    // own spec addresses the workspace, not the note.
+    return this.meetings.suggestTags({ ...this.scope(request), ...body.data });
   }
 
   private run(

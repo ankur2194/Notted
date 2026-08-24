@@ -1,4 +1,5 @@
 import {
+  CalendarClock,
   Heading1,
   Heading2,
   Heading3,
@@ -26,6 +27,11 @@ import "./extensions/CustomImage";
 import "./extensions/CustomAttachment";
 
 import { TABLE_ACTIONS } from "./toolbar-commands";
+
+import {
+  isMeetingExtractionAvailable,
+  openMeetingExtraction,
+} from "@/lib/ai/meeting-extraction-request";
 
 import type { ChainedCommands, Editor, Range } from "@tiptap/core";
 import type { LucideIcon } from "lucide-react";
@@ -218,6 +224,35 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
      * reference is ever written to the document.
      */
     run: replaceRange((chain) => chain.nottedRequestAttachmentUpload()),
+  },
+  {
+    id: "meetingExtraction",
+    label: "Extract meeting notes",
+    description: "Turn a pasted transcript into attendees, decisions, and action items",
+    icon: CalendarClock,
+    keywords: ["meeting", "transcript", "minutes", "action-items", "notes", "ai"],
+    /*
+     * Offered only while the dialog is mounted and able to serve the command —
+     * AI enabled and configured, the note editable, an editor mounted. The
+     * registration IS the availability check, so this entry never has to
+     * duplicate the dialog's conditions or read the workspace's AI status.
+     */
+    isAvailable: () => isMeetingExtractionAvailable(),
+    /*
+     * Inserts nothing on its own, exactly like `/image` and `/attachment`: it
+     * deletes the typed `/…` and asks the host to open the review dialog. Note
+     * content only ever appears once a human has confirmed what a model found,
+     * so nothing provisional is written to the document at any point.
+     *
+     * Shaped like the `table` entry rather than `replaceRange`: the typed range
+     * is deleted by its own chain first, so opening the dialog is a plain side
+     * effect and can never be entangled with whether a chained command reported
+     * success.
+     */
+    run: (editor, range) => {
+      editor.chain().focus().deleteRange(range).run();
+      openMeetingExtraction();
+    },
   },
 ]);
 

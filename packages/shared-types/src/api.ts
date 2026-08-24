@@ -61,7 +61,17 @@ export type ApiErrorCode =
   | "AI_CONSENT_REQUIRED"
   | "AI_QUOTA_EXCEEDED"
   | "AI_RATE_LIMITED"
-  | "AI_CREDENTIAL_REQUIRED";
+  | "AI_CREDENTIAL_REQUIRED"
+  // Part 69 — structured AI output. `AI_OUTPUT_INVALID` (422) is a model that
+  // produced something the response contract rejects, twice, including after
+  // being shown the validation error; `AI_PROVIDER_ERROR` (502) is the provider
+  // itself failing a non-streaming call. Part 68's streaming routes report the
+  // second one as a stream frame instead, because by then the response is
+  // already an event stream and cannot carry an envelope. Both are separate
+  // from the governance refusals above: nothing an admin configures fixes them,
+  // and the remedy is simply to try again.
+  | "AI_OUTPUT_INVALID"
+  | "AI_PROVIDER_ERROR";
 
 export interface ApiError {
   readonly code: ApiErrorCode;

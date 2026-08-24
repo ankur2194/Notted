@@ -18,6 +18,7 @@ import {
   moveNoteSchema,
   noteCreateResultSchema,
   noteDeleteResultSchema,
+  noteDetailSchema,
   noteListQuerySchema,
   noteMoveResultSchema,
   notePageSchema,
@@ -52,6 +53,7 @@ import type {
   FolderUpdateResult,
   NoteCreateResult,
   NoteDeleteResult,
+  NoteDetail,
   NoteListQuery,
   NoteMoveResult,
   NotePage,
@@ -156,6 +158,28 @@ export function requestNotePage(
     `${NOTE_API_PATHS.collection(workspaceId)}?${listSearch(parsed.data)}`,
     {},
     (value) => notePageSchema.safeParse(value),
+  );
+}
+
+/**
+ * One note, read from the browser.
+ *
+ * The same endpoint `getServerNoteDetail` reads, parsed the same way: the
+ * response is a bare `NoteDetail`, not an envelope around one.
+ *
+ * It exists for the writers that need the note's CURRENT `version` immediately
+ * before a `PATCH`. Part 39 autosave bumps `notes.version` continuously while
+ * the author types, so a version captured when a component mounted is stale by
+ * the time a slow user interaction completes and would lose the `expectedVersion`
+ * CAS on a note that is merely being edited normally.
+ */
+export function requestNoteDetail(
+  workspaceId: string,
+  noteId: string,
+): Promise<NoteRequestResult<NoteDetail>> {
+  if (!validIds(workspaceId, noteId)) return Promise.resolve({ ok: false, kind: "invalid" });
+  return requestJson(NOTE_API_PATHS.detail(workspaceId, noteId), {}, (value) =>
+    noteDetailSchema.safeParse(value),
   );
 }
 

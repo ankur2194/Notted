@@ -67,6 +67,13 @@ describe("slash command table", () => {
     // `/image` and `/attachment` are also the two entries that insert nothing by
     // themselves: each opens the host's file picker, and a node appears only
     // once real bytes have a permanent attachment id.
+    //
+    // Part 69's `meetingExtraction` is a third of that kind, and the furthest
+    // from a node-producing command: it opens the extraction dialog and inserts
+    // nothing at all until the author has reviewed what the model proposed.
+    // Its `isAvailable` is therefore about whether a dialog is mounted to serve
+    // it, not about the selection — which is why this list is the completeness
+    // check and the availability filter is tested separately.
     expect(SLASH_COMMANDS.map((command) => command.id)).toEqual([
       "heading1",
       "heading2",
@@ -82,6 +89,7 @@ describe("slash command table", () => {
       "pageBreak",
       "image",
       "attachment",
+      "meetingExtraction",
     ]);
   });
 

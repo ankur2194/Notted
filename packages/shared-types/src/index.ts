@@ -41,6 +41,10 @@ export {
   AI_STREAM_ERROR_CODES,
   AI_SUMMARY_LENGTHS,
   AI_TONES,
+  MEETING_EXTRACTION_AGENDA_MAX,
+  MEETING_EXTRACTION_LIST_MAX,
+  TAG_SUGGESTION_EXISTING_MAX,
+  TAG_SUGGESTION_PROPOSED_MAX,
 } from "./ai";
 export type {
   AiConfigView,
@@ -55,6 +59,12 @@ export type {
   AiUsageFeatureSummary,
   AiUsageStatus,
   AiUsageSummary,
+  MeetingActionItem,
+  MeetingExtraction,
+  MeetingExtractionResult,
+  TagSuggestionExistingTag,
+  TagSuggestionProposedTag,
+  TagSuggestionResult,
 } from "./ai";
 export { API_KEY_API_PATHS, API_KEY_SECRET_PREFIX } from "./api-key";
 export type {

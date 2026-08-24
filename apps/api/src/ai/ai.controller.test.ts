@@ -23,6 +23,7 @@ import { AiController } from "./ai.controller";
 
 import type { AiStreamService } from "./ai-stream.service";
 import type { AiService } from "./ai.service";
+import type { MeetingExtractionService } from "./meeting-extraction.service";
 import type { AuthService } from "../auth/auth.service";
 import type { Request, Response } from "express";
 
@@ -61,6 +62,7 @@ function controller(
   service: Partial<AiService>,
   origin = vi.fn(),
   run = vi.fn().mockResolvedValue(undefined),
+  meetings: Partial<MeetingExtractionService> = {},
 ): AiController {
   return new AiController(
     service as AiService,
@@ -68,6 +70,7 @@ function controller(
       assertTrustedMutationOrigin: origin,
     } as unknown as AuthService,
     { run } as unknown as AiStreamService,
+    meetings as MeetingExtractionService,
   );
 }
 
@@ -97,6 +100,12 @@ describe("AiController routing and authorization", () => {
       "/api/v1/workspaces/:workspaceId/ai/continue",
     );
     expect(AI_API_PATHS.rewrite(":workspaceId")).toBe("/api/v1/workspaces/:workspaceId/ai/rewrite");
+    expect(AI_API_PATHS.meetingExtraction(":workspaceId")).toBe(
+      "/api/v1/workspaces/:workspaceId/ai/meeting-extraction",
+    );
+    expect(AI_API_PATHS.tagSuggestions(":workspaceId")).toBe(
+      "/api/v1/workspaces/:workspaceId/ai/tag-suggestions",
+    );
     expect(Reflect.getMetadata(PATH_METADATA, AiController)).toBe("workspaces/:workspaceId/ai");
   });
 
@@ -109,6 +118,8 @@ describe("AiController routing and authorization", () => {
     ["summarize", RequestMethod.POST, "ai.use"],
     ["continueWriting", RequestMethod.POST, "ai.use"],
     ["rewrite", RequestMethod.POST, "ai.use"],
+    ["extractMeeting", RequestMethod.POST, "ai.use"],
+    ["suggestTags", RequestMethod.POST, "ai.use"],
   ] as const)("binds %s to its verb and authorization action", (handler, method, action) => {
     expect(Reflect.getMetadata(METHOD_METADATA, AiController.prototype[handler])).toBe(method);
     expect(specFor(handler).action).toBe(action);
@@ -292,6 +303,80 @@ describe("AiController streaming routes", () => {
 
   it("puts all three on the sensitive rate-limit tier", () => {
     for (const { handler } of cases) {
+      expect(Reflect.getMetadata(RATE_LIMIT_TIER, AiController.prototype[handler])).toBe(
+        "sensitive",
+      );
+    }
+  });
+});
+
+/**
+ * Part 69 — the two JSON routes. Ordinary handlers this time: they return a
+ * value, so a refusal or a bad reply is still an error envelope.
+ */
+describe("AiController JSON routes", () => {
+  const TRANSCRIPT = "Ana: we ship Friday. Ben: I will write the migration.";
+
+  it("enforces a trusted origin and forwards the parsed transcript", async () => {
+    const extract = vi.fn().mockResolvedValue({ extraction: { attendees: [] } });
+    const origin = vi.fn();
+
+    await controller({}, origin, vi.fn(), { extract }).extractMeeting(request(), {
+      transcript: TRANSCRIPT,
+    });
+
+    expect(origin).toHaveBeenCalledOnce();
+    expect(extract).toHaveBeenCalledWith({
+      principal: expect.objectContaining({ userId: USER_ID }),
+      workspaceId: WORKSPACE_ID,
+      requestId: null,
+      transcript: TRANSCRIPT,
+    });
+  });
+
+  it("enforces a trusted origin and forwards the note id and content for tags", async () => {
+    const suggestTags = vi.fn().mockResolvedValue({ existing: [], proposed: [] });
+    const origin = vi.fn();
+
+    await controller({}, origin, vi.fn(), { suggestTags }).suggestTags(request(), {
+      noteId: NOTE_ID,
+      content: "a note about the roadmap",
+    });
+
+    expect(origin).toHaveBeenCalledOnce();
+    expect(suggestTags).toHaveBeenCalledWith({
+      principal: expect.objectContaining({ userId: USER_ID }),
+      workspaceId: WORKSPACE_ID,
+      requestId: null,
+      noteId: NOTE_ID,
+      content: "a note about the roadmap",
+    });
+  });
+
+  it.each([
+    ["extractMeeting", {}],
+    ["extractMeeting", { transcript: "" }],
+    ["extractMeeting", { transcript: "   " }],
+    ["extractMeeting", { transcript: "x".repeat(100_001) }],
+    ["extractMeeting", { transcript: TRANSCRIPT, extra: 1 }],
+    ["suggestTags", { noteId: NOTE_ID }],
+    ["suggestTags", { noteId: "not-a-uuid", content: "note" }],
+    ["suggestTags", { noteId: NOTE_ID, content: "" }],
+    ["suggestTags", { noteId: NOTE_ID, content: "x".repeat(50_001) }],
+    ["suggestTags", { noteId: NOTE_ID, content: "note", extra: true }],
+  ] as const)("%s refuses a malformed body before it spends anything", (handler, body) => {
+    const spy = vi.fn();
+    const origin = vi.fn();
+    const instance = controller({}, origin, vi.fn(), { extract: spy, suggestTags: spy });
+
+    expect(() => instance[handler](request(), body)).toThrow("The request is invalid.");
+    // The origin check runs first, and deliberately.
+    expect(origin).toHaveBeenCalledOnce();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("puts both on the sensitive rate-limit tier", () => {
+    for (const handler of ["extractMeeting", "suggestTags"] as const) {
       expect(Reflect.getMetadata(RATE_LIMIT_TIER, AiController.prototype[handler])).toBe(
         "sensitive",
       );

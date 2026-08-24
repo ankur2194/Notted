@@ -3,9 +3,13 @@ import {
   aiConfigUpdateSchema,
   aiConfigViewSchema,
   aiContinueRequestSchema,
+  aiMeetingExtractionRequestSchema,
+  aiMeetingExtractionResultSchema,
   aiRewriteRequestSchema,
   aiStatusSchema,
   aiSummarizeRequestSchema,
+  aiTagSuggestionRequestSchema,
+  aiTagSuggestionResultSchema,
   aiUsageQuerySchema,
   aiUsageSummarySchema,
   apiKeyCreateResultSchema,
@@ -853,5 +857,25 @@ export const OPENAPI_ROUTES: Record<string, OpenApiRouteDoc> = {
     tags: ["AI"],
     description: SSE_STREAM_DESCRIPTION,
     body: aiRewriteRequestSchema,
+  },
+
+  // AI structure. Part 69. Unlike the three above these answer with JSON, so
+  // they document a response schema — the client gets a value to review, not a
+  // stream to render.
+  "POST /workspaces/{workspaceId}/ai/meeting-extraction": {
+    summary: "Extract attendees, agenda, decisions and action items from a transcript.",
+    tags: ["AI"],
+    description:
+      "Nothing is persisted: the transcript is never stored, and the extraction is computed, returned and forgotten. Applying any of it to a note is a separate, explicit action by the author. Every list is capped server-side before it is returned. An unreadable model reply is retried once and then answered with AI_OUTPUT_INVALID rather than a partial object.",
+    body: aiMeetingExtractionRequestSchema,
+    response: aiMeetingExtractionResultSchema,
+  },
+  "POST /workspaces/{workspaceId}/ai/tag-suggestions": {
+    summary: "Suggest tags for a note, split into existing and new.",
+    tags: ["AI"],
+    description:
+      "Nothing is persisted and no tag is created or attached; applying a suggestion is a separate, explicit action. The model is shown tag NAMES only and never an id: every tagId in `existing` was matched server-side against this workspace's own tag pool, so a suggestion can never name a tag from another workspace. Names the pool does not contain come back under `proposed`, which the caller must create explicitly.",
+    body: aiTagSuggestionRequestSchema,
+    response: aiTagSuggestionResultSchema,
   },
 };

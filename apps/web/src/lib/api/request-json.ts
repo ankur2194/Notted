@@ -52,6 +52,22 @@ export interface ApiRequestOptions {
    * keepalive limit, since a rejected request saves nothing at all.
    */
   readonly keepalive?: boolean;
+  /**
+   * How long the request may take before it is aborted, in milliseconds.
+   * Defaults to {@link DEFAULT_TIMEOUT_MS}.
+   *
+   * Raised only by callers whose endpoint is genuinely slow by nature — Part
+   * 69's meeting extraction reads a transcript of up to 100 000 characters and
+   * routinely runs past a minute. Under the house default that working request
+   * would abort and be reported as a network fault, which is a lie the user
+   * cannot act on.
+   */
+  readonly timeoutMs?: number;
+  /**
+   * Caller cancellation — a closed dialog, an unmounted component, a superseded
+   * request. Merged with the timeout above, so whichever fires first aborts.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -74,6 +90,15 @@ export type SafeParser<T> = (value: unknown) => { success: true; data: T } | { s
  * back to an ordinary request rather than silently vanish.
  */
 export const KEEPALIVE_BODY_LIMIT_BYTES = 64 * 1024;
+
+/**
+ * The ceiling every request runs under unless it asks for another.
+ *
+ * Eight seconds is long enough for an ordinary CRUD round trip on a poor
+ * connection and short enough that a stalled one becomes a retry rather than a
+ * spinner nobody escapes.
+ */
+export const DEFAULT_TIMEOUT_MS = 8_000;
 
 function bodyFitsKeepalive(body: BodyInit | null | undefined): boolean {
   if (typeof body !== "string") return false;
@@ -130,22 +155,43 @@ async function failureWithCode(
   return { ok: false, kind };
 }
 
+/**
+ * The single signal the request runs under.
+ *
+ * A keepalive request has to outlive the document that started it, so it gets
+ * NO abort timer: a timeout scheduled on a page that is going away either never
+ * fires or cancels the very request the flush exists to deliver. A caller's own
+ * `signal` is still honoured there — alone — because that is a cancellation
+ * someone explicitly asked for rather than a clock the flush cannot outrun.
+ *
+ * Everywhere else the two are merged, so whichever aborts first wins and the
+ * caller never has to reimplement the timeout to keep its own cancellation.
+ */
+function requestSignal(keepalive: boolean, options: ApiRequestOptions): AbortSignal | undefined {
+  const timeout = keepalive
+    ? undefined
+    : AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  if (options.signal === undefined) return timeout;
+  return timeout === undefined ? options.signal : AbortSignal.any([options.signal, timeout]);
+}
+
 export async function requestJson<T>(
   path: string,
   init: RequestInit,
   parser: SafeParser<T>,
   options: ApiRequestOptions = {},
 ): Promise<ApiRequestResult<T>> {
-  // A keepalive request has to outlive the document that started it, so it gets
-  // no abort timer: a timeout scheduled on a page that is going away either
-  // never fires or cancels the very request the flush exists to deliver.
   const keepalive = options.keepalive === true && bodyFitsKeepalive(init.body);
+  const signal = requestSignal(keepalive, options);
   try {
     const response = await fetch(new URL(path, publicEnvironment.NEXT_PUBLIC_API_URL), {
       ...init,
       cache: "no-store",
       credentials: "include",
-      ...(keepalive ? { keepalive: true } : { signal: AbortSignal.timeout(8_000) }),
+      ...(keepalive ? { keepalive: true } : {}),
+      // Spread conditionally rather than assigned: `signal: undefined` would
+      // OVERWRITE a signal an `init` carried, which is the opposite of absent.
+      ...(signal === undefined ? {} : { signal }),
     });
     if (!response.ok) {
       if (response.status === 400 || response.status === 422) {
@@ -168,8 +214,9 @@ export async function requestJson<T>(
     const parsed = parser(await response.json());
     return parsed.success ? { ok: true, data: parsed.data } : { ok: false, kind: "invalid" };
   } catch {
-    // Offline, DNS failure, TLS failure, or the 8s timeout above: all transient
-    // by nature, so the caller is allowed to repeat them.
+    // Offline, DNS failure, TLS failure, the timeout above, or a caller
+    // cancellation: all transient by nature, so the caller is allowed to repeat
+    // them. A caller that aborted deliberately already knows not to.
     return { ok: false, kind: "unavailable", retryable: true };
   }
 }

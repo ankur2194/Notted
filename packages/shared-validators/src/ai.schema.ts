@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { isoTimestampSchema, uuidSchema } from "./common.schema";
+import { tagNameSchema } from "./tag.schema";
 
 /**
  * Part 67 — AI configuration and governance contracts.
@@ -182,13 +183,7 @@ export const AI_REWRITE_MAX_CHARS = 4_000;
 
 export const aiSummaryLengthSchema = z.enum(["brief", "medium", "detailed"]);
 
-export const aiToneSchema = z.enum([
-  "professional",
-  "casual",
-  "concise",
-  "elaborate",
-  "simplify",
-]);
+export const aiToneSchema = z.enum(["professional", "casual", "concise", "elaborate", "simplify"]);
 
 /**
  * `.min(1)` after trimming, on all three: a request built from an empty
@@ -253,3 +248,153 @@ export const aiStreamEventSchema = z.discriminatedUnion("type", [
     })
     .strict(),
 ]);
+
+/**
+ * Part 69 — meeting extraction and tag suggestion.
+ *
+ * TWO KINDS OF SCHEMA LIVE BELOW AND THEY ARE NOT INTERCHANGEABLE.
+ *
+ * The REQUEST schemas are `.strict()`, like every other body in this file: the
+ * browser wrote them, an unknown key is a client bug, and rejecting it early is
+ * free.
+ *
+ * The MODEL-OUTPUT schema ({@link meetingExtractionSchema}) is deliberately NOT
+ * strict. It parses a JSON document a language model wrote, and a model that
+ * answers correctly and adds one helpful `"summary"` key alongside is not a
+ * failure worth a second billed provider call. Zod strips unknown keys by
+ * default, so being lenient here discards the extra field rather than trusting
+ * it — nothing unvalidated survives into the response. What IS enforced is
+ * everything that protects the reviewer: the shape, the per-item length, and
+ * the list caps.
+ *
+ * EVERY LIST DEFAULTS TO `[]`. A meeting with no decisions is the common case,
+ * and a model expressing that by omitting the key entirely (or sending `null`)
+ * is not malformed output. Defaulting means the review screen renders an empty
+ * section instead of paying for a repair pass to be told the same thing.
+ */
+export const AI_MEETING_TRANSCRIPT_MAX_CHARS = 100_000;
+export const AI_TAG_CONTENT_MAX_CHARS = 50_000;
+
+/** Per-item ceilings. An "attendee" longer than this is not a name. */
+export const AI_MEETING_ITEM_MAX_CHARS = 500;
+export const AI_MEETING_NAME_MAX_CHARS = 200;
+
+export const AI_MEETING_LIST_MAX = 100;
+export const AI_MEETING_AGENDA_MAX = 50;
+export const AI_TAG_SUGGESTION_EXISTING_MAX = 10;
+export const AI_TAG_SUGGESTION_PROPOSED_MAX = 5;
+
+export const aiMeetingExtractionRequestSchema = z
+  .object({
+    /**
+     * Pasted by the author, never read from a note: a transcript is normally
+     * something they have in a chat log or a meeting tool, not something already
+     * in Notted. 100 000 characters is roughly a two-hour transcript, and the
+     * bound is the cost control — the whole thing becomes prompt tokens.
+     */
+    transcript: z.string().trim().min(1).max(AI_MEETING_TRANSCRIPT_MAX_CHARS),
+  })
+  .strict();
+
+export type AiMeetingExtractionRequestInput = z.input<typeof aiMeetingExtractionRequestSchema>;
+
+/**
+ * `null` and `""` both mean "the transcript did not say", which is how a model
+ * expresses an absent optional far more often than by omitting the key. Mapping
+ * them to `undefined` here is the difference between an ordinary answer and a
+ * repair pass nobody needed.
+ */
+const aiOptionalText = (max: number) =>
+  z.preprocess(
+    (value) => (value === null || value === "" ? undefined : value),
+    z.string().trim().min(1).max(max).optional(),
+  );
+
+/** Calendar date, no time and no zone: a meeting says "by Friday". */
+const aiMeetingDueDate = z.preprocess(
+  (value) => (value === null || value === "" ? undefined : value),
+  z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/u, "Expected a YYYY-MM-DD calendar date")
+    .optional(),
+);
+
+export const aiMeetingActionItemSchema = z.object({
+  text: z.string().trim().min(1).max(AI_MEETING_ITEM_MAX_CHARS),
+  /** A name the transcript used, never a workspace member id — see the type docs. */
+  assignee: aiOptionalText(AI_MEETING_NAME_MAX_CHARS),
+  dueDate: aiMeetingDueDate,
+});
+
+const aiMeetingList = (max: number) =>
+  z
+    .preprocess(
+      (value) => (value === null || value === undefined ? [] : value),
+      z.array(z.string().trim().min(1).max(AI_MEETING_ITEM_MAX_CHARS)),
+    )
+    .transform((items) => items.slice(0, max))
+    .default([]);
+
+export const aiMeetingExtractionSchema = z.object({
+  attendees: aiMeetingList(AI_MEETING_LIST_MAX),
+  agenda: aiMeetingList(AI_MEETING_AGENDA_MAX),
+  discussionPoints: aiMeetingList(AI_MEETING_LIST_MAX),
+  decisions: aiMeetingList(AI_MEETING_LIST_MAX),
+  actionItems: z
+    .preprocess(
+      (value) => (value === null || value === undefined ? [] : value),
+      z.array(aiMeetingActionItemSchema),
+    )
+    .transform((items) => items.slice(0, AI_MEETING_LIST_MAX))
+    .default([]),
+});
+
+export const aiMeetingExtractionResultSchema = z
+  .object({ extraction: aiMeetingExtractionSchema })
+  .strict();
+
+export const aiTagSuggestionRequestSchema = z
+  .object({
+    /**
+     * Authorized for tenancy, and it is also what scopes the tag pool the
+     * server matches against. The text still comes from the live editor, for
+     * the same Part 58 reason the streaming features do.
+     */
+    noteId: uuidSchema,
+    content: z.string().trim().min(1).max(AI_TAG_CONTENT_MAX_CHARS),
+  })
+  .strict();
+
+export type AiTagSuggestionRequestInput = z.input<typeof aiTagSuggestionRequestSchema>;
+
+/**
+ * The intermediate shape the MODEL answers with: bare strings, no ids.
+ *
+ * A model is never shown a tag id and never asked to choose one. It proposes
+ * names; the server matches those names against the workspace's own pool and
+ * decides which are existing tags and which are new. That is what makes "only
+ * authorized existing tags" a property of the code rather than of the prompt.
+ */
+export const aiTagSuggestionModelSchema = z.object({
+  tags: z
+    .preprocess(
+      (value) => (value === null || value === undefined ? [] : value),
+      z.array(z.string().trim().min(1).max(200)),
+    )
+    .transform((items) => items.slice(0, 50))
+    .default([]),
+});
+
+export const aiTagSuggestionResultSchema = z
+  .object({
+    existing: z
+      .array(z.object({ tagId: uuidSchema, name: tagNameSchema }).strict())
+      .max(AI_TAG_SUGGESTION_EXISTING_MAX)
+      .readonly(),
+    proposed: z
+      .array(z.object({ name: tagNameSchema }).strict())
+      .max(AI_TAG_SUGGESTION_PROPOSED_MAX)
+      .readonly(),
+  })
+  .strict();

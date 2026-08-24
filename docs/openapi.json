@@ -549,6 +549,47 @@
         }
       }
     },
+    "/api/v1/workspaces/{workspaceId}/ai/meeting-extraction": {
+      "post": {
+        "summary": "Extract attendees, agenda, decisions and action items from a transcript.",
+        "tags": [
+          "AI"
+        ],
+        "description": "Nothing is persisted: the transcript is never stored, and the extraction is computed, returned and forgotten. Applying any of it to a note is a separate, explicit action by the author. Every list is capped server-side before it is returned. An unreadable model reply is retried once and then answered with AI_OUTPUT_INVALID rather than a partial object.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiMeetingExtractionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Extract attendees, agenda, decisions and action items from a transcript.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiMeetingExtractionResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workspaces/{workspaceId}/ai/rewrite": {
       "post": {
         "summary": "Rewrite a selection in a chosen tone, streamed.",
@@ -644,6 +685,47 @@
         "responses": {
           "2XX": {
             "description": "Summarise note text, streamed."
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/ai/tag-suggestions": {
+      "post": {
+        "summary": "Suggest tags for a note, split into existing and new.",
+        "tags": [
+          "AI"
+        ],
+        "description": "Nothing is persisted and no tag is created or attached; applying a suggestion is a separate, explicit action. The model is shown tag NAMES only and never an id: every tagId in `existing` was matched server-side against this workspace's own tag pool, so a suggestion can never name a tag from another workspace. Names the pool does not contain come back under `proposed`, which the caller must create explicitly.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiTagSuggestionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Suggest tags for a note, split into existing and new.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTagSuggestionResult"
+                }
+              }
+            }
           }
         }
       }
@@ -5513,6 +5595,97 @@
         ],
         "additionalProperties": false
       },
+      "AiMeetingActionItem": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "assignee": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "dueDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "AiMeetingExtraction": {
+        "type": "object",
+        "properties": {
+          "attendees": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "agenda": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "discussionPoints": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "decisions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          "actionItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiMeetingActionItem"
+            }
+          }
+        }
+      },
+      "AiMeetingExtractionRequest": {
+        "type": "object",
+        "properties": {
+          "transcript": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100000
+          }
+        },
+        "required": [
+          "transcript"
+        ],
+        "additionalProperties": false
+      },
+      "AiMeetingExtractionResult": {
+        "type": "object",
+        "properties": {
+          "extraction": {
+            "$ref": "#/components/schemas/AiMeetingExtraction"
+          }
+        },
+        "required": [
+          "extraction"
+        ],
+        "additionalProperties": false
+      },
       "AiModel": {
         "type": "string",
         "minLength": 1,
@@ -5604,6 +5777,72 @@
           "medium",
           "detailed"
         ]
+      },
+      "AiTagSuggestionRequest": {
+        "type": "object",
+        "properties": {
+          "noteId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50000
+          }
+        },
+        "required": [
+          "noteId",
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "AiTagSuggestionResult": {
+        "type": "object",
+        "properties": {
+          "existing": {
+            "readOnly": true,
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tagId": {
+                  "$ref": "#/components/schemas/Uuid"
+                },
+                "name": {
+                  "$ref": "#/components/schemas/TagName"
+                }
+              },
+              "required": [
+                "tagId",
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "proposed": {
+            "readOnly": true,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "$ref": "#/components/schemas/TagName"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "existing",
+          "proposed"
+        ],
+        "additionalProperties": false
       },
       "AiTone": {
         "type": "string",
