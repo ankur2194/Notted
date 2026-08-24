@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -76,6 +76,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Order matters: the popover is a `createPortal` into `document.body`, and
+  // `afterEach` hooks run LIFO, so wiping the body first would pull the portal
+  // container out from under RTL's own unmount and throw `NotFoundError`.
+  cleanup();
   document.body.innerHTML = "";
   vi.clearAllMocks();
 });

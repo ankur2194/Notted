@@ -155,6 +155,18 @@ function inlineOrParagraphNodes(text: string): JSONContent[] {
   return single.length === 0 ? [] : [{ type: "text", text: single }];
 }
 
+/**
+ * Where BLOCK content may be inserted without splitting the author's paragraph:
+ * after the top-level block holding the selection end. `insertContentAt` at an
+ * inline position splits the containing node, so a cursor inside "hello world"
+ * would leave "hello" / the draft / " world" — three paragraphs out of one.
+ * Inline content (a single-block continuation) still belongs at the cursor.
+ */
+function blockInsertPos(editor: Editor): number {
+  const $to = editor.state.doc.resolve(editor.state.selection.to);
+  return $to.depth === 0 ? $to.pos : $to.after(1);
+}
+
 export function AiPanel({ workspaceId, noteId, editor, editable }: AiPanelProps) {
   const stream = useAiStream();
 
@@ -391,9 +403,11 @@ export function AiPanel({ workspaceId, noteId, editor, editable }: AiPanelProps)
        * reading the draft would have it silently deleted by a button labelled
        * "Insert at cursor", and in the rewrite flow the stale-range fallback
        * would destroy the very text the guard just refused to touch.
-       * Collapsing to `to` inserts after the selection and deletes nothing.
+       * Collapsing to `to` inserts after the selection and deletes nothing, and
+       * `blockInsertPos` keeps these paragraphs from splitting the one the
+       * selection ends inside.
        */
-      editor.chain().focus().insertContentAt(editor.state.selection.to, nodes).run();
+      editor.chain().focus().insertContentAt(blockInsertPos(editor), nodes).run();
       setFeature(null);
       setCapture(null);
       stream.dismiss();
@@ -409,8 +423,11 @@ export function AiPanel({ workspaceId, noteId, editor, editable }: AiPanelProps)
     const nodes = inlineOrParagraphNodes(stream.text);
     if (nodes.length === 0) return refuse("The draft was empty, so nothing was added.");
     // Same two rules as `insertAsParagraphs`: insert at a COLLAPSED position so
-    // a live selection survives, and as JSON so the text arrives as text.
-    editor.chain().focus().insertContentAt(editor.state.selection.to, nodes).run();
+    // a live selection survives, and as JSON so the text arrives as text. A
+    // single-block continuation is inline content and joins the sentence at the
+    // cursor; a multi-paragraph one is blocks, so it goes after the block.
+    const at = nodes[0]?.type === "paragraph" ? blockInsertPos(editor) : editor.state.selection.to;
+    editor.chain().focus().insertContentAt(at, nodes).run();
     setFeature(null);
     stream.dismiss();
     setAnnouncement(

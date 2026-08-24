@@ -243,7 +243,7 @@ async function rejection(promise: Promise<unknown>): Promise<ApiHttpException> {
 /** Any key a stored credential could plausibly hide behind. */
 const CREDENTIAL_SHAPED = /credential|cipher|secret|apikey|api_key|encryption/iu;
 
-function expectNoCredentialLeak(view: Readonly<Record<string, unknown>>): void {
+function expectNoCredentialLeak(view: object): void {
   for (const key of Object.keys(view)) {
     if (key === "hasCredentials") continue;
     expect(key).not.toMatch(CREDENTIAL_SHAPED);

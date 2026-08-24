@@ -79,7 +79,9 @@ None. No migration, no schema change. Part 18 created `ai_provider_config` and `
 
 ## Verification Evidence
 
-**Quality gates were deliberately not run in this session and are deferred to the session reviewer.** This session was scoped implement-only; tests were authored but never executed. Nothing below is claimed to pass.
+**Review #1 (2026-08-24) ran every gate and returned FAIL.** One blocker in this part, fixed in a follow-up commit: `AiPanel.insertAsParagraphs` inserted *block* nodes at the inline selection position, which splits the paragraph the caret sits in (`hello| world` became three paragraphs). `blockInsertPos()` now resolves the selection end and inserts after the containing top-level block; `acceptContinuation` does the same only on its multi-paragraph branch, since a single-block continuation is inline content and must still join at the caret. `ai-panel.test.tsx` gained a multi-paragraph-continuation case and passes 9/9.
+
+**From the implementing session, superseded by the note above:** quality gates were deliberately not run there and were deferred to the session reviewer. This session was scoped implement-only; tests were authored but never executed. Nothing below is claimed to pass.
 
 | Check | Result | Notes |
 |---|---|---|
@@ -124,3 +126,4 @@ Four should-fix findings were also taken (lost paragraph boundaries in the summa
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-24 | Claude Code session | Initial record. Implementation complete; quality gates deferred to the session reviewer and explicitly unrun. |
+| 2026-08-24 | Claude Code review-fix session | Review #1 findings resolved; state still In progress pending Review #2 |

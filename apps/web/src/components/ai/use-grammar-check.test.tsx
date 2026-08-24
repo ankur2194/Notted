@@ -2,6 +2,7 @@ import { GRAMMAR_SEGMENT_MAX, GRAMMAR_SEGMENT_TEXT_MAX_CHARS } from "@notted/sha
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ySyncPluginKey } from "y-prosemirror";
 
 /**
  * Part 70 — what the grammar checker sends, when it refuses to send anything,
@@ -95,7 +96,7 @@ function deferred<T>() {
  * Replace the whole document with these paragraphs, in ONE dispatched
  * transaction, so the editor emits exactly one `update` per call.
  */
-function writeParagraphs(editor: Editor, texts: readonly string[]): void {
+function writeParagraphs(editor: Editor, texts: readonly string[], remote = false): void {
   const { schema } = editor.state;
   const paragraph = schema.nodes.paragraph;
   const doc = schema.nodes.doc;
@@ -105,9 +106,12 @@ function writeParagraphs(editor: Editor, texts: readonly string[]): void {
   );
   const replacement = doc.create(null, nodes);
   act(() => {
-    editor.view.dispatch(
-      editor.state.tr.replaceWith(0, editor.state.doc.content.size, replacement.content),
-    );
+    const tr = editor.state.tr.replaceWith(0, editor.state.doc.content.size, replacement.content);
+    // How y-prosemirror tags a transaction it applied from a remote peer: the
+    // `ySyncPluginKey` meta plus no history entry. The hook listens to
+    // `editor.on("update")`, which fires for these exactly as for local edits.
+    if (remote) tr.setMeta(ySyncPluginKey, { isChangeOrigin: true }).setMeta("addToHistory", false);
+    editor.view.dispatch(tr);
   });
 }
 
@@ -314,6 +318,28 @@ describe("useGrammarCheck", () => {
 
       // The author keeps typing: the block the answer describes is gone.
       writeParagraphs(editor, ["Something else entirely."]);
+      pending.resolve(grammarResult(suggestion(segmentId, 0, 5, "There")));
+      await advance(0);
+
+      expect(hook.result.current.resolveSuggestions()).toHaveLength(0);
+    });
+
+    /*
+     * The same drop, but the block was changed by a COLLABORATOR rather than the
+     * author — Part 58 applies remote Yjs updates as ordinary transactions, so
+     * the `textBetween === originalText` gate is what covers them, and nothing
+     * about the flow depends on who dispatched.
+     */
+    it("drops a suggestion whose block a collaborator changed while the request was in flight", async () => {
+      const pending = deferred<unknown>();
+      aiRequests.requestGrammarCheck.mockReturnValue(pending.promise);
+      const { editor, hook } = await mount({ stored: "true" });
+
+      writeParagraphs(editor, [FAULTY]);
+      await advance(GRAMMAR_DEBOUNCE_MS);
+      const segmentId = segmentIdFor(FAULTY);
+
+      writeParagraphs(editor, ["A remote peer rewrote this block."], true);
       pending.resolve(grammarResult(suggestion(segmentId, 0, 5, "There")));
       await advance(0);
 

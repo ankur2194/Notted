@@ -28,13 +28,13 @@ import "./extensions/CustomAttachment";
 
 import { TABLE_ACTIONS } from "./toolbar-commands";
 
+import type { ChainedCommands, Editor, Range } from "@tiptap/core";
+import type { LucideIcon } from "lucide-react";
+
 import {
   isMeetingExtractionAvailable,
   openMeetingExtraction,
 } from "@/lib/ai/meeting-extraction-request";
-
-import type { ChainedCommands, Editor, Range } from "@tiptap/core";
-import type { LucideIcon } from "lucide-react";
 
 /**
  * Slash menu contents expressed as data.

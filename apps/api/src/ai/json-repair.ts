@@ -107,13 +107,19 @@ function attempt<Schema extends ZodType>(raw: string, schema: Schema): Attempt<Z
 
 /**
  * Paths, codes and schema-authored messages only — see the file header on why
- * no model-written text may reach this string.
+ * no model-written text may reach this string. Path SEGMENTS are schema-authored
+ * today, but a `z.record()` schema would put model-chosen keys in them, so they
+ * are stripped to identifier characters before they reach the repair prompt.
  */
 function describeIssues(error: ZodError): string {
   const described = error.issues
     .slice(0, MAX_REPORTED_ISSUES)
     .map((issue) => {
-      const path = issue.path.length > 0 ? issue.path.join(".") : "(root)";
+      const path =
+        issue.path
+          .map(String)
+          .join(".")
+          .replace(/[^A-Za-z0-9_.[\]]/gu, "") || "(root)";
       return `${path}: ${issue.code} — ${issue.message}`;
     })
     .join("; ");

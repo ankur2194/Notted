@@ -99,7 +99,9 @@ Operational note: rotating `DATA_ENCRYPTION_KEYS` requires keeping the supersede
 
 ## Verification Evidence
 
-**Quality gates for this part are deliberately deferred to the session reviewer and have NOT been run here.** This session's mandate was implementation only; `pnpm lint`, `pnpm format:check`, `pnpm type-check`, `pnpm test`, `pnpm test:ci` and `pnpm build` were not executed, and no test in this part has ever been run. Nothing below should be read as evidence that the suites pass.
+**Review #1 (2026-08-24) ran every gate and returned FAIL.** Fixes applied in a follow-up commit for this part: `ai.service.test.ts` `expectNoCredentialLeak` widened from `Readonly<Record<string, unknown>>` to `object` (TS2345, `AiConfigView` has no index signature); `test/ai.integration.test.ts` import order corrected; and `json-repair.ts` `describeIssues` now strips zod path segments to `[A-Za-z0-9_.[\]]` so a future `z.record()` schema cannot inject into the repair prompt. **`apps/api/test/ai.integration.test.ts` has now been executed for the first time: 17 passed, 0 failed** (`pnpm infra:up:ports`, `DATABASE_URL=postgres://notted:notted_dev_password@127.0.0.1:5432/notted_dev pnpm --filter @notted/api exec vitest run test/ai.integration.test.ts`). It covers cross-workspace usage isolation, `ai.configure` denied to an editor, `ai.use` denied to a viewer, and every governance refusal branch. `pnpm --filter @notted/api exec tsc --noEmit` is clean.
+
+**From the implementing session, superseded by the note above:** quality gates for this part were deliberately deferred to the session reviewer and were not run there. This session's mandate was implementation only; `pnpm lint`, `pnpm format:check`, `pnpm type-check`, `pnpm test`, `pnpm test:ci` and `pnpm build` were not executed, and no test in this part has ever been run. Nothing below should be read as evidence that the suites pass.
 
 | Check | Result | Notes |
 |---|---|---|
@@ -149,3 +151,4 @@ Fragile assumptions worth knowing before changing this area:
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-24 | Claude Code lead-part-engineer session | Initial record. Implementation complete; all quality gates deferred to the session reviewer and unrun. |
+| 2026-08-24 | Claude Code review-fix session | Review #1 findings resolved; state still In progress pending Review #2 |

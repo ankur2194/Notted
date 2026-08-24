@@ -220,6 +220,38 @@ describe("AiPanel", () => {
     expect(text).toContain("A summary.");
   });
 
+  /*
+   * The other half of the same regression: `insertContentAt` given BLOCK nodes
+   * at an inline position splits the node it lands in, so a caret mid-sentence
+   * turned one paragraph into three. Block content goes after the block; a
+   * single-block continuation is inline content and still joins at the caret.
+   */
+  it("adds a multi-paragraph continuation after the block instead of splitting it", async () => {
+    const harness = await renderEditor({ initialDocument: paragraphDocument("hello world") });
+    const panel = renderPanel({ editor: harness.editor });
+    await openPanel();
+
+    act(() => {
+      harness.editor.commands.setTextSelection({ from: 6, to: 6 });
+    });
+    await userEvent.click(screen.getByTestId("ai-continue"));
+
+    streamState.phase = "preview";
+    streamState.text = "One.\n\nTwo.";
+    panel.refresh();
+
+    await userEvent.click(screen.getByTestId("ai-accept-continuation"));
+
+    const text = harness.editor.state.doc.textBetween(
+      0,
+      harness.editor.state.doc.content.size,
+      "\n",
+    );
+    expect(text).toContain("hello world");
+    expect(text).toContain("One.");
+    expect(text).toContain("Two.");
+  });
+
   it("inserts model output as literal text even when it looks like markup", async () => {
     const harness = await renderEditor({ initialDocument: paragraphDocument("hello world") });
     const panel = renderPanel({ editor: harness.editor });

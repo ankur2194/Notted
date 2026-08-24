@@ -6,7 +6,7 @@
 - **Completed on:** Not completed
 - **Implemented by:** Claude Code session (lead part engineer + four specialist agents)
 - **Plan reference:** `Plan.md`, Part 70
-- **Related records:** [Part 69](part-69-meeting-extraction-auto-tagging.md) (`complete()`, `parseJsonWithRepair`, `timeoutMs`/`signal`), [Part 68](part-68-summarize-continue-tone.md) (prompt table, AI panel, never-mutate-before-accept, plain-text-as-JSON-nodes), [Part 67](part-67-ai-configuration-governance.md) (provider seam, governance gate, usage metering), [Part 60](part-60-inline-comments.md) (**the anchor and decoration machinery this part reuses verbatim**), [Part 58](part-58-yjs-collaborative-editing.md) (who owns `notes.content`)
+- **Related records:** [Part 69](part-69-meeting-extraction-auto-tagging.md) (`complete()`, `parseJsonWithRepair`, `timeoutMs`/`signal`), [Part 68](part-68-summarize-continue-tone.md) (prompt table, AI panel, never-mutate-before-accept, plain-text-as-JSON-nodes), [Part 67](part-67-ai-configuration-governance.md) (provider seam, governance gate, usage metering), [Part 60](part-60-inline-comments-mentions.md) (**the anchor and decoration machinery this part reuses verbatim**), [Part 58](part-58-yjs-collaborative-editing.md) (who owns `notes.content`)
 
 ## Objective
 
@@ -88,7 +88,9 @@ This is the first AI feature in the product that sends note text **without the a
 
 ## Verification Evidence
 
-**Quality gates were deliberately not run in this session and are deferred to the session reviewer.** This session was scoped implement-only; all tests were authored but never executed. Nothing below is claimed to pass.
+**Review #1 (2026-08-24) ran every gate and returned FAIL.** Fixes applied in a follow-up commit: `grammar-popover.test.tsx` wiped `document.body` in an `afterEach` that runs *before* RTL's own (hooks are LIFO), tearing the `createPortal` container out from under React's unmount and throwing `NotFoundError` in three tests — it now calls `cleanup()` first (9/9 pass); the `Part 60` related-record link pointed at a filename that does not exist; and `use-grammar-check.test.tsx` gained the remote-transaction case `Plan.md:466` implies — a block rewritten by a collaborator (transaction tagged with `ySyncPluginKey` + `addToHistory: false`, exactly as y-prosemirror tags a remote apply) still drops the in-flight suggestion (19/19 pass).
+
+**From the implementing session, superseded by the note above:** quality gates were deliberately not run there and were deferred to the session reviewer. This session was scoped implement-only; all tests were authored but never executed. Nothing below is claimed to pass.
 
 | Check | Result | Notes |
 |---|---|---|
@@ -131,3 +133,4 @@ Integration work done by the lead after the four specialists returned: verified 
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-24 | Claude Code session (lead part engineer) | Initial record — implementation complete, gates deferred to the session reviewer |
+| 2026-08-24 | Claude Code review-fix session | Review #1 findings resolved; state still In progress pending Review #2 |

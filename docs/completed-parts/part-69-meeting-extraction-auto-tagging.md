@@ -81,7 +81,9 @@ Turn two kinds of unstructured text into reviewable structure: a pasted meeting 
 
 ## Verification Evidence
 
-**Quality gates were deliberately not run in this session and are deferred to the session reviewer.** This session was scoped implement-only; all tests were authored but never executed. Nothing below is claimed to pass.
+**Review #1 (2026-08-24) ran every gate and returned FAIL.** Nothing in this part's own logic was defective; the one fix touching it was the `import-x/order` error at `apps/web/src/components/editor/slash-commands.ts:31` (the `@/lib/ai/meeting-extraction-request` import now follows the `lucide-react` type import). `eslint src/components/editor/slash-commands.ts --max-warnings 0` is clean.
+
+**From the implementing session, superseded by the note above:** quality gates were deliberately not run there and were deferred to the session reviewer. This session was scoped implement-only; all tests were authored but never executed. Nothing below is claimed to pass.
 
 | Check | Result | Notes |
 |---|---|---|
@@ -123,3 +125,4 @@ Integration work done by the lead after the specialists returned: verified the `
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-24 | Claude Code session (lead part engineer) | Initial record — implementation complete, gates deferred to the session reviewer |
+| 2026-08-24 | Claude Code review-fix session | Review #1 findings resolved; state still In progress pending Review #2 |
