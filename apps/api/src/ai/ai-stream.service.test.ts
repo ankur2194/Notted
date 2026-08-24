@@ -148,10 +148,25 @@ function providerStub(
   };
 }
 
+/** A provider that never answers until the caller's signal aborts it. */
+function hangingProvider(box: SignalBox) {
+  return {
+    name: "openai" as const,
+    stream: async function* (_request: unknown, signal: AbortSignal): AsyncGenerator<AiChatEvent> {
+      box.signal = signal;
+      await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve()));
+      // Unreachable in practice: the caller's deadline aborts first. Present so
+      // the function is a real generator rather than an async function.
+      if (!signal.aborted) yield { type: "delta", text: "" };
+    },
+  };
+}
+
 function service(overrides: {
   readonly authorizeUser?: ReturnType<typeof vi.fn>;
   readonly acquire?: ReturnType<typeof vi.fn>;
   readonly provider?: unknown;
+  readonly requestTimeoutMs?: number;
 }) {
   const authorizeUser =
     overrides.authorizeUser ?? vi.fn().mockResolvedValue({ workspaceId: WORKSPACE_ID });
@@ -162,6 +177,7 @@ function service(overrides: {
     { acquire } as never,
     { resolve } as never,
     { info: vi.fn(), failure: vi.fn() } as never,
+    { requestTimeoutMs: overrides.requestTimeoutMs ?? 120_000 } as never,
   );
   return { instance, authorizeUser, acquire, resolve };
 }
@@ -434,6 +450,35 @@ describe("AiStreamService failure paths", () => {
       completionTokens: 100,
     });
   });
+
+  it("aborts a stalled provider at the configured deadline and meters it as a timeout", async () => {
+    const fake = fakeResponse();
+    const { recordUsage, grant } = grantStub();
+    const box: SignalBox = { signal: null };
+    const { instance } = service({
+      acquire: vi.fn().mockResolvedValue(grant),
+      provider: hangingProvider(box),
+      requestTimeoutMs: 20,
+    });
+
+    await instance.run(input(fake.response));
+
+    expect(box.signal?.aborted).toBe(true);
+    expect(fake.frames()).toEqual([
+      {
+        type: "error",
+        code: "ai_provider_error",
+        message: "The AI provider did not finish in time. Try again shortly.",
+      },
+    ]);
+    expect(recordUsage).toHaveBeenCalledTimes(1);
+    expect(recordUsage).toHaveBeenCalledWith({
+      status: "failed",
+      errorCode: "timeout",
+      promptTokens: null,
+      completionTokens: null,
+    });
+  });
 });
 
 /**
@@ -505,6 +550,29 @@ describe("AiStreamService.complete", () => {
     expect(recordUsage).toHaveBeenCalledTimes(1);
     expect(recordUsage).toHaveBeenCalledWith(
       expect.objectContaining({ status: "failed", errorCode: "overloaded" }),
+    );
+  });
+
+  it("aborts a stalled provider at the deadline and throws AI_PROVIDER_ERROR", async () => {
+    const { recordUsage, grant } = grantStub();
+    const box: SignalBox = { signal: null };
+    const { instance } = service({
+      acquire: vi.fn().mockResolvedValue(grant),
+      provider: hangingProvider(box),
+      requestTimeoutMs: 20,
+    });
+
+    await expect(instance.complete(completionInput())).rejects.toMatchObject({
+      status: HttpStatus.BAD_GATEWAY,
+      safeResponse: {
+        code: "AI_PROVIDER_ERROR",
+        message: "The AI provider did not finish in time. Try again shortly.",
+      },
+    });
+    expect(box.signal?.aborted).toBe(true);
+    expect(recordUsage).toHaveBeenCalledTimes(1);
+    expect(recordUsage).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "failed", errorCode: "timeout" }),
     );
   });
 

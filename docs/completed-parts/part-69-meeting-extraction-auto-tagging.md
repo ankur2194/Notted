@@ -2,8 +2,8 @@
 
 ## Status
 
-- **State:** In progress — implementation complete, quality gates deferred to the session reviewer
-- **Completed on:** Not completed
+- **State:** Complete — two review rounds passed; full quality gate green on 2026-08-25
+- **Completed on:** 2026-08-25
 - **Implemented by:** Claude Code session (lead part engineer + three specialist agents)
 - **Plan reference:** `Plan.md`, Part 69
 - **Related records:** [Part 68](part-68-summarize-continue-tone.md) (provider stream consumption, prompt table, AI panel, the never-mutate-before-accept rule), [Part 67](part-67-ai-configuration-governance.md) (provider seam, governance gate, usage metering), [Part 58](part-58-yjs-collaborative-editing.md) (who owns `notes.content`), [Part 46](part-46-tags-and-templates.md) (note tag assignment), [Part 47](part-47-standalone-tasks.md) (task creation)
@@ -100,6 +100,8 @@ Turn two kinds of unstructured text into reviewable structure: a pasted meeting 
 
 Integration work done by the lead after the specialists returned: verified the `requestTagSuggestions` seam between the two frontend agents matches on both sides; verified `taskList`/`taskItem` and the `checked` attribute against `NOTE_DOCUMENT_NODE_TYPES` in the shared document contract (a node the contract rejects halts autosave, so this was checked rather than assumed); verified `composeDueDate(date, "")` yields an offset-bearing ISO instant that `isoTimestampSchema` accepts; mounted both components; and repaired the two registry-completeness suites the new slash entry broke.
 
+**Review #2 (2026-08-25, fresh reviewer) and main-thread finalization.** Review #2 re-ran every gate from scratch and passed lint, format, type-check, test, build, the AI integration suite (17/17 live) and the first `pnpm test:ci` run with the dev stack up (api 85.27% statements / 76.80% branches, web 79.82% / 72.53%, all above the 70% floor; `src/ai` 98.63% / 90.19%). One unrelated `notes.integration.test.ts` case flaked once under the full four-package parallel run, passed alone and on the full re-run, and is untouched by these parts. Review #2 findings were fixed inline on the main thread: `MeetingExtractionDialog` inserted block-only meeting nodes at an inline position and split the author's paragraph (same defect class Review #1 fixed in `AiPanel`); it now uses the shared `blockInsertPos`; `AiStreamService.complete()` — which has no client `close` hook — now arms the `AI_REQUEST_TIMEOUT_MS` deadline. Final serial gate run after those fixes on 2026-08-25: `pnpm lint`, `pnpm format:check`, `pnpm type-check`, `pnpm test` (api 2423 passed / 161 skipped, web 1656, shared-validators 358, shared-types 49), env-prefixed `pnpm build`, and `test/ai.integration.test.ts` 17/17 — all green. Still unproven: live SSE flush behind `compression()` (needs a real provider key) and browser e2e coverage (recorded follow-up).
+
 ## Known Limitations and Follow-up Work
 
 - **Two unverified typing choices**, both flagged by the implementing agent and neither compiled: the zod generic in `json-repair.ts` (`<Schema extends ZodType>` + `z.output<Schema>`, chosen because Zod 4 defaults `ZodType`'s parameters to `unknown` and `aiMeetingExtractionSchema` has a transform-differing input type), and a union-typed handler call in the new controller `it.each`. First thing for the reviewer's `type-check` to settle.
@@ -126,3 +128,4 @@ Integration work done by the lead after the specialists returned: verified the `
 |---|---|---|
 | 2026-08-24 | Claude Code session (lead part engineer) | Initial record — implementation complete, gates deferred to the session reviewer |
 | 2026-08-24 | Claude Code review-fix session | Review #1 findings resolved; state still In progress pending Review #2 |
+| 2026-08-25 | Claude Fable 5 main session | Review #2 + finalization: `MeetingExtractionDialog` inserted block-only meeting nodes at an inline position and split the author's paragraph (same defect class Review #1 fixed in `AiPanel`). Full serial gate green. State set to Complete. |

@@ -7,6 +7,7 @@ import type { AiConfig } from "../../config/ai.config";
 
 const config = (enabled = true): AiConfig => ({
   enabled: false,
+  requestTimeoutMs: 120_000,
   embeddings: {
     enabled,
     provider: "openai-compatible",

@@ -2,8 +2,8 @@
 
 ## Status
 
-- **State:** In progress — implementation complete, quality gates deferred to the session reviewer
-- **Completed on:** Not completed
+- **State:** Complete — two review rounds passed; full quality gate green on 2026-08-25
+- **Completed on:** 2026-08-25
 - **Implemented by:** Claude Code session (lead part engineer + four specialist agents + one read-only integration review)
 - **Plan reference:** `Plan.md`, Part 68
 - **Related records:** [Part 67](part-67-ai-configuration-governance.md) (provider seam, governance gate, usage metering), [Part 58](part-58-yjs-collaborative-editing.md) (who owns `notes.content`), [Part 60](part-60-inline-comments-mentions.md) (the inline-disclosure panel pattern), [Part 39](part-39-reliable-save.md) (solo autosave)
@@ -102,6 +102,8 @@ The integration review was static only (no gate commands) and read both sides of
 
 Four should-fix findings were also taken (lost paragraph boundaries in the summarize request, a metering rejection escaping after the response closed, a prototype-chain lookup in the envelope-code parser, and a truncation frame that could be skipped by a throwing iterator cleanup). One test whose comment claimed to pin a gate it does not reach was corrected to say what it actually proves.
 
+**Review #2 (2026-08-25, fresh reviewer) and main-thread finalization.** Review #2 re-ran every gate from scratch and passed lint, format, type-check, test, build, the AI integration suite (17/17 live) and the first `pnpm test:ci` run with the dev stack up (api 85.27% statements / 76.80% branches, web 79.82% / 72.53%, all above the 70% floor; `src/ai` 98.63% / 90.19%). One unrelated `notes.integration.test.ts` case flaked once under the full four-package parallel run, passed alone and on the full re-run, and is untouched by these parts. Review #2 findings were fixed inline on the main thread: `AiStreamService.run()` now arms `AI_REQUEST_TIMEOUT_MS` and reports a stalled provider as a `timeout` error frame metered once; `blockInsertPos` moved to `apps/web/src/lib/ai/insert-position.ts` so every block-writing AI feature shares one rule (real-editor unit test added). Final serial gate run after those fixes on 2026-08-25: `pnpm lint`, `pnpm format:check`, `pnpm type-check`, `pnpm test` (api 2423 passed / 161 skipped, web 1656, shared-validators 358, shared-types 49), env-prefixed `pnpm build`, and `test/ai.integration.test.ts` 17/17 — all green. Still unproven: live SSE flush behind `compression()` (needs a real provider key) and browser e2e coverage (recorded follow-up).
+
 ## Known Limitations and Follow-up Work
 
 - **No Playwright e2e specs.** Deliberately skipped for this session. The three streaming routes have no end-to-end coverage, so compression behaviour, CORS preflight, and real `Response` semantics are unproven by the suite. The `compression()` interaction in particular is a runtime property of the deployed middleware stack that no unit test in this change can observe — **the reviewer should confirm it with one live request against the dev stack.**
@@ -127,3 +129,4 @@ Four should-fix findings were also taken (lost paragraph boundaries in the summa
 |---|---|---|
 | 2026-08-24 | Claude Code session | Initial record. Implementation complete; quality gates deferred to the session reviewer and explicitly unrun. |
 | 2026-08-24 | Claude Code review-fix session | Review #1 findings resolved; state still In progress pending Review #2 |
+| 2026-08-25 | Claude Fable 5 main session | Review #2 + finalization: `AiStreamService.run()` now arms `AI_REQUEST_TIMEOUT_MS` and reports a stalled provider as a `timeout` error frame metered once. Full serial gate green. State set to Complete. |

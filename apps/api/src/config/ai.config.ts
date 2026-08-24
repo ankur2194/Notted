@@ -22,6 +22,13 @@ export interface AiConfig {
   readonly enabled: boolean;
   readonly openAi?: AiProviderConfig;
   readonly claude?: AiProviderConfig;
+  /**
+   * Outbound deadline for one chat completion, streamed or not. Provider
+   * credentials live per workspace (Part 67), so this is the only deployment-
+   * level knob a chat call reads; it bounds how long a stalled provider can
+   * pin a request handler and a decrypted key.
+   */
+  readonly requestTimeoutMs: number;
   readonly embeddings: EmbeddingConfig;
 }
 
@@ -58,6 +65,13 @@ function provider(
 export function parseAiConfig(environment: Environment): AiConfig {
   try {
     const enabled = readBoolean(environment, "FEATURE_AI_ENABLED", false);
+    const requestTimeoutMs = readInteger(
+      environment,
+      "AI_REQUEST_TIMEOUT_MS",
+      120000,
+      1000,
+      600000,
+    );
     const openAi = provider(environment, "AI_OPENAI_API_KEY", "AI_OPENAI_MODEL", "gpt-4o-mini");
     const claude = provider(
       environment,
@@ -109,10 +123,11 @@ export function parseAiConfig(environment: Environment): AiConfig {
         120000,
       ),
     });
-    if (enabled && openAi === undefined && claude === undefined) {
-      throw new Error("at least one AI provider key is required when FEATURE_AI_ENABLED=true");
-    }
-    return Object.freeze({ enabled, openAi, claude, embeddings });
+    // No deployment-level chat key is required: since Part 67 every chat call
+    // uses the workspace's own encrypted credential, and `FEATURE_AI_ENABLED`
+    // is only the global kill-switch. The optional env keys above remain for
+    // operators that set them; nothing in the chat path reads them.
+    return Object.freeze({ enabled, requestTimeoutMs, openAi, claude, embeddings });
   } catch (error: unknown) {
     wrapConfigError("Invalid AI configuration", error);
   }

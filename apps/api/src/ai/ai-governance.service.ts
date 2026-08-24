@@ -224,6 +224,9 @@ export class AiGovernanceService {
         "The AI usage quota could not be verified. Try again shortly.",
       );
     }
+    // ponytail: check-then-act — N concurrent requests at the boundary can all
+    // pass; the per-workspace burst window below bounds the overshoot. Upgrade
+    // to a reserve-then-settle row if exact quota enforcement is ever required.
     if (usedToday >= settings.dailyTokenQuota) {
       await this.recordRefusal(input, provider, model, "ai_quota_exceeded");
       throw new AiGovernanceRefusal(

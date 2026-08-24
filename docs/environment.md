@@ -55,8 +55,9 @@ supported implicit fallback.
   root `.env`; application credentials belong in the API environment.
 - Production SMTP uses implicit TLS or requires STARTTLS. SMTP user and password are
   either both present or both absent.
-- AI remains disabled unless `FEATURE_AI_ENABLED=true` and at least one provider key is
-  configured. Provider calls are implemented in later plan parts.
+- AI remains disabled unless `FEATURE_AI_ENABLED=true`. Chat credentials are stored per
+  workspace (Part 67), so no deployment-level provider key is required; `AI_REQUEST_TIMEOUT_MS`
+  (default 120000, 1000–600000) bounds every outbound chat call.
 
 Validation errors name variables and safe requirement categories but never echo supplied
 values. Do not paste real environment files into issue reports, logs, or test artifacts.

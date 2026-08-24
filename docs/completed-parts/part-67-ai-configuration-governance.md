@@ -2,8 +2,8 @@
 
 ## Status
 
-- **State:** In progress — implementation complete, quality gates deferred to the session reviewer
-- **Completed on:** Not completed
+- **State:** Complete — two review rounds passed; full quality gate green on 2026-08-25
+- **Completed on:** 2026-08-25
 - **Implemented by:** Claude Code lead-part-engineer session, with three delegated specialist agents (providers, service layer, frontend)
 - **Plan reference:** `Plan.md`, Part 67
 - **Related records:** [Part 18](part-18-operations-integration-tables.md) (owns the `ai_provider_config` / `ai_usage` schema and names Part 67 as the sole decryptor), [Part 50](part-50-establish-bullmq-queues-workers.md) (`AiProviderRateLimiterService`), [Part 53](part-53-embeddings-semantic-search.md) (the embedding adapter this deliberately does not disturb), [Part 66](part-66-webhooks-and-delivery-logs.md) (the AES-256-GCM blob format copied here)
@@ -118,6 +118,8 @@ Operational note: rotating `DATA_ENCRYPTION_KEYS` requires keeping the supersede
 
 Specific unexecuted risks the reviewer should look at first: the drizzle `sql` aggregate shapes in `AiService.getUsage`, zod 4's `.catch()` semantics for missing (not merely invalid) fields in `parseAiSettings`, the accessible-name lookups in `ai-settings.test.tsx` that depend on a `<caption>` naming its table, and whether the integration suite's fake Redis reply shape satisfies the real `ioredis` type.
 
+**Review #2 (2026-08-25, fresh reviewer) and main-thread finalization.** Review #2 re-ran every gate from scratch and passed lint, format, type-check, test, build, the AI integration suite (17/17 live) and the first `pnpm test:ci` run with the dev stack up (api 85.27% statements / 76.80% branches, web 79.82% / 72.53%, all above the 70% floor; `src/ai` 98.63% / 90.19%). One unrelated `notes.integration.test.ts` case flaked once under the full four-package parallel run, passed alone and on the full re-run, and is untouched by these parts. Review #2 findings were fixed inline on the main thread: `AI_REQUEST_TIMEOUT_MS` (default 120000, 1000–600000) added to `AiConfig` and applied as an outbound deadline on every chat call; the deployment-level `AI_OPENAI_API_KEY`/`AI_CLAUDE_API_KEY` requirement under `FEATURE_AI_ENABLED=true` was dropped because chat credentials are per workspace; `timeout` joined `AI_PROVIDER_ERROR_CODES`; the check-then-act daily quota comparison carries a `ponytail:` note naming the concurrent-overshoot ceiling. Final serial gate run after those fixes on 2026-08-25: `pnpm lint`, `pnpm format:check`, `pnpm type-check`, `pnpm test` (api 2423 passed / 161 skipped, web 1656, shared-validators 358, shared-types 49), env-prefixed `pnpm build`, and `test/ai.integration.test.ts` 17/17 — all green. Still unproven: live SSE flush behind `compression()` (needs a real provider key) and browser e2e coverage (recorded follow-up).
+
 ## Known Limitations and Follow-up Work
 
 - **Nothing here has been executed.** The single largest risk in this record.
@@ -152,3 +154,4 @@ Fragile assumptions worth knowing before changing this area:
 |---|---|---|
 | 2026-08-24 | Claude Code lead-part-engineer session | Initial record. Implementation complete; all quality gates deferred to the session reviewer and unrun. |
 | 2026-08-24 | Claude Code review-fix session | Review #1 findings resolved; state still In progress pending Review #2 |
+| 2026-08-25 | Claude Fable 5 main session | Review #2 + finalization: `AI_REQUEST_TIMEOUT_MS` (default 120000, 1000–600000) added to `AiConfig` and applied as an outbound deadline on every chat call. Full serial gate green. State set to Complete. |

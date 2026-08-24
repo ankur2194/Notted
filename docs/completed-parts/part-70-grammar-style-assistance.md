@@ -2,8 +2,8 @@
 
 ## Status
 
-- **State:** In progress — implementation complete, quality gates deferred to the session reviewer
-- **Completed on:** Not completed
+- **State:** Complete — two review rounds passed; full quality gate green on 2026-08-25
+- **Completed on:** 2026-08-25
 - **Implemented by:** Claude Code session (lead part engineer + four specialist agents)
 - **Plan reference:** `Plan.md`, Part 70
 - **Related records:** [Part 69](part-69-meeting-extraction-auto-tagging.md) (`complete()`, `parseJsonWithRepair`, `timeoutMs`/`signal`), [Part 68](part-68-summarize-continue-tone.md) (prompt table, AI panel, never-mutate-before-accept, plain-text-as-JSON-nodes), [Part 67](part-67-ai-configuration-governance.md) (provider seam, governance gate, usage metering), [Part 60](part-60-inline-comments-mentions.md) (**the anchor and decoration machinery this part reuses verbatim**), [Part 58](part-58-yjs-collaborative-editing.md) (who owns `notes.content`)
@@ -107,6 +107,8 @@ This is the first AI feature in the product that sends note text **without the a
 
 Integration work done by the lead after the four specialists returned: verified all four seams line up on both sides (`GrammarSuggestionTarget`, `GrammarControl`, `UseGrammarCheckResult`, `GRAMMAR_SUGGESTION_ID_ATTRIBUTE`); confirmed `suggestionPopupGeometry`/`SuggestionRect`/`SUGGESTION_POPUP_WIDTH` are real exports with the assumed shapes; confirmed `browserStorage()` exists and returns `Storage | null`; confirmed the hook's plain-text insert matches Part 68's `inlineOrParagraphNodes` single-block shape (`[{type:"text", text}]`) and that *not* trimming it is correct for a replacement like `" the "`; confirmed the ref declarations in `TiptapEditor` precede the `useMemo`, so plugin presence is genuinely fixed at creation; and confirmed `EditorShortcuts` is still the last extension entry. Two defects were fixed by the lead: the `id` trim asymmetry, and the keyboard-chord discoverability gap.
 
+**Review #2 (2026-08-25, fresh reviewer) and main-thread finalization.** Review #2 re-ran every gate from scratch and passed lint, format, type-check, test, build, the AI integration suite (17/17 live) and the first `pnpm test:ci` run with the dev stack up (api 85.27% statements / 76.80% branches, web 79.82% / 72.53%, all above the 70% floor; `src/ai` 98.63% / 90.19%). One unrelated `notes.integration.test.ts` case flaked once under the full four-package parallel run, passed alone and on the full re-run, and is untouched by these parts. Review #2 findings were fixed inline on the main thread: no Part 70 code changed in this round; the shared provider deadline now bounds `POST …/ai/grammar-check` as well. Final serial gate run after those fixes on 2026-08-25: `pnpm lint`, `pnpm format:check`, `pnpm type-check`, `pnpm test` (api 2423 passed / 161 skipped, web 1656, shared-validators 358, shared-types 49), env-prefixed `pnpm build`, and `test/ai.integration.test.ts` 17/17 — all green. Still unproven: live SSE flush behind `compression()` (needs a real provider key) and browser e2e coverage (recorded follow-up).
+
 ## Known Limitations and Follow-up Work
 
 - **Blocks inside wrappers are checked and then usually discarded.** Segment `start` is `offset + 1`, the first text position of a *textblock*; for a top-level list, blockquote, or table, `node.textContent` crosses node boundaries that positions do count, so the derived range fails its own text proof and the suggestions drop. Prose in lists and quotes therefore costs tokens and yields nothing. `ponytail:` marked with the `doc.descendants` + `node.isTextblock` upgrade path, which fixes both the positions and the waste. **This is the most valuable follow-up in this list.**
@@ -134,3 +136,4 @@ Integration work done by the lead after the four specialists returned: verified 
 |---|---|---|
 | 2026-08-24 | Claude Code session (lead part engineer) | Initial record — implementation complete, gates deferred to the session reviewer |
 | 2026-08-24 | Claude Code review-fix session | Review #1 findings resolved; state still In progress pending Review #2 |
+| 2026-08-25 | Claude Fable 5 main session | Review #2 + finalization: no Part 70 code changed in this round. Full serial gate green. State set to Complete. |

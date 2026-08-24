@@ -56,6 +56,7 @@ describe("server environment contract", () => {
     });
     expect(parseAiConfig({})).toEqual({
       enabled: false,
+      requestTimeoutMs: 120_000,
       openAi: undefined,
       claude: undefined,
       embeddings: {
@@ -177,8 +178,8 @@ describe("server environment contract", () => {
       "decode to exactly 32 bytes",
     ],
     [
-      () => parseAiConfig({ FEATURE_AI_ENABLED: "true" }),
-      "at least one AI provider key is required",
+      () => parseAiConfig({ AI_REQUEST_TIMEOUT_MS: "0" }),
+      "AI_REQUEST_TIMEOUT_MS must be an integer",
     ],
     [
       () => parseImageProcessingConfig({ MAX_IMAGE_PIXELS: "500" }),

@@ -22,11 +22,12 @@
 // provider response body, which quotes the request (and therefore the note)
 // back at us.
 
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import { StructuredLogger } from "../common/logging/structured-logger.service";
+import { AI_CONFIG, type AiConfig } from "../config/ai.config";
 
 import {
   AiGovernanceRefusal,
@@ -95,6 +96,7 @@ const PROVIDER_MESSAGE: Readonly<Record<AiProviderErrorCode, string>> = Object.f
   overloaded: "The AI provider is busy. Try again shortly.",
   invalid_request: "The AI provider rejected this request.",
   network: "The connection to the AI provider failed before the answer was complete.",
+  timeout: "The AI provider did not finish in time. Try again shortly.",
 });
 
 const STREAM_MESSAGE: Readonly<Record<Exclude<AiStreamErrorCode, "ai_provider_error">, string>> =
@@ -128,6 +130,7 @@ export class AiStreamService {
     private readonly governance: AiGovernanceService,
     private readonly providers: AiChatProviderRegistry,
     private readonly logger: StructuredLogger,
+    @Inject(AI_CONFIG) private readonly aiConfig: AiConfig,
   ) {}
 
   async run(input: AiStreamRunInput): Promise<void> {
@@ -202,6 +205,13 @@ export class AiStreamService {
       controller.abort();
     };
     response.on("close", onClose);
+    // Outbound deadline: a stalled provider must not hold this handler (and
+    // the decrypted key in `grant`) for undici's multi-minute defaults.
+    let timedOut = false;
+    const deadline = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.aiConfig.requestTimeoutMs);
 
     let streamedChars = 0;
     let sawContent = false;
@@ -257,6 +267,14 @@ export class AiStreamService {
         // Already reported inside the loop; nothing more to say.
       } else if (cancelled) {
         // Nobody is listening. Skip the frame, keep the metering.
+      } else if (timedOut) {
+        streamError = "ai_provider_error";
+        providerCode = "timeout";
+        this.send(response, {
+          type: "error",
+          code: "ai_provider_error",
+          message: PROVIDER_MESSAGE.timeout,
+        });
       } else if (!sawContent) {
         streamError = "ai_output_empty";
         this.send(response, {
@@ -286,7 +304,11 @@ export class AiStreamService {
        */
       if (!cancelled && streamError === null) {
         streamError = "ai_provider_error";
-        providerCode = error instanceof AiChatProviderError ? error.code : "network";
+        providerCode = timedOut
+          ? "timeout"
+          : error instanceof AiChatProviderError
+            ? error.code
+            : "network";
         this.send(response, {
           type: "error",
           code: "ai_provider_error",
@@ -294,6 +316,7 @@ export class AiStreamService {
         });
       }
     } finally {
+      clearTimeout(deadline);
       // Computed BEFORE `end()`: ending the response emits `close`, which would
       // otherwise flip `cancelled` and mislabel a completed generation.
       const outcome = this.outcome({
@@ -380,6 +403,13 @@ export class AiStreamService {
     }
 
     const controller = new AbortController();
+    // Same outbound deadline as `run()`; `complete()` has no client `close`
+    // hook at all, so this is the only thing that ever ends a stalled call.
+    let timedOut = false;
+    const deadline = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.aiConfig.requestTimeoutMs);
     let text = "";
     let usage: StreamUsage | null = null;
     let streamError: AiStreamErrorCode | null = null;
@@ -412,6 +442,10 @@ export class AiStreamService {
         }
         text += event.text;
       }
+      if (timedOut && streamError === null) {
+        streamError = "ai_provider_error";
+        providerCode = "timeout";
+      }
     } catch (error) {
       // `streamError === null` guards the same overwrite `run()` guards: a
       // provider generator cleaning up an aborted body can throw from its
@@ -419,9 +453,14 @@ export class AiStreamService {
       // decided what happened.
       if (streamError === null) {
         streamError = "ai_provider_error";
-        providerCode = error instanceof AiChatProviderError ? error.code : "network";
+        providerCode = timedOut
+          ? "timeout"
+          : error instanceof AiChatProviderError
+            ? error.code
+            : "network";
       }
     } finally {
+      clearTimeout(deadline);
       /*
        * Empty output is NOT an error here, deliberately — unlike `run()`, where
        * an empty stream is all the client will ever get. A JSON caller hands the

@@ -55,7 +55,11 @@ function stubEditor() {
   };
   const editor = {
     chain: () => chain,
-    state: { selection: { from: 7, to: 7 } },
+    state: {
+      selection: { from: 7, to: 7 },
+      // A caret at depth 1 (inside a paragraph): block content belongs after it.
+      doc: { resolve: () => ({ depth: 1, pos: 7, after: () => 12 }) },
+    },
   } as unknown as Editor;
   return { editor, calls };
 }
@@ -166,9 +170,10 @@ describe("MeetingExtractionDialog", () => {
 
     const call = calls[0];
     expect(call).toBeDefined();
-    // A collapsed position, so a selection the author made while reading the
-    // review is never consumed by the insert.
-    expect(call?.position).toBe(7);
+    // A collapsed position AFTER the caret's block (via `blockInsertPos`), so a
+    // selection the author made while reading the review is never consumed and
+    // the paragraph holding the caret is never split.
+    expect(call?.position).toBe(12);
     const content = call?.content ?? [];
     expect(Array.isArray(content)).toBe(true);
     expect(typeof content[0]).toBe("object");

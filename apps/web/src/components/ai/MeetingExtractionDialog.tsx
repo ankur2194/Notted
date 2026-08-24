@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { blockInsertPos } from "@/lib/ai/insert-position";
 import { setMeetingExtractionHandler } from "@/lib/ai/meeting-extraction-request";
 import { aiQueryKeys } from "@/lib/ai/query-keys";
 import { fetchAiStatus, requestMeetingExtraction } from "@/lib/ai/requests";
@@ -476,10 +477,11 @@ export function MeetingExtractionDialog({
      * `insertContentAt({from: selection.from, to: selection.to})` — it REPLACES
      * the live selection, so an author who had selected a paragraph while
      * reading the review would have it silently deleted by a button labelled
-     * "Insert into note". Collapsing to `to` inserts after the selection and
-     * deletes nothing.
+     * "Insert into note". `blockInsertPos` lands the (block-only) meeting nodes
+     * after the block holding the selection end, deleting nothing and never
+     * splitting the author's paragraph.
      */
-    editor.chain().focus().insertContentAt(editor.state.selection.to, nodes).run();
+    editor.chain().focus().insertContentAt(blockInsertPos(editor), nodes).run();
     setError("");
     setAnnouncement(INSERTED_MESSAGE);
 

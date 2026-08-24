@@ -18,6 +18,7 @@ import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { setAiContinueHandler } from "@/lib/ai/continue-request";
+import { blockInsertPos } from "@/lib/ai/insert-position";
 import {
   openMeetingExtraction,
   useMeetingExtractionAvailable,
@@ -153,18 +154,6 @@ function inlineOrParagraphNodes(text: string): JSONContent[] {
   if (paragraphs.length > 1) return paragraphs;
   const single = text.trim();
   return single.length === 0 ? [] : [{ type: "text", text: single }];
-}
-
-/**
- * Where BLOCK content may be inserted without splitting the author's paragraph:
- * after the top-level block holding the selection end. `insertContentAt` at an
- * inline position splits the containing node, so a cursor inside "hello world"
- * would leave "hello" / the draft / " world" — three paragraphs out of one.
- * Inline content (a single-block continuation) still belongs at the cursor.
- */
-function blockInsertPos(editor: Editor): number {
-  const $to = editor.state.doc.resolve(editor.state.selection.to);
-  return $to.depth === 0 ? $to.pos : $to.after(1);
 }
 
 export function AiPanel({ workspaceId, noteId, editor, editable }: AiPanelProps) {

@@ -78,6 +78,7 @@ export const AI_PROVIDER_ERROR_CODES = Object.freeze([
   "overloaded",
   "invalid_request",
   "network",
+  "timeout",
 ] as const);
 
 export type AiProviderErrorCode = (typeof AI_PROVIDER_ERROR_CODES)[number];
