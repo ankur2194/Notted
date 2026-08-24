@@ -157,3 +157,99 @@ export const aiStatusSchema = z
     model: aiModelSchema.nullable(),
   })
   .strict();
+
+/**
+ * Part 68 — summarize, continue writing, and tone rewrite.
+ *
+ * THE CHARACTER CEILINGS ARE THE COST CONTROL. Every one of these bodies is
+ * note text the browser read out of the live editor, and the prompt built from
+ * it is billed per token. A missing bound is not a validation nicety here, it is
+ * an unbounded charge on a workspace's provider account, so each feature caps
+ * its input at the smallest size that still does the job: a whole note for a
+ * summary, the tail before the caret for a continuation, one selection for a
+ * rewrite.
+ *
+ * WHY THE TEXT IS ON THE WIRE AT ALL, given the server holds the note. Part 58
+ * hands `notes.content` to the Yjs projection while a collaborative session is
+ * live, so the freshest document exists in the browser, not in the row. Reading
+ * the row would summarise a version the writer can see is out of date.
+ * `noteId` is still required and still authorized — it is what proves the caller
+ * may work on this note at all — it is simply not the source of the text.
+ */
+export const AI_SUMMARIZE_MAX_CHARS = 24_000;
+export const AI_CONTINUE_MAX_CHARS = 8_000;
+export const AI_REWRITE_MAX_CHARS = 4_000;
+
+export const aiSummaryLengthSchema = z.enum(["brief", "medium", "detailed"]);
+
+export const aiToneSchema = z.enum([
+  "professional",
+  "casual",
+  "concise",
+  "elaborate",
+  "simplify",
+]);
+
+/**
+ * `.min(1)` after trimming, on all three: a request built from an empty
+ * selection or a blank note is a client bug, and sending it would spend a
+ * provider call to be told the same thing.
+ */
+const aiFeatureText = (max: number) => z.string().trim().min(1).max(max);
+
+export const aiSummarizeRequestSchema = z
+  .object({
+    noteId: uuidSchema,
+    text: aiFeatureText(AI_SUMMARIZE_MAX_CHARS),
+    length: aiSummaryLengthSchema,
+  })
+  .strict();
+
+export type AiSummarizeRequestInput = z.input<typeof aiSummarizeRequestSchema>;
+
+export const aiContinueRequestSchema = z
+  .object({
+    noteId: uuidSchema,
+    /** The text immediately before the caret — never the whole note. */
+    context: aiFeatureText(AI_CONTINUE_MAX_CHARS),
+  })
+  .strict();
+
+export type AiContinueRequestInput = z.input<typeof aiContinueRequestSchema>;
+
+export const aiRewriteRequestSchema = z
+  .object({
+    noteId: uuidSchema,
+    text: aiFeatureText(AI_REWRITE_MAX_CHARS),
+    tone: aiToneSchema,
+  })
+  .strict();
+
+export type AiRewriteRequestInput = z.input<typeof aiRewriteRequestSchema>;
+
+/**
+ * One `data:` frame, validated on arrival.
+ *
+ * The browser parses these out of a raw byte stream it read itself, so they get
+ * the same treatment as any other API response: an off-contract frame is a
+ * failure, never a silent cast. Discriminated on `type` so a frame naming an
+ * unknown kind is rejected rather than partially matched.
+ */
+export const aiStreamEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("delta"), text: z.string() }).strict(),
+  z
+    .object({
+      type: z.literal("done"),
+      promptVersion: z.string().min(1).max(50),
+      promptTokens: z.number().int().min(0).nullable(),
+      completionTokens: z.number().int().min(0).nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("error"),
+      code: z.enum(["ai_provider_error", "ai_output_empty", "ai_output_truncated"]),
+      message: z.string().min(1).max(500),
+    })
+    .strict(),
+]);

@@ -39,17 +39,32 @@ export {
   AI_DEFAULT_RATE_LIMIT_PER_MINUTE,
   AI_MAX_DAILY_TOKEN_QUOTA,
   AI_MAX_RATE_LIMIT_PER_MINUTE,
+  AI_CONTINUE_MAX_CHARS,
+  AI_REWRITE_MAX_CHARS,
+  AI_SUMMARIZE_MAX_CHARS,
   aiApiKeySchema,
   aiConfigUpdateSchema,
   aiConfigViewSchema,
+  aiContinueRequestSchema,
   aiModelSchema,
   aiProviderNameSchema,
+  aiRewriteRequestSchema,
   aiStatusSchema,
+  aiStreamEventSchema,
+  aiSummarizeRequestSchema,
+  aiSummaryLengthSchema,
+  aiToneSchema,
   aiUsageFeatureSummarySchema,
   aiUsageQuerySchema,
   aiUsageSummarySchema,
 } from "./ai.schema";
-export type { AiConfigUpdateInput, AiUsageQueryInput } from "./ai.schema";
+export type {
+  AiConfigUpdateInput,
+  AiContinueRequestInput,
+  AiRewriteRequestInput,
+  AiSummarizeRequestInput,
+  AiUsageQueryInput,
+} from "./ai.schema";
 export {
   API_KEY_PREFIX_LENGTH,
   API_KEY_SECRET_PATTERN,

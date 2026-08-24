@@ -16,12 +16,23 @@ export {
 } from "./ai.constants";
 export { AiCredentialService } from "./ai-credential.service";
 export {
+  AI_PROMPT_FEATURES,
+  AI_PROMPT_GUARDRAILS,
+  buildContinuePrompt,
+  buildRewritePrompt,
+  buildSummarizePrompt,
+  stripContentDelimiter,
+  type AiPromptFeature,
+  type AiPromptPlan,
+} from "./ai-prompts";
+export {
   AiGovernanceRefusal,
   AiGovernanceService,
   type AiAcquireInput,
   type AiRuntimeGrant,
   type AiUsageOutcome,
 } from "./ai-governance.service";
+export { AiStreamService, type AiStreamRunInput } from "./ai-stream.service";
 export { AiController } from "./ai.controller";
 export { AiModule } from "./ai.module";
 export { AiService } from "./ai.service";

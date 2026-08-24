@@ -20,8 +20,15 @@
 // `PUT`, not `PATCH`: `aiConfigUpdateSchema` is the whole desired
 // configuration, so the write is a replacement and the verb should say so.
 
-import { Body, Controller, Get, HttpStatus, Put, Query, Req } from "@nestjs/common";
-import { aiConfigUpdateSchema, aiUsageQuerySchema, uuidSchema } from "@notted/shared-validators";
+import { Body, Controller, Get, HttpStatus, Post, Put, Query, Req, Res } from "@nestjs/common";
+import {
+  aiConfigUpdateSchema,
+  aiContinueRequestSchema,
+  aiRewriteRequestSchema,
+  aiSummarizeRequestSchema,
+  aiUsageQuerySchema,
+  uuidSchema,
+} from "@notted/shared-validators";
 
 import { getAuthPrincipal } from "../auth/auth-principal";
 import { AuthService } from "../auth/auth.service";
@@ -30,15 +37,18 @@ import { ApiHttpException } from "../common/errors/api-http.exception";
 import { RateLimitTier } from "../common/rate-limit/rate-limit.decorator";
 import { getRequestId } from "../common/request/request-context";
 
+import { buildContinuePrompt, buildRewritePrompt, buildSummarizePrompt } from "./ai-prompts";
+import { AiStreamService } from "./ai-stream.service";
 import { AiService } from "./ai.service";
 
+import type { AiPromptPlan } from "./ai-prompts";
 import type {
   AiConfigView,
   AiStatus,
   AiUsageSummary,
   AuthenticatedPrincipal,
 } from "@notted/shared-types";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 
 function routeUuid(request: Request): string {
   return uuidSchema.parse(request.params.workspaceId);
@@ -56,6 +66,7 @@ export class AiController {
   constructor(
     private readonly ai: AiService,
     private readonly auth: AuthService,
+    private readonly stream: AiStreamService,
   ) {}
 
   @Get("config")
@@ -97,6 +108,74 @@ export class AiController {
   @RequireAuthorization(workspaceAuthorization("ai.use"))
   getStatus(@Req() request: Request): Promise<AiStatus> {
     return this.ai.getStatus(this.scope(request));
+  }
+
+  /**
+   * Part 68 — the three streaming authoring features.
+   *
+   * `@Res()` HANDS NEST'S RESPONSE HANDLING TO US, deliberately: an event
+   * stream is written frame by frame and cannot go through the interceptor that
+   * serialises a return value. `AiStreamService` still refuses everything it is
+   * going to refuse before it writes a byte, so a governance refusal is thrown
+   * from here and answered by the global exception filter as ordinary JSON.
+   *
+   * `sensitive` tier and a trusted-origin check on all three: these are POSTs
+   * that spend a workspace's money at a third party, so the general allowance is
+   * the wrong ceiling and a cross-site form post is not an acceptable trigger.
+   *
+   * `ai.use`, not `ai.configure` — an editor may generate text; only an admin
+   * may change who pays for it. The note itself is authorized separately inside
+   * the service, because `workspaceAuthorization` addresses the workspace.
+   */
+  @Post("summarize")
+  @RateLimitTier("sensitive")
+  @RequireAuthorization(workspaceAuthorization("ai.use"))
+  summarize(
+    @Req() request: Request,
+    @Res() response: Response,
+    @Body() rawBody: unknown,
+  ): Promise<void> {
+    this.auth.assertTrustedMutationOrigin(request);
+    const body = aiSummarizeRequestSchema.safeParse(rawBody);
+    if (!body.success) this.invalid();
+    return this.run(request, response, body.data.noteId, buildSummarizePrompt(body.data));
+  }
+
+  @Post("continue")
+  @RateLimitTier("sensitive")
+  @RequireAuthorization(workspaceAuthorization("ai.use"))
+  continueWriting(
+    @Req() request: Request,
+    @Res() response: Response,
+    @Body() rawBody: unknown,
+  ): Promise<void> {
+    this.auth.assertTrustedMutationOrigin(request);
+    const body = aiContinueRequestSchema.safeParse(rawBody);
+    if (!body.success) this.invalid();
+    return this.run(request, response, body.data.noteId, buildContinuePrompt(body.data));
+  }
+
+  @Post("rewrite")
+  @RateLimitTier("sensitive")
+  @RequireAuthorization(workspaceAuthorization("ai.use"))
+  rewrite(
+    @Req() request: Request,
+    @Res() response: Response,
+    @Body() rawBody: unknown,
+  ): Promise<void> {
+    this.auth.assertTrustedMutationOrigin(request);
+    const body = aiRewriteRequestSchema.safeParse(rawBody);
+    if (!body.success) this.invalid();
+    return this.run(request, response, body.data.noteId, buildRewritePrompt(body.data));
+  }
+
+  private run(
+    request: Request,
+    response: Response,
+    noteId: string,
+    prompt: AiPromptPlan,
+  ): Promise<void> {
+    return this.stream.run({ ...this.scope(request), noteId, prompt, response });
   }
 
   private scope(request: Request) {

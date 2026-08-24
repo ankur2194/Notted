@@ -16,6 +16,7 @@ import {
   Paperclip,
   Quote,
   Redo2,
+  Sparkles,
   SquareCode,
   SquarePlus,
   Strikethrough,
@@ -61,6 +62,8 @@ import { openMentionMenuAtCaret, openSlashMenuAtCaret } from "./suggestion-trigg
 import type { NoteDocumentCodeLanguage } from "@notted/shared-validators";
 import type { Editor } from "@tiptap/core";
 import type { LucideIcon } from "lucide-react";
+
+import { isAiContinueAvailable, requestAiContinue } from "@/lib/ai/continue-request";
 
 /**
  * Toolbar contents expressed as data so later parts can extend the toolbar
@@ -669,6 +672,35 @@ export const EDITOR_TOOLBAR_GROUPS: readonly ToolbarGroup[] = Object.freeze([
         isAvailable: (editor) => editor.isEditable && editor.can().nottedRequestAttachmentUpload(),
         run: (editor) => {
           editor.chain().focus().nottedRequestAttachmentUpload().run();
+        },
+      },
+      {
+        /*
+         * Part 68, and the third of the three triggers that reach one AI panel
+         * (the panel's own button and the `Mod-Enter` keymap are the others).
+         *
+         * `editor` IS UNUSED ON PURPOSE, in both callbacks. The panel holds the
+         * live editor already and reads the caret's surroundings itself at press
+         * time, so passing this toolbar's instance would be a second, redundant
+         * source of the same thing — and the store is what the keymap trigger
+         * goes through too, so all three paths stay one code path. The signature
+         * stays `ToolbarButtonCommand`'s; nothing in `EditorToolbar.tsx` changes.
+         *
+         * `isAvailable` is the panel's own registration: it registers only while
+         * it can actually serve the command (AI enabled, note editable, editor
+         * mounted), so nothing here duplicates that condition. Unavailable, the
+         * button renders with `aria-disabled` and `EditorToolbar` refuses to run
+         * it; `TiptapEditor` subscribes with `useAiContinueAvailable()` so the
+         * toolbar re-renders when the panel registers or withdraws.
+         */
+        kind: "button",
+        id: "aiContinue",
+        label: "Continue writing with AI",
+        icon: Sparkles,
+        shortcutId: "aiContinue",
+        isAvailable: () => isAiContinueAvailable(),
+        run: () => {
+          requestAiContinue();
         },
       },
       { kind: "control", id: "link", label: "Link", control: "link", shortcutId: "link" },

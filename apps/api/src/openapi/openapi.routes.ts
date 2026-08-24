@@ -2,7 +2,10 @@ import {
   acceptWorkspaceInvitationSchema,
   aiConfigUpdateSchema,
   aiConfigViewSchema,
+  aiContinueRequestSchema,
+  aiRewriteRequestSchema,
   aiStatusSchema,
+  aiSummarizeRequestSchema,
   aiUsageQuerySchema,
   aiUsageSummarySchema,
   apiKeyCreateResultSchema,
@@ -175,6 +178,13 @@ export interface OpenApiRouteDoc {
  * Extension point: later parts (Part 66 webhooks) add their own resource group
  * to this object literal. Keep it a plain grouped map — no registry class.
  */
+/**
+ * Shared by the three Part 68 streaming routes, because the thing a caller has
+ * to understand is identical for all three and stating it once keeps it so.
+ */
+const SSE_STREAM_DESCRIPTION =
+  "Responds with `text/event-stream`, not JSON: a sequence of `data:` frames, each one an `AiStreamEvent` from @notted/shared-types — `delta` (text), then exactly one terminator, either `done` (promptVersion and token counts) or `error` (a stream error code). A stream that stops without a terminator was cut off and must be treated as a failure. Governance refusals — AI disabled, not configured, consent missing, quota exhausted, rate limited — are answered BEFORE the stream begins, as an ordinary JSON error envelope with the usual status code (and `Retry-After` where one applies), so a client must check the response status and content type before it starts parsing frames. Note text is sent in the request body rather than read from the stored note, because a live collaborative session holds the freshest document in the browser; `noteId` is still required and still authorized. Nothing generated here is retained: only token counts reach `ai_usage`.";
+
 export const OPENAPI_ROUTES: Record<string, OpenApiRouteDoc> = {
   // Meta. Unauthenticated service and document endpoints.
   "GET /": { summary: "API root and version banner.", tags: ["Meta"] },
@@ -820,5 +830,28 @@ export const OPENAPI_ROUTES: Record<string, OpenApiRouteDoc> = {
     description:
       "The member-facing view: enabled, provider and model only. It carries no quota, no consent flag and nothing about the stored credential.",
     response: aiStatusSchema,
+  },
+
+  // AI authoring. Part 68. These three answer `text/event-stream`, not JSON, so
+  // they carry a request body and NO response schema: an SSE body is a sequence
+  // of frames, not a value, and inventing a JSON schema for one would document a
+  // contract no client should code against.
+  "POST /workspaces/{workspaceId}/ai/summarize": {
+    summary: "Summarise note text, streamed.",
+    tags: ["AI"],
+    description: SSE_STREAM_DESCRIPTION,
+    body: aiSummarizeRequestSchema,
+  },
+  "POST /workspaces/{workspaceId}/ai/continue": {
+    summary: "Continue writing from the text before the caret, streamed.",
+    tags: ["AI"],
+    description: SSE_STREAM_DESCRIPTION,
+    body: aiContinueRequestSchema,
+  },
+  "POST /workspaces/{workspaceId}/ai/rewrite": {
+    summary: "Rewrite a selection in a chosen tone, streamed.",
+    tags: ["AI"],
+    description: SSE_STREAM_DESCRIPTION,
+    body: aiRewriteRequestSchema,
   },
 };

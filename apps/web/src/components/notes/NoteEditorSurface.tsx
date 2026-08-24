@@ -13,6 +13,7 @@ import { useImageUploads } from "./useImageUploads";
 import type { CommentAnchorTarget } from "@/components/editor/extensions/comment-decorations";
 import type { Editor } from "@tiptap/core";
 
+import { AiPanel } from "@/components/ai/AiPanel";
 import {
   createAttachmentDirectory,
   documentHasAttachment,
@@ -350,6 +351,12 @@ export function NoteEditorSurface({
    * document nobody can edit.
    */
   const commentsEnabled = bindToNoteSave;
+  /*
+   * Part 68. Same gate, same reason: a historical preview is an immutable
+   * rendering of a past version, and every AI action here ends in a transaction
+   * against the live document.
+   */
+  const aiEnabled = bindToNoteSave;
   const editorRef = useRef<Editor | null>(null);
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
   const commentTargetsRef = useRef<readonly CommentAnchorTarget[]>([]);
@@ -492,6 +499,20 @@ export function NoteEditorSurface({
           editor={editorInstance}
           onAnchorsChange={handleAnchorsChange}
           onActiveCommentIdChange={handleActiveCommentIdChange}
+        />
+      ) : null}
+      {aiEnabled ? (
+        <AiPanel
+          workspaceId={workspaceId}
+          noteId={noteId}
+          editor={editorInstance}
+          /*
+           * `editable` is `NoteDetail.capabilities.canUpdate` minus a trashed
+           * note, exactly as `NoteDetailView` computed it. A viewer is offered no
+           * AI action at all, because every accept path here writes to the
+           * document. The API authorizes each generation regardless.
+           */
+          editable={editable}
         />
       ) : null}
       {/*

@@ -26,7 +26,8 @@ export type EditorShortcutHandlerId =
   | "openSlashMenu"
   | "insertMention"
   | "insertPageBreak"
-  | "toggleFocusMode";
+  | "toggleFocusMode"
+  | "requestAiContinue";
 
 export interface EditorShortcutGroup {
   readonly id: EditorShortcutGroupId;
@@ -214,6 +215,41 @@ export const EDITOR_SHORTCUTS: readonly EditorShortcut[] = Object.freeze([
     scope: "editor",
     source: "notted",
     handler: "insertPageBreak",
+  },
+  {
+    /*
+     * Part 68, and the ONE binding in this table that is not free: StarterKit's
+     * HardBreak already binds `Mod-Enter` to `setHardBreak()`
+     * (`@tiptap/extension-hard-break` 2.27.2, `addKeyboardShortcuts`). It is
+     * claimed anyway because `Mod-Enter` is the "commit / go" chord everywhere
+     * else in the product, and HardBreak keeps `Shift-Enter` — the binding this
+     * table already advertises for a line break — untouched.
+     *
+     * WHAT MAKES THIS ONE WIN: extension ORDER, not priority, and not any
+     * change to HardBreak. `ExtensionManager`'s `get plugins()` in
+     * `@tiptap/core` 2.27.1 runs `ExtensionManager.sort([...this.extensions]
+     * .reverse())` before turning each extension into a `keymap()` plugin, and
+     * `sort` compares nothing but `priority` (100 for both HardBreak and
+     * `EditorShortcuts`) with a comparator that returns 0 on a tie — so equal
+     * priorities keep the *reversed* array order. `EditorShortcuts` is appended
+     * LAST in the `extensions` array in `TiptapEditor.tsx`, so it becomes the
+     * first keymap plugin in `state.plugins`, and ProseMirror's
+     * `someProp("handleKeyDown", …)` walks plugins in that order and stops at
+     * the first one that returns true. Keep `EditorShortcuts` last in that
+     * array and this binding keeps winning; move it and it silently stops.
+     *
+     * Returning `false` — no AI panel registered — is the deliberate fallback,
+     * not a failure: ProseMirror's `keydownHandler` then reports the key as
+     * unhandled, the next keymap plugin is offered it, and `Mod-Enter` inserts
+     * a hard break exactly as it did before this entry existed.
+     */
+    id: "aiContinue",
+    group: "blocks",
+    description: "Continue writing with AI",
+    binding: "Mod-Enter",
+    scope: "editor",
+    source: "notted",
+    handler: "requestAiContinue",
   },
   {
     id: "bulletList",

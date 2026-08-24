@@ -243,6 +243,32 @@ const EDITOR_CASES: Readonly<Record<string, ShortcutCase>> = {
       expect(types).toContain("hardBreak");
     },
   },
+  aiContinue: {
+    /*
+     * Part 68. No AI panel is mounted in this harness, so no continue handler is
+     * registered, `requestAiContinue()` returns false, and the binding reports
+     * itself unhandled — which hands `Mod-Enter` on to StarterKit's HardBreak.
+     * That fall-through IS the observable proof the Notted binding is live and
+     * correctly declines: the other half — that a REGISTERED handler runs and no
+     * hard break is inserted — needs a registered handler and lives in
+     * `ai-continue-shortcut.test.tsx`.
+     *
+     * The explicit caret placement matters. The default setup selects "hello",
+     * and a hard break inserted over a selection replaces the word, which is a
+     * different (and much less obvious) assertion than inserting at a caret.
+     */
+    setup: (editor) => {
+      editor.commands.setTextSelection({ from: 6, to: 6 });
+    },
+    assert: (editor) => {
+      const types: string[] = [];
+      editor.state.doc.descendants((node) => {
+        types.push(node.type.name);
+        return true;
+      });
+      expect(types).toContain("hardBreak");
+    },
+  },
   bulletList: { assert: expectActive("bulletList") },
   orderedList: { assert: expectActive("orderedList") },
   taskList: { assert: expectActive("taskList") },

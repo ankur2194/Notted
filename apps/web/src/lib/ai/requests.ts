@@ -2,12 +2,13 @@ import { AI_API_PATHS } from "@notted/shared-types";
 import {
   aiConfigUpdateSchema,
   aiConfigViewSchema,
+  aiStatusSchema,
   aiUsageQuerySchema,
   aiUsageSummarySchema,
 } from "@notted/shared-validators";
 
 import type { ApiRequestResult } from "@/lib/api/request-json";
-import type { AiConfigView, AiUsageSummary } from "@notted/shared-types";
+import type { AiConfigView, AiStatus, AiUsageSummary } from "@notted/shared-types";
 import type { AiConfigUpdateInput } from "@notted/shared-validators";
 
 import { json, requestJson, validIds } from "@/lib/api/request-json";
@@ -19,10 +20,23 @@ import { json, requestJson, validIds } from "@/lib/api/request-json";
  * shared schema so an off-contract body is a failure rather than a silent cast,
  * and the workspace id is UUID-checked before a request is allowed to leave.
  *
- * There is deliberately no `fetchAiStatus` here. Nothing in this slice reads it
- * — the settings form is admin-only and needs the full config — and an unused
- * wrapper is a contract to keep in step for no reader.
+ * Part 68 added `fetchAiStatus`, which Part 67 deliberately left out for want of
+ * a reader. The AI panel is that reader: it is offered to every member, and a
+ * member may not call the admin-only config endpoint, so the narrow status
+ * projection — enabled, provider, model, and nothing else — is the only thing
+ * an author's browser is allowed to learn about the workspace's AI setup.
  */
+
+/**
+ * What a member may know: whether to offer AI at all, and by whom. Readable at
+ * any workspace role, unlike {@link fetchAiConfig}.
+ */
+export function fetchAiStatus(workspaceId: string): Promise<ApiRequestResult<AiStatus>> {
+  if (!validIds(workspaceId)) return Promise.resolve({ ok: false, kind: "invalid" });
+  return requestJson(AI_API_PATHS.status(workspaceId), {}, (value) =>
+    aiStatusSchema.safeParse(value),
+  );
+}
 
 /** The stored configuration. Never carries the credential — only `hasCredentials`. */
 export function fetchAiConfig(workspaceId: string): Promise<ApiRequestResult<AiConfigView>> {

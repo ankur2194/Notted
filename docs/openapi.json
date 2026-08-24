@@ -515,6 +515,74 @@
         }
       }
     },
+    "/api/v1/workspaces/{workspaceId}/ai/continue": {
+      "post": {
+        "summary": "Continue writing from the text before the caret, streamed.",
+        "tags": [
+          "AI"
+        ],
+        "description": "Responds with `text/event-stream`, not JSON: a sequence of `data:` frames, each one an `AiStreamEvent` from @notted/shared-types — `delta` (text), then exactly one terminator, either `done` (promptVersion and token counts) or `error` (a stream error code). A stream that stops without a terminator was cut off and must be treated as a failure. Governance refusals — AI disabled, not configured, consent missing, quota exhausted, rate limited — are answered BEFORE the stream begins, as an ordinary JSON error envelope with the usual status code (and `Retry-After` where one applies), so a client must check the response status and content type before it starts parsing frames. Note text is sent in the request body rather than read from the stored note, because a live collaborative session holds the freshest document in the browser; `noteId` is still required and still authorized. Nothing generated here is retained: only token counts reach `ai_usage`.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiContinueRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Continue writing from the text before the caret, streamed."
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/ai/rewrite": {
+      "post": {
+        "summary": "Rewrite a selection in a chosen tone, streamed.",
+        "tags": [
+          "AI"
+        ],
+        "description": "Responds with `text/event-stream`, not JSON: a sequence of `data:` frames, each one an `AiStreamEvent` from @notted/shared-types — `delta` (text), then exactly one terminator, either `done` (promptVersion and token counts) or `error` (a stream error code). A stream that stops without a terminator was cut off and must be treated as a failure. Governance refusals — AI disabled, not configured, consent missing, quota exhausted, rate limited — are answered BEFORE the stream begins, as an ordinary JSON error envelope with the usual status code (and `Retry-After` where one applies), so a client must check the response status and content type before it starts parsing frames. Note text is sent in the request body rather than read from the stored note, because a live collaborative session holds the freshest document in the browser; `noteId` is still required and still authorized. Nothing generated here is retained: only token counts reach `ai_usage`.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiRewriteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Rewrite a selection in a chosen tone, streamed."
+          }
+        }
+      }
+    },
     "/api/v1/workspaces/{workspaceId}/ai/status": {
       "get": {
         "summary": "Whether AI features should be offered to the caller.",
@@ -542,6 +610,40 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/ai/summarize": {
+      "post": {
+        "summary": "Summarise note text, streamed.",
+        "tags": [
+          "AI"
+        ],
+        "description": "Responds with `text/event-stream`, not JSON: a sequence of `data:` frames, each one an `AiStreamEvent` from @notted/shared-types — `delta` (text), then exactly one terminator, either `done` (promptVersion and token counts) or `error` (a stream error code). A stream that stops without a terminator was cut off and must be treated as a failure. Governance refusals — AI disabled, not configured, consent missing, quota exhausted, rate limited — are answered BEFORE the stream begins, as an ordinary JSON error envelope with the usual status code (and `Retry-After` where one applies), so a client must check the response status and content type before it starts parsing frames. Note text is sent in the request body rather than read from the stored note, because a live collaborative session holds the freshest document in the browser; `noteId` is still required and still authorized. Nothing generated here is retained: only token counts reach `ai_usage`.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiSummarizeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Summarise note text, streamed."
           }
         }
       }
@@ -5393,6 +5495,24 @@
         ],
         "additionalProperties": false
       },
+      "AiContinueRequest": {
+        "type": "object",
+        "properties": {
+          "noteId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          }
+        },
+        "required": [
+          "noteId",
+          "context"
+        ],
+        "additionalProperties": false
+      },
       "AiModel": {
         "type": "string",
         "minLength": 1,
@@ -5405,6 +5525,28 @@
           "anthropic",
           "disabled"
         ]
+      },
+      "AiRewriteRequest": {
+        "type": "object",
+        "properties": {
+          "noteId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "tone": {
+            "$ref": "#/components/schemas/AiTone"
+          }
+        },
+        "required": [
+          "noteId",
+          "text",
+          "tone"
+        ],
+        "additionalProperties": false
       },
       "AiStatus": {
         "type": "object",
@@ -5432,6 +5574,46 @@
           "model"
         ],
         "additionalProperties": false
+      },
+      "AiSummarizeRequest": {
+        "type": "object",
+        "properties": {
+          "noteId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 24000
+          },
+          "length": {
+            "$ref": "#/components/schemas/AiSummaryLength"
+          }
+        },
+        "required": [
+          "noteId",
+          "text",
+          "length"
+        ],
+        "additionalProperties": false
+      },
+      "AiSummaryLength": {
+        "type": "string",
+        "enum": [
+          "brief",
+          "medium",
+          "detailed"
+        ]
+      },
+      "AiTone": {
+        "type": "string",
+        "enum": [
+          "professional",
+          "casual",
+          "concise",
+          "elaborate",
+          "simplify"
+        ]
       },
       "AiUsageFeatureSummary": {
         "type": "object",

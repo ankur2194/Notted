@@ -31,6 +31,7 @@ import type { SlashCommand } from "./slash-commands";
 import type { NoteCollaborationBinding } from "@/lib/collaboration/note-collaboration-provider";
 import type { Editor } from "@tiptap/core";
 
+import { requestAiContinue, useAiContinueAvailable } from "@/lib/ai/continue-request";
 import { toggleFocusMode, useFocusMode } from "@/lib/notes/focus-mode";
 
 const DEFAULT_ARIA_LABEL = "Note content";
@@ -300,6 +301,18 @@ function EditorSurface({
   // A page-wide viewing mode shared with `PageContainer`, which owns the toggle
   // button, the announcement, and clearing the mode on unmount.
   const focusMode = useFocusMode();
+  /*
+   * Subscribed to, deliberately not read.
+   *
+   * The "Continue writing with AI" toolbar item's `isAvailable` asks the module
+   * store directly (`isAiContinueAvailable()`), so nothing in this render tree
+   * depends on a value React can see change. Without this subscription the
+   * button would keep whatever availability it had when the toolbar last
+   * rendered for some other reason — offered while no panel can serve it, or
+   * greyed out after one mounted. This is exactly why `useFocusMode()` above is
+   * called here too: the subscription, not the value, is the point.
+   */
+  useAiContinueAvailable();
   /**
    * The floating toolbar has to leave this subtree.
    *
@@ -352,6 +365,17 @@ function EditorSurface({
     // Reading a note in focus mode needs no write permission, so this one is
     // deliberately not gated on `editable`.
     toggleFocusMode: () => toggleFocusMode(),
+    /*
+     * Part 68. Gated on `editable` because a continuation writes into the note;
+     * `false` here (and `false` from an unregistered panel) reports the key as
+     * unhandled, so `Mod-Enter` falls through to HardBreak rather than being
+     * swallowed. No editor instance is passed: the panel already holds the live
+     * editor, and it reads the caret's surroundings itself at press time.
+     */
+    requestAiContinue: () => {
+      if (!editableRef.current) return false;
+      return requestAiContinue();
+    },
   };
 
   // The document the editor was created with. Later documents arrive through

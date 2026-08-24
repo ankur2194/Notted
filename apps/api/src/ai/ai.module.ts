@@ -11,7 +11,9 @@
 // pieces Part 68's streaming endpoints are built on: `AiGovernanceService` for
 // the fail-closed gate, `AiChatProviderRegistry` for the provider adapters, and
 // `AiCredentialService` because a future rotation job will need to re-encrypt
-// rows. Nothing else leaves this module.
+// rows. Part 68 adds `AiStreamService` — one streamed generation from
+// authorization to the metered row — so a later non-HTTP caller (a queue
+// worker, say) can reuse it. Nothing else leaves this module.
 
 import { Module } from "@nestjs/common";
 
@@ -22,6 +24,7 @@ import { QueueModule } from "../queue/queue.module";
 
 import { AiCredentialService } from "./ai-credential.service";
 import { AiGovernanceService } from "./ai-governance.service";
+import { AiStreamService } from "./ai-stream.service";
 import { AiController } from "./ai.controller";
 import { AiService } from "./ai.service";
 import { AiChatProviderRegistry, AnthropicChatProvider, OpenAiChatProvider } from "./providers";
@@ -40,10 +43,17 @@ import { AiChatProviderRegistry, AnthropicChatProvider, OpenAiChatProvider } fro
     AiService,
     AiGovernanceService,
     AiCredentialService,
+    AiStreamService,
     OpenAiChatProvider,
     AnthropicChatProvider,
     AiChatProviderRegistry,
   ],
-  exports: [AiService, AiGovernanceService, AiCredentialService, AiChatProviderRegistry],
+  exports: [
+    AiService,
+    AiGovernanceService,
+    AiCredentialService,
+    AiStreamService,
+    AiChatProviderRegistry,
+  ],
 })
 export class AiModule {}

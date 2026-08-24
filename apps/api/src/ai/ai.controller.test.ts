@@ -17,12 +17,14 @@ import {
   AUTHORIZATION_HTTP_SPEC,
   type HttpAuthorizationSpec,
 } from "../authorization/authorization-http.decorator";
+import { RATE_LIMIT_TIER } from "../common/rate-limit/rate-limit.decorator";
 
 import { AiController } from "./ai.controller";
 
+import type { AiStreamService } from "./ai-stream.service";
 import type { AiService } from "./ai.service";
 import type { AuthService } from "../auth/auth.service";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 
 const USER_ID = "a0000000-0000-4000-8000-000000000001";
 const WORKSPACE_ID = "a0000000-0000-4000-8100-000000000001";
@@ -55,14 +57,24 @@ function request(params: Record<string, string> = { workspaceId: WORKSPACE_ID })
   return value;
 }
 
-function controller(service: Partial<AiService>, origin = vi.fn()): AiController {
+function controller(
+  service: Partial<AiService>,
+  origin = vi.fn(),
+  run = vi.fn().mockResolvedValue(undefined),
+): AiController {
   return new AiController(
     service as AiService,
     {
       assertTrustedMutationOrigin: origin,
     } as unknown as AuthService,
+    { run } as unknown as AiStreamService,
   );
 }
+
+/** The streaming routes take `@Res()`; nothing in this file writes to it. */
+const responseStub = {} as Response;
+
+const NOTE_ID = "a0000000-0000-4000-8200-000000000001";
 
 function specFor(handler: keyof AiController): HttpAuthorizationSpec {
   const spec: unknown = Reflect.getMetadata(
@@ -78,6 +90,13 @@ describe("AiController routing and authorization", () => {
     expect(AI_API_PATHS.config(":workspaceId")).toBe("/api/v1/workspaces/:workspaceId/ai/config");
     expect(AI_API_PATHS.usage(":workspaceId")).toBe("/api/v1/workspaces/:workspaceId/ai/usage");
     expect(AI_API_PATHS.status(":workspaceId")).toBe("/api/v1/workspaces/:workspaceId/ai/status");
+    expect(AI_API_PATHS.summarize(":workspaceId")).toBe(
+      "/api/v1/workspaces/:workspaceId/ai/summarize",
+    );
+    expect(AI_API_PATHS.continue(":workspaceId")).toBe(
+      "/api/v1/workspaces/:workspaceId/ai/continue",
+    );
+    expect(AI_API_PATHS.rewrite(":workspaceId")).toBe("/api/v1/workspaces/:workspaceId/ai/rewrite");
     expect(Reflect.getMetadata(PATH_METADATA, AiController)).toBe("workspaces/:workspaceId/ai");
   });
 
@@ -85,8 +104,11 @@ describe("AiController routing and authorization", () => {
     ["getConfig", RequestMethod.GET, "ai.configure"],
     ["updateConfig", RequestMethod.PUT, "ai.configure"],
     ["getUsage", RequestMethod.GET, "ai.configure"],
-    // The one member-reachable route; everything else is admin-only.
+    // The member-reachable routes; everything else is admin-only.
     ["getStatus", RequestMethod.GET, "ai.use"],
+    ["summarize", RequestMethod.POST, "ai.use"],
+    ["continueWriting", RequestMethod.POST, "ai.use"],
+    ["rewrite", RequestMethod.POST, "ai.use"],
   ] as const)("binds %s to its verb and authorization action", (handler, method, action) => {
     expect(Reflect.getMetadata(METHOD_METADATA, AiController.prototype[handler])).toBe(method);
     expect(specFor(handler).action).toBe(action);
@@ -183,6 +205,95 @@ describe("AiController delegation", () => {
     for (const query of [{ days: "0" }, { days: "91" }, { days: "7", extra: "1" }]) {
       expect(() => controller({ getUsage }).getUsage(request(), query)).toThrow(
         "The request is invalid.",
+      );
+    }
+  });
+});
+
+/**
+ * Part 68 — the streaming routes. The controller's whole job here is
+ * origin, parse, build the right prompt, delegate; the SSE mechanics and the
+ * fail-closed ordering are `ai-stream.service.test.ts`.
+ */
+describe("AiController streaming routes", () => {
+  const cases = [
+    {
+      handler: "summarize",
+      feature: "summarize.v1",
+      body: { noteId: NOTE_ID, text: "a note", length: "brief" },
+      invalid: [
+        { noteId: NOTE_ID, text: "a note", length: "epic" },
+        { noteId: "not-a-uuid", text: "a note", length: "brief" },
+        { noteId: NOTE_ID, text: "   ", length: "brief" },
+        { noteId: NOTE_ID, text: "x".repeat(24_001), length: "brief" },
+        { noteId: NOTE_ID, text: "a note", length: "brief", extra: 1 },
+      ],
+    },
+    {
+      handler: "continueWriting",
+      feature: "continue.v1",
+      body: { noteId: NOTE_ID, context: "the sentence so far" },
+      invalid: [
+        { noteId: NOTE_ID },
+        { noteId: NOTE_ID, context: "" },
+        { noteId: NOTE_ID, context: "x".repeat(8_001) },
+        { noteId: NOTE_ID, context: "ok", text: "ok" },
+      ],
+    },
+    {
+      handler: "rewrite",
+      feature: "rewrite.v1",
+      body: { noteId: NOTE_ID, text: "a selection", tone: "concise" },
+      invalid: [
+        { noteId: NOTE_ID, text: "a selection", tone: "shouty" },
+        { noteId: NOTE_ID, text: "x".repeat(4_001), tone: "concise" },
+        { noteId: NOTE_ID, text: "a selection" },
+      ],
+    },
+  ] as const;
+
+  it.each(cases)(
+    "$handler parses its body and delegates with the $feature prompt",
+    async ({ handler, feature, body }) => {
+      const run = vi.fn().mockResolvedValue(undefined);
+      const origin = vi.fn();
+      await controller({}, origin, run)[handler](request(), responseStub, body);
+
+      expect(origin).toHaveBeenCalledOnce();
+      expect(run).toHaveBeenCalledOnce();
+      expect(run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          principal: expect.objectContaining({ userId: USER_ID }),
+          workspaceId: WORKSPACE_ID,
+          noteId: NOTE_ID,
+          requestId: null,
+          response: responseStub,
+          prompt: expect.objectContaining({ feature, promptVersion: feature }),
+        }),
+      );
+    },
+  );
+
+  it.each(cases)(
+    "$handler refuses a malformed body before it spends anything",
+    ({ handler, invalid }) => {
+      for (const body of invalid) {
+        const run = vi.fn();
+        const origin = vi.fn();
+        expect(() => controller({}, origin, run)[handler](request(), responseStub, body)).toThrow(
+          "The request is invalid.",
+        );
+        // The origin check runs first, and deliberately.
+        expect(origin).toHaveBeenCalledOnce();
+        expect(run).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("puts all three on the sensitive rate-limit tier", () => {
+    for (const { handler } of cases) {
+      expect(Reflect.getMetadata(RATE_LIMIT_TIER, AiController.prototype[handler])).toBe(
+        "sensitive",
       );
     }
   });
