@@ -35,6 +35,19 @@ export const tagIdsSchema = z
 export const isoTimestampSchema = z.string().datetime({ offset: true });
 export type IsoTimestampInput = z.input<typeof isoTimestampSchema>;
 
+/**
+ * Six-digit hex colour, `#rrggbb`. One definition for every colour a tenant can
+ * choose — project colours (Part 32) and the Part 72 workspace accent — so a
+ * value accepted by one surface is accepted by the other and
+ * `color-contrast.ts` can assume the shape it parses.
+ *
+ * Deliberately NOT the three-digit or eight-digit form: the persisted values,
+ * the seeded fixtures, and the email branding parser are all six-digit, and
+ * accepting alpha would let a workspace pick a transparent accent that fails
+ * contrast in a way no ratio can describe.
+ */
+export const hexColorSchema = z.string().regex(/^#[0-9a-f]{6}$/i, "Expected a six-digit hex color");
+
 export const sortDirectionSchema = z.enum(["asc", "desc"]);
 export const sortSchema = z
   .object({

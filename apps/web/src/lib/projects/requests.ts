@@ -18,7 +18,7 @@ import type {
   ProjectUpdateResult,
 } from "@notted/shared-types";
 
-import { publicEnvironment } from "@/config/public-environment";
+import { apiOrigin } from "@/lib/api/api-origin";
 
 export type ProjectRequestResult<T> =
   | { readonly ok: true; readonly data: T }
@@ -41,7 +41,7 @@ async function requestJson<T>(
   parse: (value: unknown) => { success: true; data: T } | { success: false },
 ): Promise<ProjectRequestResult<T>> {
   try {
-    const response = await fetch(new URL(path, publicEnvironment.NEXT_PUBLIC_API_URL), {
+    const response = await fetch(new URL(path, apiOrigin()), {
       ...init,
       cache: "no-store",
       credentials: "include",

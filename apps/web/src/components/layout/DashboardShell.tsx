@@ -14,6 +14,7 @@ import type { ReactNode } from "react";
 
 import { ReactQueryProvider } from "@/components/providers/ReactQueryProvider";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { accentStyle } from "@/lib/shell/accent-style";
 import { readSidebarPreference, writeSidebarPreference } from "@/lib/shell/sidebar-preference";
 
 export function breadcrumbsFor(pathname: string): readonly BreadcrumbItem[] {
@@ -136,7 +137,19 @@ export function DashboardShell({
 
   return (
     <ReactQueryProvider>
-      <div className="min-h-dvh bg-background">
+      {/*
+       * Part 72 runtime theming. The accent overrides `--color-primary` and
+       * `--color-ring` on this ONE element; Tailwind 4 resolves those custom
+       * properties at each use site, so every primary surface and focus ring
+       * beneath re-tints without a component knowing branding exists. An absent
+       * or malformed accent emits NO style attribute at all, which is what makes
+       * "no branding" identical to the pre-Part-72 shell rather than a special
+       * case someone has to maintain.
+       */}
+      <div
+        className="min-h-dvh bg-background"
+        style={accentStyle(shell.currentWorkspace?.accentColor)}
+      >
         <a href="#workspace-navigation" className="skip-link" data-notted-focus-hide>
           Skip to workspace navigation
         </a>

@@ -10,6 +10,11 @@ export type ApiErrorCode =
   | "RATE_LIMITED"
   | "REQUEST_FAILED"
   | "UNPROCESSABLE_ENTITY"
+  // 415. Paired with HTTP 415 only; `UNPROCESSABLE_ENTITY` stays 422. Part 40
+  // deliberately deferred this member and reused 422's code on 415 responses;
+  // the Part 71-74 review round closed that follow-up so the status and the
+  // code agree.
+  | "UNSUPPORTED_MEDIA_TYPE"
   | "VALIDATION_ERROR"
   | "INTERNAL_SERVER_ERROR"
   | "SERVICE_UNAVAILABLE"
@@ -47,6 +52,23 @@ export type ApiErrorCode =
   | "WEBHOOK_URL_REJECTED"
   | "WEBHOOK_NOT_VERIFIED"
   | "WEBHOOK_VERIFICATION_FAILED"
+  // Part 72 — branding. `ACCENT_CONTRAST_TOO_LOW` (422) is the accessibility
+  // verdict on a syntactically perfect `#rrggbb` value: the colour is a valid
+  // colour and simply cannot be read on the surfaces it would paint. It is its
+  // own code rather than `VALIDATION_ERROR` because the remedy is "choose a
+  // darker shade", which the settings form states with the measured ratio.
+  | "ACCENT_CONTRAST_TOO_LOW"
+  // Part 73 — custom domains. `DOMAIN_TAKEN` (409) is another workspace (or this
+  // one) already holding the globally-unique hostname; the message is
+  // deliberately identical for both so it cannot be used to detect a foreign
+  // tenant's claim. `DOMAIN_RESERVED` (422) is a hostname this deployment
+  // already answers on, which no tenant may claim. `UNTRUSTED_HOST` (421) is the
+  // host-header refusal from the trusted-host middleware — a `Misdirected
+  // Request`, not a missing resource, so a proxy re-resolves rather than caching
+  // a negative.
+  | "DOMAIN_TAKEN"
+  | "DOMAIN_RESERVED"
+  | "UNTRUSTED_HOST"
   // Part 67 — AI governance. These are the UPPER_SNAKE spelling of the
   // `AI_FAILURE_CODES` vocabulary in `ai.ts`: the same refusal appears here as
   // the envelope `code` and in `ai_usage.error_code` in its lowercase form.

@@ -25,11 +25,12 @@ import { randomUUID } from "node:crypto";
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import { AI_CONFIG, type AiConfig } from "../config/ai.config";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
-import { aiProviderConfig, aiUsage, auditLogs } from "../database/schema";
+import { aiProviderConfig, aiUsage } from "../database/schema";
 import {
   activeWorkspaceId,
   assertWorkspaceInsertValues,
@@ -203,7 +204,7 @@ export class AiService {
         // it, not the ciphertext, not the key version. `credentialChanged` is
         // the whole story an auditor needs: that the stored credential is not
         // the one it was before.
-        await tx.insert(auditLogs).values({
+        await recordAudit(tx, {
           workspaceId: activeWorkspaceId(this.tenantContext),
           userId: input.principal.userId,
           action: credential.auditAction,

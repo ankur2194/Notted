@@ -100,6 +100,8 @@ export type {
   AttachmentVariantProjection,
   AttachmentVariantSet,
 } from "./attachment";
+export { AUDIT_LOG_API_PATHS } from "./audit-log";
+export type { AuditLogEntry, AuditLogFilters, AuditLogListQuery, AuditLogPage } from "./audit-log";
 export { COMMENT_API_PATHS } from "./comment";
 export type {
   CommentAnchor,
@@ -133,6 +135,22 @@ export type {
   UserId,
   WorkspaceId,
 } from "./common";
+// Part 73 — custom domains.
+export {
+  DOMAIN_API_PATHS,
+  DOMAIN_VERIFICATION_TXT_KEY,
+  DOMAIN_VERIFICATION_TXT_PREFIX,
+  WORKSPACE_DOMAIN_ERRORS,
+  WORKSPACE_DOMAIN_STATUSES,
+} from "./domain";
+export type {
+  DomainResolveResult,
+  WorkspaceDomain,
+  WorkspaceDomainError,
+  WorkspaceDomainRecord,
+  WorkspaceDomainResult,
+  WorkspaceDomainStatus,
+} from "./domain";
 export { EXPORT_API_PATHS, SUPPORTED_EXPORT_FORMATS, SUPPORTED_EXPORT_SOURCES } from "./export";
 export type {
   ExportCancelResult,
@@ -286,6 +304,7 @@ export type {
   WorkspaceDeleteResult,
   WorkspaceDetail,
   WorkspaceListQuery,
+  WorkspaceLogoResult,
   WorkspaceMemberLeaveResult,
   WorkspaceMemberPage,
   WorkspaceMemberRemoveResult,

@@ -37,6 +37,10 @@ export const DOMAIN_JOB_TYPES = Object.freeze({
   workspaceSearchPurge: "workspace.search.purge",
   storageMaintenanceSweep: "storage.maintenance.sweep",
   noteVersionRetentionSweep: "note.version.retention.sweep",
+  // Part 71 — audit log retention purge. Deletes rows past
+  // `RETENTION_CONFIG.auditLogRetentionDays`, using the one sanctioned
+  // exception in the migration 0021 append-only trigger.
+  auditLogRetentionSweep: "audit.log.retention.sweep",
   jobIdempotencyCleanup: "queue.idempotency.cleanup",
   // Part 51.2 — system-owned, rebuildable search-index sync. Producers
   // (Part 51.3) emit one intent per note mutation batch; the handler re-reads

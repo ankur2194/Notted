@@ -18,6 +18,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import {
@@ -30,7 +31,6 @@ import {
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import {
   attachments,
-  auditLogs,
   jobOutbox,
   type JobOutboxPayload,
   notes,
@@ -658,7 +658,7 @@ export class ProjectsService {
     input: ScopedInput,
     metadata: Record<string, unknown> = {},
   ): Promise<void> {
-    await tx.insert(auditLogs).values({
+    await recordAudit(tx, {
       workspaceId: activeWorkspaceId(this.tenantContext),
       userId: input.principal.userId,
       action: PROJECT_AUDIT_ACTIONS[mutation],

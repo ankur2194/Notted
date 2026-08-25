@@ -6,12 +6,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiHttpException } from "../common/errors/api-http.exception";
+import { auditLogs } from "../database/schema";
 import { createTenantContext, TenantContextService } from "../tenant";
 
 import { CommentsService } from "./comments.service";
 
 import type { AuthorizationEntryService } from "../authorization/authorization-entry.service";
-import type { StructuredLogger } from "../common/logging/structured-logger.service";
 import type { DatabaseService } from "../database/database.service";
 import type { RealtimeRoomService } from "../realtime/realtime-room.service";
 import type { AuthenticatedPrincipal, CommentAnchor } from "@notted/shared-types";
@@ -140,16 +140,9 @@ function harness(selects: Row[][] = []) {
     emitOrder.push(state.committed);
   });
   const realtimeRooms = { emit } as unknown as RealtimeRoomService;
-  const logger = { info: vi.fn() } as unknown as StructuredLogger;
 
-  const subject = new CommentsService(
-    database,
-    authorizationEntry,
-    tenantContext,
-    realtimeRooms,
-    logger,
-  );
-  return { subject, inserts, updates, deletes, emit, emitOrder, logger, state };
+  const subject = new CommentsService(database, authorizationEntry, tenantContext, realtimeRooms);
+  return { subject, inserts, updates, deletes, emit, emitOrder, state };
 }
 
 const scope = { principal, workspaceId, noteId, requestId: null };
@@ -249,7 +242,7 @@ describe("CommentsService.create", () => {
 
 describe("CommentsService.setResolution", () => {
   it("stamps resolved_at and resolved_by_id when resolving", async () => {
-    const { subject, updates, logger, emit } = harness([
+    const { subject, updates, inserts, emit } = harness([
       [commentRow()], // the target thread root
       [
         commentRow({
@@ -270,10 +263,15 @@ describe("CommentsService.setResolution", () => {
     expect(result.comment.resolvedBy).toEqual({ id: userId, name: "Ana Editor" });
     expect(result.comment.resolvedAt).toBe("2026-08-14T11:00:00.000Z");
     // Identifiers only — never the comment body.
-    expect(logger.info).toHaveBeenCalledWith(
-      { workspaceId, noteId, commentId, actorId: userId, outcome: "resolved" },
-      "comment.resolution",
-    );
+    const audit = inserts.find((entry) => entry.table === auditLogs);
+    expect(audit?.values).toMatchObject({
+      workspaceId,
+      userId,
+      action: "comment.resolve",
+      entityType: "comment",
+      entityId: commentId,
+      metadata: { noteId },
+    });
     expect(emit).toHaveBeenCalledWith(expect.anything(), "realtime:comment:changed", {
       noteId,
       commentId,

@@ -25,6 +25,7 @@ import { createTenantContext, TenantContextService } from "../tenant";
 import { WORKSPACE_AUDIT_ACTIONS, WORKSPACE_DELETED_JOB_TYPE } from "./workspaces.constants";
 import { isUniqueViolationOnConstraint, WorkspacesService } from "./workspaces.service";
 
+import type { ApiHttpException } from "../common/errors/api-http.exception";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 
 // --------------------------------------------------------------------------- //
@@ -153,7 +154,6 @@ describe("WorkspacesService (unit)", () => {
       name: "Notted Alpha",
       slug: "notted-alpha",
       description: null,
-      domain: null,
     });
 
     // The first attempt collided; the second attempt (suffixed -2) succeeded.
@@ -341,6 +341,175 @@ describe("WorkspacesService (unit)", () => {
 });
 
 // --------------------------------------------------------------------------- //
+// Part 72 branding accent. `workspaces.settings` was already persisting (and
+// seeding) `accentColor` with no contract behind it; these cases pin the three
+// rules that gave it one: contrast is enforced on WRITE with its own code, the
+// warn band is allowed, and `null` DELETES the key instead of storing a second
+// kind of absence.
+// --------------------------------------------------------------------------- //
+
+/** Captures the thrown `ApiHttpException` so both its status and code can be asserted. */
+async function accentRejection(work: Promise<unknown>): Promise<ApiHttpException> {
+  try {
+    await work;
+  } catch (error: unknown) {
+    return error as ApiHttpException;
+  }
+  throw new Error("expected the update to reject");
+}
+
+/**
+ * One workspace row whose `settings` blob the caller chooses. The update writes
+ * back into the same row, so the re-select that feeds the detail mapper sees
+ * exactly what was persisted rather than a fixture the test restated.
+ */
+function accentHarness(storedSettings: Record<string, unknown>) {
+  const tenant = new TenantContextService();
+  const now = new Date();
+  const row = {
+    id: WORKSPACE_ID,
+    name: "Notted Alpha",
+    slug: "notted-alpha",
+    description: null,
+    logoUrl: null,
+    domain: null,
+    plan: "free" as const,
+    settings: storedSettings as unknown,
+    storageLimitBytes: null,
+    createdById: USER_ID,
+    createdAt: now,
+    updatedAt: now,
+    currentUserRole: "owner" as const,
+  };
+  const saved: Record<string, unknown>[] = [];
+
+  const tx = {
+    select: () => ({
+      from: () => {
+        const chain = {
+          innerJoin: () => chain,
+          where: () => chain,
+          limit: () => Promise.resolve([{ ...row }]),
+        };
+        return chain;
+      },
+    }),
+    update: () => ({
+      set: (value: Record<string, unknown>) => ({
+        where: () => {
+          saved.push(value);
+          if (value.settings !== undefined) row.settings = value.settings;
+          return Promise.resolve();
+        },
+      }),
+    }),
+    insert: () => ({ values: () => Promise.resolve() }),
+  };
+  const database = {
+    transaction: async (work: (scope: typeof tx) => Promise<unknown>) => work(tx),
+  };
+  const { entry } = mockEntryWithRun(tenant, WORKSPACE_ID, USER_ID);
+  const service = new WorkspacesService(database as unknown as DatabaseService, entry, tenant);
+
+  return {
+    service,
+    saved,
+    settingsWritten: (): Record<string, unknown> =>
+      (saved.at(-1)?.settings ?? {}) as Record<string, unknown>,
+  };
+}
+
+describe("WorkspacesService accent colour (unit)", () => {
+  it("persists an accent that meets the contrast floor and returns it from the detail mapper", async () => {
+    const harness = accentHarness({ defaultPageSize: "a4" });
+    // 5.47:1 against white — comfortably `ok`.
+    const result = await harness.service.update({
+      principal: principal(),
+      workspaceId: WORKSPACE_ID,
+      settings: { defaultPageSize: "a4", accentColor: "#0f766e" },
+    });
+
+    expect(harness.settingsWritten()).toEqual({ defaultPageSize: "a4", accentColor: "#0f766e" });
+    // Part 72 stopped STRIPPING the accent on read; before it, the contract
+    // could not carry the very value the workspace had chosen.
+    expect(result.workspace.settings).toEqual({ defaultPageSize: "a4", accentColor: "#0f766e" });
+  });
+
+  it("refuses an illegible accent with its own code, not a generic validation error", async () => {
+    const harness = accentHarness({ defaultPageSize: "a4" });
+    // 1.67:1 against white. The settings form needs the specific code to name
+    // the remedy ("choose a darker shade"), which a Zod refinement could not give.
+    const error = await accentRejection(
+      harness.service.update({
+        principal: principal(),
+        workspaceId: WORKSPACE_ID,
+        settings: { defaultPageSize: "a4", accentColor: "#fbbf24" },
+      }),
+    );
+    expect(error.getStatus()).toBe(422);
+    expect(error.safeResponse.code).toBe("ACCENT_CONTRAST_TOO_LOW");
+    expect(harness.saved).toEqual([]);
+  });
+
+  it("accepts an accent in the warn band rather than rejecting most brand palettes", async () => {
+    const harness = accentHarness({ defaultPageSize: "a4" });
+    // 3.76:1 — over the 3:1 non-text floor, under the 4.5:1 body-text target.
+    // The accent paints surfaces and borders, not paragraphs.
+    const result = await harness.service.update({
+      principal: principal(),
+      workspaceId: WORKSPACE_ID,
+      settings: { defaultPageSize: "a4", accentColor: "#ef4444" },
+    });
+    expect(result.workspace.settings.accentColor).toBe("#ef4444");
+  });
+
+  it("treats accentColor: null as a deletion, leaving the other stored keys intact", async () => {
+    const harness = accentHarness({
+      defaultPageSize: "letter",
+      accentColor: "#2563eb",
+      scenario: "alpha",
+    });
+    const result = await harness.service.update({
+      principal: principal(),
+      workspaceId: WORKSPACE_ID,
+      settings: { defaultPageSize: "letter", accentColor: null },
+    });
+
+    // One absence, not two: a stored `null` would make every reader — the
+    // detail mapper, the shell, the email branding parser — handle both.
+    expect(harness.settingsWritten()).not.toHaveProperty("accentColor");
+    // `scenario` is a seed-only marker no contract describes; a settings save
+    // must not erase it.
+    expect(harness.settingsWritten()).toEqual({ defaultPageSize: "letter", scenario: "alpha" });
+    expect(result.workspace.settings).toEqual({ defaultPageSize: "letter" });
+  });
+
+  it("keeps a stored accent through an update that only changes the page size", async () => {
+    const harness = accentHarness({
+      defaultPageSize: "a4",
+      accentColor: "#0f766e",
+      scenario: "alpha",
+    });
+    const result = await harness.service.update({
+      principal: principal(),
+      workspaceId: WORKSPACE_ID,
+      settings: { defaultPageSize: "letter" },
+    });
+
+    // An omitted key means "leave it alone" — only an explicit `null` clears it.
+    expect(harness.settingsWritten()).toEqual({
+      defaultPageSize: "letter",
+      accentColor: "#0f766e",
+      scenario: "alpha",
+    });
+    expect(result.workspace.settings).toEqual({
+      defaultPageSize: "letter",
+      accentColor: "#0f766e",
+    });
+  });
+});
+
+// --------------------------------------------------------------------------- //
 // Live integration tests (DATABASE_URL-gated): real PostgreSQL behavior for
 // validation, slug collision, owner-membership transactionality, authorization
 // allow/deny, cross-tenant concealment, update, and deletion cleanup intent.
@@ -409,7 +578,9 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 26 workspace lifecycle (live)", () => {
           principal: alphaOwner,
           workspaceId: SEED_IDS.workspaces.alpha,
         });
-        expect(seededDetail.settings).toEqual({ defaultPageSize: "a4" });
+        // Part 72 added a seeded accent for Alpha; the projection returns both
+        // known keys (and drops the seed's private `scenario` marker).
+        expect(seededDetail.settings).toEqual({ defaultPageSize: "a4", accentColor: "#2563eb" });
         expect(seededDetail.storageLimitBytes).toBe(1_073_741_824);
         await service.update({
           principal: alphaOwner,
@@ -443,7 +614,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 26 workspace lifecycle (live)", () => {
           name: "Lifecycle Workspace",
           slug: collisionBase,
           description: "Part 26 live fixture",
-          domain: null,
           idempotencyKey: "workspace-live-create-00000001",
         });
         expect(created.slug).toBe(`${collisionBase}-3`);
@@ -457,7 +627,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 26 workspace lifecycle (live)", () => {
           name: "Lifecycle Workspace",
           slug: collisionBase,
           description: "Part 26 live fixture",
-          domain: null,
           idempotencyKey: "workspace-live-create-00000001",
         });
         expect(replayed.workspace.id).toBe(createdId);

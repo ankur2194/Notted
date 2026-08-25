@@ -117,6 +117,12 @@ export const SEED_IDS = {
     alphaPublishNotes: "20000000-0000-4000-8b00-000000000003",
     alphaStandaloneFollowUp: "20000000-0000-4000-8b00-000000000004",
   },
+  auditLogs: {
+    alphaWorkspaceCreate: "20000000-0000-4000-8c00-000000000001",
+    alphaMemberInvite: "20000000-0000-4000-8c00-000000000002",
+    alphaNoteCreated: "20000000-0000-4000-8c00-000000000003",
+    betaWorkspaceCreate: "20000000-0000-4000-8c00-000000000004",
+  },
 } as const;
 
 export const SEED_TIMESTAMPS = {
@@ -270,6 +276,7 @@ export const SEED_EXPECTED_COUNTS = {
   taskStatuses: 1,
   tasks: 4,
   taskTags: 2,
+  auditLogs: 4,
 } as const;
 
 export type SeedCountName = keyof typeof SEED_EXPECTED_COUNTS;

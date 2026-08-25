@@ -7,3 +7,9 @@
 - Redact credentials, cookies, content, personal data, signed URLs, and secrets from logs/artifacts.
 - Use least-privilege networking and short-lived authorized downloads.
 - Add negative authorization and cross-tenant tests for affected resources.
+
+## See also
+
+- [Threat model](../security/threat-model.md)
+- [Remediation checklist](../security/remediation-checklist.md)
+- `pnpm security:check` — on-demand production-dependency and container scan (see [`docs/README.md`](../README.md#quality-commands))

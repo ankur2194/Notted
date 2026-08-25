@@ -26,6 +26,7 @@ import type { ShellBootstrap } from "@notted/shared-types";
 import { NoteTree } from "@/components/notes/NoteTree";
 import { TagFilterList } from "@/components/tags/TagFilterList";
 import { Button } from "@/components/ui/button";
+import { WorkspaceAvatar } from "@/components/workspaces/WorkspaceAvatar";
 
 export function Sidebar({
   shell,
@@ -43,24 +44,53 @@ export function Sidebar({
   readonly tagNavigation: TagNavigationState;
 }) {
   const hideLabels = collapsed && !mobile;
+  const current = shell.currentWorkspace;
+  const branded = current !== null && current.logoUrl !== null ? current : null;
   return (
     <aside
       aria-label={mobile ? "Mobile workspace navigation" : "Workspace navigation"}
       className="flex h-full min-h-0 flex-col bg-secondary/40"
     >
       <div className="border-b p-3">
+        {/*
+         * Part 72 branding. A workspace with a published logo shows its own mark
+         * and name here; everything else shows the Notted wordmark. The fallback
+         * is the SAME `N` block as before and is what a broken image resolves to
+         * at runtime, so the shell can never end up with a blank corner.
+         *
+         * The link still goes to the dashboard and still announces itself as
+         * "Notted dashboard" whichever mark is drawn — re-labelling the home link
+         * per workspace would make the one fixed landmark in the shell move.
+         */}
         <Link
           href="/"
           className="flex min-h-11 items-center gap-3 rounded-md px-2 text-lg font-bold"
           aria-label="Notted dashboard"
         >
-          <span
-            aria-hidden="true"
-            className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground"
-          >
-            N
-          </span>
-          {!hideLabels && <span>Notted</span>}
+          {branded === null ? (
+            <span
+              aria-hidden="true"
+              className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground"
+            >
+              N
+            </span>
+          ) : (
+            <WorkspaceAvatar
+              name={branded.name}
+              logoUrl={branded.logoUrl}
+              alt={`${branded.name} logo`}
+              size="sm"
+              fallback={
+                <span
+                  aria-hidden="true"
+                  className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground"
+                >
+                  N
+                </span>
+              }
+            />
+          )}
+          {!hideLabels && <span>{branded === null ? "Notted" : branded.name}</span>}
         </Link>
         {!hideLabels && (
           <div className="mt-3">

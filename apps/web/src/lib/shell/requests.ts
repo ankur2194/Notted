@@ -14,7 +14,7 @@ import type {
   NotificationsMarkAllResult,
 } from "@notted/shared-types";
 
-import { publicEnvironment } from "@/config/public-environment";
+import { apiOrigin } from "@/lib/api/api-origin";
 
 export type ShellRequestResult<T> =
   | { readonly ok: true; readonly data: T }
@@ -56,7 +56,7 @@ export function loadNotifications(
   workspaceId: string,
   page = 1,
 ): Promise<ShellRequestResult<NotificationPage>> {
-  const url = new URL(notificationsPath(workspaceId), publicEnvironment.NEXT_PUBLIC_API_URL);
+  const url = new URL(notificationsPath(workspaceId), apiOrigin());
   url.searchParams.set("page", String(page));
   url.searchParams.set("limit", "20");
   return requestJson(url, { method: "GET" }, (value) => notificationPageSchema.safeParse(value));
@@ -68,10 +68,7 @@ export function setNotificationRead(
   isRead: boolean,
 ): Promise<ShellRequestResult<NotificationReadResult>> {
   return requestJson(
-    new URL(
-      `${notificationsPath(workspaceId)}/${encodeURIComponent(notificationId)}`,
-      publicEnvironment.NEXT_PUBLIC_API_URL,
-    ),
+    new URL(`${notificationsPath(workspaceId)}/${encodeURIComponent(notificationId)}`, apiOrigin()),
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -85,7 +82,7 @@ export function markAllNotificationsRead(
   workspaceId: string,
 ): Promise<ShellRequestResult<NotificationsMarkAllResult>> {
   return requestJson(
-    new URL(`${notificationsPath(workspaceId)}/read-all`, publicEnvironment.NEXT_PUBLIC_API_URL),
+    new URL(`${notificationsPath(workspaceId)}/read-all`, apiOrigin()),
     { method: "POST", headers: { "Content-Type": "application/json" } },
     (value) => notificationsMarkAllResultSchema.safeParse(value),
   );
@@ -102,10 +99,7 @@ export function loadMentionEmailPreference(
   workspaceId: string,
 ): Promise<ShellRequestResult<NotificationEmailPreference>> {
   return requestJson(
-    new URL(
-      `${notificationsPath(workspaceId)}/email-preference`,
-      publicEnvironment.NEXT_PUBLIC_API_URL,
-    ),
+    new URL(`${notificationsPath(workspaceId)}/email-preference`, apiOrigin()),
     { method: "GET" },
     (value) => notificationEmailPreferenceSchema.safeParse(value),
   );
@@ -116,10 +110,7 @@ export function setMentionEmailPreference(
   mentionEmail: boolean,
 ): Promise<ShellRequestResult<NotificationEmailPreference>> {
   return requestJson(
-    new URL(
-      `${notificationsPath(workspaceId)}/email-preference`,
-      publicEnvironment.NEXT_PUBLIC_API_URL,
-    ),
+    new URL(`${notificationsPath(workspaceId)}/email-preference`, apiOrigin()),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

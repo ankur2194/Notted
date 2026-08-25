@@ -153,6 +153,16 @@ export type {
   UpdateAttachmentIntentInput,
 } from "./attachment.schema";
 export {
+  AUDIT_LOG_EXPORT_MAX_ROWS,
+  auditLogActionSchema,
+  auditLogEntityTypeSchema,
+  auditLogEntrySchema,
+  auditLogExportQuerySchema,
+  auditLogListQuerySchema,
+  auditLogPageSchema,
+} from "./audit-log.schema";
+export type { AuditLogExportQueryInput, AuditLogListQueryInput } from "./audit-log.schema";
+export {
   COMMENT_ANCHOR_QUOTE_MAX_LENGTH,
   COMMENT_ANCHOR_RELATIVE_MAX_LENGTH,
   COMMENT_ANCHOR_SCHEMA_VERSION,
@@ -182,8 +192,17 @@ export type {
   UpdateCommentInput,
 } from "./comment.schema";
 export {
+  ACCENT_CONTRAST_MIN_RATIO,
+  ACCENT_CONTRAST_TARGET_RATIO,
+  accentContrast,
+  contrastRatio,
+  relativeLuminance,
+} from "./color-contrast";
+export type { AccentContrast, AccentContrastLevel } from "./color-contrast";
+export {
   dateRangeQuerySchema,
   explicitBooleanQuerySchema,
+  hexColorSchema,
   idempotencyKeySchema,
   isoTimestampSchema,
   jsonValueSchema,
@@ -204,6 +223,19 @@ export type {
   SortInput,
   UuidInput,
 } from "./common.schema";
+// Part 73 — custom domains.
+export {
+  customDomainHostnameSchema,
+  domainResolveQuerySchema,
+  domainResolveResultSchema,
+  normalizeHostname,
+  setWorkspaceDomainSchema,
+  workspaceDomainErrorSchema,
+  workspaceDomainResultSchema,
+  workspaceDomainSchema,
+  workspaceDomainStatusSchema,
+} from "./domain.schema";
+export type { DomainResolveQueryInput, SetWorkspaceDomainInput } from "./domain.schema";
 export {
   exportCreateSchema,
   exportFormatSchema,
@@ -500,6 +532,7 @@ export {
   workspaceDetailSchema,
   workspaceFilterSchema,
   workspaceListQuerySchema,
+  workspaceLogoResultSchema,
   workspaceInvitationAcceptResultSchema,
   workspaceInvitationPageSchema,
   workspaceInvitationResendResultSchema,

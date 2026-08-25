@@ -36,8 +36,17 @@ const shell: ShellBootstrap = {
     name: "Ada Editor",
     email: "ada@example.test",
   },
-  workspaces: [{ workspaceId, name: "Alpha", slug: "alpha", role: "editor" }],
-  currentWorkspace: { workspaceId, name: "Alpha", slug: "alpha", role: "editor" },
+  workspaces: [
+    { workspaceId, name: "Alpha", slug: "alpha", role: "editor", logoUrl: null, accentColor: null },
+  ],
+  currentWorkspace: {
+    workspaceId,
+    name: "Alpha",
+    slug: "alpha",
+    role: "editor",
+    logoUrl: null,
+    accentColor: null,
+  },
   permissions: {
     canViewSettings: true,
     canManageWorkspace: false,
@@ -204,5 +213,87 @@ describe("DashboardShell", () => {
     await user.click(markAll);
     expect(markAll).toHaveFocus();
     expect(markAllNotificationsRead).not.toHaveBeenCalled();
+  });
+  // ------------------------------------------------------------------- //
+  // Part 72 — branding.
+  // ------------------------------------------------------------------- //
+
+  it("emits no accent custom properties when the workspace has no accent", () => {
+    const { container } = render(
+      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+        <p>Content</p>
+      </DashboardShell>,
+    );
+    const root = container.querySelector("div.min-h-dvh");
+    expect(root?.getAttribute("style")).toBeNull();
+  });
+
+  it("overrides --color-primary and --color-ring from the workspace accent", () => {
+    const branded: ShellBootstrap = {
+      ...shell,
+      currentWorkspace:
+        shell.currentWorkspace === null
+          ? null
+          : { ...shell.currentWorkspace, accentColor: "#0f766e" },
+    };
+    const { container } = render(
+      <DashboardShell shell={branded} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+        <p>Content</p>
+      </DashboardShell>,
+    );
+    const style = container.querySelector("div.min-h-dvh")?.getAttribute("style") ?? "";
+    expect(style).toContain("--color-primary: #0f766e");
+    expect(style).toContain("--color-ring: #0f766e");
+  });
+
+  it("ignores an accent that is not a six-digit hex colour", () => {
+    const hostile: ShellBootstrap = {
+      ...shell,
+      currentWorkspace:
+        shell.currentWorkspace === null
+          ? null
+          : { ...shell.currentWorkspace, accentColor: "red;} :root{--color-primary:blue" },
+    };
+    const { container } = render(
+      <DashboardShell shell={hostile} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+        <p>Content</p>
+      </DashboardShell>,
+    );
+    expect(container.querySelector("div.min-h-dvh")?.getAttribute("style")).toBeNull();
+  });
+
+  it("shows the Notted mark when the workspace has no logo", () => {
+    render(
+      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+        <p>Content</p>
+      </DashboardShell>,
+    );
+    const home = screen.getAllByRole("link", { name: "Notted dashboard" })[0];
+    expect(home).toHaveTextContent("Notted");
+    expect(within(home as HTMLElement).queryByRole("img")).toBeNull();
+  });
+
+  it("shows the workspace logo and name when one is published", () => {
+    const branded: ShellBootstrap = {
+      ...shell,
+      currentWorkspace:
+        shell.currentWorkspace === null
+          ? null
+          : {
+              ...shell.currentWorkspace,
+              logoUrl: `/api/v1/workspaces/${workspaceId}/logo/0123456789abcdef0123456789abcdef`,
+            },
+    };
+    render(
+      <DashboardShell shell={branded} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+        <p>Content</p>
+      </DashboardShell>,
+    );
+    const home = screen.getAllByRole("link", { name: "Notted dashboard" })[0];
+    expect(home).toHaveTextContent("Alpha");
+    const logo = within(home as HTMLElement).getByRole("img", { name: "Alpha logo" });
+    expect(logo.getAttribute("src")).toContain(
+      `/api/v1/workspaces/${workspaceId}/logo/0123456789abcdef0123456789abcdef`,
+    );
   });
 });

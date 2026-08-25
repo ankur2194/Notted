@@ -43,6 +43,9 @@ function kindForAction(action: AuthorizationAction): AuthorizationResourceKind {
       // workspace's quota, so both AI actions address the workspace itself.
       "ai.configure",
       "ai.use",
+      // Part 71: an audit trail is workspace-wide, not per-entity.
+      "audit.read",
+      "audit.export",
     ].includes(action)
   )
     return "workspace";
@@ -524,6 +527,42 @@ describe("AuthorizationPolicyService", () => {
     expect(
       policy.decide(evaluation("editor", "ai.use", resourceFor("ai.use"), stale), NOW).allowed,
     ).toBe(true);
+  });
+
+  it("allows only owner/admin to read and export the audit trail", () => {
+    expect(policy.decide(evaluation("owner", "audit.read"), NOW).allowed).toBe(true);
+    expect(policy.decide(evaluation("owner", "audit.export"), NOW).allowed).toBe(true);
+    expect(policy.decide(evaluation("admin", "audit.read"), NOW).allowed).toBe(true);
+    expect(policy.decide(evaluation("admin", "audit.export"), NOW).allowed).toBe(true);
+  });
+
+  it("denies audit actions to editors and viewers despite matching the generic `.read` suffix rule", () => {
+    // `audit.read` ends in `.read`, so without the explicit `action.startsWith("audit.")`
+    // entry in the editor/viewer deny blocks, the generic `action.endsWith(".read")` rule
+    // further down each method would allow it. This is the regression the deny
+    // block exists to prevent — mirroring the same hazard already documented for `ai.`.
+    expect(policy.decide(evaluation("editor", "audit.read"), NOW).allowed).toBe(false);
+    expect(policy.decide(evaluation("editor", "audit.export"), NOW).allowed).toBe(false);
+    expect(policy.decide(evaluation("viewer", "audit.read"), NOW).allowed).toBe(false);
+    expect(policy.decide(evaluation("viewer", "audit.export"), NOW).allowed).toBe(false);
+  });
+
+  it("requires the admin API-key scope for audit.read, not merely a read scope", () => {
+    const base = evaluation("owner", "audit.read");
+    const adminKey = {
+      kind: "api-key" as const,
+      apiKeyId: "key-1",
+      workspaceId: WORKSPACE_ID,
+      scopes: ["admin"] as const,
+    };
+    const readKey = {
+      kind: "api-key" as const,
+      apiKeyId: "key-1",
+      workspaceId: WORKSPACE_ID,
+      scopes: ["read"] as const,
+    };
+    expect(policy.decide({ ...base, actor: adminKey }, NOW).allowed).toBe(true);
+    expect(policy.decide({ ...base, actor: readKey }, NOW).allowed).toBe(false);
   });
 
   it("rechecks user-requested jobs without granting freshness", () => {

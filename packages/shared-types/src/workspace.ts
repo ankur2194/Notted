@@ -4,6 +4,17 @@ export type WorkspacePlan = "free" | "pro" | "enterprise";
 export type WorkspaceRole = "owner" | "admin" | "editor" | "viewer";
 export type WorkspaceSettings = {
   defaultPageSize: "a4" | "letter";
+  /**
+   * Part 72 branding accent, `#rrggbb`.
+   *
+   * ON READ this is either a colour or ABSENT: the key is DELETED from the
+   * stored settings when an admin resets it, so a reader never sees `null`.
+   * `null` exists in the type only because it is meaningful ON WRITE — it is
+   * the explicit "use the platform default" instruction, which `undefined`
+   * (leave whatever is stored) cannot express. Read it as
+   * `settings.accentColor ?? null` and the distinction never leaks further.
+   */
+  accentColor?: string | null;
 };
 
 /**
@@ -21,6 +32,20 @@ export const WORKSPACE_API_PATHS = Object.freeze({
   storage: "/api/v1/workspaces/:workspaceId/storage",
   /** Part 45 administrative cleanup. Owner/admin only; supports `dryRun`. */
   storageMaintenance: "/api/v1/workspaces/:workspaceId/storage/maintenance",
+  /**
+   * Part 72 branding logo. `POST` replaces and `DELETE` removes (both
+   * `settings.update`); the tokenised `GET` beneath it is PUBLIC and is
+   * addressed through the stored `logoUrl`, never rebuilt by a client.
+   */
+  logo: "/api/v1/workspaces/:workspaceId/logo",
+  /**
+   * Part 73 custom domain. A SINGLETON, not a collection: a workspace claims at
+   * most one hostname (`workspace_domains.workspace_id` is unique). `GET` reads
+   * (`settings.read`), `PUT` claims, `DELETE` releases, and the `verify`
+   * sub-route re-runs the DNS check — all three mutations are `settings.update`.
+   */
+  domain: "/api/v1/workspaces/:workspaceId/domain",
+  domainVerify: "/api/v1/workspaces/:workspaceId/domain/verify",
 } as const);
 
 /** REST paths for Part 28 membership and invitation operations. */
@@ -44,6 +69,11 @@ export interface WorkspaceSummary {
   /** Public workspace branding logo. Database-only/secret columns stay internal. */
   logoUrl: string | null;
   updatedAt: IsoTimestamp;
+}
+
+/** Part 72 logo mutation result: the new app-relative path, or `null` after removal. */
+export interface WorkspaceLogoResult {
+  readonly logoUrl: string | null;
 }
 
 export interface WorkspaceDetail extends WorkspaceSummary {

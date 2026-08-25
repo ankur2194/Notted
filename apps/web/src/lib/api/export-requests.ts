@@ -11,7 +11,7 @@ import type { ApiRequestResult } from "@/lib/api/request-json";
 import type { ExportJob } from "@notted/shared-types";
 import type { ExportCreateInput } from "@notted/shared-validators";
 
-import { publicEnvironment } from "@/config/public-environment";
+import { apiOrigin } from "@/lib/api/api-origin";
 import { json, requestJson, validIds } from "@/lib/api/request-json";
 
 /*
@@ -144,8 +144,5 @@ export function cancelExportJob(
  * string into an anchor href would make that field an open-redirect surface.
  */
 export function exportDownloadUrl(workspaceId: string, exportId: string): string {
-  return new URL(
-    EXPORT_API_PATHS.download(workspaceId, exportId),
-    publicEnvironment.NEXT_PUBLIC_API_URL,
-  ).toString();
+  return new URL(EXPORT_API_PATHS.download(workspaceId, exportId), apiOrigin()).toString();
 }

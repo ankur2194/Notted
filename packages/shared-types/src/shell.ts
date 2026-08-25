@@ -17,6 +17,14 @@ export interface ShellWorkspaceMembership {
   readonly name: string;
   readonly slug: string;
   readonly role: WorkspaceRole;
+  /**
+   * Part 72. App-relative API path (`/api/v1/workspaces/<id>/logo/<token>`) or
+   * `null`. Resolve it with `apiAssetUrl` in the web app; never treat it as an
+   * absolute URL, and never build it client-side from the workspace id.
+   */
+  readonly logoUrl: string | null;
+  /** Part 72 branding accent, `#rrggbb`, or `null` for the platform default. */
+  readonly accentColor: string | null;
 }
 
 /** Display hints only. The API re-authorizes every operation. */

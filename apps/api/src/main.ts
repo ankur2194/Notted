@@ -13,6 +13,7 @@ import { AppModule } from "./app.module";
 import { AuthRateLimitMiddleware } from "./auth/auth-rate-limit.middleware";
 import { AuthService } from "./auth/auth.service";
 import { BETTER_AUTH_NODE_HANDLER } from "./auth/auth.tokens";
+import { CsrfOriginMiddleware } from "./auth/csrf-origin.middleware";
 import { PlatformOperatorService } from "./auth/platform-operator.service";
 import { ApiExceptionFilter } from "./common/errors/api-exception.filter";
 import { ApiHttpException } from "./common/errors/api-http.exception";
@@ -21,10 +22,12 @@ import { StructuredLogger } from "./common/logging/structured-logger.service";
 import { RateLimitService } from "./common/rate-limit/rate-limit.service";
 import { getRequestId } from "./common/request/request-context";
 import { RequestContextMiddleware } from "./common/request/request-context.middleware";
+import { VerifiedHostsService } from "./common/verified-hosts.service";
 import { APP_CONFIG, type AppConfig } from "./config/app.config";
 import { AUTH_CONFIG, type AuthConfig } from "./config/auth.config";
 import { FEATURES_CONFIG, type FeaturesConfig } from "./config/features.config";
 import { REALTIME_CONFIG, type RealtimeConfig } from "./config/realtime.config";
+import { TrustedHostMiddleware } from "./domains/trusted-host.middleware";
 import {
   BULL_BOARD_PATH,
   bullBoardRequestPolicy,
@@ -52,8 +55,11 @@ export async function createApplication(): Promise<NestExpressApplication> {
   const authConfig = app.get<AuthConfig>(AUTH_CONFIG);
   const logger = app.get(StructuredLogger);
   const requestContext = app.get(RequestContextMiddleware);
+  const trustedHost = app.get(TrustedHostMiddleware);
+  const verifiedHosts = app.get(VerifiedHostsService);
   const authRateLimit = app.get(AuthRateLimitMiddleware);
   const authService = app.get(AuthService);
+  const csrfOrigin = app.get(CsrfOriginMiddleware);
   const apiKeyAuth = app.get(ApiKeyAuthService);
   const platformOperator = app.get(PlatformOperatorService);
   const rateLimit = app.get(RateLimitService);
@@ -82,12 +88,60 @@ export async function createApplication(): Promise<NestExpressApplication> {
   express.set("trust proxy", config.trustProxyHops === 0 ? false : config.trustProxyHops);
 
   app.use(requestContext.use.bind(requestContext));
-  app.use(helmet());
+  // Part 74. FIRST after the request id, and deliberately ahead of the Part 73
+  // trusted-host check below: helmet reads nothing host-derived, so putting it
+  // first costs nothing and is the only way a refusal — a 421 from
+  // `TrustedHostMiddleware`, a CORS rejection — carries the security headers
+  // too. A response without them is still a response.
+  //
+  // Explicit rather than `helmet()`'s defaults, because the API serves
+  // JSON, files and downloads — never a document a browser should execute.
+  //
+  //   * `default-src 'none'` with nothing added: an API response has no
+  //     legitimate subresource of any kind, so the strictest possible policy is
+  //     also the correct one. Bull Board is the single HTML surface and
+  //     overrides this below with its own directives.
+  //   * HSTS is PRODUCTION ONLY. Sending it from `http://localhost:3001` would
+  //     pin the developer's browser to HTTPS for localhost — a durable,
+  //     hard-to-clear break of every other local project on that host.
+  //   * CORP `same-origin` is the safe default; the attachment and export
+  //     routes already downgrade themselves to `same-site` where the web app
+  //     must read the bytes cross-origin.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: false,
+        directives: {
+          defaultSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          baseUri: ["'none'"],
+          formAction: ["'none'"],
+        },
+      },
+      crossOriginResourcePolicy: { policy: "same-origin" },
+      referrerPolicy: { policy: "no-referrer" },
+      hsts:
+        config.nodeEnv === "production"
+          ? { maxAge: 31_536_000, includeSubDomains: true, preload: false }
+          : false,
+    }),
+  );
+  // Part 73. After helmet (see above) and BEFORE everything that reads the
+  // host: CORS, the Better Auth handler, and every route. No-op unless
+  // `CUSTOM_DOMAINS_ENABLED`.
+  app.use(trustedHost.use.bind(trustedHost));
   app.use(compression());
   const corsOrigins = new Set(authConfig.trustedOrigins);
+  // Part 73. The configured origins ALWAYS pass — `isTrustedOriginSync` answers
+  // for them from a set built at boot, with no I/O and no dependency on the
+  // database — and a verified tenant origin additionally passes once the
+  // trusted-host middleware above has seen it. The `Set` stays as the primary
+  // answer so this callback behaves identically when custom domains are off.
+  const isTrustedOrigin = (origin: string): boolean =>
+    corsOrigins.has(origin) || verifiedHosts.isTrustedOriginSync(origin);
   app.enableCors({
     origin: (origin, callback) => {
-      callback(null, origin === undefined || corsOrigins.has(origin));
+      callback(null, origin === undefined || isTrustedOrigin(origin));
     },
     credentials: true,
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -106,13 +160,20 @@ export async function createApplication(): Promise<NestExpressApplication> {
   // the sensitive endpoint limiter are already active.
   if (authHandler !== null) {
     express.use(authConfig.basePath, (request, response, next) => {
+      // Part 74. Better Auth resolves the client IP itself and, by default,
+      // believes any `x-forwarded-for` it is handed. Overwrite one private
+      // header — the ONLY one it is configured to read — with Express's own
+      // `request.ip`, which already honours `trust proxy`. Unconditional on
+      // purpose: an inbound value for this name must never survive.
+      request.headers["x-notted-client-ip"] =
+        request.ip ?? request.socket.remoteAddress ?? "unknown";
       const stateChanging = ["POST", "PUT", "PATCH", "DELETE"].includes(request.method);
       if (!stateChanging) {
         next();
         return;
       }
       const origin = request.header("origin");
-      if (origin !== undefined && corsOrigins.has(origin)) {
+      if (origin !== undefined && isTrustedOrigin(origin)) {
         next();
         return;
       }
@@ -264,6 +325,11 @@ export async function createApplication(): Promise<NestExpressApplication> {
       });
     });
   });
+  // Part 74. AFTER the credential middleware above (it needs to know whether an
+  // API-key actor was installed) and BEFORE tRPC and the Nest pipeline, so one
+  // default-deny Origin check covers every mutating cookie-authenticated route
+  // on `/api/v1` — including any added later that forgets the manual call.
+  express.use("/api/v1", csrfOrigin.use.bind(csrfOrigin));
   express.use(
     TRPC_PATH,
     (request, response, next) => {

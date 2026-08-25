@@ -43,6 +43,7 @@ Socket join/message, files, API keys, user jobs, and system jobs.
 | Comments | Full | Full | Create where readable; edit/delete own; resolve where note-editable | Create where readable; edit/delete own |
 | Export | Any readable source | Any readable source/record | Create/read/download/cancel own while source remains readable | Same requester/source rule |
 | API keys/webhooks | Admin controls, recent auth for secret-bearing/destructive changes | Same | No | No |
+| Audit log read/export | Yes | Yes | No | No |
 | Files/attachments | Through note permission | Through note permission | Read through note; upload when note-editable; delete own upload when note-editable | Read through note only |
 | Folders/tasks | Full | Full | Bounded create/update on owned/delegated content; no destructive escalation | Read only |
 | Current-user sessions | Own sessions only; revoke requires freshness | Same | Same | Same |
@@ -124,5 +125,7 @@ provider, membership, project, share, object-key, or existence detail.
   authenticated, workspace-bound machine actor.
 - Export creation/state machines and private object delivery are Parts 62–63. Part 24 defines the
   authorization checks they must call.
-- Audit persistence/UI is Part 71. Part 24 decisions are audit-ready but do not write an audit log.
+- Audit persistence/UI is Part 71. Part 24 authorization decisions are still not themselves written
+  to `audit_logs`; Part 71 audits the resulting mutations, and `audit.read`/`audit.export` are the
+  two actions guarding the trail.
 - The repository-layer strategy from ADR 0009 remains authoritative; PostgreSQL RLS is not added.

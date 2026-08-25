@@ -1,0 +1,1 @@
+CREATE INDEX "audit_logs_retention_scan_idx" ON "audit_logs" USING btree ("created_at","id");

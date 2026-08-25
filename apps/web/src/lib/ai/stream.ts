@@ -2,7 +2,7 @@ import { aiStreamEventSchema } from "@notted/shared-validators";
 
 import type { AiStreamEvent } from "@notted/shared-types";
 
-import { publicEnvironment } from "@/config/public-environment";
+import { apiOrigin } from "@/lib/api/api-origin";
 
 /**
  * Part 68 — the browser's Server-Sent Events client for AI generation.
@@ -181,7 +181,7 @@ export function streamAi(
   async function run(): Promise<void> {
     let response: Response;
     try {
-      response = await fetch(new URL(path, publicEnvironment.NEXT_PUBLIC_API_URL), {
+      response = await fetch(new URL(path, apiOrigin()), {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
         body: JSON.stringify(body),

@@ -21,7 +21,7 @@ import { Param, SQL } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiHttpException } from "../common/errors/api-http.exception";
-import { apiIdempotencyRecords, exportJobs, jobOutbox } from "../database/schema";
+import { apiIdempotencyRecords, auditLogs, exportJobs, jobOutbox } from "../database/schema";
 import { ObjectStorageDisabledError } from "../infrastructure/minio/object-storage.service";
 import { createTenantContext, TenantContextService } from "../tenant";
 
@@ -432,6 +432,32 @@ describe("ExportService.create", () => {
     ]);
   });
 
+  it("writes exactly one export.create audit row, never the options", async () => {
+    const { service, run, inserted } = build();
+    const job = await run(() => service.create(createInput()));
+
+    const auditRows = inserted.filter((entry) => entry.table === auditLogs);
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0]?.handle).toBe("tx");
+    expect(auditRows[0]?.value).toMatchObject({
+      workspaceId,
+      userId,
+      action: "export.create",
+      entityType: "export",
+      entityId: job.id,
+      metadata: { format: "txt", sourceType: "note", sourceId: noteId },
+    });
+    expect(JSON.stringify(auditRows[0]?.value.metadata)).not.toContain("includeAttachments");
+  });
+
+  it("replays an identical idempotency key without a second export.create audit row", async () => {
+    const { service, run, inserted } = build();
+    await run(() => service.create(createInput()));
+    await run(() => service.create(createInput()));
+
+    expect(inserted.filter((entry) => entry.table === auditLogs)).toHaveLength(1);
+  });
+
   it("replays an identical idempotency key to the same export without a second insert", async () => {
     const { service, run, inserted } = build();
     const first = await run(() => service.create(createInput()));
@@ -554,15 +580,28 @@ describe("ExportService state machine", () => {
     },
   );
 
-  it.each(["queued", "processing"] as const)("cancels a %s row", async (status) => {
-    const rows = [exportRow({ status })];
-    const { service, run } = build({ rows });
-    const job = await run(() => service.cancel({ workspaceId, exportId }));
-    expect(job.status).toBe("cancelled");
-    expect(job.completedAt).not.toBeNull();
-  });
+  it.each(["queued", "processing"] as const)(
+    "cancels a %s row and writes exactly one export.cancel audit row",
+    async (status) => {
+      const rows = [exportRow({ status })];
+      const { service, run, inserted } = build({ rows });
+      const job = await run(() => service.cancel({ workspaceId, exportId }));
+      expect(job.status).toBe("cancelled");
+      expect(job.completedAt).not.toBeNull();
+      const auditRows = inserted.filter((entry) => entry.table === auditLogs);
+      expect(auditRows).toHaveLength(1);
+      expect(auditRows[0]?.handle).toBe("tx");
+      expect(auditRows[0]?.value).toMatchObject({
+        workspaceId,
+        userId,
+        action: "export.cancel",
+        entityType: "export",
+        entityId: exportId,
+      });
+    },
+  );
 
-  it("treats cancelling an already-ready export as a no-op, not an error", async () => {
+  it("treats cancelling an already-ready export as a no-op, not an error, and writes no audit row", async () => {
     const rows = [
       exportRow({
         status: "ready",
@@ -570,10 +609,11 @@ describe("ExportService state machine", () => {
         signedUrlExpiresAt: new Date(Date.now() + 60_000),
       }),
     ];
-    const { service, run } = build({ rows });
+    const { service, run, inserted } = build({ rows });
     const job = await run(() => service.cancel({ workspaceId, exportId }));
     expect(job.status).toBe("ready");
     expect(rows[0]?.status).toBe("ready");
+    expect(inserted.filter((entry) => entry.table === auditLogs)).toHaveLength(0);
   });
 });
 
@@ -603,7 +643,7 @@ describe("ExportService.markFailed", () => {
 });
 
 describe("ExportService.openDownload", () => {
-  it("refuses an export whose download grant has lapsed", async () => {
+  it("refuses an export whose download grant has lapsed, and writes no audit row", async () => {
     const rows = [
       exportRow({
         status: "ready",
@@ -611,15 +651,16 @@ describe("ExportService.openDownload", () => {
         signedUrlExpiresAt: new Date(Date.now() - 1_000),
       }),
     ];
-    const { service, run } = build({ rows });
+    const { service, run, inserted } = build({ rows });
     await run(async () => {
       await expect(service.openDownload({ workspaceId, exportId })).rejects.toMatchObject({
         safeResponse: { code: "EXPORT_EXPIRED" },
       });
     });
+    expect(inserted.filter((entry) => entry.table === auditLogs)).toHaveLength(0);
   });
 
-  it("refuses an export whose object has already been swept away", async () => {
+  it("refuses an export whose object has already been swept away, and writes no audit row", async () => {
     const rows = [
       exportRow({
         status: "ready",
@@ -627,25 +668,27 @@ describe("ExportService.openDownload", () => {
         signedUrlExpiresAt: new Date(Date.now() + 60_000),
       }),
     ];
-    const { service, run } = build({ rows });
+    const { service, run, inserted } = build({ rows });
     await run(async () => {
       await expect(service.openDownload({ workspaceId, exportId })).rejects.toMatchObject({
         safeResponse: { code: "EXPORT_OBJECT_UNAVAILABLE" },
       });
     });
+    expect(inserted.filter((entry) => entry.table === auditLogs)).toHaveLength(0);
   });
 
-  it("refuses a non-ready export even though the policy already should have", async () => {
+  it("refuses a non-ready export even though the policy already should have, and writes no audit row", async () => {
     const rows = [exportRow({ status: "processing" })];
-    const { service, run } = build({ rows });
+    const { service, run, inserted } = build({ rows });
     await run(async () => {
       await expect(service.openDownload({ workspaceId, exportId })).rejects.toMatchObject({
         safeResponse: { code: "EXPORT_OBJECT_UNAVAILABLE" },
       });
     });
+    expect(inserted.filter((entry) => entry.table === auditLogs)).toHaveLength(0);
   });
 
-  it("streams the bytes with a sanitised filename derived from the live source", async () => {
+  it("streams the bytes with a sanitised filename derived from the live source, and writes one export.download audit row", async () => {
     const objectKey = `${workspaceId}/${exportId}.txt`;
     const rows = [
       exportRow({
@@ -656,14 +699,26 @@ describe("ExportService.openDownload", () => {
     ];
     const store = new MemoryObjectStore();
     store.objects.set(objectKey, Buffer.from("hello", "utf8"));
-    const { service, run } = build({ rows, noteTitle: "../../etc/passwd" }, store);
+    const { service, run, inserted } = build({ rows, noteTitle: "../../etc/passwd" }, store);
     const content = await run(() => service.openDownload({ workspaceId, exportId }));
     expect(content.filename).toBe("etcpasswd.txt");
     expect(content.mimeType).toBe("text/plain; charset=utf-8");
     expect(content.contentLength).toBe(5);
+    const auditRows = inserted.filter((entry) => entry.table === auditLogs);
+    expect(auditRows).toHaveLength(1);
+    // No transaction on this read path — the audit row lands on the plain `db` handle.
+    expect(auditRows[0]?.handle).toBe("db");
+    expect(auditRows[0]?.value).toMatchObject({
+      workspaceId,
+      userId,
+      action: "export.download",
+      entityType: "export",
+      entityId: exportId,
+      metadata: { format: "txt" },
+    });
   });
 
-  it("degrades to a stable 503 when object storage is switched off", async () => {
+  it("degrades to a stable 503 when object storage is switched off, and writes no audit row", async () => {
     const rows = [
       exportRow({
         status: "ready",
@@ -673,12 +728,13 @@ describe("ExportService.openDownload", () => {
     ];
     const store = new MemoryObjectStore();
     store.disabled = true;
-    const { service, run } = build({ rows }, store);
+    const { service, run, inserted } = build({ rows }, store);
     await run(async () => {
       const error = await service.openDownload({ workspaceId, exportId }).catch((e: unknown) => e);
       expect(error).toBeInstanceOf(ApiHttpException);
       expect((error as ApiHttpException).safeResponse.code).toBe("SERVICE_UNAVAILABLE");
     });
+    expect(inserted.filter((entry) => entry.table === auditLogs)).toHaveLength(0);
   });
 });
 

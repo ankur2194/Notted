@@ -69,7 +69,15 @@ export default tseslint.config(
 
   // Node.js globals for scripts and config files
   {
-    files: ["scripts/**/*.mjs", "scripts/**/*.js", "*.config.mjs", "*.config.js"],
+    files: [
+      "scripts/**/*.mjs",
+      "scripts/**/*.js",
+      "*.config.mjs",
+      "*.config.js",
+      // CommonJS helpers consumed by an app's Node config (e.g.
+      // apps/web/security-headers.js, required from next.config.mjs).
+      "apps/*/security-headers.js",
+    ],
     languageOptions: {
       globals: {
         console: "readonly",

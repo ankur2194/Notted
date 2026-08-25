@@ -32,12 +32,13 @@ import { and, asc, eq, inArray, isNotNull, lte, ne, or, sql, type SQL } from "dr
 import { attachmentObjectKeys } from "../attachments/attachment-object-keys";
 import { parseAttachmentObjectKey } from "../attachments/attachment-storage-key";
 import { ATTACHMENT_PROCESSING_ERRORS } from "../attachments/attachments.constants";
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { StructuredLogger } from "../common/logging/structured-logger.service";
 import { RETENTION_CONFIG, type RetentionConfig } from "../config/retention.config";
 import { STORAGE_CONFIG, type StorageConfig } from "../config/storage.config";
 import { DatabaseService } from "../database/database.service";
-import { attachments, auditLogs, exportJobs, notes, workspaces } from "../database/schema";
+import { attachments, exportJobs, notes, workspaces } from "../database/schema";
 import {
   ObjectStorageService,
   type ObjectStore,
@@ -886,7 +887,7 @@ export class StorageMaintenanceService {
     input: RunWorkspaceMaintenanceInput,
     report: StorageMaintenanceReport,
   ): Promise<void> {
-    await this.database.db.insert(auditLogs).values({
+    await recordAudit(this.database.db, {
       workspaceId: activeWorkspaceId(this.tenantContext),
       userId: input.principal.userId,
       action: STORAGE_MAINTENANCE_AUDIT_ACTION,

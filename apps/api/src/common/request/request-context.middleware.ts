@@ -4,7 +4,12 @@ import { Inject, Injectable, type NestMiddleware } from "@nestjs/common";
 
 import { StructuredLogger } from "../logging/structured-logger.service";
 
-import { setRequestId } from "./request-context";
+import {
+  REQUEST_IP_MAX_LENGTH,
+  REQUEST_USER_AGENT_MAX_LENGTH,
+  runWithRequestContext,
+  setRequestId,
+} from "./request-context";
 
 import type { NextFunction, Request, Response } from "express";
 
@@ -55,6 +60,19 @@ export class RequestContextMiddleware implements NestMiddleware {
       );
     });
 
-    next();
+    // Part 71: the audit-facing request facts live in an AsyncLocalStorage
+    // entered HERE, so every downstream writer — REST, tRPC and Better Auth all
+    // run behind this one `app.use` — can record the caller's address and agent
+    // without threading them through a single service signature. Both are
+    // truncated at the boundary to their column widths.
+    runWithRequestContext(
+      {
+        requestId,
+        ipAddress: request.ip?.slice(0, REQUEST_IP_MAX_LENGTH) ?? null,
+        // `||` and not `??`: an empty User-Agent header is "absent", not "".
+        userAgent: request.header("user-agent")?.slice(0, REQUEST_USER_AGENT_MAX_LENGTH) || null,
+      },
+      next,
+    );
   }
 }

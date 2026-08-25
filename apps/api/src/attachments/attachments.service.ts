@@ -22,6 +22,7 @@ import {
 } from "@notted/shared-validators";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import {
@@ -36,7 +37,6 @@ import { SECURITY_CONFIG, type SecurityConfig } from "../config/security.config"
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import {
   attachments,
-  auditLogs,
   jobOutbox,
   notes,
   type AttachmentVariantObject,
@@ -266,7 +266,7 @@ export class AttachmentsService {
       // Refused before any row exists, so an unsupported format never leaves a
       // `failed` row behind for the sweeper to reconcile.
       throw new ApiHttpException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, {
-        code: "UNPROCESSABLE_ENTITY",
+        code: "UNSUPPORTED_MEDIA_TYPE",
         message: "The uploaded file is not a supported image.",
       });
     }
@@ -450,7 +450,7 @@ export class AttachmentsService {
       // Refused before any row exists, so a rejected payload never leaves a
       // `failed` row behind for the sweeper to reconcile.
       throw new ApiHttpException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, {
-        code: "UNPROCESSABLE_ENTITY",
+        code: "UNSUPPORTED_MEDIA_TYPE",
         message: "The uploaded file type is not supported.",
       });
     }
@@ -901,7 +901,7 @@ export class AttachmentsService {
     input: ScopedInput,
     metadata: Record<string, unknown> = {},
   ): Promise<void> {
-    await tx.insert(auditLogs).values({
+    await recordAudit(tx, {
       workspaceId: activeWorkspaceId(this.tenantContext),
       userId: input.principal.userId,
       action: ATTACHMENT_AUDIT_ACTIONS[action],

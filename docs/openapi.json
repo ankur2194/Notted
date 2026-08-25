@@ -108,6 +108,48 @@
         "security": []
       }
     },
+    "/api/v1/domains/resolve": {
+      "get": {
+        "summary": "Resolve a custom host to its workspace.",
+        "tags": [
+          "Workspaces"
+        ],
+        "description": "PUBLIC and unauthenticated — a certificate issuer answering `on_demand_tls ask` holds no session, and the web proxy asks before rendering anything. Accepts `?host=` or `?domain=` (Caddy sends the latter). Answers only for VERIFIED hosts and returns identifiers only; every miss, including a malformed host, is the same 404.",
+        "parameters": [
+          {
+            "name": "host",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 254
+            }
+          },
+          {
+            "name": "domain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 254
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Resolve a custom host to its workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainResolveResult"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
     "/api/v1/invitations/accept": {
       "post": {
         "summary": "Accept an invitation with its token.",
@@ -1087,6 +1129,347 @@
         }
       }
     },
+    "/api/v1/workspaces/{workspaceId}/audit-logs": {
+      "get": {
+        "summary": "List the workspace's audit trail.",
+        "tags": [
+          "Audit logs"
+        ],
+        "description": "The trail is append-only and workspace-wide; reading it is an owner/admin action. Never returns the actor's email, only a display name.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9]\\d*)$"
+                }
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(0|[1-9]\\d*)$"
+                }
+              ]
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50
+            }
+          },
+          {
+            "name": "entityType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50
+            }
+          },
+          {
+            "name": "entityId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "List the workspace's audit trail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/audit-logs/export": {
+      "get": {
+        "summary": "Export the workspace's audit trail as CSV.",
+        "tags": [
+          "Audit logs"
+        ],
+        "description": "The response is text/csv, not JSON, and is bounded at 10,000 rows (AUDIT_LOG_EXPORT_MAX_ROWS) — narrow with the from/to filters for a larger history.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50
+            }
+          },
+          {
+            "name": "entityType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50
+            }
+          },
+          {
+            "name": "entityId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Export the workspace's audit trail as CSV."
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/domain": {
+      "delete": {
+        "summary": "Remove the custom domain.",
+        "tags": [
+          "Workspaces"
+        ],
+        "description": "Idempotent: removing an absent claim succeeds. Frees the hostname for another workspace to claim and clears the `workspaces.domain` mirror.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Remove the custom domain.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDomainResult"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Read the workspace custom domain.",
+        "tags": [
+          "Workspaces"
+        ],
+        "description": "`{ domain: null }` when no hostname is claimed. The response carries the two DNS records to publish (`_notted-verify` TXT and the CNAME target), so a client never has to know the token format. 404 when custom domains are disabled on this deployment.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Read the workspace custom domain.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDomainResult"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Claim a custom domain.",
+        "tags": [
+          "Workspaces"
+        ],
+        "description": "The hostname is normalised (lowercase, punycode, no trailing dot). The claim always lands `pending` — a claim is not a proof — and re-claiming the same hostname is idempotent and keeps the existing token. 409 `DOMAIN_TAKEN` when the hostname is already claimed; 422 `DOMAIN_RESERVED` for a hostname this deployment already answers on.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetWorkspaceDomain"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Claim a custom domain.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDomainResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/domain/verify": {
+      "post": {
+        "summary": "Verify the claimed custom domain.",
+        "tags": [
+          "Workspaces"
+        ],
+        "description": "Runs the DNS checks (ownership TXT, then CNAME to the configured target with an apex address fallback) and records the verdict. On success `workspaces.domain` mirrors the hostname and the host begins routing; on failure `lastError` carries one of `txt_missing`, `txt_mismatch`, `cname_mismatch`, `dns_failure`.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Verify the claimed custom domain.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDomainResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workspaces/{workspaceId}/exports": {
       "get": {
         "summary": "List export jobs.",
@@ -1701,6 +2084,84 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/logo": {
+      "delete": {
+        "summary": "Remove the workspace logo.",
+        "tags": [
+          "Workspaces"
+        ],
+        "description": "Idempotent: removing an absent logo succeeds. Responds with `{ logoUrl: null }`.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Remove the workspace logo."
+          }
+        }
+      },
+      "post": {
+        "summary": "Replace the workspace logo.",
+        "tags": [
+          "Workspaces"
+        ],
+        "description": "multipart/form-data with a single `file` part, at most 2 MiB; the request body has no committed Zod schema. The image is sniffed (the declared Content-Type is ignored), re-encoded to a 200 px WebP, and published under a fresh random token, so the previous logo URL stops resolving. Responds with `{ logoUrl }`, an app-relative path.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Replace the workspace logo."
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/logo/{token}": {
+      "get": {
+        "summary": "Fetch the published workspace logo.",
+        "tags": [
+          "Workspaces"
+        ],
+        "description": "PUBLIC and unauthenticated — an <img src> in an email client carries no session. The 128-bit token in the path is the authorization and is compared in constant time; every miss answers 404. The response is a WebP image, not JSON, and is immutably cacheable.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Fetch the published workspace logo."
           }
         }
       }
@@ -6516,6 +6977,141 @@
         },
         "additionalProperties": false
       },
+      "AuditLogAction": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 50
+      },
+      "AuditLogEntityType": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 50
+      },
+      "AuditLogEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "workspaceId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "userId": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "userName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "action": {
+            "$ref": "#/components/schemas/AuditLogAction"
+          },
+          "entityType": {
+            "$ref": "#/components/schemas/AuditLogEntityType"
+          },
+          "entityId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "ipAddress": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 45
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "userAgent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/IsoTimestamp"
+          }
+        },
+        "required": [
+          "id",
+          "workspaceId",
+          "userId",
+          "userName",
+          "action",
+          "entityType",
+          "entityId",
+          "metadata",
+          "ipAddress",
+          "userAgent",
+          "requestId",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "AuditLogPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "readOnly": true,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditLogEntry"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "limit",
+          "hasMore"
+        ],
+        "additionalProperties": false
+      },
       "BulkTask": {
         "type": "object",
         "properties": {
@@ -7188,8 +7784,7 @@
             ]
           },
           "color": {
-            "type": "string",
-            "pattern": "^#[0-9a-f]{6}$"
+            "$ref": "#/components/schemas/HexColor"
           },
           "status": {
             "$ref": "#/components/schemas/ProjectStatus"
@@ -7384,18 +7979,6 @@
               }
             ]
           },
-          "domain": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 253,
-                "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "settings": {
             "$ref": "#/components/schemas/WorkspaceSettings"
           }
@@ -7405,6 +7988,10 @@
           "slug"
         ],
         "additionalProperties": false
+      },
+      "CustomDomainHostname": {
+        "type": "string",
+        "maxLength": 254
       },
       "CustomTaskStatus": {
         "type": "object",
@@ -7502,6 +8089,21 @@
           "expectedVersion"
         ],
         "additionalProperties": false
+      },
+      "DomainResolveResult": {
+        "type": "object",
+        "properties": {
+          "workspaceId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "slug"
+        ]
       },
       "ExportCreate": {
         "type": "object",
@@ -7742,6 +8344,10 @@
         ],
         "additionalProperties": false
       },
+      "HexColor": {
+        "type": "string",
+        "pattern": "^#[0-9a-f]{6}$"
+      },
       "InvitationStatus": {
         "type": "string",
         "enum": [
@@ -7777,6 +8383,37 @@
         "type": "string",
         "format": "date-time",
         "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+      },
+      "JsonValue": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JsonValue"
+            }
+          },
+          {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            }
+          }
+        ]
       },
       "MembershipEmail": {
         "type": "string",
@@ -9088,8 +9725,7 @@
             ]
           },
           "color": {
-            "type": "string",
-            "pattern": "^#[0-9a-f]{6}$"
+            "$ref": "#/components/schemas/HexColor"
           },
           "status": {
             "$ref": "#/components/schemas/ProjectStatus"
@@ -9246,8 +9882,7 @@
             ]
           },
           "color": {
-            "type": "string",
-            "pattern": "^#[0-9a-f]{6}$"
+            "$ref": "#/components/schemas/HexColor"
           },
           "status": {
             "$ref": "#/components/schemas/ProjectStatus"
@@ -9383,8 +10018,7 @@
             ]
           },
           "color": {
-            "type": "string",
-            "pattern": "^#[0-9a-f]{6}$"
+            "$ref": "#/components/schemas/HexColor"
           },
           "status": {
             "$ref": "#/components/schemas/ProjectStatus"
@@ -9747,6 +10381,18 @@
         ],
         "additionalProperties": false
       },
+      "SetWorkspaceDomain": {
+        "type": "object",
+        "properties": {
+          "hostname": {
+            "$ref": "#/components/schemas/CustomDomainHostname"
+          }
+        },
+        "required": [
+          "hostname"
+        ],
+        "additionalProperties": false
+      },
       "ShellBootstrap": {
         "type": "object",
         "properties": {
@@ -9848,13 +10494,36 @@
           },
           "role": {
             "$ref": "#/components/schemas/WorkspaceRole"
+          },
+          "logoUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accentColor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HexColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "workspaceId",
           "name",
           "slug",
-          "role"
+          "role",
+          "logoUrl",
+          "accentColor"
         ],
         "additionalProperties": false
       },
@@ -10811,8 +11480,7 @@
             ]
           },
           "color": {
-            "type": "string",
-            "pattern": "^#[0-9a-f]{6}$"
+            "$ref": "#/components/schemas/HexColor"
           },
           "status": {
             "$ref": "#/components/schemas/ProjectStatus"
@@ -10937,18 +11605,6 @@
               {
                 "type": "string",
                 "maxLength": 2000
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "domain": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 253,
-                "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
               },
               {
                 "type": "null"
@@ -11508,6 +12164,148 @@
         ],
         "additionalProperties": false
       },
+      "WorkspaceDomain": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "workspaceId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "hostname": {
+            "type": "string",
+            "maxLength": 253
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkspaceDomainStatus"
+          },
+          "lastError": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceDomainError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastCheckedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IsoTimestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verifiedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IsoTimestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "$ref": "#/components/schemas/IsoTimestamp"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/IsoTimestamp"
+          },
+          "verificationRecord": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "TXT"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "type",
+              "value"
+            ]
+          },
+          "cnameRecord": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "CNAME"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "type",
+              "value"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "workspaceId",
+          "hostname",
+          "status",
+          "lastError",
+          "lastCheckedAt",
+          "verifiedAt",
+          "createdAt",
+          "updatedAt",
+          "verificationRecord",
+          "cnameRecord"
+        ]
+      },
+      "WorkspaceDomainError": {
+        "type": "string",
+        "enum": [
+          "txt_missing",
+          "txt_mismatch",
+          "cname_mismatch",
+          "dns_failure"
+        ]
+      },
+      "WorkspaceDomainResult": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceDomain"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "domain"
+        ]
+      },
+      "WorkspaceDomainStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "verified",
+          "error"
+        ]
+      },
       "WorkspaceInvitationAcceptResult": {
         "type": "object",
         "properties": {
@@ -11861,6 +12659,16 @@
             "enum": [
               "a4",
               "letter"
+            ]
+          },
+          "accentColor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HexColor"
+              },
+              {
+                "type": "null"
+              }
             ]
           }
         },

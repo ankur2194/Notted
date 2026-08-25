@@ -12,6 +12,15 @@ export const WORKSPACE_AUDIT_ACTIONS = Object.freeze({
   create: "workspace.create",
   update: "workspace.update",
   delete: "workspace.delete",
+  // Part 72 branding. Separate from `workspace.update` because the logo does
+  // not travel through `PATCH /workspaces/{id}` at all — it is a multipart
+  // route with its own object-store side effect — and because "who replaced the
+  // workspace's public face, and when" is exactly the question an audit reader
+  // asks. Metadata carries the stored byte count and the source format only —
+  // never the image, a URL, or the object token, which is the bearer capability
+  // for a public address and must not reach an exportable log.
+  logoUpdate: "workspace.logo.update",
+  logoDelete: "workspace.logo.delete",
 } as const);
 
 /** `audit_logs.entity_type` for workspace lifecycle events. */

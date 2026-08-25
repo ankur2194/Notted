@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseAiConfig } from "./ai.config";
+import { parseAppConfig } from "./app.config";
 import { parseAuthConfig } from "./auth.config";
 import { parseExportConfig } from "./export.config";
 import { parseFeaturesConfig } from "./features.config";
@@ -258,5 +259,62 @@ describe("server environment contract", () => {
     expect(parseMinioConfig(environment).enabled).toBe(false);
     expect(parseMeilisearchConfig(environment).enabled).toBe(false);
     expect(parseSmtpConfig(environment).enabled).toBe(false);
+  });
+
+  // Part 73 — custom domains ship OFF, and the CNAME target defaults to the
+  // APP_URL host so a single-host deployment needs no extra variable at all.
+  it("defaults custom domains off with the APP_URL host as the CNAME target", () => {
+    expect(parseAppConfig({}).customDomainsEnabled).toBe(false);
+    expect(parseAppConfig({}).customDomainCnameTarget).toBe("localhost");
+    expect(
+      parseAppConfig({ APP_URL: "https://App.Example.test", CUSTOM_DOMAINS_ENABLED: "true" }),
+    ).toMatchObject({ customDomainsEnabled: true, customDomainCnameTarget: "app.example.test" });
+    expect(
+      parseAppConfig({ CUSTOM_DOMAIN_CNAME_TARGET: "Edge.Example.test" }).customDomainCnameTarget,
+    ).toBe("edge.example.test");
+  });
+
+  it("rejects a malformed or loopback CNAME target", () => {
+    expect(() => parseAppConfig({ CUSTOM_DOMAIN_CNAME_TARGET: "https://edge.example" })).toThrow(
+      "CUSTOM_DOMAIN_CNAME_TARGET",
+    );
+    expect(() => parseAppConfig({ CUSTOM_DOMAIN_CNAME_TARGET: "edge.example:443" })).toThrow(
+      "CUSTOM_DOMAIN_CNAME_TARGET",
+    );
+    // A tenant cannot CNAME to a name that only resolves on our own machine.
+    expect(() =>
+      parseAppConfig({
+        NODE_ENV: "production",
+        API_HOST: "0.0.0.0",
+        APP_URL: "https://app.example.test",
+        API_URL: "https://api.example.test",
+        WS_URL: "wss://api.example.test",
+        CUSTOM_DOMAIN_CNAME_TARGET: "localhost",
+      }),
+    ).toThrow("CUSTOM_DOMAIN_CNAME_TARGET must be a public hostname in production");
+  });
+
+  // Part 74 — authentication rate-limit and account-lockout defaults.
+  it("defaults the authentication rate-limit and lockout thresholds", () => {
+    expect(parseAppConfig({}).authRateLimitPerMinute).toBe(5);
+    expect(parseAuthConfig({}).lockoutAttempts).toBe(10);
+    expect(parseAuthConfig({}).lockoutSeconds).toBe(900);
+  });
+
+  it.each([
+    [
+      () => parseAppConfig({ RATE_LIMIT_AUTH_PER_MINUTE: "0" }),
+      "RATE_LIMIT_AUTH_PER_MINUTE must be an integer between 1 and 10000",
+    ],
+    [
+      () => parseAuthConfig({ AUTH_LOCKOUT_ATTEMPTS: "2" }),
+      "AUTH_LOCKOUT_ATTEMPTS must be an integer between 3 and 100",
+    ],
+    [
+      () => parseAuthConfig({ AUTH_LOCKOUT_SECONDS: "30" }),
+      "AUTH_LOCKOUT_SECONDS must be an integer between 60 and 86400",
+    ],
+  ])("rejects an out-of-range Part 74 threshold", (parse, message) => {
+    expect(parse).toThrowError(message);
   });
 });

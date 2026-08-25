@@ -64,9 +64,18 @@ manifests did not yet select. Phase 2 therefore applies only these reviewed over
 | Various (Phase 4) | `file-type@21.3.4` | Resolves GHSA‑5v7r (infinite loop) and GHSA‑j47w (ZIP bomb) without changing NestJS v10. |
 | Various (Phase 4) | `qs@6.15.3` | Resolves GHSA‑q8mj (DoS in qs.stringify comma arrays) without changing Express. |
 
-The single remaining `@nestjs/core` advisory (GHSA‑36xv) is a semver false positive:
-the vulnerable `SseStream` class does not exist in `@nestjs/core@10.4.22`. Suppressed
-via `pnpm audit --ignore` and the `audit:prod` root script.
+The `@nestjs/core` advisory (GHSA‑36xv) is a semver false positive: the vulnerable
+`SseStream` class does not exist in `@nestjs/core@10.4.22`. It is suppressed through
+`pnpm.auditConfig.ignoreGhsas` in the root `package.json` — **not** through the
+`pnpm audit --ignore` flag, which in pnpm 10.34.5 switches `audit` into write-the-ignore-list
+mode and always exits 0, and not through `auditConfig.ignoreCves`, which matches CVE
+identifiers rather than GHSA ones. Every suppressed identifier is recorded with an owner and
+a deadline in [`docs/security/remediation-checklist.md`](../security/remediation-checklist.md#exceptions).
+
+Advisories that this matrix owns and that the next refresh must clear: `pdfjs-dist`
+GHSA‑hq66 (E6, high, needs the 5.x → 6.x major), the transitive `brace-expansion` and
+`nanoid` advisories (E7), and the `postcss` GHSA‑fxqj moderate, which is deliberately **not**
+suppressed and is why `pnpm audit:prod` currently exits non-zero.
 
 They are compatibility exceptions, not permission for broad/global dependency
 replacement. Strict installation, API/web tests, type checks, production builds, runtime

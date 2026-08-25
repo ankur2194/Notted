@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   explicitBooleanQuerySchema,
+  hexColorSchema,
   isoTimestampSchema,
   paginationQuerySchema,
   sortDirectionSchema,
@@ -16,7 +17,9 @@ export const projectMemberAccessSourceSchema = z.enum(["workspace", "workspace-a
 
 const projectNameSchema = z.string().trim().min(1).max(255);
 const projectDescriptionSchema = z.string().trim().max(5_000).nullable();
-const projectColorSchema = z.string().regex(/^#[0-9a-f]{6}$/i, "Expected a six-digit hex color");
+// Part 72 moved the rule to `common.schema.ts` so the workspace accent and a
+// project colour cannot drift apart. The alias keeps every reference below.
+const projectColorSchema = hexColorSchema;
 
 /**
  * Part 29 stores one canonical app-relative attachment reference. The service

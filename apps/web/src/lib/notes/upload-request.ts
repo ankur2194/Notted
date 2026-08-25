@@ -21,7 +21,7 @@ import { attachmentUploadResultSchema, uuidSchema } from "@notted/shared-validat
 import type { NoteRequestFailureKind, NoteRequestResult } from "./requests";
 import type { AttachmentMedia } from "@notted/shared-types";
 
-import { publicEnvironment } from "@/config/public-environment";
+import { apiOrigin } from "@/lib/api/api-origin";
 
 /** The multipart part name; mirrors `ATTACHMENT_UPLOAD_FILE_FIELD` on the API. */
 export const IMAGE_UPLOAD_FILE_FIELD = "file";
@@ -132,10 +132,7 @@ export function uploadNoteImage(
   }
 
   return new Promise<NoteRequestResult<AttachmentMedia>>((resolve) => {
-    const url = new URL(
-      ATTACHMENT_API_PATHS.noteCollection(workspaceId, noteId),
-      publicEnvironment.NEXT_PUBLIC_API_URL,
-    );
+    const url = new URL(ATTACHMENT_API_PATHS.noteCollection(workspaceId, noteId), apiOrigin());
     const xhr = new XMLHttpRequest();
     let settled = false;
 

@@ -8,6 +8,7 @@ import { passkey as passkeyTable, twoFactor as twoFactorTable } from "../databas
 import { setAuthPrincipal } from "./auth-principal";
 import { AuthService } from "./auth.service";
 import {
+  AUTH_IDENTIFIER_PATHS,
   type BetterAuthInstance,
   configuredSocialProviders,
   passkeyPluginOptions,
@@ -16,6 +17,7 @@ import {
   twoFactorPluginOptions,
 } from "./better-auth.setup";
 
+import type { VerifiedHostsService } from "../common/verified-hosts.service";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 import type { Request } from "express";
 
@@ -44,6 +46,9 @@ describe("advanced authentication policy", () => {
       {} as BetterAuthInstance,
       config,
       parseRetentionConfig({ SESSION_REMEMBER_ME_DAYS: "30" }),
+      // Part 73. A stub that trusts nothing beyond the configured list, so this
+      // suite still asserts exactly what it asserted before custom domains.
+      { isTrustedOriginSync: () => false } as unknown as VerifiedHostsService,
     );
     const serialized = JSON.stringify(service.capabilities());
     expect(serialized).toContain("github");
@@ -97,6 +102,9 @@ describe("advanced authentication policy", () => {
       {} as BetterAuthInstance,
       parseAuthConfig({ AUTH_RECENT_AUTH_SECONDS: "300" }),
       parseRetentionConfig({ SESSION_REMEMBER_ME_DAYS: "45" }),
+      // Part 73. A stub that trusts nothing beyond the configured list, so this
+      // suite still asserts exactly what it asserted before custom domains.
+      { isTrustedOriginSync: () => false } as unknown as VerifiedHostsService,
     );
     expect(service.capabilities()).toMatchObject({
       nonRememberedSessionSeconds: 86_400,
@@ -126,6 +134,9 @@ describe("advanced authentication policy", () => {
       {} as BetterAuthInstance,
       parseAuthConfig({}),
       parseRetentionConfig({}),
+      // Part 73. A stub that trusts nothing beyond the configured list, so this
+      // suite still asserts exactly what it asserted before custom domains.
+      { isTrustedOriginSync: () => false } as unknown as VerifiedHostsService,
     );
     expect(() => service.requireRecentAuthentication(principal(false))).toThrowError(
       "Confirm your identity",
@@ -138,7 +149,9 @@ describe("advanced authentication policy", () => {
   // Redis. Checking availability first threw that principal away and 401'd
   // every API-key request.
   it("returns an already-installed principal even with no Better Auth instance", async () => {
-    const service = new AuthService(null, parseAuthConfig({}), parseRetentionConfig({}));
+    const service = new AuthService(null, parseAuthConfig({}), parseRetentionConfig({}), {
+      isTrustedOriginSync: () => false,
+    } as unknown as VerifiedHostsService);
     expect(service.isAvailable()).toBe(false);
 
     const request = { headers: {} } as unknown as Request;
@@ -147,6 +160,18 @@ describe("advanced authentication policy", () => {
     const installed = principal(false);
     setAuthPrincipal(request, installed);
     expect(await service.authenticate(request)).toEqual(installed);
+  });
+
+  // Part 74. OAuth and passkey paths are deliberately absent: neither accepts
+  // a guessable secret, and locking on them would let one attacker lock a
+  // victim out of their own provider sign-in.
+  it("limits identifier-based lockout counting to the four credential-guessing paths", () => {
+    expect(AUTH_IDENTIFIER_PATHS).toEqual([
+      "/sign-in/email",
+      "/sign-up/email",
+      "/sign-in/magic-link",
+      "/notted/request-password-reset",
+    ]);
   });
 
   it("preserves one-day intent across Better Auth TOTP management rotations", () => {

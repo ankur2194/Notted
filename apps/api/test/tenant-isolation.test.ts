@@ -34,6 +34,7 @@
 //   │ audit_logs                 │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
 //   │ api_keys                   │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
 //   │ webhooks                   │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
+//   │ workspace_domains          │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
 //   │ exports                    │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
 //   │ ai_provider_config         │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
 //   │ ai_usage                   │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
@@ -93,6 +94,7 @@ import {
   tasks,
   webhookDeliveries,
   webhooks,
+  workspaceDomains,
   workspaces,
   workspaceMembers,
 } from "../src/database/schema";
@@ -258,6 +260,10 @@ const DIRECT_TENANT_ENTITIES = [
   "auditLogs",
   "apiKeys",
   "webhooks",
+  // Part 73. A custom-domain claim is workspace-owned like any other tenant
+  // row, and the hostname is globally unique — a cross-tenant read here would
+  // hand one workspace another's claimed address.
+  "workspaceDomains",
   "exports",
   "aiProviderConfig",
   "aiUsage",
@@ -868,6 +874,23 @@ describe.skipIf(!HAS_DATABASE_URL)("tenant isolation (live)", () => {
           .returning({ id: webhooks.id })
       )[0] as IdRow;
 
+      // Custom-domain claims (Part 73). One per workspace; the hostname is
+      // globally unique, so both fixtures carry the run stamp.
+      await db.insert(workspaceDomains).values({
+        workspaceId: tenantA.workspaceId,
+        createdById: tenantA.userId,
+        hostname: `a-${stamp}.example.com`,
+        verificationToken: `token-a-${stamp}`,
+        status: "verified",
+      });
+      await db.insert(workspaceDomains).values({
+        workspaceId: tenantB.workspaceId,
+        createdById: tenantB.userId,
+        hostname: `b-${stamp}.example.com`,
+        verificationToken: `token-b-${stamp}`,
+        status: "pending",
+      });
+
       // Exports (queued; no object_key yet).
       await db.insert(exportJobs).values({
         workspaceId: tenantA.workspaceId,
@@ -1197,6 +1220,14 @@ describe.skipIf(!HAS_DATABASE_URL)("tenant isolation (live)", () => {
           .where(whereWorkspace(webhooks, tenantContext));
         expect(webhookRows.map((r) => r.id)).toContain(webhookA.id);
         expect(webhookRows.map((r) => r.url)).not.toContain("https://example.com/hook-b");
+
+        // workspace_domains.
+        const domainRows = await scopedDb
+          .select({ hostname: workspaceDomains.hostname })
+          .from(workspaceDomains)
+          .where(whereWorkspace(workspaceDomains, tenantContext));
+        expect(domainRows.map((r) => r.hostname)).toContain(`a-${stamp}.example.com`);
+        expect(domainRows.map((r) => r.hostname)).not.toContain(`b-${stamp}.example.com`);
 
         // exports.
         const exportRows = await scopedDb

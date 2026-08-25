@@ -1,9 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { HttpStatus, Injectable } from "@nestjs/common";
-import { workspaceSettingsSchema } from "@notted/shared-validators";
+import {
+  ACCENT_CONTRAST_MIN_RATIO,
+  accentContrast,
+  workspaceSettingsSchema,
+} from "@notted/shared-validators";
 import { and, asc, desc, eq, ilike, type SQL } from "drizzle-orm";
 
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import {
@@ -15,7 +20,6 @@ import {
 } from "../common/idempotency/api-idempotency";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import {
-  auditLogs,
   jobOutbox,
   type JobOutboxPayload,
   workspaceDeletionAudits,
@@ -55,8 +59,9 @@ import type {
  * exposes them on the thrown `DatabaseError` (`code` + `constraint`); Drizzle
  * re-throws the raw error so the helper inspects it directly.
  */
+const HEX_COLOR = /^#[0-9a-f]{6}$/iu;
+
 const WORKSPACES_SLUG_UNIQUE_CONSTRAINT = "workspaces_slug_unique";
-const WORKSPACES_DOMAIN_UNIQUE_CONSTRAINT = "workspaces_domain_unique";
 const PG_UNIQUE_VIOLATION = "23505";
 
 /** Drizzle may wrap a pg DatabaseError in `cause`; inspect only a bounded chain. */
@@ -79,24 +84,47 @@ export function isUniqueViolationOnConstraint(error: unknown, constraint: string
 
 const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = Object.freeze({ defaultPageSize: "a4" });
 
+/**
+ * `workspaces.settings` is untyped `jsonb`, so every read parses it
+ * defensively and any miss falls back to the platform default rather than
+ * throwing on a row an older build wrote.
+ *
+ * Part 72 stopped STRIPPING `accentColor` here. It was always persisted (and
+ * seeded), but this function used to drop it on the way out, so the contract
+ * could not carry the very value the workspace had chosen. Its legibility is
+ * NOT re-checked on read: a stored accent was validated on write, and a read
+ * that silently discarded a colour would hide the setting rather than fix it.
+ */
 function normalizeStoredSettings(value: unknown): WorkspaceSettings {
   if (typeof value !== "object" || value === null) return DEFAULT_WORKSPACE_SETTINGS;
-  const defaultPageSize = (value as { readonly defaultPageSize?: unknown }).defaultPageSize;
-  return defaultPageSize === "letter"
-    ? Object.freeze({ defaultPageSize: "letter" })
-    : DEFAULT_WORKSPACE_SETTINGS;
+  const persisted = value as {
+    readonly defaultPageSize?: unknown;
+    readonly accentColor?: unknown;
+  };
+  const accentColor =
+    typeof persisted.accentColor === "string" && HEX_COLOR.test(persisted.accentColor)
+      ? persisted.accentColor
+      : undefined;
+  const defaultPageSize = persisted.defaultPageSize === "letter" ? "letter" : "a4";
+  return Object.freeze(
+    accentColor === undefined ? { defaultPageSize } : { defaultPageSize, accentColor },
+  );
 }
 
+/**
+ * Everything an UPDATE must preserve from the stored blob when the caller sends
+ * a partial `settings` object. `scenario` is a seed-only marker no contract
+ * describes; keeping it here is what stops a settings save from erasing it.
+ */
 function knownSafePersistedSettings(value: unknown): Record<string, string> {
-  const settings: Record<string, string> = { ...normalizeStoredSettings(value) };
+  const normalized = normalizeStoredSettings(value);
+  // Built key by key rather than spread so the narrow `Record<string, string>`
+  // stays true: `WorkspaceSettings.accentColor` is `string | null` because
+  // `null` is meaningful on WRITE, but a normalized (read) value never is.
+  const settings: Record<string, string> = { defaultPageSize: normalized.defaultPageSize };
+  if (typeof normalized.accentColor === "string") settings.accentColor = normalized.accentColor;
   if (typeof value !== "object" || value === null) return settings;
-  const persisted = value as {
-    readonly accentColor?: unknown;
-    readonly scenario?: unknown;
-  };
-  if (typeof persisted.accentColor === "string" && /^#[0-9a-f]{6}$/iu.test(persisted.accentColor)) {
-    settings.accentColor = persisted.accentColor;
-  }
+  const persisted = value as { readonly scenario?: unknown };
   if (typeof persisted.scenario === "string" && /^[a-z0-9_-]{1,64}$/iu.test(persisted.scenario)) {
     settings.scenario = persisted.scenario;
   }
@@ -114,6 +142,11 @@ interface SummaryFields {
 }
 
 interface DetailFields extends SummaryFields {
+  /**
+   * Part 73: READ-ONLY. Mirrors the workspace's verified custom hostname; it is
+   * written by `DomainsService`, never by a workspace update, and there is no
+   * longer a `domain` field on `createWorkspaceSchema`/`updateWorkspaceSchema`.
+   */
   readonly domain: string | null;
   readonly settings: unknown;
   readonly storageLimitBytes: number | null;
@@ -126,7 +159,6 @@ interface CreateWorkspacesInput {
   readonly name: string;
   readonly slug: string;
   readonly description: string | null;
-  readonly domain: string | null;
   readonly settings?: WorkspaceSettings;
   readonly idempotencyKey?: string;
   readonly requestId?: string | null;
@@ -155,7 +187,6 @@ interface UpdateWorkspacesInput {
   readonly name?: string;
   readonly slug?: string;
   readonly description?: string | null;
-  readonly domain?: string | null;
   readonly settings?: WorkspaceSettings;
   readonly requestId?: string | null;
 }
@@ -200,7 +231,6 @@ export class WorkspacesService {
         name: input.name,
         slug: input.slug,
         description: input.description,
-        domain: input.domain,
         settings,
       },
     });
@@ -225,7 +255,6 @@ export class WorkspacesService {
               name: input.name,
               slug: candidateSlug,
               description: input.description,
-              domain: input.domain,
               settings,
               createdById: input.principal.userId,
             });
@@ -266,9 +295,6 @@ export class WorkspacesService {
             // Retry the entire transaction with a suffixed slug. Each attempt
             // is a fresh transaction; a failed INSERT aborts only that attempt.
             continue;
-          }
-          if (isUniqueViolationOnConstraint(error, WORKSPACES_DOMAIN_UNIQUE_CONSTRAINT)) {
-            throw this.conflict("The workspace domain is already in use.");
           }
           throw error;
         }
@@ -397,32 +423,25 @@ export class WorkspacesService {
       requestId: input.requestId,
     });
     return this.authorizationEntry.run(operation, async () => {
-      try {
-        if (input.slug === undefined) {
-          const workspace = await this.applyUpdateTransaction(input, undefined);
-          return Object.freeze({ workspace: Object.freeze(workspace) });
-        }
-        for (let attempt = 0; attempt < WORKSPACE_MAX_SLUG_ATTEMPTS; attempt += 1) {
-          const candidateSlug = attempt === 0 ? input.slug : this.suffixedSlug(input.slug, attempt);
-          try {
-            const workspace = await this.applyUpdateTransaction(input, candidateSlug);
-            return Object.freeze({ workspace: Object.freeze(workspace) });
-          } catch (error: unknown) {
-            if (isUniqueViolationOnConstraint(error, WORKSPACES_SLUG_UNIQUE_CONSTRAINT)) {
-              continue;
-            }
-            throw error;
-          }
-        }
-        throw this.conflict(
-          `Unable to allocate a unique workspace slug after ${WORKSPACE_MAX_SLUG_ATTEMPTS} attempts.`,
-        );
-      } catch (error: unknown) {
-        if (isUniqueViolationOnConstraint(error, WORKSPACES_DOMAIN_UNIQUE_CONSTRAINT)) {
-          throw this.conflict("The workspace domain is already in use.");
-        }
-        throw error;
+      if (input.slug === undefined) {
+        const workspace = await this.applyUpdateTransaction(input, undefined);
+        return Object.freeze({ workspace: Object.freeze(workspace) });
       }
+      for (let attempt = 0; attempt < WORKSPACE_MAX_SLUG_ATTEMPTS; attempt += 1) {
+        const candidateSlug = attempt === 0 ? input.slug : this.suffixedSlug(input.slug, attempt);
+        try {
+          const workspace = await this.applyUpdateTransaction(input, candidateSlug);
+          return Object.freeze({ workspace: Object.freeze(workspace) });
+        } catch (error: unknown) {
+          if (isUniqueViolationOnConstraint(error, WORKSPACES_SLUG_UNIQUE_CONSTRAINT)) {
+            continue;
+          }
+          throw error;
+        }
+      }
+      throw this.conflict(
+        `Unable to allocate a unique workspace slug after ${WORKSPACE_MAX_SLUG_ATTEMPTS} attempts.`,
+      );
     });
   }
 
@@ -441,12 +460,17 @@ export class WorkspacesService {
       const changes: Partial<typeof workspaces.$inferInsert> = { updatedAt: new Date() };
       if (input.name !== undefined) changes.name = input.name;
       if (input.description !== undefined) changes.description = input.description;
-      if (input.domain !== undefined) changes.domain = input.domain;
       if (input.settings !== undefined) {
-        changes.settings = {
+        const merged: Record<string, unknown> = {
           ...knownSafePersistedSettings(existing.settings),
           ...this.validateSettings(input.settings),
         };
+        // `accentColor: null` is the explicit "use the platform default"
+        // instruction. It is DELETED rather than stored as null so every reader
+        // — the detail mapper, the shell, the email branding parser — has one
+        // absence to handle instead of two.
+        if (merged.accentColor === null) delete merged.accentColor;
+        changes.settings = merged;
       }
       if (slugOverride !== undefined && slugOverride !== existing.slug) {
         changes.slug = slugOverride;
@@ -688,7 +712,7 @@ export class WorkspacesService {
       readonly requestId?: string | null;
     },
   ): Promise<void> {
-    await tx.insert(auditLogs).values({
+    await recordAudit(tx, {
       workspaceId: input.workspaceId,
       userId: input.userId,
       action: input.action,
@@ -750,6 +774,17 @@ export class WorkspacesService {
     return new ApiHttpException(HttpStatus.CONFLICT, { code: "CONFLICT", message });
   }
 
+  /**
+   * Shape first, then legibility. The contrast rule is enforced HERE rather
+   * than as a Zod refinement because a refinement can only say "invalid": the
+   * caller needs the specific `ACCENT_CONTRAST_TOO_LOW` code so the settings
+   * form can name the remedy (choose a darker shade) and show the ratio it
+   * measured with the same shared function the server used.
+   *
+   * `warn` (3:1 <= ratio < 4.5:1) is ACCEPTED. Refusing every accent that
+   * cannot also carry body text would reject most real brand palettes, and the
+   * accent paints surfaces and borders, not paragraphs.
+   */
   private validateSettings(settings: WorkspaceSettings | undefined): WorkspaceSettings {
     const parsed = workspaceSettingsSchema.safeParse(settings ?? DEFAULT_WORKSPACE_SETTINGS);
     if (!parsed.success) {
@@ -757,6 +792,18 @@ export class WorkspacesService {
         code: "VALIDATION_ERROR",
         message: "The workspace settings are invalid.",
       });
+    }
+    const accentColor = parsed.data.accentColor;
+    if (typeof accentColor === "string") {
+      const contrast = accentContrast(accentColor);
+      if (contrast === null || contrast.level === "fail") {
+        throw new ApiHttpException(HttpStatus.UNPROCESSABLE_ENTITY, {
+          code: "ACCENT_CONTRAST_TOO_LOW",
+          message: `The accent color contrasts too weakly against white (${String(
+            contrast?.ratioOnWhite ?? 0,
+          )}:1). Choose a darker shade with at least ${String(ACCENT_CONTRAST_MIN_RATIO)}:1.`,
+        });
+      }
     }
     return Object.freeze(parsed.data);
   }

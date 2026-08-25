@@ -116,7 +116,10 @@ function build(
     smtp as unknown as SmtpService,
     logger as unknown as StructuredLogger,
     registry,
-    { appUrl: new URL("https://app.notted.test") } as AppConfig,
+    {
+      appUrl: new URL("https://app.notted.test"),
+      apiUrl: new URL("https://api.notted.test"),
+    } as AppConfig,
     { emailEnabled: true } as FeaturesConfig,
   );
   return { handler, authorization, renderer, smtp, logger, registry };

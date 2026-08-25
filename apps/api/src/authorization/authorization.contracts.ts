@@ -65,6 +65,12 @@ export const AUTHORIZATION_ACTIONS = [
   // who have no authority to spend the workspace's AI budget.
   "ai.configure",
   "ai.use",
+  // Part 71. Both address the `workspace` resource: an audit trail is
+  // workspace-wide, not per-entity. Reading it exposes who did what, from
+  // which address, so it is owner/admin only; exporting it additionally
+  // leaves the system as a file.
+  "audit.read",
+  "audit.export",
 ] as const;
 
 export type AuthorizationAction = (typeof AUTHORIZATION_ACTIONS)[number];

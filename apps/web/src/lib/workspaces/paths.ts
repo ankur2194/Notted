@@ -16,3 +16,31 @@ export function workspaceMemberPath(workspaceId: string): string {
 export function workspaceStoragePath(workspaceId: string): string {
   return WORKSPACE_API_PATHS.storage.replace(":workspaceId", encodeURIComponent(workspaceId));
 }
+
+/**
+ * Builds the Part 72 logo path. `POST` replaces and `DELETE` removes; the
+ * tokenised public `GET` beneath it is NEVER built here — the server hands the
+ * browser the whole `logoUrl`, and reconstructing it client-side would mean
+ * guessing a 128-bit token.
+ */
+export function workspaceLogoPath(workspaceId: string): string {
+  return WORKSPACE_API_PATHS.logo.replace(":workspaceId", encodeURIComponent(workspaceId));
+}
+
+/**
+ * Builds the Part 73 custom-domain path. A SINGLETON, so there is no id to
+ * interpolate beyond the workspace: `GET` reads, `PUT` claims, `DELETE`
+ * releases.
+ */
+export function workspaceDomainPath(workspaceId: string): string {
+  return WORKSPACE_API_PATHS.domain.replace(":workspaceId", encodeURIComponent(workspaceId));
+}
+
+/**
+ * Builds the Part 73 re-check path. Built from its OWN constant rather than by
+ * appending `/verify` to the path above, so a future change to either route
+ * cannot leave the two silently disagreeing.
+ */
+export function workspaceDomainVerifyPath(workspaceId: string): string {
+  return WORKSPACE_API_PATHS.domainVerify.replace(":workspaceId", encodeURIComponent(workspaceId));
+}

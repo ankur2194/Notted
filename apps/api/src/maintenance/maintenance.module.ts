@@ -14,6 +14,8 @@ import { AuthorizationModule } from "../authorization/authorization.module";
 import { MinioModule } from "../infrastructure/minio/minio.module";
 import { QueueModule } from "../queue/queue.module";
 
+import { AuditLogRetentionQueueService } from "./audit-log-retention-queue.service";
+import { AuditLogRetentionService } from "./audit-log-retention.service";
 import { JobIdempotencyCleanupQueueService } from "./job-idempotency-cleanup-queue.service";
 import {
   JobIdempotencyCleanupRepository,
@@ -36,6 +38,8 @@ import { StorageMaintenanceService } from "./storage-maintenance.service";
     JobIdempotencyCleanupQueueService,
     NoteVersionRetentionService,
     NoteVersionRetentionQueueService,
+    AuditLogRetentionService,
+    AuditLogRetentionQueueService,
   ],
   exports: [StorageMaintenanceService],
 })

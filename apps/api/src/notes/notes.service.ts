@@ -9,6 +9,7 @@ import {
 } from "@notted/shared-validators";
 import { and, asc, desc, eq, exists, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { AuthorizationDeniedError } from "../authorization/authorization.errors";
 import { ApiHttpException } from "../common/errors/api-http.exception";
@@ -21,7 +22,6 @@ import {
 } from "../common/idempotency/api-idempotency";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import {
-  auditLogs,
   folders,
   jobOutbox,
   type JobOutboxPayload,
@@ -2189,7 +2189,7 @@ export class NotesService {
   ): Promise<void> {
     const folderMutation = mutation.startsWith("folder");
     const eventName = NOTE_DOMAIN_EVENTS[mutation];
-    await tx.insert(auditLogs).values({
+    await recordAudit(tx, {
       workspaceId: activeWorkspaceId(this.tenantContext),
       userId: input.principal.userId,
       action: eventName,

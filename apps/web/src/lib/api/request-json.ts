@@ -1,6 +1,6 @@
 import { uuidSchema } from "@notted/shared-validators";
 
-import { publicEnvironment } from "@/config/public-environment";
+import { apiOrigin } from "@/lib/api/api-origin";
 
 export type ApiRequestFailureKind =
   "invalid" | "forbidden-or-not-found" | "version-conflict" | "conflict" | "unavailable";
@@ -184,7 +184,7 @@ export async function requestJson<T>(
   const keepalive = options.keepalive === true && bodyFitsKeepalive(init.body);
   const signal = requestSignal(keepalive, options);
   try {
-    const response = await fetch(new URL(path, publicEnvironment.NEXT_PUBLIC_API_URL), {
+    const response = await fetch(new URL(path, apiOrigin()), {
       ...init,
       cache: "no-store",
       credentials: "include",

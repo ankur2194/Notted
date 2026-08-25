@@ -141,7 +141,7 @@ describe("parseSingleFileUpload", () => {
   it("rejects a non-multipart content type with 415", async () => {
     const request = fakeRequest(Buffer.from("{}", "utf8"), { contentType: "application/json" });
     await expect(parseSingleFileUpload(request, options)).rejects.toMatchObject({
-      safeResponse: { code: "UNPROCESSABLE_ENTITY" },
+      safeResponse: { code: "UNSUPPORTED_MEDIA_TYPE" },
     });
     expect(
       await statusOf(

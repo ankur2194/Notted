@@ -64,21 +64,43 @@ function safeAccentColor(settings: unknown): string {
 /**
  * Only absolute http(s) logos survive. A `javascript:`/`data:` value stored by
  * an earlier bug must never reach an `<img src>` in a mailbox.
+ *
+ * PART 72: `workspaces.logo_url` now holds an APP-RELATIVE API path
+ * (`/api/v1/workspaces/<id>/logo/<token>`), because the bytes are served by this
+ * API. A mail client has no base URL to resolve that against, so it is resolved
+ * here against `API_URL` — the one place that knows the deployment's public API
+ * origin. Resolution prefixes `apiUrl.origin`, so the result cannot leave that
+ * origin, and the protocol check below still runs on it. A value that tries to
+ * be clever (`//evil.example` protocol-relative, `javascript:...`) either fails
+ * the protocol-relative guard or is not app-relative at all and falls through to
+ * the pre-existing absolute-URL rules.
  */
-function safeLogoUrl(logoUrl: string | null): string | null {
+function safeLogoUrl(logoUrl: string | null, apiUrl: URL): string | null {
   if (logoUrl === null || logoUrl.trim() === "") return null;
+  const value = logoUrl.trim();
+  const candidate = value.startsWith("/")
+    ? value.startsWith("//")
+      ? null
+      : `${apiUrl.origin}${value}`
+    : value;
+  if (candidate === null) return null;
   try {
-    const parsed = new URL(logoUrl);
+    const parsed = new URL(candidate);
     return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.toString() : null;
   } catch {
     return null;
   }
 }
 
-/** Pure. `workspace === null` yields platform branding (system email). */
+/**
+ * Pure. `workspace === null` yields platform branding (system email).
+ *
+ * `appConfig` is satisfied structurally by the injected `AppConfig`, so every
+ * existing caller already passes both URLs and none of them changed.
+ */
 export function resolveBranding(
   workspace: BrandingWorkspaceRow | null,
-  appConfig: { readonly appUrl: URL },
+  appConfig: { readonly appUrl: URL; readonly apiUrl: URL },
 ): EmailBranding {
   const appUrl = appConfig.appUrl.origin;
   if (workspace === null) {
@@ -92,7 +114,7 @@ export function resolveBranding(
   const name = workspace.name.trim();
   return Object.freeze({
     name: name === "" ? PLATFORM_BRANDING_NAME : name,
-    logoUrl: safeLogoUrl(workspace.logoUrl),
+    logoUrl: safeLogoUrl(workspace.logoUrl, appConfig.apiUrl),
     accentColor: safeAccentColor(workspace.settings),
     appUrl,
   });

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import AiSettings from "@/components/workspaces/AiSettings";
 import { ApiKeys } from "@/components/workspaces/ApiKeys";
+import { AuditLog } from "@/components/workspaces/AuditLog";
 import { MentionEmailPreference } from "@/components/workspaces/MentionEmailPreference";
 import { WebhookSettings } from "@/components/workspaces/WebhookSettings";
 import { WorkspaceSettings } from "@/components/workspaces/WorkspaceSettings";
@@ -83,6 +84,13 @@ export default async function WorkspaceSettingsPage({
         — the config and usage routes both re-authorize server-side.
       */}
       {canManage ? <AiSettings workspaceId={workspace.id} /> : null}
+      {/*
+        Admin-only for the same reason again: the audit trail is who-did-what
+        for the whole workspace, not the reader's own activity. The gate is
+        presentational — the list and export routes both re-authorize
+        `audit.read` / `audit.export` server-side for owner/admin only.
+      */}
+      {canManage ? <AuditLog workspaceId={workspace.id} /> : null}
       {/*
         Rendered for EVERY member, unlike the blocks above. This is the reader's
         own mail preference — the control the mention email's footer links to —

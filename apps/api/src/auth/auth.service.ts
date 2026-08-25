@@ -3,6 +3,7 @@ import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { getApiKeyActor } from "../api-keys/api-key-context";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import { setTrustedPrincipal } from "../common/rate-limit/trusted-principal";
+import { VerifiedHostsService } from "../common/verified-hosts.service";
 import { AUTH_CONFIG, type AuthConfig } from "../config/auth.config";
 import { RETENTION_CONFIG, type RetentionConfig } from "../config/retention.config";
 
@@ -43,6 +44,10 @@ export class AuthService {
     @Inject(BETTER_AUTH_INSTANCE) private readonly auth: BetterAuthInstance | null,
     @Inject(AUTH_CONFIG) private readonly config: AuthConfig,
     @Inject(RETENTION_CONFIG) private readonly retention: RetentionConfig,
+    // Part 73. Adds verified tenant origins to the CSRF allow-list. It lives in
+    // the `@Global()` `CommonModule` precisely so this constructor can take it
+    // without `AuthModule` importing `DomainsModule` (which imports `AuthModule`).
+    private readonly verifiedHosts: VerifiedHostsService,
   ) {}
 
   capabilities(): AuthCapabilities {
@@ -71,7 +76,16 @@ export class AuthService {
     // would reject every legitimate integration mutation.
     if (getApiKeyActor(request) !== undefined) return;
     const origin = request.header("origin");
-    if (origin === undefined || !this.config.trustedOrigins.includes(origin)) {
+    // Part 73. The configured list is still the primary answer and is checked
+    // first, with no I/O; a verified custom-domain origin passes as well, and
+    // only once the trusted-host middleware has already admitted that host.
+    if (
+      origin === undefined ||
+      !(
+        this.config.trustedOrigins.includes(origin) ||
+        this.verifiedHosts.isTrustedOriginSync(origin)
+      )
+    ) {
       throw new ApiHttpException(HttpStatus.FORBIDDEN, {
         code: "CSRF_ORIGIN_INVALID",
         message: "The request origin is not allowed.",

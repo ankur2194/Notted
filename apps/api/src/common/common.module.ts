@@ -7,12 +7,16 @@ import { RateLimitGuard } from "./rate-limit/rate-limit.guard";
 import { RateLimitService } from "./rate-limit/rate-limit.service";
 import { RATE_LIMIT_STORE } from "./rate-limit/rate-limit.types";
 import { RequestContextMiddleware } from "./request/request-context.middleware";
+import { VerifiedHostsService } from "./verified-hosts.service";
 
 @Global()
 @Module({
   providers: [
     StructuredLogger,
     RequestContextMiddleware,
+    // Part 73. Lives here, not in `DomainsModule`: `AuthService` needs it and
+    // `DomainsModule` imports `AuthModule`, so the arrow would be circular.
+    VerifiedHostsService,
     InMemoryRateLimitStore,
     RateLimitService,
     {
@@ -24,6 +28,12 @@ import { RequestContextMiddleware } from "./request/request-context.middleware";
       useClass: RateLimitGuard,
     },
   ],
-  exports: [RateLimitService, RequestContextMiddleware, StructuredLogger, RATE_LIMIT_STORE],
+  exports: [
+    RateLimitService,
+    RequestContextMiddleware,
+    StructuredLogger,
+    VerifiedHostsService,
+    RATE_LIMIT_STORE,
+  ],
 })
 export class CommonModule {}

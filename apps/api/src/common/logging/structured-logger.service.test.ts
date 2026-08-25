@@ -70,6 +70,59 @@ describe("StructuredLogger auth redaction", () => {
     expect(output).toContain("11111111-1111-4111-8111-111111111111");
     write.mockRestore();
   });
+
+  /**
+   * Part 74. Pins the newer credential-shaped fields (both API-key spellings,
+   * webhook and connection secrets, request signatures) and the nested
+   * `err`/`res` shapes that HTTP client and Express logging libraries commonly
+   * attach to a log record, where the sensitive material sits one level deep.
+   */
+  it("redacts API keys, secrets, signatures, and nested request/response objects", () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const logger = new StructuredLogger({ nodeEnv: "test", logLevel: "info" } as AppConfig);
+    // `err`/`res` are nested objects, which `LogMetadata` deliberately forbids
+    // (scalars only). The cast reproduces what an untyped caller — a pino
+    // serializer or Nest's `LoggerService` overload — actually hands the logger.
+    logger.info(
+      {
+        apiKey: "distinct-apiKey-value",
+        api_key: "distinct-api_key-value",
+        "x-api-key": "distinct-x-api-key-value",
+        signature: "distinct-signature-value",
+        "set-cookie": "distinct-set-cookie-value",
+        privateKey: "distinct-privateKey-value",
+        webhookSecret: "distinct-webhookSecret-value",
+        secretKey: "distinct-secretKey-value",
+        accessKey: "distinct-accessKey-value",
+        connectionString: "distinct-connectionString-value",
+        dsn: "distinct-dsn-value",
+        err: { response: "distinct-err-response-value", config: "distinct-err-config-value" },
+        res: { headers: "distinct-res-headers-value" },
+      } as unknown as Parameters<StructuredLogger["info"]>[0],
+      "Extended sensitive-field redaction probe",
+    );
+    const output = write.mock.calls.map(([chunk]) => String(chunk)).join("");
+
+    for (const value of [
+      "distinct-apiKey-value",
+      "distinct-api_key-value",
+      "distinct-x-api-key-value",
+      "distinct-signature-value",
+      "distinct-set-cookie-value",
+      "distinct-privateKey-value",
+      "distinct-webhookSecret-value",
+      "distinct-secretKey-value",
+      "distinct-accessKey-value",
+      "distinct-connectionString-value",
+      "distinct-dsn-value",
+      "distinct-err-response-value",
+      "distinct-err-config-value",
+      "distinct-res-headers-value",
+    ]) {
+      expect(output).not.toContain(value);
+    }
+    write.mockRestore();
+  });
 });
 
 /**

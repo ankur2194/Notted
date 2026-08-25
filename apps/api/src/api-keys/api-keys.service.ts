@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { and, asc, desc, eq, type SQL } from "drizzle-orm";
 
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import {
@@ -25,7 +26,7 @@ import {
 } from "../common/idempotency/api-idempotency";
 import { AUTH_CONFIG, type AuthConfig } from "../config/auth.config";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
-import { apiKeys, auditLogs } from "../database/schema";
+import { apiKeys } from "../database/schema";
 import {
   activeWorkspaceId,
   assertWorkspaceInsertValues,
@@ -184,7 +185,7 @@ export class ApiKeysService {
               "apiKey.create",
             ),
           );
-          await this.recordAudit(tx, API_KEY_AUDIT_ACTIONS.created, apiKeyId, input, {
+          await this.writeAudit(tx, API_KEY_AUDIT_ACTIONS.created, apiKeyId, input, {
             keyPrefix: secret.prefix,
             scopes: [...input.scopes],
           });
@@ -237,7 +238,7 @@ export class ApiKeysService {
           if (existing === undefined) this.notFound();
           return Object.freeze({ apiKeyId: input.apiKeyId, revoked: true as const });
         }
-        await this.recordAudit(tx, API_KEY_AUDIT_ACTIONS.revoked, transitioned.id, input, {
+        await this.writeAudit(tx, API_KEY_AUDIT_ACTIONS.revoked, transitioned.id, input, {
           keyPrefix: transitioned.keyPrefix,
           scopes: [...parseScopes(transitioned.scopes)],
         });
@@ -291,14 +292,14 @@ export class ApiKeysService {
    * enough to answer "which credential was this" without ever recording
    * anything that could authenticate.
    */
-  private async recordAudit(
+  private async writeAudit(
     tx: DatabaseTransaction,
     action: (typeof API_KEY_AUDIT_ACTIONS)[keyof typeof API_KEY_AUDIT_ACTIONS],
     entityId: string,
     input: ScopedInput,
     metadata: { readonly keyPrefix: string; readonly scopes: readonly ApiKeyScope[] },
   ): Promise<void> {
-    await tx.insert(auditLogs).values({
+    await recordAudit(tx, {
       workspaceId: activeWorkspaceId(this.tenantContext),
       userId: input.principal.userId,
       action,

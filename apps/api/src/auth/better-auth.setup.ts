@@ -14,7 +14,10 @@ import { eq } from "drizzle-orm";
 
 import { BETTER_AUTH_SCHEMA_CONTRACT, schema, users } from "../database/schema";
 
+import { AuthLockoutError } from "./auth-lockout.service";
+
 import type { AuthEmailProducerService } from "./auth-email-producer.service";
+import type { AuthLockoutService } from "./auth-lockout.service";
 import type { BetterAuthRedisStorage } from "./better-auth-redis.storage";
 import type { StructuredLogger } from "../common/logging/structured-logger.service";
 import type { AppConfig } from "../config/app.config";
@@ -43,6 +46,20 @@ export const RECENT_AUTHENTICATION_PATHS = Object.freeze([
   "/revoke-session",
   "/revoke-sessions",
   "/revoke-other-sessions",
+]);
+
+/**
+ * Part 74 — the paths that carry a caller-supplied identifier in the body and
+ * are therefore worth counting per identifier rather than only per IP. OAuth
+ * and passkey paths are absent on purpose: neither accepts a guessable secret,
+ * and locking on them would let one attacker lock a victim out of their own
+ * provider sign-in.
+ */
+export const AUTH_IDENTIFIER_PATHS = Object.freeze([
+  "/sign-in/email",
+  "/sign-up/email",
+  "/sign-in/magic-link",
+  "/notted/request-password-reset",
 ]);
 
 const SESSION_ROTATION_PATHS = new Set(["/two-factor/verify-totp", "/two-factor/disable"]);
@@ -90,6 +107,21 @@ function tokenHash(secret: string, token: string): string {
   return createHmac("sha256", secret).update(token, "utf8").digest("hex");
 }
 
+const identifierPaths = new Set(AUTH_IDENTIFIER_PATHS);
+
+/**
+ * The email a request is attempting, or `undefined` when the path does not
+ * carry one. Anything that is not a plausible address is ignored rather than
+ * counted: hashing arbitrary attacker-controlled bytes would let them fill
+ * Redis with keys that lock nothing.
+ */
+function attemptedIdentifier(path: string, body: unknown): string | undefined {
+  if (!identifierPaths.has(path) || typeof body !== "object" || body === null) return undefined;
+  const email = (body as { email?: unknown }).email;
+  if (typeof email !== "string" || email.length === 0 || email.length > 320) return undefined;
+  return email.includes("@") ? email : undefined;
+}
+
 export interface BetterAuthSetupDependencies {
   readonly database: DatabaseService;
   readonly redisStorage: BetterAuthRedisStorage;
@@ -100,6 +132,20 @@ export interface BetterAuthSetupDependencies {
   readonly retention: RetentionConfig;
   readonly features: FeaturesConfig;
   readonly logger: StructuredLogger;
+  /**
+   * Part 73. Supplies the VERIFIED custom-domain origins Better Auth must also
+   * trust. Optional so a caller that has no custom-domain support (and the unit
+   * suite) keeps the static list unchanged.
+   */
+  readonly verifiedHosts?: {
+    verifiedOriginsFor(protocol?: "http" | "https"): Promise<readonly string[]>;
+  };
+  /**
+   * Part 74. Optional for the same reason as `verifiedHosts`: the unit suite
+   * builds this options object without Redis, and an absent lockout simply
+   * leaves the per-IP limiter as the only brute-force bound.
+   */
+  readonly lockout?: AuthLockoutService;
 }
 
 export function betterAuthCookieAttributes(production: boolean) {
@@ -180,6 +226,7 @@ export async function setupBetterAuth(dependencies: BetterAuthSetupDependencies)
       createAuthMiddleware,
       formCsrfMiddleware,
       getAuthoritativeSessionFromCtx,
+      isAPIError,
       sessionMiddleware,
     },
     { magicLink, twoFactor },
@@ -305,7 +352,33 @@ export async function setupBetterAuth(dependencies: BetterAuthSetupDependencies)
 
   const recentAuthenticationPaths = new Set(RECENT_AUTHENTICATION_PATHS);
 
+  /**
+   * Part 74. Better Auth's own `APIError` is the only refusal shape its handler
+   * knows how to serialise, so the transport-neutral error is translated here
+   * rather than thrown from the service. `Retry-After` is a real header the
+   * client can act on; the body message is identical for every outcome.
+   */
+  const throwAsApiError = (error: AuthLockoutError): never => {
+    throw new APIError(
+      error.status === 423 ? "LOCKED" : "TOO_MANY_REQUESTS",
+      { code: error.code, message: error.message },
+      { "Retry-After": String(error.retryAfterSeconds) },
+    );
+  };
+
   const authBoundaryHook = createAuthMiddleware({}, async (ctx) => {
+    // FIRST, before any validation, session lookup or password hash: a refused
+    // attempt must cost the server less than it costs the attacker.
+    const identifier = attemptedIdentifier(ctx.path, ctx.body);
+    if (identifier !== undefined && dependencies.lockout !== undefined) {
+      try {
+        await dependencies.lockout.consumeIdentifierBudget(identifier);
+        await dependencies.lockout.assertNotLocked(identifier);
+      } catch (error: unknown) {
+        if (error instanceof AuthLockoutError) throwAsApiError(error);
+        throw error;
+      }
+    }
     if (ctx.path === "/sign-in/social") {
       const provider = oauthProviderIdSchema.safeParse(ctx.body?.provider);
       if (!provider.success || !authConfig.enabledOAuthProviders.includes(provider.data)) {
@@ -384,14 +457,36 @@ export async function setupBetterAuth(dependencies: BetterAuthSetupDependencies)
     }
   });
 
-  const preserveRotationCookieHook = createAuthMiddleware({}, async (ctx) => {
-    if (ctx.request === undefined) return;
-    const rotation = nonRememberedRotationCookies.get(ctx.request);
-    if (rotation === undefined) return;
-    nonRememberedRotationCookies.delete(ctx.request);
-    // The plugin writes a persistent cookie after rotating a managed TOTP
-    // session. Write the same opaque token last as a browser-session cookie.
-    await setSessionCookie(ctx, rotation, true);
+  // Better Auth 1.6.24 accepts exactly ONE `hooks.after` middleware (see
+  // `@better-auth/core` init-options: `after?: AuthMiddleware`, not an array),
+  // so the two after-request concerns are composed here rather than registered
+  // separately. Order matters only in that the cookie must be written before
+  // anything can throw.
+  const afterHook = createAuthMiddleware({}, async (ctx) => {
+    if (ctx.request !== undefined) {
+      const rotation = nonRememberedRotationCookies.get(ctx.request);
+      if (rotation !== undefined) {
+        nonRememberedRotationCookies.delete(ctx.request);
+        // The plugin writes a persistent cookie after rotating a managed TOTP
+        // session. Write the same opaque token last as a browser-session cookie.
+        await setSessionCookie(ctx, rotation, true);
+      }
+    }
+    // Part 74. `/sign-in/email` is the only path here that can fail because a
+    // secret was guessed wrong, so it is the only one whose failures count
+    // toward a lockout. A rejected sign-up or reset request is not a guess.
+    const identifier = attemptedIdentifier(ctx.path, ctx.body);
+    if (identifier === undefined || dependencies.lockout === undefined) return;
+    if (ctx.path !== "/sign-in/email") return;
+    const returned = ctx.context.returned;
+    if (isAPIError(returned)) {
+      // 401 only. An unverified account answers 403 and a malformed body 400;
+      // neither is evidence of guessing, and counting them would let a bad
+      // client lock its own user out.
+      if (returned.statusCode === 401) await dependencies.lockout.recordFailure(identifier);
+      return;
+    }
+    await dependencies.lockout.recordSuccess(identifier);
   });
 
   const nottedPasswordResetPlugin = {
@@ -404,7 +499,23 @@ export async function setupBetterAuth(dependencies: BetterAuthSetupDependencies)
     secret: authConfig.secret,
     baseURL: authConfig.baseUrl.origin,
     basePath: authConfig.basePath,
-    trustedOrigins: [...authConfig.trustedOrigins],
+    // Part 73. Better Auth 1.6 accepts an async function here and calls it per
+    // request. THE STATIC LIST MUST BE RETURNED BY THE FUNCTION TOO — supplying
+    // a function REPLACES the array rather than extending it, so returning only
+    // the verified origins would silently un-trust APP_URL.
+    //
+    // A resolution failure degrades to the static list rather than throwing:
+    // an auth request on the primary host must not fail because the
+    // custom-domain table was briefly unreadable.
+    trustedOrigins: async (): Promise<string[]> => {
+      const verified =
+        dependencies.verifiedHosts === undefined
+          ? []
+          : await dependencies.verifiedHosts.verifiedOriginsFor(
+              appConfig.nodeEnv === "production" ? "https" : "http",
+            );
+      return [...authConfig.trustedOrigins, ...verified];
+    },
     database: drizzleAdapter(database.db, {
       provider: "pg",
       schema: { ...schema, user: schema.users },
@@ -520,14 +631,17 @@ export async function setupBetterAuth(dependencies: BetterAuthSetupDependencies)
       window: 60,
       max: appConfig.unauthenticatedRateLimitPerMinute,
       customRules: {
-        "/sign-up/email": { window: 60, max: appConfig.sensitiveRateLimitPerMinute },
-        "/sign-in/email": { window: 60, max: appConfig.sensitiveRateLimitPerMinute },
-        "/sign-in/magic-link": { window: 60, max: appConfig.sensitiveRateLimitPerMinute },
-        "/send-verification-email": { window: 60, max: appConfig.sensitiveRateLimitPerMinute },
+        // Part 74. The four credential paths move to the tighter authentication
+        // tier. Better Auth keys these by IP and path only, which is why the
+        // per-identifier budget in `AuthLockoutService` exists alongside them.
+        "/sign-up/email": { window: 60, max: appConfig.authRateLimitPerMinute },
+        "/sign-in/email": { window: 60, max: appConfig.authRateLimitPerMinute },
+        "/sign-in/magic-link": { window: 60, max: appConfig.authRateLimitPerMinute },
         "/notted/request-password-reset": {
           window: 60,
-          max: appConfig.sensitiveRateLimitPerMinute,
+          max: appConfig.authRateLimitPerMinute,
         },
+        "/send-verification-email": { window: 60, max: appConfig.sensitiveRateLimitPerMinute },
         "/notted/reauthenticate": { window: 60, max: appConfig.sensitiveRateLimitPerMinute },
         "/two-factor/*": { window: 60, max: appConfig.sensitiveRateLimitPerMinute },
         "/passkey/*": { window: 60, max: appConfig.sensitiveRateLimitPerMinute },
@@ -538,6 +652,15 @@ export async function setupBetterAuth(dependencies: BetterAuthSetupDependencies)
       ...BETTER_AUTH_SCHEMA_CONTRACT.advanced,
       useSecureCookies: appConfig.nodeEnv === "production",
       defaultCookieAttributes: betterAuthCookieAttributes(appConfig.nodeEnv === "production"),
+      // Part 74. Better Auth 1.6.24's default IP resolution trusts
+      // `x-forwarded-for` unconditionally — a header any client can send — and
+      // with no proxy in front of it falls back to a constant, collapsing every
+      // caller into one rate-limit bucket. `main.ts` sets this single private
+      // header from `request.ip`, which Express derives under the deployment's
+      // own `trust proxy` setting, so the value is the one Notted already
+      // trusts everywhere else. Naming exactly one header also makes the
+      // spoofable ones unreadable to the limiter.
+      ipAddress: { ipAddressHeaders: ["x-notted-client-ip"] },
     },
     plugins: [
       magicLink({
@@ -545,7 +668,7 @@ export async function setupBetterAuth(dependencies: BetterAuthSetupDependencies)
         allowedAttempts: 1,
         disableSignUp: !features.registrationEnabled,
         storeToken: "hashed",
-        rateLimit: { window: 60, max: appConfig.sensitiveRateLimitPerMinute },
+        rateLimit: { window: 60, max: appConfig.authRateLimitPerMinute },
         sendMagicLink: async ({ email, url }, ctx) => {
           await emailProducer.queue({
             recipient: email,
@@ -582,7 +705,7 @@ export async function setupBetterAuth(dependencies: BetterAuthSetupDependencies)
           ]
         : []),
     ],
-    hooks: { before: authBoundaryHook, after: preserveRotationCookieHook },
+    hooks: { before: authBoundaryHook, after: afterHook },
     onAPIError: {
       throw: false,
       onError: () => {

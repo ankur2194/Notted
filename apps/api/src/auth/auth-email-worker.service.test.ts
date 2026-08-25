@@ -16,7 +16,10 @@ import type { SmtpService } from "../infrastructure/smtp/smtp.service";
 const intentId = "00000000-0000-4000-8000-000000000021";
 const deliveryId = "00000000-0000-4000-8000-000000000022";
 
-const appConfig = { appUrl: new URL("https://app.notted.test") } as AppConfig;
+const appConfig = {
+  appUrl: new URL("https://app.notted.test"),
+  apiUrl: new URL("https://api.notted.test"),
+} as AppConfig;
 
 /** Renders the fixed shape the handler consumes; never touches React. */
 function renderer(

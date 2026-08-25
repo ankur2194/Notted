@@ -43,6 +43,7 @@ import {
 import { exportOptionsSchema } from "@notted/shared-validators";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
+import { recordAudit } from "../audit/audit-record";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import {
   assertIdempotencyPayload,
@@ -63,7 +64,12 @@ import {
   ObjectStorageService,
   type ObjectStore,
 } from "../infrastructure/minio/object-storage.service";
-import { assertActiveWorkspace, TenantContextService, whereWorkspace } from "../tenant";
+import {
+  activeWorkspaceId,
+  assertActiveWorkspace,
+  TenantContextService,
+  whereWorkspace,
+} from "../tenant";
 
 import { ExportJobProducer } from "./export-job.producer";
 import { exportDownloadFilename } from "./export-object-key";
@@ -242,6 +248,8 @@ export class ExportService {
       await lockApiIdempotency(tx, identity);
       const replay = await loadApiIdempotency(tx, identity);
       if (replay !== null) {
+        // A replay is a lookup of the ORIGINAL creation, not a second one — no
+        // audit row here, or one create request would appear to create twice.
         assertIdempotencyPayload(replay, identity);
         return this.readRow(tx, { workspaceId: input.workspaceId, exportId: replay.resourceId });
       }
@@ -274,6 +282,19 @@ export class ExportService {
         correlationId: input.correlationId,
       });
       await storeApiIdempotency(tx, identity, exportId);
+      // Identifiers only — `input.options` never reaches an audit row.
+      await recordAudit(tx, {
+        workspaceId: activeWorkspaceId(this.tenantContext),
+        userId: input.principal.userId,
+        action: "export.create",
+        entityType: "export",
+        entityId: exportId,
+        metadata: {
+          format: input.format,
+          sourceType: input.sourceType,
+          sourceId: input.sourceId,
+        },
+      });
       return created;
     });
 
@@ -321,16 +342,33 @@ export class ExportService {
    * error the UI has to explain.
    */
   async cancel(input: ExportSelector): Promise<ExportJob> {
-    const [cancelled] = await this.database.db
-      .update(exportJobs)
-      .set({ status: "cancelled", completedAt: new Date() })
-      .where(and(this.rowScope(input), inArray(exportJobs.status, [...CANCELLABLE_STATUSES])))
-      .returning();
-    if (cancelled !== undefined) return this.toJob(cancelled);
-    // Lost the race (or nothing to cancel): report the row as it actually is.
-    // `read` still 404s for a row outside this workspace, so the no-op branch
-    // cannot be used to probe for foreign export ids.
-    return this.read(input);
+    // Wrapped in a transaction (the state machine elsewhere in this file
+    // deliberately is not) purely so the audit row commits atomically with a
+    // real transition, per ADR 0006 — the conditional UPDATE itself needs no
+    // transaction of its own.
+    return this.database.transaction(async (tx) => {
+      const [cancelled] = await tx
+        .update(exportJobs)
+        .set({ status: "cancelled", completedAt: new Date() })
+        .where(and(this.rowScope(input), inArray(exportJobs.status, [...CANCELLABLE_STATUSES])))
+        .returning();
+      if (cancelled === undefined) {
+        // Lost the race (or nothing to cancel, e.g. a double-click): report the
+        // row as it actually is and write no audit row — a no-op transition is
+        // not an event. `readRow` still 404s for a row outside this workspace,
+        // so this branch cannot be used to probe for foreign export ids.
+        return this.toJob(await this.readRow(tx, input));
+      }
+      await recordAudit(tx, {
+        workspaceId: activeWorkspaceId(this.tenantContext),
+        userId: this.tenantContext.get().userId,
+        action: "export.cancel",
+        entityType: "export",
+        entityId: cancelled.id,
+        metadata: {},
+      });
+      return this.toJob(cancelled);
+    });
   }
 
   /**
@@ -375,6 +413,17 @@ export class ExportService {
     const stream = await this.readStorage(() =>
       this.objects.getObjectStream(EXPORTS_BUCKET, objectKey),
     );
+    // Written only here, after every gate above has passed and the stream is
+    // in hand — a refused or unavailable download must never be recorded as a
+    // download. No transaction: this read path has none of its own.
+    await recordAudit(this.database.db, {
+      workspaceId: activeWorkspaceId(this.tenantContext),
+      userId: this.tenantContext.get().userId,
+      action: "export.download",
+      entityType: "export",
+      entityId: row.id,
+      metadata: { format: row.format },
+    });
     return Object.freeze({
       stream,
       filename: exportDownloadFilename(await this.sourceLabel(row), media.fileExtension),

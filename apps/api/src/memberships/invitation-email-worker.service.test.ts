@@ -61,7 +61,10 @@ function build(database: unknown) {
     smtp as unknown as SmtpService,
     { info: vi.fn(), failure: vi.fn() } as unknown as StructuredLogger,
     registry,
-    { appUrl: new URL("https://app.notted.test") } as AppConfig,
+    {
+      appUrl: new URL("https://app.notted.test"),
+      apiUrl: new URL("https://api.notted.test"),
+    } as AppConfig,
     { emailEnabled: true } as FeaturesConfig,
   );
   return { handler, authorization, smtp, tokens, render, registry };

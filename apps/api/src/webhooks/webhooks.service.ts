@@ -42,12 +42,13 @@ import {
 } from "@notted/shared-types";
 import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import { APP_CONFIG, type AppConfig } from "../config/app.config";
 import { SECURITY_CONFIG, type SecurityConfig } from "../config/security.config";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
-import { auditLogs, jobOutbox, webhookDeliveries, webhooks } from "../database/schema";
+import { jobOutbox, webhookDeliveries, webhooks } from "../database/schema";
 import { DOMAIN_JOB_TYPES } from "../queue/job-identifiers";
 import { WEBHOOK_DELIVER_JOB_DEFINITION } from "../queue/job-registry";
 import {
@@ -259,7 +260,7 @@ export class WebhooksService {
             "webhook.create",
           ),
         );
-        await this.recordAudit(tx, WEBHOOK_AUDIT_ACTIONS.created, webhookId, input, {
+        await this.writeAudit(tx, WEBHOOK_AUDIT_ACTIONS.created, webhookId, input, {
           host: hostOf(input.url),
           events: [...input.events],
         });
@@ -309,7 +310,7 @@ export class WebhooksService {
           )
           .returning(this.webhookSelection());
         if (updated === undefined) this.notFound();
-        await this.recordAudit(tx, WEBHOOK_AUDIT_ACTIONS.updated, updated.id, input, {
+        await this.writeAudit(tx, WEBHOOK_AUDIT_ACTIONS.updated, updated.id, input, {
           host: hostOf(updated.url),
           events: [...updated.events],
           isEnabled: updated.isEnabled,
@@ -340,7 +341,7 @@ export class WebhooksService {
         if (deleted === undefined) this.notFound();
         // The delivery history cascades with the endpoint (schema `onDelete`),
         // so the audit row is the only trace that survives.
-        await this.recordAudit(tx, WEBHOOK_AUDIT_ACTIONS.deleted, deleted.id, input, {
+        await this.writeAudit(tx, WEBHOOK_AUDIT_ACTIONS.deleted, deleted.id, input, {
           host: hostOf(deleted.url),
         });
         return Object.freeze({ webhookId: deleted.id, deleted: true as const });
@@ -384,7 +385,7 @@ export class WebhooksService {
           )
           .returning(this.webhookSelection());
         if (updated === undefined) this.notFound();
-        await this.recordAudit(tx, WEBHOOK_AUDIT_ACTIONS.secretRotated, updated.id, input, {
+        await this.writeAudit(tx, WEBHOOK_AUDIT_ACTIONS.secretRotated, updated.id, input, {
           host: hostOf(updated.url),
           encryptionKeyVersion: encrypted.encryptionKeyVersion,
         });
@@ -520,7 +521,7 @@ export class WebhooksService {
               eq(webhooks.isVerified, false),
             ),
           );
-        await this.recordAudit(tx, WEBHOOK_AUDIT_ACTIONS.verified, endpoint.id, input, {
+        await this.writeAudit(tx, WEBHOOK_AUDIT_ACTIONS.verified, endpoint.id, input, {
           host: hostOf(endpoint.url),
         });
         return this.readRow(tx, endpoint.id);
@@ -637,7 +638,7 @@ export class WebhooksService {
           payload,
           correlationId: input.requestId ?? null,
         });
-        await this.recordAudit(tx, WEBHOOK_AUDIT_ACTIONS.redelivered, input.webhookId, input, {
+        await this.writeAudit(tx, WEBHOOK_AUDIT_ACTIONS.redelivered, input.webhookId, input, {
           eventId: delivery.eventId,
           deliveryId: input.deliveryId,
         });
@@ -809,14 +810,14 @@ export class WebhooksService {
    * readable. The full URL stays in `webhooks.url`, where exactly one code path
    * reads it.
    */
-  private async recordAudit(
+  private async writeAudit(
     tx: DatabaseTransaction,
     action: (typeof WEBHOOK_AUDIT_ACTIONS)[keyof typeof WEBHOOK_AUDIT_ACTIONS],
     entityId: string,
     input: ScopedInput,
     metadata: Readonly<Record<string, unknown>>,
   ): Promise<void> {
-    await tx.insert(auditLogs).values({
+    await recordAudit(tx, {
       workspaceId: activeWorkspaceId(this.tenantContext),
       userId: input.principal.userId,
       action,
@@ -842,7 +843,7 @@ export class WebhooksService {
   }
 }
 
-/** Hostname only — see `recordAudit`. Unparseable input yields `"invalid"`. */
+/** Hostname only — see `writeAudit`. Unparseable input yields `"invalid"`. */
 function hostOf(url: string): string {
   try {
     return new URL(url).hostname;

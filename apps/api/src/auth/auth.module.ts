@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 
 import { AuthorizationPolicyModule } from "../authorization/authorization-policy.module";
 import { StructuredLogger } from "../common/logging/structured-logger.service";
+import { VerifiedHostsService } from "../common/verified-hosts.service";
 import { APP_CONFIG, type AppConfig } from "../config/app.config";
 import { AUTH_CONFIG, type AuthConfig } from "../config/auth.config";
 import { FEATURES_CONFIG, type FeaturesConfig } from "../config/features.config";
@@ -17,6 +18,7 @@ import { QueueModule } from "../queue/queue.module";
 import { AuthEmailEncryptionService } from "./auth-email-encryption.service";
 import { AuthEmailProducerService } from "./auth-email-producer.service";
 import { AuthEmailQueueHandler } from "./auth-email-worker.service";
+import { AuthLockoutService } from "./auth-lockout.service";
 import { AuthRateLimitMiddleware } from "./auth-rate-limit.middleware";
 import { AuthSecurityService } from "./auth-security.service";
 import { AuthController } from "./auth.controller";
@@ -29,6 +31,7 @@ import {
   setupBetterAuth,
   type BetterAuthInstance,
 } from "./better-auth.setup";
+import { CsrfOriginMiddleware } from "./csrf-origin.middleware";
 import { PlatformOperatorService } from "./platform-operator.service";
 
 @Module({
@@ -37,6 +40,7 @@ import { PlatformOperatorService } from "./platform-operator.service";
   providers: [
     BetterAuthRedisStorage,
     AuthEmailEncryptionService,
+    AuthLockoutService,
     // EmailModule is NOT imported here: it imports AuthorizationModule, which
     // imports this module, so the module arrow would be circular. Both services
     // are pure and stateless (a renderer and a transaction-scoped writer), so a
@@ -57,6 +61,8 @@ import { PlatformOperatorService } from "./platform-operator.service";
         RETENTION_CONFIG,
         FEATURES_CONFIG,
         StructuredLogger,
+        VerifiedHostsService,
+        AuthLockoutService,
       ],
       useFactory: async (
         database: DatabaseService,
@@ -68,6 +74,8 @@ import { PlatformOperatorService } from "./platform-operator.service";
         retention: RetentionConfig,
         features: FeaturesConfig,
         logger: StructuredLogger,
+        verifiedHosts: VerifiedHostsService,
+        lockout: AuthLockoutService,
       ): Promise<BetterAuthInstance | null> => {
         if (!features.redisEnabled) {
           // Auth requires Redis secondary storage for session acceleration.
@@ -86,6 +94,8 @@ import { PlatformOperatorService } from "./platform-operator.service";
           retention,
           features,
           logger,
+          verifiedHosts,
+          lockout,
         });
       },
     },
@@ -104,6 +114,7 @@ import { PlatformOperatorService } from "./platform-operator.service";
     AuthSecurityService,
     AuthGuard,
     AuthRateLimitMiddleware,
+    CsrfOriginMiddleware,
   ],
   exports: [
     BETTER_AUTH_INSTANCE,
@@ -112,6 +123,7 @@ import { PlatformOperatorService } from "./platform-operator.service";
     AuthGuard,
     AuthRateLimitMiddleware,
     AuthService,
+    CsrfOriginMiddleware,
     PlatformOperatorService,
   ],
 })

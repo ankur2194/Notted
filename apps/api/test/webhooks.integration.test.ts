@@ -39,6 +39,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client, Pool } from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { allowAuditDelete } from "../src/audit/audit-record";
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
 import { AuthorizationPolicyService } from "../src/authorization/authorization-policy.service";
 import { AuthorizationRepository } from "../src/authorization/authorization.repository";
@@ -382,7 +383,12 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook delivery pipeline (live Post
       await db.delete(notes).where(eq(notes.id, noteId));
     }
     for (const webhookId of createdWebhookIds.splice(0)) {
-      await db.delete(auditLogs).where(eq(auditLogs.entityId, webhookId));
+      // The append-only trigger (migration 0021) refuses this DELETE unless
+      // `notted.audit_purge` is set for the transaction.
+      await db.transaction(async (tx) => {
+        await allowAuditDelete(tx);
+        await tx.delete(auditLogs).where(eq(auditLogs.entityId, webhookId));
+      });
       // `webhook_deliveries.webhook_id` cascades, so the attempt rows go too.
       await db.delete(webhooks).where(eq(webhooks.id, webhookId));
     }

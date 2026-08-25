@@ -217,7 +217,7 @@ automated purge".
 | `noteVersionRetentionDaysFree`       | `RETENTION_NOTE_VERSION_DAYS_FREE`       | `30`               | Free-tier `note_versions` snapshot rows                                  | Part 55                    |
 | `noteVersionRetentionDaysPro`        | `RETENTION_NOTE_VERSION_DAYS_PRO`        | `null` (unlimited) | Pro-tier `note_versions`                                                 | Part 55 (skip when `null`) |
 | `noteVersionRetentionDaysEnterprise` | `RETENTION_NOTE_VERSION_DAYS_ENTERPRISE` | `null` (unlimited) | Enterprise `note_versions`                                               | Part 55 (skip when `null`) |
-| `auditLogRetentionDays`              | `RETENTION_AUDIT_LOG_DAYS`               | `365`              | `audit_logs` rows                                                        | Part 71                    |
+| `auditLogRetentionDays`              | `RETENTION_AUDIT_LOG_DAYS`               | `365`              | `audit_logs` rows                                                        | Part 71 (`AuditLogRetentionService`) |
 | `exportObjectRetentionDays`          | `RETENTION_EXPORT_OBJECT_DAYS`           | `7`                | MinIO objects for `exports` rows (ADR 0007)                              | Parts 45/62                |
 | `sessionShortLivedHours`             | `SESSION_SHORT_LIVED_HOURS`              | `24` (hours only)  | Better Auth 1.6.24 fixed non-remember-me TTL (ADRs 0007, 0010)            | Part 21 (Better Auth)      |
 | `sessionRememberMeDays`              | `SESSION_REMEMBER_ME_DAYS`               | `30`               | Remember-me session duration (ADR 0007)                                  | Part 21 (Better Auth)      |
@@ -233,8 +233,22 @@ automated purge".
   and Enterprise: unlimited. Part 55 scans `note_versions.created_at` joined
   to the note's workspace plan to decide which rows to reap.
 - **Audit logs (`audit_logs`).** 365 days across all plans (compliance
-  baseline). Append-only (no `updated_at`); immutability is service-enforced
-  in Part 71.
+  baseline), uniform by design — an audit window that varied by plan would
+  make the compliance answer depend on billing. Append-only (no `updated_at`),
+  and immutability is enforced by the DATABASE, not by convention: migration
+  `0021_audit_logs_append_only` installs a `BEFORE UPDATE OR DELETE` trigger
+  that raises `insufficient_privilege` (SQLSTATE 42501). It has exactly two
+  exemptions — a referential action (`workspace_id` CASCADE, `user_id` SET
+  NULL), recognised by `pg_trigger_depth() > 1`; and a DELETE under the
+  transaction-local `notted.audit_purge = 'on'` flag, which only
+  `AuditLogRetentionService` and test fixtures set, through `allowAuditDelete`.
+  The sweep runs on the maintenance lane every 6 hours (`audit.log.retention.sweep`),
+  in batches of 500 with `for update skip locked`, and supports a counting dry run.
+  The scan is workspace-agnostic (`created_at < cutoff`), so none of the
+  workspace-leading indexes serve it; migration `0023` adds
+  `audit_logs_retention_scan_idx` on `(created_at, id)` for it, the same shape
+  Part 55 added for `note_versions` in migration `0018`. At most ten batches
+  (5 000 rows) are removed per sweep, so a larger backlog drains over several.
 - **Export objects (`exports`).** Two distinct lifecycles (Part 18): the
   `signed_url_expires_at` download-grant ceiling (capped at 7 days per
   Notted.md) and the `object_expires_at` object-retention expiry (7 days per

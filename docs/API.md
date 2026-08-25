@@ -30,6 +30,13 @@ Clients must ignore unknown response fields and must not depend on JSON key orde
 Breaking REST changes are recorded in the OpenAPI documents and in the part completion
 record for the change.
 
+### Breaking changes in `v1`
+
+| Change | Part | Detail |
+|---|---|---|
+| `domain` removed from `POST /workspaces` and `PATCH /workspaces/{id}` | 73 | Both bodies are `.strict()`, so a request that still sends `domain` is now a `VALIDATION_ERROR` rather than being accepted and ignored. The field never had a working implementation behind it; a custom hostname is claimed through the dedicated `/workspaces/{id}/domain` endpoints, which verify DNS before the host serves anything. Clients that sent `domain` must drop the key and use `PUT /workspaces/{id}/domain`. |
+| `415` responses now carry `code: "UNSUPPORTED_MEDIA_TYPE"` instead of `"UNPROCESSABLE_ENTITY"` | 74 (closes a Part 40 follow-up) | Affects the five Part 40 upload/download sites in `/attachments` and the multipart parser (the Part 72 logo route is new and was never shipped with the old code). HTTP statuses are unchanged; only the envelope `code` moved so that it matches the status. Clients that switch on `error.code` for rejected media types must accept the new value. |
+
 ## Authentication
 
 Every `/api/v1` request must present exactly one credential.
@@ -40,6 +47,14 @@ Every `/api/v1` request must present exactly one credential.
 | Session cookie | The credentialed cookie issued by Better Auth | The first-party browser client |
 
 An unauthenticated request to an authenticated route returns `401 UNAUTHENTICATED`.
+
+**Two routes are deliberately unauthenticated**, and they are the only two:
+`GET /workspaces/{workspaceId}/logo/{token}` (Branding) and
+`GET /domains/resolve` (Custom domains). Each exists because its primary caller
+provably cannot hold a credential — an `<img src>` in an email client for the first, a
+reverse proxy mid-TLS-handshake for the second — and each is narrow enough to say so:
+identifiers or bytes only, and the same `404` for every miss. Neither is callable with an
+API key; see the note under Branding for why.
 
 ### API keys
 
@@ -268,12 +283,39 @@ traces, credentials, object keys, or signed URLs.
 | `WEBHOOK_URL_REJECTED` | 422 | The webhook destination is not an allowed delivery address. |
 | `WEBHOOK_NOT_VERIFIED` | 409 | The webhook endpoint must pass verification before it can be enabled. |
 | `WEBHOOK_VERIFICATION_FAILED` | 422 | The endpoint did not echo the verification challenge. |
+| `ACCENT_CONTRAST_TOO_LOW` | 422 | The branding accent color cannot be read on white. |
+| `DOMAIN_TAKEN` | 409 | The custom hostname is already claimed — by another workspace, or by this one. |
+| `DOMAIN_RESERVED` | 422 | The custom hostname is one this deployment already answers on. |
+| `UNTRUSTED_HOST` | 421 | The request's `Host` is not a hostname this deployment serves. |
 | `PAYLOAD_TOO_LARGE` | 413 | The request body or upload exceeds the configured limit. |
 | `UNPROCESSABLE_ENTITY` | 422 | Well-formed but semantically rejected. |
+| `UNSUPPORTED_MEDIA_TYPE` | 415 | The request or upload media type is not one this endpoint accepts. |
 | `RATE_LIMITED` | 429 | A rate-limit bucket is empty; see `Retry-After`. |
 | `REQUEST_FAILED` | 4xx/5xx | A request-level failure with no more specific code. |
 | `INTERNAL_SERVER_ERROR` | 500 | An unexpected server fault. |
 | `SERVICE_UNAVAILABLE` | 503 | A dependency the request needs is unavailable. |
+
+### Accent color contrast
+
+`ACCENT_CONTRAST_TOO_LOW` (422) is an accessibility verdict, not a syntax error:
+`settings.accentColor` was a perfectly valid six-digit `#rrggbb` colour and simply cannot be
+read on the surfaces it would paint. The accent tints buttons, borders, and focus rings, so
+it must reach **at least 3:1 against white** — the WCAG 2.2 §1.4.11 non-text floor. The
+remedy is a **darker shade**; the message carries the ratio that was measured. Between 3:1
+and 4.5:1 the colour is accepted (the settings form warns that it cannot also carry
+normal-size text); at or above 4.5:1 it is accepted silently.
+
+### 421 UNTRUSTED_HOST
+
+`UNTRUSTED_HOST` (421) is the only error returned **before routing**. When custom domains
+are enabled, a middleware ahead of CORS, the authentication handler, and every route
+refuses any request whose `Host` (or, behind a configured proxy, `X-Forwarded-Host`) is
+neither a configured hostname nor a verified tenant hostname. `421 Misdirected Request` is
+the status for "right server, wrong authority": a proxy that sees it re-resolves rather
+than caching a negative, and it does not claim a resource is missing. `GET /health/live`
+and `GET /health/ready` are exempt, because orchestrators dial a container by whatever
+address they like. With `CUSTOM_DOMAINS_ENABLED=false` the check is inert and this code is
+never returned. See [`custom-domains.md`](custom-domains.md) § 10.
 
 ### 404 instead of 403 across workspaces
 
@@ -363,6 +405,117 @@ curl -sS -X POST https://api.example.com/api/v1/workspaces/$WORKSPACE_ID/api-key
 Creating a workspace and listing the workspaces a user belongs to are account-level
 operations with no workspace to scope to, so they are session-only and unreachable by an API
 key. Workspace deletion also requires recent authentication for session callers.
+
+### Branding
+
+| Method | Path | Scope | Purpose |
+|---|---|---|---|
+| `POST` | `/workspaces/{workspaceId}/logo` | `admin` | Replace the workspace logo |
+| `DELETE` | `/workspaces/{workspaceId}/logo` | `admin` | Remove the workspace logo |
+| `GET` | `/workspaces/{workspaceId}/logo/{token}` | — | Fetch the published logo (public) |
+
+Upload is `multipart/form-data` with a single part named **`file`**. The ceiling is
+**2 MiB**, enforced *during transfer* by the multipart parser, so a lying `Content-Length`
+cannot get past it; an oversized upload returns `413 PAYLOAD_TOO_LARGE`. The **sniffed**
+media type is authoritative — the declared part `Content-Type` and the filename are never
+consulted — and PNG, JPEG, GIF, WebP, SVG, and HEIC are accepted. Whatever arrives is
+re-encoded to a **200 px WebP** before it is stored, so the bytes served are always a WebP
+this API produced.
+
+The response is `{ "logoUrl": "…" }`, and `logoUrl` is an **app-relative path**
+(`/api/v1/workspaces/{workspaceId}/logo/{token}`), never an absolute URL — resolve it
+against your API origin. `DELETE` responds `{ "logoUrl": null }` and is idempotent:
+removing an absent logo is a success, not a 404. Replacing or removing a logo mints a new
+token, so the previous URL stops resolving.
+
+The `GET` is **unauthenticated** — one of the API's two such routes, the other being
+`GET /domains/resolve` under Custom domains. Its authorization is the 128-bit random token
+in the path, compared in constant time; the route exists because the primary consumer is an
+`<img src>` in an email client, which has no session and cannot follow a login redirect.
+Every miss — unknown workspace, no logo, superseded token, missing object — answers the
+same `404 NOT_FOUND`, so the route cannot be used to probe which workspaces exist or which
+have branding. Responses are `public, max-age=31536000, immutable` with an `ETag`: the URL
+changes on every replacement, so a shared cache can never serve a superseded logo.
+
+**API keys cannot call the public `GET`.** The route carries no authorization
+specification, and the API-key route guard is default-deny — a route with no declared
+action is refused outright to an API-key caller, which is `403 FORBIDDEN` even though the
+same URL succeeds anonymously. Fetch a logo with a session or with **no credential at all**;
+do not send an `Authorization: Bearer ntk_…` header to it.
+
+### Custom domains
+
+| Method | Path | Scope | Purpose |
+|---|---|---|---|
+| `GET` | `/workspaces/{workspaceId}/domain` | `admin` | Read the claim and the two DNS records to publish |
+| `PUT` | `/workspaces/{workspaceId}/domain` | `admin` | Claim a hostname |
+| `POST` | `/workspaces/{workspaceId}/domain/verify` | `admin` | Re-run the DNS checks and record the verdict |
+| `DELETE` | `/workspaces/{workspaceId}/domain` | `admin` | Release the claim |
+| `GET` | `/domains/resolve` | — | Resolve a verified hostname to its workspace (public) |
+
+All five answer **`404 NOT_FOUND` when `CUSTOM_DOMAINS_ENABLED` is false** on the
+deployment. The capability does not exist there, so it is a 404 rather than a 403; a 403
+would invite the caller to find someone who is allowed. Operators: see
+[`custom-domains.md`](custom-domains.md).
+
+A workspace has at most one domain, which is why these are a singleton (`/domain`) rather
+than a collection. `GET`, `PUT`, `POST verify`, and `DELETE` all answer the same shape,
+`{ "domain": … | null }`. The `domain` object carries `hostname`, `status`
+(`pending` / `verified` / `error`), `lastError`, `lastCheckedAt`, `verifiedAt`, and the
+two records to publish:
+
+```json
+{
+  "domain": {
+    "hostname": "notes.acme.com",
+    "status": "pending",
+    "lastError": null,
+    "verificationRecord": {
+      "name": "_notted-verify.notes.acme.com",
+      "type": "TXT",
+      "value": "notted-verify=1f0c…"
+    },
+    "cnameRecord": { "name": "notes.acme.com", "type": "CNAME", "value": "app.example.com" }
+  }
+}
+```
+
+`PUT` takes `{ "hostname": "notes.acme.com" }`. The hostname is normalised — lowercased,
+punycoded, trailing root dot stripped — so `Notes.ACME.com.` and `notes.acme.com` are the
+same claim and cannot become two rows. IP literals, single labels, wildcards, and
+`.local` / `.internal` / `.localhost` / `.test` / `.invalid` / `.home.arpa` names are
+refused. A claim always lands **`pending`**; re-claiming the same hostname is idempotent
+and keeps the existing token, and claiming a different one replaces the row with a new
+token. `409 DOMAIN_TAKEN` means the hostname is already claimed — by another workspace or
+by this one — with deliberately the same message either way, because naming the holder
+would leak that a foreign tenant has it. `422 DOMAIN_RESERVED` means the hostname is one
+this deployment already answers on.
+
+`POST …/verify` performs outbound DNS from the API: the ownership `TXT` first, then the
+`CNAME` (with an apex fallback that requires every address the host resolves to also to be
+an address the target resolves to). On success the host begins routing and
+`workspaces.domain` mirrors it; on failure `lastError` is one of `txt_missing`,
+`txt_mismatch`, `cname_mismatch`, `dns_failure`. `DELETE` is idempotent and frees the
+hostname globally.
+
+`PUT` and `POST …/verify` are on the **sensitive** rate-limit tier — one writes a globally
+unique column, the other makes this server perform network lookups — and both, like
+`DELETE`, require a trusted `Origin` for session callers.
+
+**`workspaces.domain` is read-only.** It appears on the workspace detail as a mirror of
+the verified hostname and can no longer be set through `POST` or `PATCH /workspaces`; the
+`domain` field was removed from both request bodies.
+
+`GET /domains/resolve?host=notes.acme.com` is **public and unauthenticated** (the second
+of the API's two such routes). It answers `{ "workspaceId": …, "slug": … }` for a
+**verified** host and the same `404` for every miss — unknown, pending, failed, or
+malformed. `?domain=` is accepted as a synonym because Caddy's `on_demand_tls ask` sends
+that spelling and offers no way to rename it. It exists so a reverse proxy can decide,
+mid-TLS-handshake, whether to obtain a certificate for a hostname; it returns identifiers
+only and cannot be used to enumerate claims or workspaces. It carries no authorization
+specification, so — exactly like the logo `GET` — the default-deny API-key route guard
+refuses it to API-key callers with `403 FORBIDDEN` while anonymous and session callers
+succeed. It is on the sensitive rate-limit tier, keyed by client IP for anonymous callers.
 
 ### Members and invitations
 
@@ -555,6 +708,44 @@ the key's creator, so a key reads and mutates only that user's notifications.
 
 Maintenance is a `settings.update` action: it reclaims orphaned objects and is administrative
 rather than a content operation.
+
+### Audit logs
+
+| Method | Path | Scope | Purpose |
+|---|---|---|---|
+| `GET` | `/workspaces/{workspaceId}/audit-logs` | `admin` | Read the workspace audit trail |
+| `GET` | `/workspaces/{workspaceId}/audit-logs/export` | `admin` | Download the trail as CSV |
+
+Both routes are `audit.read` / `audit.export`: **owner and admin only**. Editors and viewers
+are denied outright, and an API key needs the `admin` scope — `audit.read` does *not* fall
+into the ordinary read-scope rule despite its `.read` suffix, because the trail records who
+did what from which address across the whole workspace.
+
+The trail is **append-only**. There is no create, update, or delete route, and there is no
+tRPC counterpart; the database itself refuses `UPDATE` and `DELETE` on `audit_logs` (see
+`docs/tenant-and-retention.md` § 2.2). Rows are written by the server as a side effect of the
+mutation they describe, in the same transaction, so an event cannot exist for a change that
+rolled back.
+
+List filters are `action`, `entityType`, `entityId`, `userId`, `from`, `to` (ISO timestamps,
+`from <= to`), plus `page` and `limit`. Rows are ordered newest first, with the row id as a
+deterministic tiebreak so paging cannot repeat or skip an entry.
+
+The export accepts the same filters, takes no pagination, and is **capped at 10 000 rows** —
+it is a bounded window over the trail, not a full dump. It responds with
+`text/csv; charset=utf-8` as an `attachment`, never JSON. Values that begin with `=`, `+`,
+`-`, `@`, a tab, or a carriage return are prefixed with an apostrophe so a spreadsheet renders
+them as text rather than evaluating them as a formula.
+
+**Audit rows carry identifiers and cheap facts only** — never note content, never a comment
+body, never export options, never a credential, a token, a signing secret, or a signed URL.
+Metadata is redacted before it is stored, so a row that is exportable to every workspace admin
+cannot carry something that authenticates. The actor's display name is joined for legibility;
+the actor's email address is deliberately absent.
+
+**Authentication events are not recorded here.** Sign-in, sign-out, password reset and
+two-factor events have no workspace to belong to, and `audit_logs.workspace_id` is `NOT NULL`.
+They remain in the structured application log.
 
 ### Webhooks
 

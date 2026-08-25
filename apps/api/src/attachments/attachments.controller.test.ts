@@ -318,7 +318,7 @@ describe("AttachmentsController", () => {
         fakeResponse().response,
         {},
       ),
-    ).rejects.toMatchObject({ safeResponse: { code: "UNPROCESSABLE_ENTITY" } });
+    ).rejects.toMatchObject({ safeResponse: { code: "UNSUPPORTED_MEDIA_TYPE" } });
     expect(stream.destroyed).toBe(true);
   });
 
@@ -417,7 +417,7 @@ describe("AttachmentsController", () => {
       controllers({ uploadImage, uploadFile, maximumUploadBytes: 1_024 }).notes.upload(
         request({ workspaceId, noteId }, trustedOrigin),
       ),
-    ).rejects.toMatchObject({ safeResponse: { code: "UNPROCESSABLE_ENTITY" } });
+    ).rejects.toMatchObject({ safeResponse: { code: "UNSUPPORTED_MEDIA_TYPE" } });
     expect(uploadImage).not.toHaveBeenCalled();
     expect(uploadFile).not.toHaveBeenCalled();
   });

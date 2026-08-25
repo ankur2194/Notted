@@ -56,7 +56,6 @@ describe("WorkspacesController", () => {
       name: "Notted Alpha",
       slug: "notted-alpha",
       description: "Isolation tenant",
-      domain: null,
       settings: { defaultPageSize: "letter" },
       idempotencyKey: "workspace-create-00000001",
       requestId: null,
@@ -130,7 +129,6 @@ describe("WorkspacesController", () => {
       name: "Renamed",
       slug: undefined,
       description: undefined,
-      domain: undefined,
       settings: { defaultPageSize: "a4" },
       requestId: null,
     });

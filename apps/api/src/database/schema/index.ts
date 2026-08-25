@@ -116,6 +116,11 @@ import {
 } from "./webhooks";
 import { workspaceDeletionAudits } from "./workspace-deletion-audits";
 import {
+  workspaceDomainStatusEnum,
+  workspaceDomains,
+  workspaceDomainsRelations,
+} from "./workspace-domains";
+import {
   invitations,
   invitationsRelations,
   memberRoleEnum,
@@ -153,6 +158,11 @@ export {
   workspacesRelations,
 } from "./workspaces";
 export { workspaceDeletionAudits } from "./workspace-deletion-audits";
+export {
+  workspaceDomainStatusEnum,
+  workspaceDomains,
+  workspaceDomainsRelations,
+} from "./workspace-domains";
 export { folders, foldersRelations } from "./folders";
 export {
   noteShares,
@@ -271,6 +281,13 @@ export const schema = {
   // Part 26 — deletion tombstones have no workspace/user FK and survive the
   // tenant cascade. Part 71 owns their read and retention policy.
   workspaceDeletionAudits,
+  // Part 73 — custom-domain claims. One per workspace (unique `workspace_id`),
+  // hostname unique GLOBALLY because two tenants claiming one address is a race
+  // only the database can settle. `workspaces.domain` mirrors the VERIFIED
+  // hostname only; a pending claim never reaches it.
+  workspaceDomains,
+  workspaceDomainsRelations,
+  workspaceDomainStatusEnum,
   // Part 15 — projects, project access, folders, notes, note sharing, and
   // their enums and relations. Notes carry composite FKs to projects and
   // folders for DB-level cross-tenant integrity; ordering, depth, cycle, and

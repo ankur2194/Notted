@@ -155,7 +155,7 @@ export class AttachmentsController {
     if (inline && !INLINE_SERVABLE_MIME_TYPES.has(content.mimeType)) {
       content.stream.destroy();
       throw new ApiHttpException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, {
-        code: "UNPROCESSABLE_ENTITY",
+        code: "UNSUPPORTED_MEDIA_TYPE",
         message: "No servable rendition is available for this attachment.",
       });
     }
@@ -268,7 +268,7 @@ export class NoteAttachmentsController {
     const admission = admitUpload(upload.buffer, upload.declaredFilename);
     if (!admission.ok) {
       throw new ApiHttpException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, {
-        code: "UNPROCESSABLE_ENTITY",
+        code: "UNSUPPORTED_MEDIA_TYPE",
         message: "The uploaded file type is not supported.",
       });
     }

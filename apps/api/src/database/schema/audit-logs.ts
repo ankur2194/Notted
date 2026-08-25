@@ -6,11 +6,18 @@
 // entity (polymorphic type + id), and safe request context (IP, user agent,
 // request id).
 //
-// APPEND-ONLY: there is NO `updated_at` column. Immutability (no UPDATE, no
-// DELETE except via the workspace cascade) is enforced by the audit service
-// (Part 71); PostgreSQL has no per-row "INSERT only" permission, so the schema
-// signals intent (no updatedAt) and the service policy makes it binding.
-// Retention/purge of old audit rows is owned by Part 19.
+// APPEND-ONLY: there is NO `updated_at` column, and immutability is enforced
+// in the DATABASE by the `audit_logs_append_only` trigger installed in
+// migration 0021 (apps/api/src/database/migrations/0021_audit_logs_append_only.sql):
+// UPDATE and DELETE both raise `insufficient_privilege`. There are exactly two
+// exemptions: the referential-action path (`pg_trigger_depth() > 1`), which is
+// how the `workspace_id` CASCADE delete and the `user_id` SET NULL below still
+// go through, and a DELETE while `notted.audit_purge = 'on'` for the current
+// transaction, which only the Part 71 retention purge
+// (`AuditLogRetentionService`) and test fixtures set, via `allowAuditDelete()`
+// in apps/api/src/audit/audit-record.ts. Retention/purge of old audit rows is
+// owned by Part 71, not Part 19 (Part 19 only ships the retention-window
+// config; see `retention.config.ts`).
 //
 // `entity_id` is a polymorphic uuid with NO foreign key: an audit row can
 // reference any auditable entity (note, project, workspace, task, user, api
@@ -92,6 +99,12 @@ export const auditLogs = pgTable(
     index("audit_logs_workspace_entity_idx").on(t.workspaceId, t.entityType, t.entityId),
     // "Actions taken by user Z" cross-workspace admin/forensics lookup.
     index("audit_logs_user_id_idx").on(t.userId),
+    // Part 71 retention sweep scans workspace-agnostically by
+    // `created_at < cutoff` ordered by (created_at, id). None of the indexes
+    // above serve that (all are workspace_id- or user_id-leading), so without
+    // this the purge sequentially scans an ever-growing table. Mirrors the
+    // Part 55 `note_versions_retention_scan_idx` (migration 0018).
+    index("audit_logs_retention_scan_idx").on(t.createdAt, t.id),
   ],
 );
 

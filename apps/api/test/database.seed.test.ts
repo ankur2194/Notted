@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type Database, type DatabaseTransaction } from "../src/database/database.service";
 import {
   attachments,
+  auditLogs,
   comments,
   folders,
   noteTags,
@@ -162,6 +163,10 @@ async function deterministicCounts(tx: DatabaseTransaction) {
     .from(tasks)
     .where(inArray(tasks.id, Object.values(SEED_IDS.tasks)));
   const taskTagRows = await tx.select({ value: count() }).from(taskTags).where(taskTagPredicate);
+  const auditLogRows = await tx
+    .select({ value: count() })
+    .from(auditLogs)
+    .where(inArray(auditLogs.id, Object.values(SEED_IDS.auditLogs)));
 
   return {
     users: userRows[0]?.value ?? 0,
@@ -178,6 +183,7 @@ async function deterministicCounts(tx: DatabaseTransaction) {
     taskStatuses: statusRows[0]?.value ?? 0,
     tasks: taskRows[0]?.value ?? 0,
     taskTags: taskTagRows[0]?.value ?? 0,
+    auditLogs: auditLogRows[0]?.value ?? 0,
   };
 }
 

@@ -71,7 +71,6 @@ function buildWorkspaceSubrouter(
             name: input.name,
             slug: input.slug,
             description: input.description ?? null,
-            domain: input.domain ?? null,
             settings: input.settings,
             idempotencyKey: requireIdempotencyKey(ctx.request),
             requestId: ctx.requestId,
@@ -140,7 +139,6 @@ function buildWorkspaceSubrouter(
             name: input.data.name,
             slug: input.data.slug,
             description: input.data.description,
-            domain: input.data.domain,
             settings: input.data.settings,
             requestId: ctx.requestId,
           });

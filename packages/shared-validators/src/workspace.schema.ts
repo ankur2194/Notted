@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  hexColorSchema,
   isoTimestampSchema,
   paginationQuerySchema,
   sortDirectionSchema,
@@ -9,8 +10,22 @@ import {
 
 export const workspacePlanSchema = z.enum(["free", "pro", "enterprise"]);
 export const workspaceRoleSchema = z.enum(["owner", "admin", "editor", "viewer"]);
+/**
+ * Part 72 opened this to the branding accent that `workspaces.settings` had
+ * already been persisting (and seeding) since Part 26 without a contract.
+ *
+ * `null` is MEANINGFUL and distinct from `undefined`: it is the "use the
+ * platform default" instruction, and the service deletes the stored key on it.
+ * `undefined` leaves whatever is already stored alone. The COLOUR's legibility
+ * is not decided here — a Zod refinement could only reject, and the API owes a
+ * specific 422 (`ACCENT_CONTRAST_TOO_LOW`) rather than a generic validation
+ * error, so `WorkspacesService.validateSettings` owns the contrast rule.
+ */
 export const workspaceSettingsSchema = z
-  .object({ defaultPageSize: z.enum(["a4", "letter"]) })
+  .object({
+    defaultPageSize: z.enum(["a4", "letter"]),
+    accentColor: hexColorSchema.nullable().optional(),
+  })
   .strict();
 
 const workspaceNameSchema = z.string().trim().min(1).max(255);
@@ -21,22 +36,12 @@ const workspaceSlugSchema = z
   .max(63)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lower-case letters, numbers, and single hyphens");
 const workspaceDescriptionSchema = z.string().trim().max(2_000).nullable();
-const workspaceDomainSchema = z
-  .string()
-  .trim()
-  .max(253)
-  .regex(
-    /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i,
-    "Expected a domain name without a protocol or path",
-  )
-  .nullable();
 
 export const createWorkspaceSchema = z
   .object({
     name: workspaceNameSchema,
     slug: workspaceSlugSchema,
     description: workspaceDescriptionSchema.optional(),
-    domain: workspaceDomainSchema.optional(),
     settings: workspaceSettingsSchema.optional(),
   })
   .strict();
@@ -47,7 +52,6 @@ export const updateWorkspaceSchema = z
     name: workspaceNameSchema.optional(),
     slug: workspaceSlugSchema.optional(),
     description: workspaceDescriptionSchema.optional(),
-    domain: workspaceDomainSchema.optional(),
     settings: workspaceSettingsSchema.optional(),
   })
   .strict()
@@ -138,6 +142,16 @@ export const workspaceUpdateResultSchema = z.object({ workspace: workspaceDetail
 
 export const workspaceDeleteResultSchema = z
   .object({ id: uuidSchema, deleted: z.literal(true) })
+  .strict();
+
+/**
+ * Part 72 logo mutation result. `logoUrl` is an APP-RELATIVE API path
+ * (`/api/v1/workspaces/<id>/logo/<token>`) or `null` after a removal — never an
+ * absolute URL, which is what lets the same string be resolved against the API
+ * origin in a browser and against `API_URL` in an email.
+ */
+export const workspaceLogoResultSchema = z
+  .object({ logoUrl: z.string().max(2_048).nullable() })
   .strict();
 
 // Safe destructive-action confirmation. `confirm: true` is the required literal

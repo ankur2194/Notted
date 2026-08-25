@@ -13,6 +13,7 @@ import {
 } from "./bull-board-policy";
 import { safeJobJson } from "./redacted-bull-mq.adapter";
 
+import type { VerifiedHostsService } from "../common/verified-hosts.service";
 import type { AuthConfig } from "../config/auth.config";
 import type { RetentionConfig } from "../config/retention.config";
 import type { Job } from "bullmq";
@@ -70,6 +71,9 @@ describe("Bull Board security contract", () => {
       null,
       { trustedOrigins: ["https://app.example.test"] } as unknown as AuthConfig,
       {} as RetentionConfig,
+      // Part 73. Trusts nothing beyond the configured list: this test is about
+      // the configured-origin refusal, not about custom domains.
+      { isTrustedOriginSync: () => false } as unknown as VerifiedHostsService,
     );
     const absent = { header: () => undefined } as unknown as Request;
     const invalid = { header: () => "https://evil.example" } as unknown as Request;

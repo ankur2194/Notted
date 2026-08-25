@@ -22,6 +22,7 @@ import { commentAnchorSchema } from "@notted/shared-validators";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import {
@@ -31,7 +32,6 @@ import {
   lockApiIdempotency,
   storeApiIdempotency,
 } from "../common/idempotency/api-idempotency";
-import { StructuredLogger } from "../common/logging/structured-logger.service";
 import {
   DatabaseService,
   type Database,
@@ -40,7 +40,7 @@ import {
 import { comments, notes, users } from "../database/schema";
 import { RealtimeRoomService } from "../realtime/realtime-room.service";
 import { REALTIME_EVENTS } from "../realtime/realtime.contracts";
-import { TenantContextService, whereWorkspace } from "../tenant";
+import { activeWorkspaceId, TenantContextService, whereWorkspace } from "../tenant";
 
 import type {
   AuthenticatedPrincipal,
@@ -126,7 +126,6 @@ export class CommentsService {
     private readonly authorizationEntry: AuthorizationEntryService,
     private readonly tenantContext: TenantContextService,
     private readonly realtimeRooms: RealtimeRoomService,
-    private readonly logger: StructuredLogger,
   ) {}
 
   /**
@@ -249,6 +248,17 @@ export class CommentsService {
           anchorTo: input.anchor?.to ?? null,
           anchorMetadata: this.toAnchorMetadata(input.anchor),
         });
+        // Identifiers only — never `input.content`. Commits in the same
+        // transaction as the insert above (ADR 0006).
+        await recordAudit(tx, {
+          workspaceId: activeWorkspaceId(this.tenantContext),
+          userId: input.principal.userId,
+          action: "comment.create",
+          entityType: "comment",
+          entityId: commentId,
+          metadata: { noteId: input.noteId, parentId },
+          requestId: input.requestId ?? null,
+        });
         await storeApiIdempotency(tx, identity, commentId);
         return this.readRow(tx, input.noteId, commentId);
       });
@@ -299,10 +309,23 @@ export class CommentsService {
           .select({ count: sql<number>`count(*)::int` })
           .from(comments)
           .where(and(eq(comments.parentId, input.commentId), eq(comments.noteId, input.noteId)));
+        const deletedCount = 1 + (replies?.count ?? 0);
+        // Written BEFORE the delete, using the count already read above, so
+        // the audit row never depends on a statement that could still roll
+        // back the delete out from under it. Identifiers only.
+        await recordAudit(tx, {
+          workspaceId: activeWorkspaceId(this.tenantContext),
+          userId: input.principal.userId,
+          action: "comment.delete",
+          entityType: "comment",
+          entityId: input.commentId,
+          metadata: { noteId: input.noteId, deletedCount },
+          requestId: input.requestId ?? null,
+        });
         await tx
           .delete(comments)
           .where(and(eq(comments.id, input.commentId), eq(comments.noteId, input.noteId)));
-        return { row, deletedCount: 1 + (replies?.count ?? 0) };
+        return { row, deletedCount };
       });
       this.broadcast(input, result.row, "deleted");
       return Object.freeze({ id: result.row.id, deletedCount: result.deletedCount });
@@ -338,24 +361,21 @@ export class CommentsService {
             updatedAt: new Date(),
           })
           .where(and(eq(comments.id, rootId), eq(comments.noteId, input.noteId)));
+        // `entityId` is the ROOT comment, not `input.commentId`: resolution is
+        // a property of the THREAD (a reply inherits its root's state), so the
+        // audited entity must be the same id the update above just wrote.
+        // Identifiers only, committed in the same transaction (ADR 0006).
+        await recordAudit(tx, {
+          workspaceId: activeWorkspaceId(this.tenantContext),
+          userId: input.principal.userId,
+          action: input.isResolved ? "comment.resolve" : "comment.unresolve",
+          entityType: "comment",
+          entityId: rootId,
+          metadata: { noteId: input.noteId },
+          requestId: input.requestId ?? null,
+        });
         return this.readRow(tx, input.noteId, rootId);
       });
-      // RESOLUTION AUDIT. Part 71 owns audit logging; there is no audit service
-      // and no `audit_logs` row to write here, and an outbox row "for Part 71"
-      // would be a durable contract nobody consumes. The durable record already
-      // exists in `is_resolved`/`resolved_at`/`resolved_by_id`, surfaced through
-      // `commentSummarySchema` so the UI renders "Resolved by X on 14 Aug".
-      // IDENTIFIERS ONLY — comment content is never logged.
-      this.logger.info(
-        {
-          workspaceId: input.workspaceId,
-          noteId: input.noteId,
-          commentId: row.id,
-          actorId: input.principal.userId,
-          outcome: input.isResolved ? "resolved" : "unresolved",
-        },
-        "comment.resolution",
-      );
       this.broadcast(input, row, input.isResolved ? "resolved" : "unresolved");
       return Object.freeze({ comment: this.toSummary(row) });
     });

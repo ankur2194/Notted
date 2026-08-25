@@ -22,6 +22,9 @@ import {
   attachmentDeleteResultSchema,
   attachmentListResultSchema,
   attachmentUploadResultSchema,
+  auditLogExportQuerySchema,
+  auditLogListQuerySchema,
+  auditLogPageSchema,
   bulkTaskSchema,
   changeWorkspaceMemberRoleSchema,
   commentDeleteResultSchema,
@@ -40,6 +43,8 @@ import {
   createTaskStatusSchema,
   createWorkspaceSchema,
   customTaskStatusListSchema,
+  domainResolveQuerySchema,
+  domainResolveResultSchema,
   deleteFolderSchema,
   deleteNoteSchema,
   exportCreateSchema,
@@ -71,6 +76,8 @@ import {
   noteVersionListQuerySchema,
   noteVersionPageSchema,
   noteVersionRestoreResultSchema,
+  setWorkspaceDomainSchema,
+  workspaceDomainResultSchema,
   notificationEmailPreferenceSchema,
   notificationListQuerySchema,
   notificationPageSchema,
@@ -345,6 +352,82 @@ export const OPENAPI_ROUTES: Record<string, OpenApiRouteDoc> = {
     summary: "Revoke an API key.",
     tags: ["API keys"],
     response: apiKeyRevokeResultSchema,
+  },
+
+  // Audit logs. Part 71 workspace audit trail: append-only, admin-only.
+  "GET /workspaces/{workspaceId}/audit-logs": {
+    summary: "List the workspace's audit trail.",
+    tags: ["Audit logs"],
+    description:
+      "The trail is append-only and workspace-wide; reading it is an owner/admin action. Never returns the actor's email, only a display name.",
+    query: auditLogListQuerySchema,
+    response: auditLogPageSchema,
+  },
+  "GET /workspaces/{workspaceId}/audit-logs/export": {
+    summary: "Export the workspace's audit trail as CSV.",
+    tags: ["Audit logs"],
+    description:
+      "The response is text/csv, not JSON, and is bounded at 10,000 rows (AUDIT_LOG_EXPORT_MAX_ROWS) — narrow with the from/to filters for a larger history.",
+    query: auditLogExportQuerySchema,
+  },
+
+  // Branding. Part 72 workspace logo: two admin mutations and a public read.
+  "POST /workspaces/{workspaceId}/logo": {
+    summary: "Replace the workspace logo.",
+    tags: ["Workspaces"],
+    description:
+      "multipart/form-data with a single `file` part, at most 2 MiB; the request body has no committed Zod schema. The image is sniffed (the declared Content-Type is ignored), re-encoded to a 200 px WebP, and published under a fresh random token, so the previous logo URL stops resolving. Responds with `{ logoUrl }`, an app-relative path.",
+  },
+  "DELETE /workspaces/{workspaceId}/logo": {
+    summary: "Remove the workspace logo.",
+    tags: ["Workspaces"],
+    description: "Idempotent: removing an absent logo succeeds. Responds with `{ logoUrl: null }`.",
+  },
+  "GET /workspaces/{workspaceId}/logo/{token}": {
+    summary: "Fetch the published workspace logo.",
+    tags: ["Workspaces"],
+    description:
+      "PUBLIC and unauthenticated — an <img src> in an email client carries no session. The 128-bit token in the path is the authorization and is compared in constant time; every miss answers 404. The response is a WebP image, not JSON, and is immutably cacheable.",
+  },
+
+  // Custom domains. Part 73: a singleton claim per workspace plus one PUBLIC
+  // host lookup that is deliberately unauthenticated.
+  "GET /workspaces/{workspaceId}/domain": {
+    summary: "Read the workspace custom domain.",
+    tags: ["Workspaces"],
+    response: workspaceDomainResultSchema,
+    description:
+      "`{ domain: null }` when no hostname is claimed. The response carries the two DNS records to publish (`_notted-verify` TXT and the CNAME target), so a client never has to know the token format. 404 when custom domains are disabled on this deployment.",
+  },
+  "PUT /workspaces/{workspaceId}/domain": {
+    summary: "Claim a custom domain.",
+    tags: ["Workspaces"],
+    body: setWorkspaceDomainSchema,
+    response: workspaceDomainResultSchema,
+    description:
+      "The hostname is normalised (lowercase, punycode, no trailing dot). The claim always lands `pending` — a claim is not a proof — and re-claiming the same hostname is idempotent and keeps the existing token. 409 `DOMAIN_TAKEN` when the hostname is already claimed; 422 `DOMAIN_RESERVED` for a hostname this deployment already answers on.",
+  },
+  "POST /workspaces/{workspaceId}/domain/verify": {
+    summary: "Verify the claimed custom domain.",
+    tags: ["Workspaces"],
+    response: workspaceDomainResultSchema,
+    description:
+      "Runs the DNS checks (ownership TXT, then CNAME to the configured target with an apex address fallback) and records the verdict. On success `workspaces.domain` mirrors the hostname and the host begins routing; on failure `lastError` carries one of `txt_missing`, `txt_mismatch`, `cname_mismatch`, `dns_failure`.",
+  },
+  "DELETE /workspaces/{workspaceId}/domain": {
+    summary: "Remove the custom domain.",
+    tags: ["Workspaces"],
+    response: workspaceDomainResultSchema,
+    description:
+      "Idempotent: removing an absent claim succeeds. Frees the hostname for another workspace to claim and clears the `workspaces.domain` mirror.",
+  },
+  "GET /domains/resolve": {
+    summary: "Resolve a custom host to its workspace.",
+    tags: ["Workspaces"],
+    query: domainResolveQuerySchema,
+    response: domainResolveResultSchema,
+    description:
+      "PUBLIC and unauthenticated — a certificate issuer answering `on_demand_tls ask` holds no session, and the web proxy asks before rendering anything. Accepts `?host=` or `?domain=` (Caddy sends the latter). Answers only for VERIFIED hosts and returns identifiers only; every miss, including a malformed host, is the same 404.",
   },
 
   // Notes.

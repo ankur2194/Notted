@@ -30,7 +30,7 @@ import type {
   AttachmentServableVariant,
 } from "@notted/shared-types";
 
-import { publicEnvironment } from "@/config/public-environment";
+import { apiOrigin } from "@/lib/api/api-origin";
 
 const REQUEST_TIMEOUT_MS = 8_000;
 
@@ -49,7 +49,7 @@ async function requestAttachmentJson<T>(
   parser: SafeParser<T>,
 ): Promise<NoteRequestResult<T>> {
   try {
-    const response = await fetch(new URL(path, publicEnvironment.NEXT_PUBLIC_API_URL), {
+    const response = await fetch(new URL(path, apiOrigin()), {
       ...init,
       cache: "no-store",
       credentials: "include",
@@ -82,7 +82,7 @@ export function attachmentContentUrl(
 ): string {
   return new URL(
     ATTACHMENT_API_PATHS.content(workspaceId, attachmentId, variant),
-    publicEnvironment.NEXT_PUBLIC_API_URL,
+    apiOrigin(),
   ).toString();
 }
 

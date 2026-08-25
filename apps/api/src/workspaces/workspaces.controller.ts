@@ -91,7 +91,6 @@ export class WorkspacesController {
       name: body.data.name,
       slug: body.data.slug,
       description: body.data.description ?? null,
-      domain: body.data.domain ?? null,
       settings: body.data.settings,
       idempotencyKey: requireIdempotencyKey(request),
       requestId: getRequestId(request) ?? null,
@@ -137,7 +136,6 @@ export class WorkspacesController {
       name: body.data.name,
       slug: body.data.slug,
       description: body.data.description,
-      domain: body.data.domain,
       settings: body.data.settings,
       requestId: getRequestId(request) ?? null,
     });

@@ -3,11 +3,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { HttpStatus, Injectable, Optional } from "@nestjs/common";
 import { and, asc, desc, eq, exists, gt, isNotNull, isNull, lte, sql, type SQL } from "drizzle-orm";
 
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import {
-  auditLogs,
   emailDeliveries,
   invitations,
   jobOutbox,
@@ -924,7 +924,7 @@ export class MembershipsService {
     },
   ): Promise<void> {
     assertActiveWorkspace(input.workspaceId, this.tenantContext, "audit insert");
-    await tx.insert(auditLogs).values({
+    await recordAudit(tx, {
       workspaceId: activeWorkspaceId(this.tenantContext),
       userId: input.actorId,
       action: input.action,

@@ -14,12 +14,16 @@ const alpha = {
   name: "Alpha",
   slug: "alpha",
   role: "editor" as const,
+  logoUrl: null,
+  accentColor: null,
 };
 const beta = {
   workspaceId: "20000000-0000-4000-8000-000000000002",
   name: "Beta",
   slug: "beta",
   role: "viewer" as const,
+  logoUrl: null,
+  accentColor: null,
 };
 
 describe("WorkspaceSwitcher", () => {

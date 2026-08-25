@@ -3,11 +3,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { and, asc, eq } from "drizzle-orm";
 
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import {
-  auditLogs,
   jobOutbox,
   noteShares,
   notes,
@@ -190,13 +190,12 @@ export class NoteSharesService {
     input: ShareScope,
   ): Promise<void> {
     const workspaceId = activeWorkspaceId(this.tenantContext);
-    await tx.insert(auditLogs).values({
+    await recordAudit(tx, {
       workspaceId,
       userId: input.principal.userId,
       action,
       entityType: NOTE_AUDIT_ENTITY_TYPE,
       entityId: input.noteId,
-      metadata: {},
       requestId: input.requestId ?? null,
     });
     const intentId = randomUUID();

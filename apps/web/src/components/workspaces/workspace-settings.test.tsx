@@ -6,22 +6,46 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceDetail, WorkspaceStorageUsage } from "@notted/shared-types";
 
 import { WorkspaceSettings } from "@/components/workspaces/WorkspaceSettings";
+import { loadWorkspaceDomain } from "@/lib/workspaces/domain-requests";
 import {
   deleteWorkspace,
+  deleteWorkspaceLogo,
   requestWorkspaceStorageUsage,
   updateWorkspace,
+  uploadWorkspaceLogo,
 } from "@/lib/workspaces/requests";
+
+// Part 73 moved the custom domain into its own section with its own routes.
+// Settings only has to prove the section is mounted for the right role; the
+// section's own behaviour is covered by `custom-domain-settings.test.tsx`.
+vi.mock("@/lib/workspaces/domain-requests", () => ({
+  loadWorkspaceDomain: vi.fn(),
+  setWorkspaceDomain: vi.fn(),
+  verifyWorkspaceDomain: vi.fn(),
+  removeWorkspaceDomain: vi.fn(),
+}));
 
 const { router } = vi.hoisted(() => ({
   router: { replace: vi.fn(), refresh: vi.fn() },
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
-vi.mock("@/lib/workspaces/requests", () => ({
-  updateWorkspace: vi.fn(),
-  deleteWorkspace: vi.fn(),
-  requestWorkspaceStorageUsage: vi.fn(),
-}));
+vi.mock("@/lib/workspaces/requests", async () => {
+  // `WORKSPACE_LOGO_MAX_BYTES` is a constant the component reads, not a
+  // request: mocking it away would make the oversize test assert against a
+  // ceiling of `undefined`.
+  const actual = await vi.importActual<typeof import("@/lib/workspaces/requests")>(
+    "@/lib/workspaces/requests",
+  );
+  return {
+    WORKSPACE_LOGO_MAX_BYTES: actual.WORKSPACE_LOGO_MAX_BYTES,
+    updateWorkspace: vi.fn(),
+    deleteWorkspace: vi.fn(),
+    requestWorkspaceStorageUsage: vi.fn(),
+    uploadWorkspaceLogo: vi.fn(),
+    deleteWorkspaceLogo: vi.fn(),
+  };
+});
 
 const workspace = {
   id: "30000000-0000-4000-8000-000000000001",
@@ -84,7 +108,11 @@ describe("WorkspaceSettings", () => {
     vi.mocked(updateWorkspace).mockReset();
     vi.mocked(deleteWorkspace).mockReset();
     vi.mocked(requestWorkspaceStorageUsage).mockReset();
+    vi.mocked(uploadWorkspaceLogo).mockReset();
+    vi.mocked(deleteWorkspaceLogo).mockReset();
     vi.mocked(requestWorkspaceStorageUsage).mockResolvedValue({ ok: true, data: storageUsage });
+    vi.mocked(loadWorkspaceDomain).mockReset();
+    vi.mocked(loadWorkspaceDomain).mockResolvedValue({ ok: true, data: { domain: null } });
   });
 
   it("saves an identity rename and refreshes from the response", async () => {
@@ -150,11 +178,17 @@ describe("WorkspaceSettings", () => {
     await user.click(screen.getByRole("button", { name: "Save page default" }));
 
     await waitFor(() =>
+      // `settings` is sent whole, so the unchanged accent rides along as its
+      // current value (`null` = use the platform default). Sending only the
+      // changed key would read on the server as "clear the accent".
       expect(updateWorkspace).toHaveBeenCalledWith(workspace.id, {
-        settings: { defaultPageSize: "letter" },
+        settings: { defaultPageSize: "letter", accentColor: null },
       }),
     );
-    expect(await screen.findByRole("status")).toHaveTextContent(/settings saved at/i);
+    // Several polite live regions coexist (logo state, accent contrast), so
+    // select by content rather than assuming this is the only `status`.
+    const saved = await screen.findByText(/settings saved at/i);
+    expect(saved).toHaveAttribute("role", "status");
     expect(screen.getByLabelText("Default page size")).toHaveValue("letter");
     expect(router.refresh).toHaveBeenCalled();
   });
@@ -233,7 +267,10 @@ describe("WorkspaceSettings", () => {
     expect(screen.getByLabelText("Default page size")).toHaveValue("a4");
     expect(screen.getByText(/Default page size is read-only/i)).toBeVisible();
     expect(screen.getByText("Plan-managed limit")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Replace logo" })).toBeDisabled();
+    // The logo controls are the file input and the removal button; both are
+    // inert for a viewer.
+    expect(screen.getByLabelText("Workspace logo")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remove logo" })).toBeDisabled();
   });
 
   describe("storage usage (Part 45)", () => {
@@ -420,6 +457,171 @@ describe("WorkspaceSettings", () => {
       // `settings.read` is enough to see usage, so a viewer gets the real bar.
       expect(await screen.findByRole("progressbar", { name: "Storage used" })).toBeVisible();
       expect(screen.getByText(/The limit is read-only here/i)).toBeVisible();
+    });
+  });
+
+  // --------------------------------------------------------------------- //
+  // Part 72 — branding.
+  // --------------------------------------------------------------------- //
+
+  describe("logo", () => {
+    it("uploads the chosen file as multipart and adopts the persisted path", async () => {
+      const user = userEvent.setup();
+      const logoUrl = `/api/v1/workspaces/${workspace.id}/logo/${"a".repeat(32)}`;
+      vi.mocked(uploadWorkspaceLogo).mockResolvedValue({ ok: true, data: { logoUrl } });
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      const file = new File([new Uint8Array([1, 2, 3])], "logo.png", { type: "image/png" });
+      await user.upload(screen.getByLabelText("Workspace logo"), file);
+
+      await waitFor(() => expect(uploadWorkspaceLogo).toHaveBeenCalledWith(workspace.id, file));
+      // The persisted path is adopted; no blob/preview URL is ever stored.
+      expect(await screen.findByText("A logo is set.")).toBeVisible();
+      expect(router.refresh).toHaveBeenCalled();
+    });
+
+    it("rejects an oversize file in the browser without calling the API", async () => {
+      const user = userEvent.setup();
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      const oversize = new File([new Uint8Array(3 * 1_024 * 1_024)], "huge.png", {
+        type: "image/png",
+      });
+      await user.upload(screen.getByLabelText("Workspace logo"), oversize);
+
+      expect(await screen.findByText(/larger than 2 MB/i)).toBeVisible();
+      expect(uploadWorkspaceLogo).not.toHaveBeenCalled();
+    });
+
+    it("offers Remove logo only once a logo exists", async () => {
+      const user = userEvent.setup();
+      vi.mocked(deleteWorkspaceLogo).mockResolvedValue({ ok: true, data: { logoUrl: null } });
+      const { unmount } = renderSettings({ workspace, canManage: true, canDelete: true });
+      expect(screen.getByRole("button", { name: "Remove logo" })).toBeDisabled();
+      unmount();
+
+      const branded = {
+        ...workspace,
+        logoUrl: `/api/v1/workspaces/${workspace.id}/logo/${"b".repeat(32)}`,
+      } satisfies WorkspaceDetail;
+      renderSettings({ workspace: branded, canManage: true, canDelete: true });
+
+      const remove = screen.getByRole("button", { name: "Remove logo" });
+      expect(remove).not.toBeDisabled();
+      await user.click(remove);
+      await waitFor(() => expect(deleteWorkspaceLogo).toHaveBeenCalledWith(workspace.id));
+      expect(await screen.findByText("No logo is set.")).toBeVisible();
+    });
+
+    it("disables the file input for a role that cannot manage settings", () => {
+      renderSettings({
+        workspace: { ...workspace, currentUserRole: "viewer" },
+        canManage: false,
+        canDelete: false,
+      });
+      expect(screen.getByLabelText("Workspace logo")).toBeDisabled();
+    });
+  });
+
+  describe("accent color", () => {
+    it("reports the measured contrast for a passing accent", async () => {
+      const user = userEvent.setup();
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      const hex = screen.getByLabelText("Hex value");
+      await user.clear(hex);
+      await user.type(hex, "#2563eb");
+
+      // 5.17:1 is the value the SERVER computes with the same shared function.
+      expect(await screen.findByText(/5\.17:1 against white/)).toBeVisible();
+      expect(screen.getByRole("button", { name: "Save accent color" })).not.toBeDisabled();
+    });
+
+    it("blocks the save and names the remedy when contrast fails", async () => {
+      const user = userEvent.setup();
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      const hex = screen.getByLabelText("Hex value");
+      await user.clear(hex);
+      await user.type(hex, "#fbbf24");
+
+      expect(await screen.findByText(/too low to save/i)).toBeVisible();
+      expect(screen.getByRole("button", { name: "Save accent color" })).toBeDisabled();
+      expect(updateWorkspace).not.toHaveBeenCalled();
+    });
+
+    it("warns without blocking between 3:1 and 4.5:1", async () => {
+      const user = userEvent.setup();
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      const hex = screen.getByLabelText("Hex value");
+      await user.clear(hex);
+      await user.type(hex, "#ef4444");
+
+      expect(await screen.findByText(/below the 4\.5:1 needed for body text/i)).toBeVisible();
+      expect(screen.getByRole("button", { name: "Save accent color" })).not.toBeDisabled();
+    });
+
+    it("sends accentColor: null when the accent is reset to the default", async () => {
+      const user = userEvent.setup();
+      const branded = {
+        ...workspace,
+        settings: { defaultPageSize: "a4", accentColor: "#0f766e" },
+      } satisfies WorkspaceDetail;
+      vi.mocked(updateWorkspace).mockResolvedValue({
+        ok: true,
+        data: { workspace: { ...branded, settings: { defaultPageSize: "a4" } } },
+      });
+      renderSettings({ workspace: branded, canManage: true, canDelete: true });
+
+      await user.click(screen.getByRole("button", { name: "Use default" }));
+      await user.click(screen.getByRole("button", { name: "Save accent color" }));
+
+      await waitFor(() =>
+        expect(updateWorkspace).toHaveBeenCalledWith(workspace.id, {
+          settings: { defaultPageSize: "a4", accentColor: null },
+        }),
+      );
+    });
+
+    it("is read-only for a role that cannot manage settings", () => {
+      renderSettings({
+        workspace: { ...workspace, currentUserRole: "viewer" },
+        canManage: false,
+        canDelete: false,
+      });
+      expect(screen.getByLabelText("Hex value")).toBeDisabled();
+      expect(screen.getByLabelText("Accent color")).toBeDisabled();
+      expect(screen.getByText(/accent color is read-only for your role/i)).toBeVisible();
+    });
+  });
+
+  describe("custom domain", () => {
+    it("no longer offers a writable domain field in Identity", () => {
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      // Part 73: the hostname is claimed and verified through its own section,
+      // so a field that could save an unverified value must not exist.
+      expect(screen.queryByLabelText("Custom domain (optional)")).toBeNull();
+      expect(document.getElementById("settings-domain")).toBeNull();
+    });
+
+    it("renders the custom-domain section for an admin", async () => {
+      renderSettings({ workspace, canManage: true, canDelete: true });
+
+      expect(await screen.findByRole("heading", { name: "Custom domain", level: 2 })).toBeVisible();
+      expect(loadWorkspaceDomain).toHaveBeenCalledWith(workspace.id);
+    });
+
+    it("hides it from a role that cannot change settings", () => {
+      renderSettings({
+        workspace: { ...workspace, currentUserRole: "viewer" },
+        canManage: false,
+        canDelete: false,
+      });
+
+      expect(screen.queryByRole("heading", { name: "Custom domain" })).toBeNull();
+      expect(loadWorkspaceDomain).not.toHaveBeenCalled();
     });
   });
 });

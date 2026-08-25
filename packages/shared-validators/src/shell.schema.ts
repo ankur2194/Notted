@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   explicitBooleanQuerySchema,
+  hexColorSchema,
   isoTimestampSchema,
   paginationQuerySchema,
   uuidSchema,
@@ -37,12 +38,26 @@ export const notificationEmailPreferenceSchema = z.object({ mentionEmail: z.bool
 
 export const workspaceSelectorSchema = z.object({ workspaceId: uuidSchema }).strict();
 
+/**
+ * Part 72 added the two branding fields. They ride the bootstrap the shell
+ * already fetches rather than getting their own request: the sidebar logo and
+ * the accent custom property are needed on the FIRST paint of every page, and a
+ * second round-trip would make the shell flash the default mark and then swap.
+ *
+ * Both are required-and-nullable rather than optional: a membership that simply
+ * omitted them would be indistinguishable from one with no branding, and the
+ * server always knows which it is. `logoUrl` is an app-relative API path
+ * (`/api/v1/workspaces/<id>/logo/<token>`), never an absolute URL — the browser
+ * resolves it through `lib/api/api-origin.ts`.
+ */
 export const shellWorkspaceMembershipSchema = z
   .object({
     workspaceId: uuidSchema,
     name: z.string().min(1).max(255),
     slug: z.string().min(1).max(255),
     role: workspaceRoleSchema,
+    logoUrl: z.string().max(2_048).nullable(),
+    accentColor: hexColorSchema.nullable(),
   })
   .strict();
 

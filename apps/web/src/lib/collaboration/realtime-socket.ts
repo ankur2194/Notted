@@ -1,6 +1,6 @@
 import { io, type Socket } from "socket.io-client";
 
-import { publicEnvironment } from "@/config/public-environment";
+import { wsOrigin } from "@/lib/api/api-origin";
 
 /**
  * The single realtime connection for the whole tab (Part 58).
@@ -18,7 +18,10 @@ import { publicEnvironment } from "@/config/public-environment";
 let socket: Socket | null = null;
 
 export function getRealtimeSocket(): Socket {
-  socket ??= io(publicEnvironment.NEXT_PUBLIC_WS_URL, {
+  // Part 73: the page's own origin on a custom host, the configured
+  // `NEXT_PUBLIC_WS_URL` everywhere else. Resolved lazily, inside the factory,
+  // so it reads the real `window` rather than a build-time constant.
+  socket ??= io(wsOrigin(), {
     path: "/socket.io",
     // WebSocket only. The HTTP long-polling fallback would send the session
     // cookie on every poll and cannot be sticky-routed without extra

@@ -18,6 +18,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { AuthorizationDeniedError } from "../authorization/authorization.errors";
 import { ApiHttpException } from "../common/errors/api-http.exception";
@@ -30,7 +31,6 @@ import {
 } from "../common/idempotency/api-idempotency";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import {
-  auditLogs,
   jobOutbox,
   type JobOutboxPayload,
   notes,
@@ -1412,7 +1412,7 @@ export class TasksService {
     input: ScopedInput,
   ): Promise<void> {
     const eventName = TASK_DOMAIN_EVENTS[mutation];
-    await tx.insert(auditLogs).values({
+    await recordAudit(tx, {
       workspaceId: activeWorkspaceId(this.tenantContext),
       userId: input.principal.userId,
       action: eventName,

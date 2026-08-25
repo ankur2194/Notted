@@ -123,7 +123,7 @@ function build(db: NodePgDatabase<typeof schema>) {
   return {
     realtimeEmit,
     realtimeRooms,
-    commentsService: new CommentsService(database, authorization, tenant, realtimeRooms, logger),
+    commentsService: new CommentsService(database, authorization, tenant, realtimeRooms),
     notesService: new NotesService(
       database,
       authorization,

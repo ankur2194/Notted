@@ -58,6 +58,12 @@ supported implicit fallback.
 - AI remains disabled unless `FEATURE_AI_ENABLED=true`. Chat credentials are stored per
   workspace (Part 67), so no deployment-level provider key is required; `AI_REQUEST_TIMEOUT_MS`
   (default 120000, 1000–600000) bounds every outbound chat call.
+- Custom domains remain disabled unless `CUSTOM_DOMAINS_ENABLED=true`, and enabling them
+  requires a reverse proxy that can obtain certificates for tenant hostnames on demand.
+  `CUSTOM_DOMAIN_CNAME_TARGET` must be a public hostname in production — `localhost`,
+  `*.localhost`, and IPv4 literals fail startup — and `TRUST_PROXY_HOPS` must match the
+  number of proxies in front of the API. See
+  [Custom-domain values](#custom-domain-values).
 
 Validation errors name variables and safe requirement categories but never echo supplied
 values. Do not paste real environment files into issue reports, logs, or test artifacts.
@@ -136,7 +142,16 @@ they never silently promote a browser-session login to a remembered session.
 `AUTH_RECENT_AUTH_SECONDS` configures Better Auth `session.freshAge` and the matching internal
 principal freshness projection. `AUTH_TWO_FACTOR_CHALLENGE_SECONDS`,
 `AUTH_TWO_FACTOR_LOCKOUT_ATTEMPTS`, and `AUTH_TWO_FACTOR_LOCKOUT_SECONDS` bound challenge and
-account-level brute-force behavior. Authentication and invitation email intents use the shared
+account-level brute-force behavior for an already-identified account's second factor.
+`AUTH_LOCKOUT_ATTEMPTS` (default `10`, 3–100) and `AUTH_LOCKOUT_SECONDS` (default `900`,
+60–86400) instead bound credential-stuffing against the sign-in identifier itself, before any
+second factor is reached: `AUTH_LOCKOUT_SECONDS` is both the window in which failures accrue
+and the resulting lock duration, one knob for both. State lives in Redis rather than in the
+in-memory rate-limit buckets, so a lockout holds across every API replica instead of resetting
+whichever instance the next attempt happens to land on. The identifier is never stored or
+logged in the clear, only as its SHA-256 hash, and a locked response (`423`, `Retry-After`) uses
+the same refusal message as an unrecognized identifier, so the lockout itself cannot be used to
+enumerate which accounts exist. Authentication and invitation email intents use the shared
 BullMQ runtime's `QUEUE_*` dispatch, attempt, backoff, timeout, concurrency, and idempotency
 limits; there is no standalone auth-email queue configuration. These are operational limits,
 never payload or secret inputs. `DATA_ENCRYPTION_KEYS` protects tokenized auth-email context at
@@ -156,10 +171,10 @@ and credential material are never rendered.
 
 ## Rate-limit values
 
-Four independent token buckets guard the API. Each value is requests per minute for one
-bucket; the buckets are keyed disjointly (client IP, user ID, API-key ID, and a per-route
-sensitive bucket), so draining one never consumes another's allowance. All four are optional
-API environment values with the defaults below.
+Five independent token buckets guard the API. Each value is requests per minute for one
+bucket; the buckets are keyed disjointly (client IP, user ID, API-key ID, a per-route
+sensitive bucket, and the authentication bucket below), so draining one never consumes
+another's allowance. All five are optional API environment values with the defaults below.
 
 | Variable | Default | Accepted range | Bucket |
 |---|---|---|---|
@@ -167,11 +182,21 @@ API environment values with the defaults below.
 | `RATE_LIMIT_AUTHENTICATED_PER_MINUTE` | `1000` | 1–1000000 | Per authenticated user |
 | `RATE_LIMIT_API_KEY_PER_MINUTE` | `100` | 1–1000000 | Per API key, not per workspace or per creator |
 | `RATE_LIMIT_SENSITIVE_PER_MINUTE` | `10` | 1–10000 | Per caller, per route opted into the sensitive tier |
+| `RATE_LIMIT_AUTH_PER_MINUTE` | `5` | 1–10000 | Per client IP and per attempted identifier on authentication endpoints |
 
 A value outside its range fails startup rather than being clamped. The tier is selected only
 from the trusted principal an authentication adapter installed after validating a credential;
 request headers never influence it, and rate-limit identity never grants a role or a resource
 permission.
+
+`RATE_LIMIT_AUTH_PER_MINUTE` is Part 74's authentication tier and is deliberately tighter than
+`RATE_LIMIT_SENSITIVE_PER_MINUTE`. It is keyed disjointly from the sensitive bucket, so
+exhausting one never consumes the other's allowance, and it is spent twice on every sign-in
+attempt: once as a per-IP bucket in the Express middleware in front of Better Auth, and once
+as a per-identifier budget in `AuthLockoutService` once the credential body is parsed. The
+per-IP half is what a single attacker's own address exhausts; the per-identifier half is the
+axis a distributed attacker spreading requests across many source IPs cannot rotate, because
+it counts against the email being guessed rather than the address guessing it.
 
 The sensitive tier is layered on top of the caller's general bucket rather than replacing it,
 so a handful of sign-in-grade or credential-minting requests cannot consume a caller's whole
@@ -207,3 +232,37 @@ flag is not an SSRF switch and cannot be used as one.
 [`compose.yaml`](../compose.yaml) sets it to `true` for the development and disposable e2e
 API containers, which enumerate their own environment; override it through root `.env` if a
 local run should behave like production.
+
+## Custom-domain values
+
+Both variables belong to the API environment and both are optional. They enable Part 73's
+custom domains — serving one workspace on a hostname its owner controls. The operator
+guide is [`custom-domains.md`](custom-domains.md).
+
+| Variable | Default | Accepted values | Notes |
+|---|---|---|---|
+| `CUSTOM_DOMAINS_ENABLED` | `false` | `true` / `false` | The whole feature. With it false the four workspace-domain routes and the public `GET /api/v1/domains/resolve` all answer `404`, the trusted-host check passes every request through untouched, and only the configured hosts are served. There is no second, web-side flag. |
+| `CUSTOM_DOMAIN_CNAME_TARGET` | the `APP_URL` hostname | A bare hostname, ≤253 characters | The name administrators point their `CNAME` at, and one of the hostnames no tenant may claim. A value carrying a protocol, a port, or a path fails startup. |
+
+`CUSTOM_DOMAIN_CNAME_TARGET` defaults to the `APP_URL` host, which is correct for the
+single-edge topology; name something else only when tenant TLS terminates on a separate
+edge. **In production the value must be a public hostname:** `localhost`, any
+`*.localhost` name, and an IPv4 literal fail startup, because a tenant cannot `CNAME` to a
+name that resolves only inside your network and the resulting failure would be reported to
+them as a problem with their own DNS.
+
+Enabling custom domains has a prerequisite outside this file: a TLS-terminating reverse
+proxy that can obtain a certificate for a hostname it has never seen, and that serves the
+web app, `/api/`, `/api/auth/`, and `/socket.io/` from the tenant's own origin. Notted
+stores no certificate and no ACME account. Set `TRUST_PROXY_HOPS` to the number of proxies
+in front of the API, or the forwarded host is ignored and every tenant request is refused
+with `421 UNTRUSTED_HOST`. See [`custom-domains.md`](custom-domains.md) §§ 4–5.
+
+`GET /api/v1/domains/resolve` sits on the default unauthenticated tier, not the sensitive
+one: a proxy that asks it during TLS handshakes shares one IP bucket, and a refused ask is
+a failed handshake that never reaches the application logs. A deployment onboarding many
+hostnames at once may need to raise `RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE` above its
+default of `60`.
+
+[`compose.yaml`](../compose.yaml) sets neither variable, so the development and disposable
+e2e stacks run with custom domains off.

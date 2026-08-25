@@ -11,9 +11,12 @@ import {
   createTaskSchema,
   createUserProfileSchema,
   createWorkspaceSchema,
+  customDomainHostnameSchema,
   noteMetadataFilterSchema,
+  normalizeHostname,
   projectFilterSchema,
   searchQuerySchema,
+  setWorkspaceDomainSchema,
   TAG_DEFAULT_COLOR,
   tagColorSchema,
   tagIdsSchema,
@@ -66,7 +69,6 @@ describe("workspace schemas", () => {
         name: "Product",
         slug: "product-team",
         description: null,
-        domain: "notes.example.com",
       }).success,
     ).toBe(true);
     expect(updateWorkspaceSchema.safeParse({ description: null }).success).toBe(true);
@@ -79,16 +81,19 @@ describe("workspace schemas", () => {
     ).toBe(true);
   });
 
-  it("rejects empty updates, invalid slugs/domains, and authority assignment", () => {
+  it("rejects empty updates, invalid slugs, and authority assignment", () => {
     expect(updateWorkspaceSchema.safeParse({}).success).toBe(false);
     expect(createWorkspaceSchema.safeParse({ name: "A", slug: "Upper Case" }).success).toBe(false);
+    // Part 73 moved the custom domain out of the workspace body entirely: it is
+    // now a verified resource of its own, so sending one here is mass assignment.
     expect(
       createWorkspaceSchema.safeParse({
         name: "A",
         slug: "valid",
-        domain: "https://example.com/private",
+        domain: "notes.example.com",
       }).success,
     ).toBe(false);
+    expect(updateWorkspaceSchema.safeParse({ domain: null }).success).toBe(false);
     expect(
       createWorkspaceSchema.safeParse({
         name: "A",
@@ -460,6 +465,53 @@ describe("task schemas", () => {
         taskIds: [taskId],
         action: { kind: "status", status: "cancelled" },
       }).success,
+    ).toBe(false);
+  });
+});
+
+describe("custom domain schemas (Part 73)", () => {
+  it("folds case, the root dot, and unicode into one canonical hostname", () => {
+    expect(normalizeHostname("Notes.ACME.com.")).toBe("notes.acme.com");
+    expect(normalizeHostname("  notes.acme.com  ")).toBe("notes.acme.com");
+    expect(normalizeHostname("münchen.example")).toBe("xn--mnchen-3ya.example");
+    expect(customDomainHostnameSchema.parse("Notes.ACME.com.")).toBe("notes.acme.com");
+    expect(setWorkspaceDomainSchema.parse({ hostname: "Notes.ACME.com" })).toEqual({
+      hostname: "notes.acme.com",
+    });
+  });
+
+  it.each([
+    ["a protocol", "https://notes.acme.com"],
+    ["a path", "notes.acme.com/private"],
+    ["a port", "notes.acme.com:8443"],
+    ["credentials", "user@notes.acme.com"],
+    ["a wildcard", "*.acme.com"],
+    ["a query", "notes.acme.com?a=1"],
+    ["a backslash", "notes.acme.com\\evil"],
+    ["percent-encoding", "notes%2eacme.com"],
+    ["a single label", "acme"],
+    ["an IPv4 literal", "127.0.0.1"],
+    ["an IPv6 literal", "[::1]"],
+    ["localhost", "localhost"],
+    ["a .local suffix", "notes.local"],
+    ["an .internal suffix", "notes.internal"],
+    ["an empty string", ""],
+    ["whitespace only", "   "],
+    ["a leading hyphen label", "-notes.acme.com"],
+    ["an over-long label", `${"a".repeat(64)}.example.com`],
+    [
+      "an over-long name",
+      `${"a".repeat(60)}.${"b".repeat(60)}.${"c".repeat(60)}.${"d".repeat(60)}.${"e".repeat(60)}.example`,
+    ],
+  ])("rejects %s", (_label, value) => {
+    expect(normalizeHostname(value)).toBeNull();
+    expect(customDomainHostnameSchema.safeParse(value).success).toBe(false);
+  });
+
+  it("rejects unknown fields on the claim body", () => {
+    expect(
+      setWorkspaceDomainSchema.safeParse({ hostname: "notes.acme.com", status: "verified" })
+        .success,
     ).toBe(false);
   });
 });

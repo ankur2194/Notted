@@ -4,7 +4,7 @@ import {
   workspaceInvitationAcceptResultSchema,
 } from "@notted/shared-validators";
 
-import { publicEnvironment } from "@/config/public-environment";
+import { apiOrigin } from "@/lib/api/api-origin";
 
 export type InvitationAcceptRequestResult =
   | { readonly ok: true; readonly data: WorkspaceInvitationAcceptResult }
@@ -16,17 +16,14 @@ export async function acceptWorkspaceInvitation(
   const input = acceptWorkspaceInvitationSchema.safeParse({ token });
   if (!input.success) return { ok: false, kind: "invalid" };
   try {
-    const response = await fetch(
-      new URL(MEMBERSHIP_API_PATHS.acceptInvitation, publicEnvironment.NEXT_PUBLIC_API_URL),
-      {
-        method: "POST",
-        cache: "no-store",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input.data),
-        signal: AbortSignal.timeout(8_000),
-      },
-    );
+    const response = await fetch(new URL(MEMBERSHIP_API_PATHS.acceptInvitation, apiOrigin()), {
+      method: "POST",
+      cache: "no-store",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input.data),
+      signal: AbortSignal.timeout(8_000),
+    });
     if (!response.ok) {
       return {
         ok: false,

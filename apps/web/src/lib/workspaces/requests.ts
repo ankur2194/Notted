@@ -2,6 +2,7 @@ import {
   WORKSPACE_API_PATHS,
   type WorkspaceCreateResult,
   type WorkspaceDeleteResult,
+  type WorkspaceLogoResult,
   type WorkspaceStorageUsage,
   type WorkspaceUpdateResult,
 } from "@notted/shared-types";
@@ -15,12 +16,17 @@ import {
   workspaceDeleteResultSchema,
   workspaceDeleteSchema,
   type WorkspaceDeleteInput,
+  workspaceLogoResultSchema,
   workspaceStorageUsageSchema,
   workspaceUpdateResultSchema,
 } from "@notted/shared-validators";
 
-import { publicEnvironment } from "@/config/public-environment";
-import { workspaceMemberPath, workspaceStoragePath } from "@/lib/workspaces/paths";
+import { apiOrigin } from "@/lib/api/api-origin";
+import {
+  workspaceLogoPath,
+  workspaceMemberPath,
+  workspaceStoragePath,
+} from "@/lib/workspaces/paths";
 
 export type WorkspaceRequestResult<T> =
   | { readonly ok: true; readonly data: T }
@@ -72,7 +78,7 @@ export function createWorkspace(
   const parsed = createWorkspaceSchema.safeParse(input);
   if (!parsed.success) return Promise.resolve({ ok: false, kind: "invalid" });
   return requestJson(
-    new URL(WORKSPACE_API_PATHS.collection, publicEnvironment.NEXT_PUBLIC_API_URL),
+    new URL(WORKSPACE_API_PATHS.collection, apiOrigin()),
     {
       method: "POST",
       headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
@@ -92,7 +98,7 @@ export function updateWorkspace(
     return Promise.resolve({ ok: false, kind: "invalid" });
   }
   return requestJson(
-    new URL(workspaceMemberPath(parsedId.data), publicEnvironment.NEXT_PUBLIC_API_URL),
+    new URL(workspaceMemberPath(parsedId.data), apiOrigin()),
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -112,7 +118,7 @@ export function deleteWorkspace(
     return Promise.resolve({ ok: false, kind: "invalid" });
   }
   return requestJson(
-    new URL(workspaceMemberPath(parsedId.data), publicEnvironment.NEXT_PUBLIC_API_URL),
+    new URL(workspaceMemberPath(parsedId.data), apiOrigin()),
     {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -140,9 +146,49 @@ export function requestWorkspaceStorageUsage(
   const parsedId = uuidSchema.safeParse(workspaceId);
   if (!parsedId.success) return Promise.resolve({ ok: false, kind: "invalid" });
   return requestJson(
-    new URL(workspaceStoragePath(parsedId.data), publicEnvironment.NEXT_PUBLIC_API_URL),
+    new URL(workspaceStoragePath(parsedId.data), apiOrigin()),
     { method: "GET", headers: { Accept: "application/json" } },
     (value) => workspaceStorageUsageSchema.safeParse(value),
+  );
+}
+
+/**
+ * Part 72 branding logo. `FormData` with one `file` part — deliberately NOT
+ * `Content-Type: application/json` and deliberately no header set by hand: the
+ * browser must write its own multipart boundary.
+ *
+ * The size ceiling is checked here purely so an oversize pick fails instantly
+ * instead of after a 2 MiB upload. It is NOT the control — the API refuses the
+ * body during transfer, before it is fully buffered.
+ */
+export const WORKSPACE_LOGO_MAX_BYTES = 2 * 1_024 * 1_024;
+
+export function uploadWorkspaceLogo(
+  workspaceId: string,
+  file: File,
+): Promise<WorkspaceRequestResult<WorkspaceLogoResult>> {
+  const parsedId = uuidSchema.safeParse(workspaceId);
+  if (!parsedId.success || file.size > WORKSPACE_LOGO_MAX_BYTES || file.size === 0) {
+    return Promise.resolve({ ok: false, kind: "invalid" });
+  }
+  const body = new FormData();
+  body.append("file", file);
+  return requestJson(
+    new URL(workspaceLogoPath(parsedId.data), apiOrigin()),
+    { method: "POST", headers: { Accept: "application/json" }, body },
+    (value) => workspaceLogoResultSchema.safeParse(value),
+  );
+}
+
+export function deleteWorkspaceLogo(
+  workspaceId: string,
+): Promise<WorkspaceRequestResult<WorkspaceLogoResult>> {
+  const parsedId = uuidSchema.safeParse(workspaceId);
+  if (!parsedId.success) return Promise.resolve({ ok: false, kind: "invalid" });
+  return requestJson(
+    new URL(workspaceLogoPath(parsedId.data), apiOrigin()),
+    { method: "DELETE", headers: { Accept: "application/json" } },
+    (value) => workspaceLogoResultSchema.safeParse(value),
   );
 }
 

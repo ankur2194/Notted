@@ -35,6 +35,14 @@ import { ImageProcessingService } from "./image-processing.service";
     ImageProcessingService,
     { provide: IMAGE_PROCESSOR, useExisting: ImageProcessingService },
   ],
-  exports: [AttachmentsService],
+  // Part 72: the `IMAGE_PROCESSOR` TOKEN is exported — not the Sharp-backed
+  // class — so `WorkspacesModule` can re-encode a branding logo through the SAME
+  // reviewed pipeline (SVG scan, HEIC decode, EXIF strip, bounded re-encode)
+  // while still depending only on the `ImageProcessor` interface, exactly as
+  // `AttachmentsService` does. Exporting the concrete class instead would have
+  // coupled the workspace surface to the native decoder and made it untestable
+  // without one. `matchesEtag` and `parseSingleFileUpload` are plain functions
+  // and need no provider.
+  exports: [AttachmentsService, IMAGE_PROCESSOR],
 })
 export class AttachmentsModule {}

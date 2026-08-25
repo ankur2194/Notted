@@ -93,6 +93,8 @@ const RESOURCE_KINDS_BY_ACTION: Readonly<Record<AuthorizationAction, readonly st
   "session.revoke": ["session"],
   "ai.configure": ["workspace"],
   "ai.use": ["workspace"],
+  "audit.read": ["workspace"],
+  "audit.export": ["workspace"],
 };
 
 const NOTE_PERMISSION_RANK: Readonly<Record<NoteSharePermission, number>> = {
@@ -439,6 +441,7 @@ export class AuthorizationPolicyService {
       action.startsWith("billing.") ||
       action.startsWith("apiKey.") ||
       action.startsWith("webhook.") ||
+      action.startsWith("audit.") ||
       action === "workspace.delete";
     const allowed = adminAction
       ? actor.scopes.includes("admin")
@@ -494,6 +497,10 @@ export class AuthorizationPolicyService {
       action === "workspace.delete" ||
       action === "settings.update" ||
       action === "ai.configure" ||
+      // Audit trails are owner/admin only. Denied by prefix (not by name) so
+      // the generic `.read` suffix rule below cannot allow `audit.read` for
+      // an editor.
+      action.startsWith("audit.") ||
       (action.startsWith("member.") && action !== "member.list")
     ) {
       return false;
@@ -559,6 +566,10 @@ export class AuthorizationPolicyService {
       // prefix (not the two names) is denied so a future `ai.*` action cannot
       // slip in through the `.read`/`.list` suffix rule below.
       action.startsWith("ai.") ||
+      // Audit trails are owner/admin only. Denied by prefix (not by name) so
+      // the generic `.read` suffix rule below cannot allow `audit.read` for
+      // a viewer.
+      action.startsWith("audit.") ||
       (action.startsWith("member.") && action !== "member.list")
     ) {
       return false;

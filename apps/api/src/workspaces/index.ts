@@ -1,6 +1,16 @@
 export { WorkspacesModule } from "./workspaces.module";
 export { WorkspacesService } from "./workspaces.service";
 export { WorkspacesController } from "./workspaces.controller";
+export { WorkspaceLogoController } from "./workspace-logo.controller";
+export {
+  WORKSPACE_LOGO_CACHE_CONTROL,
+  WORKSPACE_LOGO_FILE_FIELD,
+  WORKSPACE_LOGO_MAX_BYTES,
+  WorkspaceLogoService,
+  parseWorkspaceLogoUrl,
+  workspaceLogoObjectKey,
+  workspaceLogoUrl,
+} from "./workspace-logo.service";
 export {
   WORKSPACE_TRPC_PATH,
   WorkspacesTrpcRouter,

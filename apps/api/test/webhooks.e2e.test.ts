@@ -60,6 +60,7 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { formatScopes, generateApiKeySecret, hashApiKey } from "../src/api-keys/api-key-secret";
+import { allowAuditDelete } from "../src/audit/audit-record";
 import { AUTH_CONFIG, type AuthConfig } from "../src/config/auth.config";
 import { apiKeys, auditLogs, schema, webhooks } from "../src/database/schema";
 import { SEED_IDS, seedDatabase } from "../src/database/seed";
@@ -302,7 +303,12 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
       .from(webhooks)
       .where(eq(webhooks.workspaceId, ALPHA));
     for (const row of rows) {
-      await db.delete(auditLogs).where(eq(auditLogs.entityId, row.id));
+      // The append-only trigger (migration 0021) refuses this DELETE unless
+      // `notted.audit_purge` is set for the transaction.
+      await db.transaction(async (tx) => {
+        await allowAuditDelete(tx);
+        await tx.delete(auditLogs).where(eq(auditLogs.entityId, row.id));
+      });
       await db.delete(webhooks).where(eq(webhooks.id, row.id));
     }
   });

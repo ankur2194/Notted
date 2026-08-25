@@ -472,7 +472,7 @@ describe("AttachmentsService", () => {
         ...uploadInput(),
         buffer: Buffer.from("<?php system($_GET['c']); ?>", "utf8"),
       }),
-    ).rejects.toMatchObject({ safeResponse: { code: "UNPROCESSABLE_ENTITY" } });
+    ).rejects.toMatchObject({ safeResponse: { code: "UNSUPPORTED_MEDIA_TYPE" } });
     expect(context.rows).toEqual([]);
     expect((context.store as MemoryObjectStore).objects.size).toBe(0);
     expect(context.inserted).toEqual([]);
@@ -485,7 +485,7 @@ describe("AttachmentsService", () => {
         ...uploadInput(),
         buffer: Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>", "utf8"),
       }),
-    ).rejects.toMatchObject({ safeResponse: { code: "UNPROCESSABLE_ENTITY" } });
+    ).rejects.toMatchObject({ safeResponse: { code: "UNSUPPORTED_MEDIA_TYPE" } });
     expect(context.rows).toEqual([]);
   });
 
@@ -775,7 +775,7 @@ describe("AttachmentsService.uploadFile", () => {
       context.service.uploadFile(
         fileInput({ buffer: Buffer.from([0x4d, 0x5a, 0x90, 0x00]), declaredFilename: "setup.exe" }),
       ),
-    ).rejects.toMatchObject({ safeResponse: { code: "UNPROCESSABLE_ENTITY" } });
+    ).rejects.toMatchObject({ safeResponse: { code: "UNSUPPORTED_MEDIA_TYPE" } });
     expect(context.rows).toEqual([]);
     expect((context.store as MemoryObjectStore).objects.size).toBe(0);
     expect(context.inserted).toEqual([]);
@@ -790,7 +790,7 @@ describe("AttachmentsService.uploadFile", () => {
           declaredFilename: "notes.txt",
         }),
       ),
-    ).rejects.toMatchObject({ safeResponse: { code: "UNPROCESSABLE_ENTITY" } });
+    ).rejects.toMatchObject({ safeResponse: { code: "UNSUPPORTED_MEDIA_TYPE" } });
     expect(context.rows).toEqual([]);
   });
 
@@ -798,7 +798,7 @@ describe("AttachmentsService.uploadFile", () => {
     const context = build();
     await expect(
       context.service.uploadFile(fileInput({ buffer: PNG, declaredFilename: "photo.png" })),
-    ).rejects.toMatchObject({ safeResponse: { code: "UNPROCESSABLE_ENTITY" } });
+    ).rejects.toMatchObject({ safeResponse: { code: "UNSUPPORTED_MEDIA_TYPE" } });
     expect(context.rows).toEqual([]);
   });
 

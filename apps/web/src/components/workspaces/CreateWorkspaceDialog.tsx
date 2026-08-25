@@ -150,7 +150,7 @@ export function CreateWorkspaceDialog({
         result.kind === "forbidden"
           ? "You are not permitted to create a workspace, or the details were rejected."
           : result.kind === "conflict"
-            ? "That workspace slug or domain is already in use. Choose another and try again."
+            ? "That workspace slug is already in use. Choose another and try again."
             : result.kind === "invalid"
               ? "Those details could not be validated. Adjust the name or slug and try again."
               : "The workspace could not be created. Check your connection and try again.",

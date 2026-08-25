@@ -209,7 +209,7 @@ the host build rewrites the `.next` directory the dev server is using.
 - `presignedGetUrl` is implemented and clamped but unused; **Part 54** consumes it for exports.
 - Attachment listing is unpaginated (one note's attachments). `attachmentPageSchema` exists for a future paginated workspace-wide listing.
 - The `/api/v1/attachments/{id}` project-cover reference shape still has no implementing route; whichever part owns project cover images should reconcile it with this part's paths.
-- No dedicated `UNSUPPORTED_MEDIA_TYPE` `ApiErrorCode`; 415 responses carry `UNPROCESSABLE_ENTITY`.
+- ~~No dedicated `UNSUPPORTED_MEDIA_TYPE` `ApiErrorCode`; 415 responses carry `UNPROCESSABLE_ENTITY`.~~ **Closed during the Parts 71–74 review round (2026-08-25):** `UNSUPPORTED_MEDIA_TYPE` was added to `ApiErrorCode`, mapped to 415 in `ApiExceptionFilter`, and adopted by every 415 call site — this part's five plus Part 72's logo upload. 422 responses keep `UNPROCESSABLE_ENTITY`.
 
 ## Handoff Notes
 

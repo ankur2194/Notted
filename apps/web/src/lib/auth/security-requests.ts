@@ -4,7 +4,7 @@ import {
   type AuthSecurityOverview,
 } from "@notted/shared-types";
 
-import { publicEnvironment } from "@/config/public-environment";
+import { apiOrigin } from "@/lib/api/api-origin";
 
 export type SecurityRequestResult =
   { readonly ok: true } | { readonly ok: false; readonly recentAuthenticationRequired: boolean };
@@ -21,10 +21,11 @@ function isOverview(value: unknown): value is AuthSecurityOverview {
 
 export async function loadSecurityOverview(): Promise<AuthSecurityOverview | null> {
   try {
-    const response = await fetch(
-      new URL(AUTH_API_PATHS.security, publicEnvironment.NEXT_PUBLIC_API_URL),
-      { cache: "no-store", credentials: "include", signal: AbortSignal.timeout(5_000) },
-    );
+    const response = await fetch(new URL(AUTH_API_PATHS.security, apiOrigin()), {
+      cache: "no-store",
+      credentials: "include",
+      signal: AbortSignal.timeout(5_000),
+    });
     if (!response.ok) return null;
     const body: unknown = await response.json();
     return isOverview(body) ? body : null;
@@ -35,10 +36,11 @@ export async function loadSecurityOverview(): Promise<AuthSecurityOverview | nul
 
 export async function loadPrincipal(): Promise<AuthenticatedPrincipal | null> {
   try {
-    const response = await fetch(
-      new URL(AUTH_API_PATHS.principalSession, publicEnvironment.NEXT_PUBLIC_API_URL),
-      { cache: "no-store", credentials: "include", signal: AbortSignal.timeout(5_000) },
-    );
+    const response = await fetch(new URL(AUTH_API_PATHS.principalSession, apiOrigin()), {
+      cache: "no-store",
+      credentials: "include",
+      signal: AbortSignal.timeout(5_000),
+    });
     if (!response.ok) return null;
     const value: unknown = await response.json();
     if (typeof value !== "object" || value === null) return null;
@@ -68,16 +70,10 @@ async function mutate(url: URL, method: "POST" | "DELETE"): Promise<SecurityRequ
 }
 
 export function revokeRemoteSession(sessionId: string): Promise<SecurityRequestResult> {
-  const url = new URL(
-    `${AUTH_API_PATHS.sessions}/${encodeURIComponent(sessionId)}`,
-    publicEnvironment.NEXT_PUBLIC_API_URL,
-  );
+  const url = new URL(`${AUTH_API_PATHS.sessions}/${encodeURIComponent(sessionId)}`, apiOrigin());
   return mutate(url, "DELETE");
 }
 
 export function revokeOtherSessions(): Promise<SecurityRequestResult> {
-  return mutate(
-    new URL(AUTH_API_PATHS.revokeOtherSessions, publicEnvironment.NEXT_PUBLIC_API_URL),
-    "POST",
-  );
+  return mutate(new URL(AUTH_API_PATHS.revokeOtherSessions, apiOrigin()), "POST");
 }

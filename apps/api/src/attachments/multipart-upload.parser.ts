@@ -81,7 +81,7 @@ export function parseSingleFileUpload(
   if (!contentType.toLowerCase().startsWith("multipart/form-data")) {
     return Promise.reject(
       new ApiHttpException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, {
-        code: "UNPROCESSABLE_ENTITY",
+        code: "UNSUPPORTED_MEDIA_TYPE",
         message: "The upload must be sent as multipart/form-data.",
       }),
     );

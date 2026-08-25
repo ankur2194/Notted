@@ -20,8 +20,13 @@ export class AuthRateLimitMiddleware {
       next();
       return;
     }
-    const limit = this.config.sensitiveRateLimitPerMinute;
-    const key = `auth-ip:${request.ip || request.socket.remoteAddress || "unknown"}`;
+    // Part 74. The authentication tier, not the generic sensitive tier, and its
+    // own `:auth` bucket so draining it never consumes a caller's allowance for
+    // sensitive application routes. This is the per-IP half only: the body is
+    // deliberately not parsed here (Better Auth needs the raw stream), so the
+    // per-identifier half lives in `AuthLockoutService`.
+    const limit = this.config.authRateLimitPerMinute;
+    const key = `auth-ip:${request.ip || request.socket.remoteAddress || "unknown"}:auth`;
     const decision = this.store.consume(key, {
       capacity: limit,
       refillTokensPerMillisecond: limit / MILLISECONDS_PER_MINUTE,

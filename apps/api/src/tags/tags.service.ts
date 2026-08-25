@@ -4,6 +4,7 @@ import { HttpStatus, Injectable } from "@nestjs/common";
 import { TAG_DEFAULT_COLOR } from "@notted/shared-validators";
 import { and, asc, desc, eq, ilike, sql, type SQL } from "drizzle-orm";
 
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import {
@@ -15,7 +16,6 @@ import {
 } from "../common/idempotency/api-idempotency";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import {
-  auditLogs,
   jobOutbox,
   type JobOutboxPayload,
   notes,
@@ -397,13 +397,12 @@ export class TagsService {
     input: ScopedInput,
   ): Promise<void> {
     const eventName = TAG_DOMAIN_EVENTS[mutation];
-    await tx.insert(auditLogs).values({
+    await recordAudit(tx, {
       workspaceId: activeWorkspaceId(this.tenantContext),
       userId: input.principal.userId,
       action: eventName,
       entityType: TAG_AUDIT_ENTITY_TYPE,
       entityId,
-      metadata: {},
       requestId: input.requestId ?? null,
     });
     const intentId = randomUUID();

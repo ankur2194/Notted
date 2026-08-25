@@ -4,12 +4,14 @@ import { AiModule } from "./ai/ai.module";
 import { ApiKeysModule } from "./api-keys/api-keys.module";
 import { ApiController } from "./api.controller";
 import { AttachmentsModule } from "./attachments/attachments.module";
+import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
 import { AuthorizationModule } from "./authorization/authorization.module";
 import { CommentsModule } from "./comments/comments.module";
 import { CommonModule } from "./common/common.module";
 import { ConfigModule } from "./config/config.module";
 import { DatabaseModule } from "./database/database.module";
+import { DomainsModule } from "./domains/domains.module";
 import { EmailModule } from "./email/email.module";
 import { ExportModule } from "./export/export.module";
 import { HealthModule } from "./health/health.module";
@@ -48,7 +50,12 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
     // request passes through.
     AiModule,
     AttachmentsModule,
+    // Part 71. Owns the read-only audit trail REST surface (paged list + bounded CSV export).
+    AuditModule,
     CommentsModule,
+    // Part 73. Owns the custom-domain claim/verify surface and the public
+    // host-to-workspace lookup the reverse proxy and ACME issuer ask.
+    DomainsModule,
     // Part 61. Owns the generic template renderer, the transactional producer,
     // and the `email.deliver` queue handler.
     EmailModule,

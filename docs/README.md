@@ -289,6 +289,7 @@ pnpm test:ci
 pnpm test:e2e
 pnpm build
 pnpm audit:prod
+pnpm security:check
 ```
 
 `pnpm test:ci` adds coverage and enforces a 70% threshold on statements, branches,
@@ -311,6 +312,21 @@ browser binaries
 separately when needed with `pnpm --filter @notted/web exec playwright install`; browser
 binaries are not installed by dependency installation and are not committed. The suite
 creates fresh `.test` accounts and never relies on seed credentials.
+
+`pnpm audit:prod` audits production dependencies at **every** severity and currently exits
+non-zero on one moderate advisory (`postcss` GHSA-fxqj-rqcc-2cmp, build-time only, fixed in
+`postcss >= 8.5.23` which is an ADR 0008 matrix change). `pnpm security:deps` is the gate:
+production dependencies at **high** and above. Suppressions live in
+`pnpm.auditConfig.ignoreGhsas` and each one is recorded with an owner and a deadline in
+[`docs/security/remediation-checklist.md`](security/remediation-checklist.md#exceptions).
+Do not use `pnpm audit --ignore <id>` — in pnpm 10.34.5 that flag switches `audit` into
+write-the-ignore-list mode and always exits 0, which silently disables the check.
+
+`pnpm security:check` runs a production-dependency audit (`pnpm security:deps`) followed by
+a container scan (`pnpm security:containers`, Trivy through Docker against the images named
+in `compose.yaml`). It is deliberately on demand rather than CI-gated. The container scan
+SKIPS any image that is not present locally and prints a hint to build or pull it, so a run
+in which nothing was scanned reports "nothing scanned" and must not be read as a pass.
 
 If Chromium refuses to launch because system libraries are missing and you cannot install
 them (`playwright install-deps` needs `sudo`), run the suite inside the official Playwright
@@ -449,3 +465,9 @@ The root `Makefile` is an optional thin alias layer (`make infra-up`, `make test
 
 Variable ownership and production rules are detailed in
 [`environment.md`](environment.md).
+
+Serving a workspace on a hostname its owner controls is an operator feature documented in
+[`custom-domains.md`](custom-domains.md). It is off by default
+(`CUSTOM_DOMAINS_ENABLED=false`), `compose.yaml` does not enable it, and local development
+never needs it — the development stack has no reverse proxy that could obtain a
+certificate for a tenant hostname.

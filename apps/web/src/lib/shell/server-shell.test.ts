@@ -21,8 +21,17 @@ const bootstrap: ShellBootstrap = {
     name: "Ada Editor",
     email: "ada@example.test",
   },
-  workspaces: [{ workspaceId, name: "Alpha", slug: "alpha", role: "editor" }],
-  currentWorkspace: { workspaceId, name: "Alpha", slug: "alpha", role: "editor" },
+  workspaces: [
+    { workspaceId, name: "Alpha", slug: "alpha", role: "editor", logoUrl: null, accentColor: null },
+  ],
+  currentWorkspace: {
+    workspaceId,
+    name: "Alpha",
+    slug: "alpha",
+    role: "editor",
+    logoUrl: null,
+    accentColor: null,
+  },
   permissions: {
     canViewSettings: true,
     canManageWorkspace: false,

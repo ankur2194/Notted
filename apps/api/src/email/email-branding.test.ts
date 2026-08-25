@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_ACCENT_COLOR, PLATFORM_BRANDING_NAME, resolveBranding } from "./email-branding";
 
-const appConfig = { appUrl: new URL("https://app.notted.test/dashboard?x=1") } as const;
+const appConfig = {
+  appUrl: new URL("https://app.notted.test/dashboard?x=1"),
+  apiUrl: new URL("https://api.notted.test"),
+} as const;
 
 describe("resolveBranding", () => {
   it("falls back to platform branding for workspace-less email", () => {
@@ -51,6 +54,30 @@ describe("resolveBranding", () => {
       appConfig,
     );
     expect(branding.logoUrl).toBe("https://cdn.notted.test/logo.png");
+  });
+
+  // Part 72: the persisted `logo_url` is an app-relative API path, so the mail
+  // client — which has no base URL — must receive it already absolute.
+  it("resolves an app-relative logo path against the API origin", () => {
+    const branding = resolveBranding(
+      {
+        name: "Acme",
+        logoUrl:
+          "/api/v1/workspaces/11111111-1111-4111-8111-111111111111/logo/0123456789abcdef0123456789abcdef",
+        settings: {},
+      },
+      appConfig,
+    );
+    expect(branding.logoUrl).toBe(
+      "https://api.notted.test/api/v1/workspaces/11111111-1111-4111-8111-111111111111/logo/0123456789abcdef0123456789abcdef",
+    );
+  });
+
+  it("refuses a protocol-relative value that would leave the API origin", () => {
+    expect(
+      resolveBranding({ name: "Acme", logoUrl: "//evil.example/logo.png", settings: {} }, appConfig)
+        .logoUrl,
+    ).toBeNull();
   });
 
   it("falls back to the platform name for a blank workspace name", () => {

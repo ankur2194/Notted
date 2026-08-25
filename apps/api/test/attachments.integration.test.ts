@@ -19,6 +19,7 @@ import {
   PassthroughImageProcessor,
   type ImageProcessor,
 } from "../src/attachments/image-processing";
+import { allowAuditDelete } from "../src/audit/audit-record";
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
 import { AuthorizationPolicyService } from "../src/authorization/authorization-policy.service";
 import { AuthorizationRepository } from "../src/authorization/authorization.repository";
@@ -83,7 +84,12 @@ async function purgeQuotaFixtureRows(live: NodePgDatabase<typeof schema>): Promi
     .where(like(attachments.originalName, `${QUOTA_FIXTURE}%`));
   for (const { id } of rows) {
     await live.delete(jobOutbox).where(like(jobOutbox.idempotencyKey, `%:${id}:%`));
-    await live.delete(auditLogs).where(eq(auditLogs.entityId, id));
+    // The append-only trigger (migration 0021) refuses this DELETE unless
+    // `notted.audit_purge` is set for the transaction.
+    await live.transaction(async (tx) => {
+      await allowAuditDelete(tx);
+      await tx.delete(auditLogs).where(eq(auditLogs.entityId, id));
+    });
   }
   await live.delete(attachments).where(like(attachments.originalName, `${QUOTA_FIXTURE}%`));
 }

@@ -95,8 +95,16 @@ export const workspaces = pgTable(
     slug: varchar("slug", { length: 255 }).notNull(),
     description: text("description"),
     logoUrl: text("logo_url"),
-    // Optional custom domain for branded workspaces. NULL for the majority;
-    // uniqueness only applies to non-null values (PostgreSQL NULL distinctness).
+    // Part 73: a READ-ONLY MIRROR of the workspace's VERIFIED custom hostname.
+    // `workspace_domains` is the source of truth — it is where a claim lives
+    // while it is still unproven, which this column must never contain. The
+    // domains service writes it inside the same transaction as a successful
+    // verification and clears it on removal or a failed re-verification, so a
+    // reader of this column is always reading a proved hostname. It is not
+    // writable through `PATCH /workspaces/{id}` and carries no API input schema.
+    //
+    // NULL for the majority; uniqueness only applies to non-null values
+    // (PostgreSQL NULL distinctness).
     domain: varchar("domain", { length: 255 }),
     plan: workspacePlanEnum("plan").default("free").notNull(),
     // Branding, accent color, default page size, feature flags, etc. Defaults

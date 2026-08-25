@@ -5,8 +5,11 @@ import { shellBootstrapSchema, uuidSchema } from "@notted/shared-validators";
 import { cookies } from "next/headers";
 
 import { publicEnvironment } from "@/config/public-environment";
+import { WORKSPACE_SELECTION_COOKIE } from "@/lib/shell/constants";
 
-export const WORKSPACE_SELECTION_COOKIE = "notted_workspace";
+// Re-exported so the existing importers (the workspaces page, the selection
+// route handler, and this module's own tests) keep their import path.
+export { WORKSPACE_SELECTION_COOKIE };
 
 export type ServerShellResult =
   | { readonly status: "ready"; readonly data: ShellBootstrap }

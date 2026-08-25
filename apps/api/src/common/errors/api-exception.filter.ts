@@ -37,6 +37,10 @@ const ERROR_BY_STATUS: Readonly<Record<number, ApiError>> = {
     code: "UNPROCESSABLE_ENTITY",
     message: "The request could not be processed.",
   },
+  [HttpStatus.UNSUPPORTED_MEDIA_TYPE]: {
+    code: "UNSUPPORTED_MEDIA_TYPE",
+    message: "The media type is not supported.",
+  },
 };
 
 function statusForUnknownException(exception: unknown): number {

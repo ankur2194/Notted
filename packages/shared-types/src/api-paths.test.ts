@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { API_KEY_API_PATHS } from "./api-key";
 import { ATTACHMENT_API_PATHS } from "./attachment";
+import { AUDIT_LOG_API_PATHS } from "./audit-log";
 import { SEARCH_API_PATHS } from "./search";
 import { TAG_API_PATHS } from "./tag";
 import { TASK_API_PATHS, TASK_STATUS_API_PATHS } from "./task";
@@ -37,6 +38,14 @@ describe("shared API path builders", () => {
       API_KEY_API_PATHS.detail(workspaceId, resourceId).endsWith(`/api-keys/${resourceId}`),
     ).toBe(true);
     expect(API_KEY_API_PATHS.collection(workspaceId).startsWith("/api/v1/workspaces/")).toBe(true);
+  });
+
+  it("builds audit-log read and export paths", () => {
+    expect(AUDIT_LOG_API_PATHS.collection(workspaceId).endsWith("/audit-logs")).toBe(true);
+    expect(AUDIT_LOG_API_PATHS.collection(workspaceId).startsWith("/api/v1/workspaces/")).toBe(
+      true,
+    );
+    expect(AUDIT_LOG_API_PATHS.export(workspaceId).endsWith("/audit-logs/export")).toBe(true);
   });
 
   it("builds webhook management and delivery-log paths", () => {

@@ -4,6 +4,7 @@ import { Pool } from "pg";
 
 import {
   attachments,
+  auditLogs,
   comments,
   folders,
   noteTags,
@@ -895,6 +896,72 @@ export async function seedDatabase(db: SeedDatabaseClient): Promise<SeedResult> 
       .insert(taskTags)
       .values(taskTagRows)
       .onConflictDoNothing({ target: [taskTags.taskId, taskTags.tagId] });
+
+    // Part 71 — a small, legible activity trail across BOTH tenants, so a
+    // cross-tenant test has something to prove (the alpha list must not
+    // contain the beta row). Written directly with fixed ids rather than
+    // through `recordAudit`: the seed is not a request (there is no ambient
+    // IP/user-agent/request id to record) and the ids must be deterministic
+    // for reseed idempotency, which a request-shaped writer has no reason to
+    // offer. `.onConflictDoNothing` (not `.onConflictDoUpdate`, unlike every
+    // other table above) because `audit_logs` is append-only: migration 0021's
+    // trigger REFUSES an UPDATE outright, so a reseed can only leave an
+    // existing row untouched, never revise it.
+    const auditLogRows = [
+      {
+        id: SEED_IDS.auditLogs.alphaWorkspaceCreate,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        userId: SEED_IDS.users.alphaOwner,
+        action: "workspace.create",
+        entityType: "workspace",
+        entityId: SEED_IDS.workspaces.alpha,
+        metadata: {},
+        ipAddress: null,
+        userAgent: null,
+        requestId: null,
+        createdAt,
+      },
+      {
+        id: SEED_IDS.auditLogs.alphaMemberInvite,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        userId: SEED_IDS.users.alphaAdmin,
+        action: "member.invite",
+        entityType: "workspace",
+        entityId: SEED_IDS.workspaces.alpha,
+        metadata: {},
+        ipAddress: null,
+        userAgent: null,
+        requestId: null,
+        createdAt,
+      },
+      {
+        id: SEED_IDS.auditLogs.alphaNoteCreated,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        userId: SEED_IDS.users.alphaEditor,
+        action: "note.created",
+        entityType: "note",
+        entityId: SEED_IDS.notes.alphaTemplate,
+        metadata: {},
+        ipAddress: null,
+        userAgent: null,
+        requestId: null,
+        createdAt,
+      },
+      {
+        id: SEED_IDS.auditLogs.betaWorkspaceCreate,
+        workspaceId: SEED_IDS.workspaces.beta,
+        userId: SEED_IDS.users.betaOwner,
+        action: "workspace.create",
+        entityType: "workspace",
+        entityId: SEED_IDS.workspaces.beta,
+        metadata: {},
+        ipAddress: null,
+        userAgent: null,
+        requestId: null,
+        createdAt,
+      },
+    ] satisfies Array<typeof auditLogs.$inferInsert>;
+    await tx.insert(auditLogs).values(auditLogRows).onConflictDoNothing({ target: auditLogs.id });
 
     return {
       scenarios: [SEED_SCENARIOS.alpha.label, SEED_SCENARIOS.beta.label],

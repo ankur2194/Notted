@@ -47,6 +47,14 @@ export interface AuthConfig {
   readonly twoFactorChallengeSeconds: number;
   readonly twoFactorLockoutAttempts: number;
   readonly twoFactorLockoutSeconds: number;
+  /**
+   * Part 74 — credential-stuffing lockout on the *identifier* (email), which is
+   * the axis a distributed attacker cannot rotate. Distinct from the two-factor
+   * lockout above, which counts second-factor failures for an already-identified
+   * account.
+   */
+  readonly lockoutAttempts: number;
+  readonly lockoutSeconds: number;
 }
 
 function oauthCredentials(
@@ -250,6 +258,8 @@ export function parseAuthConfig(environment: Environment): AuthConfig {
         60,
         3_600,
       ),
+      lockoutAttempts: readInteger(environment, "AUTH_LOCKOUT_ATTEMPTS", 10, 3, 100),
+      lockoutSeconds: readInteger(environment, "AUTH_LOCKOUT_SECONDS", 900, 60, 86_400),
     });
   } catch (error: unknown) {
     wrapConfigError("Invalid auth configuration", error);

@@ -4,6 +4,7 @@ import { HttpStatus, Injectable } from "@nestjs/common";
 import { taskStatusNameSchema } from "@notted/shared-validators";
 import { and, asc, eq, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 
+import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import {
@@ -14,7 +15,7 @@ import {
   storeApiIdempotency,
 } from "../common/idempotency/api-idempotency";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
-import { auditLogs, notes, projects, tasks, taskStatuses } from "../database/schema";
+import { notes, projects, tasks, taskStatuses } from "../database/schema";
 import {
   activeWorkspaceId,
   assertWorkspaceInsertValues,
@@ -455,7 +456,7 @@ export class TaskStatusesService {
     entityId: string,
     input: ScopedInput,
   ): Promise<void> {
-    await tx.insert(auditLogs).values({
+    await recordAudit(tx, {
       workspaceId: activeWorkspaceId(this.tenantContext),
       userId: input.principal.userId,
       action: TASK_STATUS_AUDIT_ACTIONS[mutation],

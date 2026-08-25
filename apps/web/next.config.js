@@ -1,3 +1,5 @@
+const { buildSecurityHeaders } = require("./security-headers.js");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -12,6 +14,18 @@ const nextConfig = {
   // the URL. These are loopback addresses for the same machine, so allowing
   // them grants no reach a `localhost` visitor does not already have.
   allowedDevOrigins: ["127.0.0.1", "[::1]"],
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: buildSecurityHeaders({
+          apiUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001",
+          wsUrl: process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3001",
+          production: process.env.NODE_ENV === "production",
+        }),
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;
