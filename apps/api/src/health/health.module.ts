@@ -18,6 +18,7 @@ import { RealtimeModule } from "../realtime/realtime.module";
 import { HealthController } from "./health.controller";
 import { ProcessReadinessIndicator } from "./process-readiness.indicator";
 import { READINESS_INDICATORS } from "./readiness-indicator";
+import { ReadinessService } from "./readiness.service";
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { READINESS_INDICATORS } from "./readiness-indicator";
   controllers: [HealthController],
   providers: [
     ProcessReadinessIndicator,
+    ReadinessService,
     {
       provide: READINESS_INDICATORS,
       inject: [
@@ -65,6 +67,8 @@ import { READINESS_INDICATORS } from "./readiness-indicator";
       ],
     },
   ],
-  exports: [READINESS_INDICATORS],
+  // Part 78: `ReadinessService` is exported so `MetricsModule` can read the
+  // dependency states through the same 1 s cache `/health/ready` uses.
+  exports: [READINESS_INDICATORS, ReadinessService],
 })
 export class HealthModule {}

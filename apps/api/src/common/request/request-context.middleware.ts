@@ -2,6 +2,13 @@ import { randomUUID } from "node:crypto";
 
 import { Inject, Injectable, type NestMiddleware } from "@nestjs/common";
 
+import {
+  httpRequestDurationSeconds,
+  httpRequestsInFlight,
+  httpRouteLabel,
+  metricLabel,
+  statusClassLabel,
+} from "../../metrics/metrics.registry";
 import { StructuredLogger } from "../logging/structured-logger.service";
 
 import {
@@ -45,15 +52,45 @@ export class RequestContextMiddleware implements NestMiddleware {
     request.headers["x-request-id"] = requestId;
     response.setHeader("X-Request-Id", requestId);
 
+    // Part 78 mounts HTTP metrics HERE rather than in a Nest interceptor,
+    // because this middleware is `app.use`'d FIRST (`main.ts`) and therefore
+    // sees tRPC, Better Auth and Bull Board — none of which pass through Nest's
+    // interceptor chain — and it already holds the duration the histogram wants.
+    httpRequestsInFlight.inc();
+    // `close`, not `finish`: a client that aborts mid-response never emits
+    // `finish`, and an in-flight gauge that only ever counts up is worse than no
+    // gauge. `close` fires on both paths.
+    response.once("close", () => {
+      httpRequestsInFlight.dec();
+    });
+
     response.once("finish", () => {
       const statusCode = response.statusCode;
+      const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
+      httpRequestDurationSeconds.observe(
+        {
+          method: metricLabel(request.method, 10),
+          route: httpRouteLabel(request),
+          // The CLASS, never the raw status: 40-odd statuses multiplied by the
+          // route label would be 40× the series for a distinction no alert makes.
+          status_class: statusClassLabel(statusCode),
+        },
+        durationMs / 1_000,
+      );
       this.logger.info(
         {
           requestId,
           method: request.method,
-          path: request.path,
+          // `originalUrl`, not `path`: Express strips the mount prefix from
+          // `req.url` (and therefore from the `req.path` getter) when it
+          // dispatches into an `app.use(prefix, handler)` mount and only
+          // restores it in the `next()` callback a terminating sub-handler
+          // never calls — so this line used to log `/sign-up/email` for a
+          // request to `/api/auth/sign-up/email`. The query string is cut
+          // because it carries tokens and search terms.
+          path: request.originalUrl.split("?")[0] ?? request.path,
           statusCode,
-          durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+          durationMs,
           outcome: statusCode >= 500 ? "error" : statusCode >= 400 ? "denied" : "success",
         },
         "HTTP request completed",

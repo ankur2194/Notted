@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 
 import { latestActionLink } from "./mailpit";
 
@@ -103,6 +103,34 @@ async function signIn(page: Page, account: ReturnType<typeof identity>): Promise
   await expect(page).toHaveURL(/\/workspaces/u);
 }
 
+/**
+ * Opens the command palette and returns its dialog and search box.
+ *
+ * PRESSED ON A POLL, NOT ONCE. The trigger being visible only proves the
+ * server-rendered markup arrived; the document keydown listener is installed by
+ * `TopBar`'s effect, and a chord pressed before then is simply lost — no later
+ * timeout recovers it, so a single press fails with the palette never opening at
+ * all. Repeating is safe because the handler returns early while the palette is
+ * open (`if (commandOpen) return`), so it can never toggle back closed.
+ *
+ * Shared by both keyboard tests: one of them carried this treatment and the
+ * other pressed once, which is why the second failed on this host every run
+ * while the first passed in the same browser a moment earlier.
+ */
+async function openPalette(page: Page): Promise<{ palette: Locator; combobox: Locator }> {
+  const palette = page.getByRole("dialog", { name: "Search notes" });
+  await expect
+    .poll(
+      async () => {
+        await page.keyboard.press("Control+K");
+        return palette.isVisible();
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+  return { palette, combobox: palette.getByRole("combobox", { name: "Search notes" }) };
+}
+
 test.describe.serial("Part 52 full-text search UI", () => {
   test.skip(
     !disposable,
@@ -171,17 +199,7 @@ test.describe.serial("Part 52 full-text search UI", () => {
     // a chord pressed before then is simply lost — no later timeout recovers it.
     // Repeating is safe because the handler returns early while the palette is
     // open (`if (commandOpen) return`), so it can never toggle back closed.
-    const palette = page.getByRole("dialog", { name: "Search notes" });
-    await expect
-      .poll(
-        async () => {
-          await page.keyboard.press("Control+K");
-          return palette.isVisible();
-        },
-        { timeout: 15_000 },
-      )
-      .toBe(true);
-    const combobox = palette.getByRole("combobox", { name: "Search notes" });
+    const { palette, combobox } = await openPalette(page);
     await expect(combobox).toBeFocused();
 
     await combobox.fill(token);
@@ -197,9 +215,7 @@ test.describe.serial("Part 52 full-text search UI", () => {
     await page.goto(`/workspaces/${workspaceId}`);
     await expect(page.getByRole("button", { name: "Open command menu and search" })).toBeVisible();
 
-    await page.keyboard.press("Control+K");
-    const palette = page.getByRole("dialog", { name: "Search notes" });
-    const combobox = palette.getByRole("combobox", { name: "Search notes" });
+    const { palette, combobox } = await openPalette(page);
     await combobox.fill(token);
     const option = palette.getByRole("option", { name: new RegExp(token, "u") });
     await expect(option).toBeVisible();

@@ -34,7 +34,38 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "env": ["DATABASE_URL"],
+      // Turbo filters the environment strictly, so a variable that is not declared
+      // here never reaches vitest. Every one of these is read by a suite (or by
+      // the config parser a suite boots) and gates whether that suite runs:
+      // `DATABASE_URL` for the ~30 `describe.skipIf` integration suites,
+      // `MINIO_*` for `minio-test-helpers.ts`, `MEILISEARCH_*` for the search
+      // and reindex suites, `MAILPIT_*` and `APP_ORIGIN` for the realtime and
+      // email suites, `AUTH_E2E`/`AUTH_LOCKOUT_ATTEMPTS`/
+      // `SESSION_REMEMBER_ME_DAYS`/`RATE_LIMIT_*` for the auth suites,
+      // `EXPORT_CHROMIUM_PATH` for the PDF suite, `REALTIME_INTEGRATION` for the
+      // socket suite, `FEATURE_*` for the feature gates, and `REDIS_URL` /
+      // `BETTER_AUTH_*` / `DATA_ENCRYPTION_KEYS` for `createApplication()` in
+      // `app.e2e.test.ts`. Undeclared, they all skip silently while the run
+      // still prints green — the exact failure `test/integration-gates.test.ts`
+      // now turns into one red test under CI.
+      "env": [
+        "DATABASE_URL",
+        "REDIS_URL",
+        "APP_URL",
+        "APP_ORIGIN",
+        "AUTH_E2E",
+        "AUTH_LOCKOUT_ATTEMPTS",
+        "SESSION_REMEMBER_ME_DAYS",
+        "REALTIME_INTEGRATION",
+        "EXPORT_CHROMIUM_PATH",
+        "DATA_ENCRYPTION_KEYS",
+        "MINIO_*",
+        "MEILISEARCH_*",
+        "MAILPIT_*",
+        "BETTER_AUTH_*",
+        "RATE_LIMIT_*",
+        "FEATURE_*"
+      ],
       "inputs": [
         "$TURBO_DEFAULT$",
         "src/**/*",
@@ -46,13 +77,31 @@
     },
     "test:ci": {
       "dependsOn": ["^build"],
-      // The API's integration suites are gated on DATABASE_URL. Turbo filters
-      // the environment strictly, so without this declaration the variable never
-      // reaches vitest, every gated suite skips, and coverage falls far below
-      // the thresholds. Declaring it also makes it part of the cache key, which
-      // is correct: the same sources produce different coverage with and
-      // without a database.
-      "env": ["DATABASE_URL"],
+      // Same list as `test`, for the same reason, plus one that is specific to
+      // coverage: a skipped suite still counts its source file as uncovered, so
+      // an undeclared variable does not merely hide a suite — it drags branch
+      // coverage far below the thresholds and reads as a real regression.
+      // Declaring these also makes them part of the cache key, which is
+      // correct: the same sources produce different coverage with and without
+      // the infrastructure behind them.
+      "env": [
+        "DATABASE_URL",
+        "REDIS_URL",
+        "APP_URL",
+        "APP_ORIGIN",
+        "AUTH_E2E",
+        "AUTH_LOCKOUT_ATTEMPTS",
+        "SESSION_REMEMBER_ME_DAYS",
+        "REALTIME_INTEGRATION",
+        "EXPORT_CHROMIUM_PATH",
+        "DATA_ENCRYPTION_KEYS",
+        "MINIO_*",
+        "MEILISEARCH_*",
+        "MAILPIT_*",
+        "BETTER_AUTH_*",
+        "RATE_LIMIT_*",
+        "FEATURE_*"
+      ],
       "inputs": [
         "$TURBO_DEFAULT$",
         "src/**/*",

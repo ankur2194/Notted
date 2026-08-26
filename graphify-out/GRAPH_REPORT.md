@@ -1,16 +1,16 @@
-# Graph Report - Notted  (2026-08-25)
+# Graph Report - Notted  (2026-08-26)
 
 ## Corpus Check
-- 1408 files · ~1,452,899 words
+- 1438 files · ~1,528,447 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 12259 nodes · 30569 edges · 536 communities (435 shown, 101 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 270 edges (avg confidence: 0.74)
+- 12659 nodes · 31261 edges · 545 communities (455 shown, 90 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 273 edges (avg confidence: 0.74)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `08efbe04`
+- Built from commit: `50cee26a`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -20,17 +20,17 @@
 - document.schema.ts
 - button.tsx
 - domain-verifier.ts
-- grouping.ts
+- TaskListView.tsx
 - AuthService
-- useExportJob.ts
-- suggestion-modules.test.ts
+- job-registry.ts
+- NoteEditorSurface.tsx
 - requestJson
 - useGrammarCheck.ts
-- config.module.ts
+- app.config.ts
 - NotesService
 - shared-validators/src/index.ts
 - export-generation.service.ts
-- CustomImage.ts
+- extensions/index.ts
 - page-geometry.ts
 - openapi.builder.ts
 - editor-harness.tsx
@@ -38,69 +38,69 @@
 - .run
 - ExportService
 - presence-client.ts
-- attachments.controller.ts
+- attachments.controller.test.ts
 - health.module.ts
 - auth.module.ts
-- webhooks.integration.test.ts
+- role-denial.spec.ts
 - markdown.ts
 - auth/requests.ts
-- OutboxRuntimeRow
-- attachment-admission.ts
+- queue-worker-processor.service.ts
+- file-signature.ts
 - RealtimeGateway
 - providers/index.ts
 - shared-types/src/index.ts
 - workspace.schema.ts
 - realtime.gateway.ts
-- main.ts
+- workspaces.trpc.ts
 - seed.ts
 - rate-limit.guard.test.ts
 - TasksService
 - toolbar-commands.ts
-- .transaction
+- DatabaseTransaction
 - search.service.ts
 - autosave-machine.ts
 - comment.schema.ts
 - export-formats.spec.ts
 - createTenantContext
 - ai/index.ts
-- export.integration.test.ts
+- activeWorkspaceId
 - webhooks/requests.ts
 - GlobalSearchDialog.tsx
 - TiptapEditor.tsx
 - note-index.repository.ts
-- docs/README.md
-- maintenance/index.ts
+- threat-model.md
+- storage-maintenance.service.ts
 - .userId
 - zip.test.ts
 - dev-tooling.mjs
-- NoteEditorSurface.tsx
+- use-image-uploads.test.tsx
 - image-upload-placeholder.ts
-- AttachmentsService
-- useImageUploads.ts
-- NoteComments.tsx
+- .transaction
+- image-uploads.ts
+- ImageToolbar.tsx
 - ProjectsService
 - dependencies
-- DatabaseTransaction
-- DomainsService
+- tasks.service.ts
+- recordAudit
 - PageContainer.tsx
 - scripts
 - note.ts
 - search.schema.ts
 - compilerOptions
-- redirects.ts
-- request-json.ts
+- perf-bench.mjs
+- apiOrigin
 - devDependencies
-- tasks/index.ts
+- server-shell.ts
 - image-processing.service.test.ts
 - workspace.ts
-- image-transfer.ts
+- AiSettings.tsx
 - AiService
 - email-renderer.service.ts
 - dependencies
 - server-workspaces.ts
 - RequireAuthorization
 - RedisService
-- image-signature.ts
+- image-signature.test.ts
 - meeting-extraction.service.ts
 - devDependencies
 - meilisearch.service.ts
@@ -115,43 +115,43 @@
 - editor-tables.test.tsx
 - note-comments.test.tsx
 - ai-prompts.ts
-- whereWorkspace
+- authorization-entry.service.ts
 - shared-types/package.json
 - What You Must Do When Invoked
 - Part 42 — Editor image insertion
 - What You Must Do When Invoked
 - compilerOptions
-- .authorizeUser
-- StorageMaintenanceService
+- webhooks.integration.test.ts
+- attachments/index.ts
 - AiController
 - TagsController
-- shell.ts
-- task.ts
+- UserId
+- common.ts
 - TasksController
 - note-images.spec.ts
 - task-list.spec.ts
 - Remediation Checklist — OWASP Top 10 (2021)
 - export.ts
-- NoteBoard.tsx
+- config.module.ts
 - compilerOptions
 - task-views.spec.ts
-- Notted Coding Conventions
-- WorkspaceId
+- README.md
+- Part 78 — Add observability and operational diagnostics
 - common.schema.ts
-- apiOrigin
+- DashboardShell.tsx
 - Part 48 — Add board, calendar, and progress views
 - scripts
 - scripts
-- CommentsService
-- public-environment.ts
-- ApiKeys.tsx
+- comments.service.ts
+- proxy.ts
+- NoteIndexRepository
 - Part 43 — Add image manipulation UI
 - Part 45 — Add storage quotas and cleanup
-- AiConfig
+- semantic-search.repository.ts
 - api-key.schema.ts
-- audit-logs.controller.test.ts
+- audit-logs.controller.ts
 - TaskStatusesController
-- extensions/index.ts
+- CustomAttachment.ts
 - components.json
 - note-attachments.spec.ts
 - project-board.spec.ts
@@ -167,26 +167,26 @@
 - attachment-storage-key.ts
 - VersionHistory.tsx
 - Custom Domains
-- tags-templates.spec.ts
+- StorageMaintenanceService
 - Coverage remediation — making `pnpm test:ci` pass
 - Part 21 — Integrate Better Auth on the backend
 - Part 46 — Implement tags and templates
 - attachment.ts
-- DashboardShell.tsx
+- NoteDetailView.tsx
 - .create
 - NoteSharesController
 - Part 50 — Establish BullMQ queues and workers
 - compilerOptions
-- ImageToolbar.tsx
-- search.ts
+- auth-email-producer.service.ts
+- Part 77 — Test performance and scale limits
 - Part 04 — Scaffold the Next.js Web Application
 - Part 11 — Implement Configuration and Dependency Clients
 - Part 22 — Build authentication screens and route protection
 - Part 23 — Add OAuth, two-factor authentication, passkeys, and session controls
-- .failure
+- queue.module.ts
 - webhook.schema.ts
 - Notted
-- workspace-logo.service.test.ts
+- getServerWorkspaceDetail
 - .info
 - TaskStatusesService
 - Part 01 — Record architecture decisions and resolve specification gaps
@@ -213,13 +213,13 @@
 - Part 35 — Add tables, checklists, markdown shortcuts, and block behavior
 - Part 36 — Build slash commands and mentions
 - Part 37 — Implement the A4/Letter page container
-- queue-outbox.repository.ts
+- queue-infrastructure.service.ts
 - Part 39 — Implement reliable save behavior
-- Decision
-- Notted — Corporate Notes Platform
-- StorageBucket
-- NoteVersionRetentionQueueService
-- workspaceId
+- Third-Party Notices
+- Database Schema (Drizzle ORM)
+- note-block-tab.ts
+- defineQueueJobRegistration
+- database.module.ts
 - All-in-Docker development stack
 - Part 16 — Implement Tags, Attachments, Comments, and Note Versions
 - Part 17 — Implement Standalone Task Data
@@ -231,12 +231,12 @@
 - Local development
 - 4. STRIDE by surface
 - globalDependencies
-- common.ts
+- comment.ts
 - better-auth.setup.ts
-- AiSettings.tsx
+- memberships.service.ts
 - webhooks.service.test.ts
 - notes/view-preference.ts
-- note-collaboration.repository.ts
+- task-statuses.service.test.ts
 - Part 24 — Implement centralized authorization
 - MeetingExtractionDialog.tsx
 - package.json
@@ -250,7 +250,7 @@
 - Part 74 — Security hardening and abuse controls
 - svg-safety.ts
 - webhooks.e2e.test.ts
-- workspace-logo.service.ts
+- workspaces.service.ts
 - Disposable end-to-end stack, and the production defect it uncovered
 - Part 25 — Build the dashboard shell
 - server-notes.ts
@@ -260,21 +260,21 @@
 - image-processing.service.ts
 - Part 59 — Presence and collaboration UI
 - Part 60 — Inline comments, mentions, and notifications
-- bull-board-policy.ts
-- note-collaboration.projection.ts
+- bull-board.service.ts
+- note-collaboration.policy.ts
 - graphify reference: extra exports and benchmark
 - Deliver a Notted Plan Part
 - pdf-export.service.test.ts
 - graphify reference: extra exports and benchmark
 - export-pdf.integration.test.ts
-- webhook-url-guard.ts
+- webhook-sender.ts
 - latestActionLink
 - presence-client.test.ts
 - storage-maintenance.integration.test.ts
 - Environment contracts
 - WebhooksController
 - ADR 0004: Yjs collaborative document authority over Socket.io transport
-- ExportNoteDialog.tsx
+- server-projects.ts
 - overrides
 - note-yjs-document.ts
 - Phase 1 — Product Decisions and Repository Foundation
@@ -289,7 +289,7 @@
 - agents/lead-part-engineer.md
 - agents/quality-reviewer.md
 - Build and Diagnose Notted Playwright Integration Tests
-- TaskBoard.tsx
+- SearchContainer.tsx
 - ADR 0002: Separate first-party tRPC and public REST transports
 - ADR 0005: Store private binaries in MinIO with PostgreSQL metadata
 - ADR 0010: Persist Better Auth sessions and encrypted authentication-email intent
@@ -307,20 +307,20 @@
 - src/format-bytes.ts
 - Phase 4 — Authentication, Authorization, and Application Shell
 - Phase 9 — Search and Indexing
-- inputs
+- hybrid-ranking.service.ts
 - Build Notted Frontend and Editor Features
 - Deliver a Notted Plan Part
 - api/package.json
 - notes.service.ts
 - Part 52 — Authorized full-text search
-- tag.ts
+- main.ts
 - 1. Workspace-scoping strategy
 - Build Notted Backend and Data Features
 - Assure Notted Quality and Operations
 - Part 53 — Embeddings and semantic search
 - Part 54 — Hybrid ranking
 - project.ts
-- advanced-auth.spec.ts
+- WorkspacesController
 - Phase 16 — Release Preparation and Incremental Delivery
 - Build Notted Backend and Data Features
 - Assure Notted Quality and Operations
@@ -340,51 +340,51 @@
 - app/not-found.tsx
 - graphify reference: GitHub clone and cross-repo merge
 - graphify reference: transcribe video and audio
-- storage-report.ts
+- ProjectCollection.tsx
 - graphify.js
 - graphify reference: GitHub clone and cross-repo merge
 - graphify reference: transcribe video and audio
 - ensure-docker-mounts.mjs
 - Part 72 — Branding and customization
-- domains.service.ts
+- ai-panel.test.tsx
 - ai.service.test.ts
-- JobIdempotencyCleanupQueueService
+- WorkspaceLogoController
 - IsoTimestamp
 - user-color.ts
 - note-collaboration-provider.ts
 - realtime.gateway.test.ts
 - Part 71 — Add audit logging and administrative views
-- part-58-yjs-collaborative-editing.md
-- shell.schema.ts
+- Part 56 — Version history, diff, and restore
+- WebhookSecretService
 - ApiController
-- job-registry.ts
+- export.integration.test.ts
 - class-variance-authority
-- api-keys.e2e.test.ts
+- ApiKeysController
 - next.config.js
 - next-env.d.ts
-- TaskListView.tsx
-- @better-auth/passkey
-- QueueOutboxRepository
-- ObjectStorageService
+- task-board.test.tsx
+- [projectId]/page.tsx
+- Part 76 — Accessibility and cross-browser validation
+- editor-slash-commands.test.tsx
 - lowlight
 - @notted/shared-types
 - RealtimeRateLimitService
-- WorkspacesService
+- storage/index.ts
 - folder-controls.test.tsx
 - part-72-branding-and-customization.md
-- Part 56 — Version history, diff, and restore
-- @tanstack/react-query
+- env
+- tags.service.ts
 - @tiptap/core
-- stream.ts
-- AuditLogRetentionQueueService
-- webhook-sender.ts
+- api-keys.service.ts
+- webhooks.service.ts
+- webhook-sender.test.ts
 - note-collaboration-provider.test.ts
 - useNoteCollaboration.ts
-- @tiptap/extension-table-cell
+- public-environment.ts
 - @tiptap/extension-table-row
 - ai-governance.service.test.ts
-- Part 62 — Export job lifecycle
-- attachments/index.ts
+- QueueAdminRemediationService
+- attachments.constants.ts
 - class-transformer
 - @tiptap/react
 - class-validator
@@ -398,8 +398,8 @@
 - architecture.md
 - backend.md
 - database.md
-- frontend.md
-- observability.md
+- Testing Standard
+- Warning
 - .runMaintenance
 - ADR 0009: Tenant protection strategy — repository-layer enforcement with transaction-local tenant/user context
 - eslint.config.mjs
@@ -408,70 +408,71 @@
 - .opencode/skills/graphify/references/extraction-spec.md
 - _test-eslint-fix.mjs
 - playwright.config.ts
-- cron-parser
+- Notted Agent Instructions
 - @notted/shared-validators
-- CommentsController
+- SearchResults.tsx
 - express
 - fflate
 - @nestjs/websockets
-- pino
+- storage-report.ts
 - presence-bar.test.tsx
 - Public REST API
-- Deployment Instructions
+- audit-logs.service.ts
 - Part 65 — Implement public REST API and API key management
-- markdown.test.ts
+- search.spec.ts
 - Part 66 — Implement webhooks and delivery logs
 - AuditLog.tsx
 - @radix-ui/react-dialog
-- ShellService
-- better-auth
+- .bootstrap
+- recent-searches.ts
 - Part 58 — Integrate Yjs collaborative editing
 - @notted/shared-types
-- highlight.js
-- lucide-react
+- AiProviderRateLimiterService
+- markdown.test.ts
 - drizzle-orm
-- react
+- bull-board-policy.ts
 - react-dom
-- socket.io-client
-- Database Schema (Drizzle ORM)
-- @tiptap/extension-highlight
+- Performance Standard
+- Deployment Instructions
+- Centralized authorization
 - @tiptap/extension-mention
-- @tiptap/extension-table-header
+- Decision
 - webhooks/index.ts
 - y-prosemirror
 - SelectChain
-- ApiKeyRouteGuard
+- api-key-route.guard.test.ts
 - helmet
 - editor-mentions.test.tsx
-- minio
+- StorageMaintenanceScheduler
 - web/package.json
-- socket.io
-- AuthController
-- domain.schema.ts
-- projects/requests.ts
+- queue-worker-processor.service.test.ts
+- auth-security.service.ts
+- better-auth
+- busboy
 - @dnd-kit/sortable
-- @notted/shared-validators
+- docx
 - next
 - qrcode.react
 - meeting-extraction.service.test.ts
-- sonner
-- @tiptap/extension-code-block-lowlight
+- note-projection.repository.ts
+- Part 75 — Complete the automated test pyramid
 - @tiptap/extension-link
 - @tiptap/extension-superscript
-- @tiptap/extension-task-list
+- completed-parts/README.md
 - @tiptap/extension-text-align
 - @tiptap/pm
 - BrowserPoolService
+- ioredis
 - Part 73 — Custom-domain support
 - Phase 2 — Local Infrastructure and Configuration
-- request-context.middleware.ts
-- meilisearch
-- notes-api-indexes.test.ts
-- embedding-reindex.ts
+- metrics.registry.ts
+- @nestjs/core
+- @nestjs/platform-express
+- @nestjs/platform-socket.io
 - Part 67 — Build provider-neutral AI configuration and governance
 - Webhooks
 - Part 68 — Implement summarize, continue writing, and tone rewrite
-- page-layout.spec.ts
+- prom-client
 - Part 69 — Implement meeting extraction and auto-tagging
 - Part 70 — Implement grammar and style assistance
 - tenant/index.ts
@@ -479,51 +480,60 @@
 - SearchController
 - filename.ts
 - Phase 15 — Production Packaging and Operations
-- RealtimeSocketAdapter
+- RealtimeRedisAdapterService
 - FakeXhr
-- object-storage.service.test.ts
+- Notted Coding Conventions
 - Phase 8 — Tasks, Tags, Templates, and Advanced Organization
 - Phase 12 — AI Capabilities
-- Phase 13 — Enterprise Controls and Customization
-- .deliver
-- app/error.tsx
-- compression
-- heic-convert
+- axe.ts
+- webhook-delivery.worker.service.ts
+- task-calendar.test.tsx
+- react
+- @react-email/render
 - ignoreGhsas
-- pg
-- rxjs
-- yjs
-- zod
+- reflect-metadata
+- @trpc/server
+- @tiptap/extension-table-header
 - ADR 0013 — Successful REST responses return the bare resource payload
-- MemoryObjectStore
 - Phase 14 — Testing, Performance, Accessibility, and Observability
 - NoteExportSourceService
-- note-embedding-producer.ts
-- StubObjectStore
-- task-status-manager.test.tsx
-- FakeObjectStore
-- ConfigModule
-- Development Workflow
+- [workspaceId]/page.tsx
 - SelectChain
-- Docker Compose Configuration
-- Part 55 — Version snapshots and retention
-- @tiptap/extension-subscript
+- note-browser.test.tsx
+- note-board.test.tsx
 - security-scan.mjs
 - @better-auth/passkey
-- MemoryObjectStore
 - @socket.io/redis-adapter
+- Part 63 — PDF and HTML export
+- tag-manager.test.tsx
 - Part 61 — Email subsystem
-- FakeRedis
+- Part 64 — Markdown, TXT, DOCX and ZIP export, and the export UI
+- ADR 0001: pnpm and Turborepo monorepo boundaries
 - security-headers.test.ts
 - @better-auth/drizzle-adapter
-- StorageMaintenanceScheduler
+- NoteCollaborationProjectionService
+- Database migration policy
+- decodeAwarenessClientIds
 - Requests and responses
 - Errors
+- @dnd-kit/core
+- @dnd-kit/utilities
+- pdfjs-dist
+- @tiptap/extension-collaboration
+- @tiptap/extension-collaboration-cursor
+- @tiptap/extension-color
+- @tiptap/extension-placeholder
+- @tiptap/extension-table
+- @tiptap/extension-task-item
+- @tiptap/extension-text-style
+- @tiptap/extension-underline
+- @tiptap/starter-kit
+- @tiptap/suggestion
 
 ## God Nodes (most connected - your core abstractions)
 1. `DatabaseTransaction` - 240 edges
-2. `whereWorkspace()` - 192 edges
-3. `DatabaseService` - 191 edges
+2. `DatabaseService` - 194 edges
+3. `whereWorkspace()` - 192 edges
 4. `TenantContextService` - 150 edges
 5. `StructuredLogger` - 149 edges
 6. `RequireAuthorization()` - 128 edges
@@ -535,156 +545,156 @@
 ## Surprising Connections (you probably didn't know these)
 - `setupBetterAuth()` --references--> `ApiError`  [EXTRACTED]
   apps/api/src/auth/better-auth.setup.ts → packages/shared-types/src/api.ts
+- `service()` --indirect_call--> `workspaceId()`  [INFERRED]
+  apps/api/src/notes/note-version-history.service.test.ts → apps/api/src/tasks/task-statuses.controller.ts
 - `job()` --indirect_call--> `workspaceId()`  [INFERRED]
   apps/web/src/components/notes/export-note-dialog.test.tsx → apps/api/src/tasks/task-statuses.controller.ts
-- `item()` --indirect_call--> `workspaceId()`  [INFERRED]
-  apps/web/src/components/notes/note-list.test.tsx → apps/api/src/tasks/task-statuses.controller.ts
 - `note()` --indirect_call--> `workspaceId()`  [INFERRED]
-  apps/web/src/components/notes/note-timeline.test.tsx → apps/api/src/tasks/task-statuses.controller.ts
-- `task()` --indirect_call--> `workspaceId()`  [INFERRED]
-  apps/web/src/components/notes/note-timeline.test.tsx → apps/api/src/tasks/task-statuses.controller.ts
+  apps/web/src/components/notes/note-board.test.tsx → apps/api/src/tasks/task-statuses.controller.ts
+- `base()` --indirect_call--> `workspaceId()`  [INFERRED]
+  apps/web/src/components/notes/note-browser.test.tsx → apps/api/src/tasks/task-statuses.controller.ts
 
 ## Import Cycles
 - 3-file cycle: `apps/api/src/database/schema/notes.ts -> apps/api/src/database/schema/tasks.ts -> apps/api/src/database/schema/tags.ts -> apps/api/src/database/schema/notes.ts`
 - 4-file cycle: `apps/api/src/app.module.ts -> apps/api/src/openapi/openapi.module.ts -> apps/api/src/openapi/openapi.controller.ts -> apps/api/src/openapi/openapi.builder.ts -> apps/api/src/app.module.ts`
 
-## Communities (536 total, 101 thin omitted)
+## Communities (545 total, 90 thin omitted)
 
 ### Community 0 - "note.schema.ts"
 Cohesion: 0.03
-Nodes (72): NOTE_DOCUMENT_MARK_TYPES, NOTE_DOCUMENT_MENTION_CLASS, NOTE_DOCUMENT_MENTION_PREFIX, NoteDocument, NoteDocumentCodeLanguage, NoteDocumentJson, NoteDocumentMarkType, NoteDocumentMigrationResult (+64 more)
+Nodes (84): NOTE_DOCUMENT_MARK_TYPES, NOTE_DOCUMENT_MENTION_CLASS, NOTE_DOCUMENT_MENTION_PREFIX, NoteDocument, NoteDocumentCodeLanguage, NoteDocumentJson, NoteDocumentMarkType, NoteDocumentMigrationResult (+76 more)
 
 ### Community 1 - "schema/index.ts"
 Cohesion: 0.02
-Nodes (129): aiProviderConfigRelations, aiProviderEnum, aiUsageRelations, ADR-0007, apiIdempotencyRecords, apiKeysRelations, ADR-0003, attachmentMediaTypeEnum (+121 more)
+Nodes (126): getRequestContext(), aiProviderConfig, aiProviderConfigRelations, aiProviderEnum, aiUsage, aiUsageRelations, ADR-0007, apiIdempotencyRecords (+118 more)
 
 ### Community 2 - "document.schema.ts"
 Cohesion: 0.04
-Nodes (130): assertMigrationInputBounds(), attachmentPlainText(), ATTRLESS_MARK_TYPES, BLOCK_NODE_TYPES, cellAttributesHtml(), cellSpanOrNull(), cellWidthOrNull(), CODE_LANGUAGE_ALIASES (+122 more)
+Nodes (125): assertMigrationInputBounds(), attachmentPlainText(), ATTRLESS_MARK_TYPES, BLOCK_NODE_TYPES, cellAttributesHtml(), cellSpanOrNull(), cellWidthOrNull(), CODE_LANGUAGE_ALIASES (+117 more)
 
 ### Community 3 - "button.tsx"
-Cohesion: 0.06
-Nodes (57): LoginForm(), ReauthenticationDialogProps, RegisterForm(), AttachmentDeleteDialog(), ColorPickerDialog(), ColorPickerDialogProps, EditorColorOption, ImageAltTextDialog() (+49 more)
+Cohesion: 0.04
+Nodes (73): Error(), ErrorProps, ReauthenticationDialogProps, AttachmentDeleteDialog(), AttachmentDeleteDialogProps, ColorPickerDialog(), ColorPickerDialogProps, EditorColorOption (+65 more)
 
 ### Community 4 - "domain-verifier.ts"
 Cohesion: 0.16
 Nodes (14): bounded(), canonical(), defaultDomainDnsResolver, DNS_TIMEOUT_MS, DOMAIN_DNS_RESOLVER, DomainDnsResolver, DomainVerificationResult, DomainVerifierOptions (+6 more)
 
-### Community 5 - "grouping.ts"
-Cohesion: 0.06
-Nodes (47): empty, late, later, mocks, page, task(), loadFailure(), MyTasksWidget() (+39 more)
+### Community 5 - "TaskListView.tsx"
+Cohesion: 0.03
+Nodes (84): design, research, support, tag(), TagPicker(), CreateTaskForm(), empty, late (+76 more)
 
 ### Community 6 - "AuthService"
-Cohesion: 0.04
-Nodes (73): request(), responseStub, validBody, ADR-0013, ApiRootResponse, API_KEY_ACTOR, ApiKeyRequest, getApiKeyActor() (+65 more)
+Cohesion: 0.03
+Nodes (85): request(), responseStub, validBody, ADR-0013, ApiRootResponse, KeyRow, liveRow, API_KEY_ACTOR (+77 more)
 
-### Community 7 - "useExportJob.ts"
-Cohesion: 0.11
-Nodes (24): job(), mocks, open(), view(), advance(), advanceUntil(), job(), mocks (+16 more)
+### Community 7 - "job-registry.ts"
+Cohesion: 0.06
+Nodes (37): AnyOutboxJobDefinition, BullJobEnvelope, bullJobEnvelopeSchema, defineOutboxJob(), identifierPayloadSchema(), OutboxJobDefinition, platformIdentifierPayloadSchema(), QueueJobHandler (+29 more)
 
-### Community 8 - "suggestion-modules.test.ts"
-Cohesion: 0.05
-Nodes (65): createNoteMention(), MENTION_EXTENSION_NAME, MENTION_PRIORITY, MENTION_REMOVED_CLASS, MENTION_REMOVED_SUFFIX, MENTION_REMOVED_TITLE, mentionDisplayText(), NoteMentionOptions (+57 more)
+### Community 8 - "NoteEditorSurface.tsx"
+Cohesion: 0.03
+Nodes (95): accept, dismiss, fakeEditor(), getSuggestion, renderPopover(), SUGGESTION, CATEGORY_LABELS, decoratedAncestor() (+87 more)
 
 ### Community 9 - "requestJson"
-Cohesion: 0.09
-Nodes (65): CODE_MESSAGES, FAILURE_MESSAGES, failureMessage(), TagSuggestions(), TagSuggestionsProps, toggle(), CreateNoteDialog(), depths() (+57 more)
+Cohesion: 0.05
+Nodes (109): CODE_MESSAGES, FAILURE_MESSAGES, failureMessage(), TagSuggestions(), TagSuggestionsProps, toggle(), FolderControls(), NoteBrowser() (+101 more)
 
 ### Community 10 - "useGrammarCheck.ts"
-Cohesion: 0.03
-Nodes (83): accept, dismiss, fakeEditor(), getSuggestion, renderPopover(), SUGGESTION, grammarControl, setEnabled (+75 more)
-
-### Community 11 - "config.module.ts"
 Cohesion: 0.05
-Nodes (102): argumentsSet, production, buildService(), buildMiddleware(), database(), service(), AiConfigProvider, AiProviderConfig (+94 more)
+Nodes (57): grammarControl, setEnabled, GrammarToggle(), advance(), aiRequests, EMPTY_DOCUMENT, GrammarRequestBody, grammarResult() (+49 more)
+
+### Community 11 - "app.config.ts"
+Cohesion: 0.10
+Nodes (57): argumentsSet, production, buildService(), database(), service(), AiProviderConfig, EmbeddingConfig, parseAiConfig() (+49 more)
 
 ### Community 12 - "NotesService"
 Cohesion: 0.07
-Nodes (9): decodeVersionCursor(), encodeVersionCursor(), NotesService, Injectable, buildFolderSubrouter(), buildNoteSubrouter(), withData(), withFolderData() (+1 more)
+Nodes (7): decodeVersionCursor(), encodeVersionCursor(), NotesService, Injectable, buildFolderSubrouter(), buildNoteSubrouter(), createNote()
 
 ### Community 13 - "shared-validators/src/index.ts"
 Cohesion: 0.02
-Nodes (168): ColorField(), AI_CONTINUE_MAX_CHARS, AI_DEFAULT_DAILY_TOKEN_QUOTA, AI_DEFAULT_RATE_LIMIT_PER_MINUTE, AI_GRAMMAR_MESSAGE_MAX_CHARS, AI_GRAMMAR_SEGMENT_ID_MAX_CHARS, AI_GRAMMAR_SEGMENT_MAX, AI_GRAMMAR_SEGMENT_TEXT_MAX_CHARS (+160 more)
+Nodes (181): ColorField(), AI_CONTINUE_MAX_CHARS, AI_DEFAULT_DAILY_TOKEN_QUOTA, AI_DEFAULT_RATE_LIMIT_PER_MINUTE, AI_GRAMMAR_MESSAGE_MAX_CHARS, AI_GRAMMAR_SEGMENT_ID_MAX_CHARS, AI_GRAMMAR_SEGMENT_MAX, AI_GRAMMAR_SEGMENT_TEXT_MAX_CHARS (+173 more)
 
 ### Community 14 - "export-generation.service.ts"
 Cohesion: 0.14
 Nodes (17): renderDocx(), bodyXml(), OPTIONS, partsOf(), source(), SUBJECT, ExportGenerationService, OPTIONS (+9 more)
 
-### Community 15 - "CustomImage.ts"
-Cohesion: 0.04
-Nodes (56): AttachmentDirectory, created, stubReducedMotion(), applyImageLayout(), CAPTION_SWALLOWED_EVENTS, Commands, createHandle(), createImageDom() (+48 more)
+### Community 15 - "extensions/index.ts"
+Cohesion: 0.05
+Nodes (67): created, Options, stubReducedMotion(), AttachmentUploadRequest, applyImageLayout(), CAPTION_SWALLOWED_EVENTS, Commands, createHandle() (+59 more)
 
 ### Community 16 - "page-geometry.ts"
 Cohesion: 0.07
-Nodes (52): canStepZoom(), clampMargins(), clampScale(), cssLength(), DEFAULT_PAGE_MARGINS, DEFAULT_ZOOM, exactPx(), isValidMargin() (+44 more)
+Nodes (53): PageSize, canStepZoom(), clampMargins(), clampScale(), cssLength(), DEFAULT_PAGE_MARGINS, DEFAULT_ZOOM, exactPx() (+45 more)
 
 ### Community 17 - "openapi.builder.ts"
 Cohesion: 0.07
 Nodes (48): target, applyGlobalPrefix(), assertDeclaredSchemas(), buildOpenApiDocument(), buildSchemaCatalog(), collectControllers(), collectRefs(), componentName() (+40 more)
 
 ### Community 18 - "editor-harness.tsx"
-Cohesion: 0.04
-Nodes (39): aiRequests, fakeEditor(), PanelOptions, renderPanel(), streamState, attachmentDocument(), attachmentNode(), requests (+31 more)
+Cohesion: 0.05
+Nodes (33): attachmentDocument(), attachmentNode(), requests, collaborativeEditor(), EMPTY_DOCUMENT, NESTED_TASKS, typedKeys(), typeInEmptyNote() (+25 more)
 
 ### Community 19 - "docx.ts"
 Cohesion: 0.13
-Nodes (37): alignmentOf(), ALIGNMENTS, attachmentBlocks(), attrsOf(), Block, blocksFor(), blocksForAll(), cellSpan() (+29 more)
+Nodes (36): alignmentOf(), ALIGNMENTS, attachmentBlocks(), attrsOf(), Block, blocksFor(), blocksForAll(), cellSpan() (+28 more)
 
 ### Community 20 - ".run"
-Cohesion: 0.18
-Nodes (7): additionalAuthenticatedData(), DELIVERY_ERROR_CODES, hostOf(), SUBSCRIBABLE_EVENTS, Injectable, webhookGuardOptions(), WebhooksService
+Cohesion: 0.12
+Nodes (7): AuditLogsService, Injectable, NoteSharesService, Injectable, hostOf(), Injectable, WebhooksService
 
 ### Community 21 - "ExportService"
-Cohesion: 0.16
-Nodes (7): exportDownloadFilename(), exportObjectKey(), ADR-0005, RFC-5987, ExportQueryRunner, ExportService, Injectable
+Cohesion: 0.21
+Nodes (3): ExportQueryRunner, ExportService, Injectable
 
 ### Community 22 - "presence-client.ts"
 Cohesion: 0.15
-Nodes (28): asInteger(), asRecord(), asString(), clampColorIndex(), EVENT, isForNote(), NotePresenceOptions, parseViewer() (+20 more)
+Nodes (27): asInteger(), asRecord(), asString(), clampColorIndex(), EVENT, isForNote(), NotePresenceOptions, parseViewer() (+19 more)
 
-### Community 23 - "attachments.controller.ts"
-Cohesion: 0.04
-Nodes (56): applyContentHeaders(), attachmentAuthorization(), AttachmentsController, contentDisposition(), INLINE_SERVABLE_MIME_TYPES, invalidRequest(), matchesEtag(), NoteAttachmentsController (+48 more)
+### Community 23 - "attachments.controller.test.ts"
+Cohesion: 0.05
+Nodes (39): applyContentHeaders(), attachmentAuthorization(), AttachmentsController, INLINE_SERVABLE_MIME_TYPES, invalidRequest(), NoteAttachmentsController, noteAuthorization(), principalOf() (+31 more)
 
 ### Community 24 - "health.module.ts"
-Cohesion: 0.04
-Nodes (52): RateLimitExempt(), MINIO_CONFIG, MinioConfig, REDIS_CONFIG, RedisConfig, SMTP_CONFIG, SmtpConfig, DatabaseReadinessIndicator (+44 more)
+Cohesion: 0.06
+Nodes (28): RateLimitExempt(), REDIS_CONFIG, SmtpConfig, DatabaseReadinessIndicator, Injectable, HealthController, LivenessResponse, Controller (+20 more)
 
 ### Community 25 - "auth.module.ts"
-Cohesion: 0.07
-Nodes (59): AppModule, Module, AttachmentsModule, Module, AuditModule, Module, AuthModule, Module (+51 more)
+Cohesion: 0.06
+Nodes (67): AiModule, Module, ApiKeysModule, Module, AppModule, Module, AttachmentsModule, Module (+59 more)
 
-### Community 26 - "webhooks.integration.test.ts"
-Cohesion: 0.05
-Nodes (35): WEBHOOK_DELIVER_SOURCE_QUEUE_NAME, dialect, FakeTx, InsertedRow, OCCURRED_AT, ADR-0006, Injectable, webhookDeliverIdempotencyKey() (+27 more)
+### Community 26 - "role-denial.spec.ts"
+Cohesion: 0.10
+Nodes (23): account, CELL_ATTRS, FIGURE_PNG, Account, API_URL, APP_URL, createWorkspace(), expectOk() (+15 more)
 
 ### Community 27 - "markdown.ts"
 Cohesion: 0.21
 Nodes (28): applyMark(), cellText(), childNodes(), cleanedText(), codeBlockText(), collapseCell(), escapeHref(), escapeLineStart() (+20 more)
 
 ### Community 28 - "auth/requests.ts"
-Cohesion: 0.07
-Nodes (51): capabilities, refresh, replace, AdvancedSignInMethods(), AdvancedSignInMethodsProps, refresh, replace, ReauthenticationDialog() (+43 more)
+Cohesion: 0.04
+Nodes (94): ForgotPasswordPage(), LoginPage(), MagicLinkResultPage(), RegisterPage(), ResetPasswordPage(), TwoFactorPage(), VerifyEmailPage(), DashboardLayout() (+86 more)
 
-### Community 29 - "OutboxRuntimeRow"
-Cohesion: 0.28
-Nodes (5): QueueFailureCode, QueueWorkerInvocation, OutboxRuntimeRow, QueueWorkerProcessorService, Injectable
+### Community 29 - "queue-worker-processor.service.ts"
+Cohesion: 0.11
+Nodes (15): isRegisteredOutboxRoute(), QueueFailureCode, QueueRuntimeError, QueueWorkerInvocation, parseRows(), QueueOutboxRepository, Injectable, DeadLetterRecord (+7 more)
 
-### Community 30 - "attachment-admission.ts"
-Cohesion: 0.05
-Nodes (47): AdmissionRejection, AdmissionResult, AdmittedFileUpload, AdmittedUpload, admitUpload(), ATTACHMENT_SIGNATURE_HEAD_BYTES, PDF, PNG (+39 more)
+### Community 30 - "file-signature.ts"
+Cohesion: 0.08
+Nodes (28): EXTENSION_BY_TYPE, GZIP_SIGNATURE, hasOoxmlMarker(), isTarArchive(), isZipContainer(), OOXML_MARKER, PDF_SIGNATURE, RAR4_SIGNATURE (+20 more)
 
 ### Community 31 - "RealtimeGateway"
-Cohesion: 0.16
-Nodes (7): RealtimeRoomSelector, presenceIn(), RealtimeGateway, RealtimeSocket, Injectable, WebSocketGateway, WebSocketServer
+Cohesion: 0.17
+Nodes (6): RealtimeRoomSelector, RealtimeGateway, RealtimeSocket, Injectable, WebSocketGateway, WebSocketServer
 
 ### Community 32 - "providers/index.ts"
 Cohesion: 0.08
 Nodes (29): AiChatEvent, AiChatMessage, AiChatProvider, AiChatProviderError, AiChatRequest, ADR-0008, AiChatProviderRegistry, Injectable (+21 more)
 
 ### Community 33 - "shared-types/src/index.ts"
-Cohesion: 0.07
-Nodes (54): AI_FAILURE_CODES, AI_PROVIDER_ERROR_CODES, AI_PROVIDER_NAMES, AI_STREAM_ERROR_CODES, AI_SUMMARY_LENGTHS, AI_TONES, AiFailureCode, AiProviderErrorCode (+46 more)
+Cohesion: 0.05
+Nodes (73): AI_FAILURE_CODES, AI_PROVIDER_ERROR_CODES, AI_PROVIDER_NAMES, AI_STREAM_ERROR_CODES, AI_SUMMARY_LENGTHS, AI_TONES, AiConfigView, AiFailureCode (+65 more)
 
 ### Community 34 - "workspace.schema.ts"
 Cohesion: 0.04
@@ -692,139 +702,139 @@ Nodes (55): AcceptWorkspaceInvitationInput, acceptWorkspaceInvitationSchema, Cha
 
 ### Community 35 - "realtime.gateway.ts"
 Cohesion: 0.07
-Nodes (37): toWebHeadersFromRaw(), decodeAwarenessClientIds(), awarenessUpdate(), varUint(), PRESENCE_COLOR_COUNT, presenceColorIndex(), FIXTURES, binary() (+29 more)
+Nodes (38): toWebHeadersFromRaw(), websocketConnections, websocketConnectionsTotal, websocketRooms, PRESENCE_COLOR_COUNT, presenceColorIndex(), FIXTURES, binary() (+30 more)
 
-### Community 36 - "main.ts"
-Cohesion: 0.04
-Nodes (68): BETTER_AUTH_NODE_HANDLER, authorizationDenialToHttpException(), authenticatedProcedure, commentSelectorSchema, CommentsTrpcRouter, CommentSubrouter, noteSelectorSchema, ADR-0002 (+60 more)
+### Community 36 - "workspaces.trpc.ts"
+Cohesion: 0.05
+Nodes (67): authenticatedProcedure, commentSelectorSchema, CommentSubrouter, noteSelectorSchema, ADR-0002, authenticatedProcedure, FolderSubrouter, noteSelectorSchema (+59 more)
 
 ### Community 37 - "seed.ts"
-Cohesion: 0.04
-Nodes (60): auditLogs, comments, folders, noteVersions, noteTags, tags, taskStatuses, taskTags (+52 more)
+Cohesion: 0.03
+Nodes (90): comments, noteVersions, notes, projects, noteTags, tags, taskPriorityEnum, taskRecurrenceEnum (+82 more)
 
 ### Community 38 - "rate-limit.guard.test.ts"
 Cohesion: 0.05
 Nodes (40): AuthRateLimitMiddleware, CapturingStore, DenyingStore, FakeResponse, Inject, Injectable, toWebHeaders(), Bucket (+32 more)
 
 ### Community 39 - "TasksService"
-Cohesion: 0.11
-Nodes (4): TasksService, Injectable, buildTaskSubrouter(), withTaskData()
+Cohesion: 0.12
+Nodes (3): TasksService, Injectable, buildTaskSubrouter()
 
 ### Community 40 - "toolbar-commands.ts"
 Cohesion: 0.04
-Nodes (85): areDocumentsEquivalent(), stableStringify(), stableValue(), ALLOWED_COLORS, isAllowedEditorColor(), NOTE_HIGHLIGHT_COLORS, NOTE_TEXT_COLORS, accessibleNameFor() (+77 more)
+Nodes (86): areDocumentsEquivalent(), stableStringify(), stableValue(), ALLOWED_COLORS, isAllowedEditorColor(), NOTE_HIGHLIGHT_COLORS, NOTE_TEXT_COLORS, accessibleNameFor() (+78 more)
 
-### Community 41 - ".transaction"
-Cohesion: 0.16
-Nodes (5): AuthEmailQueueHandler, Injectable, MembershipsService, normalizeEmail(), Injectable
+### Community 41 - "DatabaseTransaction"
+Cohesion: 0.09
+Nodes (20): DatabaseTransaction, FakeTx, MembershipsService, normalizeEmail(), Injectable, whereWorkspace(), scopedDatabase(), seededAlphaRow() (+12 more)
 
 ### Community 42 - "search.service.ts"
-Cohesion: 0.04
-Nodes (56): AuthoritativeRankingFact, finite(), HybridRankedCandidate, HybridRankingService, LEXICAL_WEIGHT, LexicalRankingCandidate, normalizeRelativeScores(), SEMANTIC_WEIGHT (+48 more)
+Cohesion: 0.06
+Nodes (36): bucket(), HYBRID_CANDIDATE_MULTIPLIER, HYBRID_MAX_CANDIDATES, HYBRID_SEARCH_CLOCK, HybridSearchClock, HybridSearchService, candidate(), fact() (+28 more)
 
 ### Community 43 - "autosave-machine.ts"
 Cohesion: 0.07
-Nodes (45): SaveStatusIndicator(), SaveStatusIndicatorProps, SEVERITY_CLASS, mocks, mount(), clearTimer(), NoteAutosaveHandle, TimerRef (+37 more)
+Nodes (44): SaveStatusIndicator(), SaveStatusIndicatorProps, SEVERITY_CLASS, mocks, mount(), clearTimer(), NoteAutosaveHandle, TimerRef (+36 more)
 
 ### Community 44 - "comment.schema.ts"
 Cohesion: 0.08
-Nodes (28): COMMENT_ANCHOR_POSITION_MAX, COMMENT_ANCHOR_QUOTE_MAX_LENGTH, COMMENT_ANCHOR_RELATIVE_MAX_LENGTH, COMMENT_ANCHOR_SCHEMA_VERSION, COMMENT_ANCHOR_SCHEME_ABSOLUTE, COMMENT_ANCHOR_SCHEME_YJS, COMMENT_CONTENT_MAX_LENGTH, CommentAnchorInput (+20 more)
+Nodes (29): COMMENT_ANCHOR_POSITION_MAX, COMMENT_ANCHOR_QUOTE_MAX_LENGTH, COMMENT_ANCHOR_RELATIVE_MAX_LENGTH, COMMENT_ANCHOR_SCHEMA_VERSION, COMMENT_ANCHOR_SCHEME_ABSOLUTE, COMMENT_ANCHOR_SCHEME_YJS, COMMENT_CONTENT_MAX_LENGTH, CommentAnchorInput (+21 more)
 
 ### Community 45 - "export-formats.spec.ts"
 Cohesion: 0.13
 Nodes (19): Account, apiGet(), apiPatch(), apiPost(), ATTACHMENT_BYTES, downloadBytes(), expectOk(), ExportManifest (+11 more)
 
 ### Community 46 - "createTenantContext"
-Cohesion: 0.03
-Nodes (74): Awaitable, createdAt, createInput, dialect, HarnessOptions, listInput, mockEntry(), principal (+66 more)
+Cohesion: 0.02
+Nodes (109): Awaitable, createdAt, createInput, dialect, HarnessOptions, listInput, mockEntry(), principal (+101 more)
 
 ### Community 47 - "ai/index.ts"
 Cohesion: 0.09
-Nodes (38): AI_AUDIT_ACTIONS, AI_AUDIT_ENTITY_TYPE, AI_CREDENTIAL_AAD_PREFIX, AI_LIMITER_PROVIDER, AI_MODEL_PRICES, AI_SETTINGS_DEFAULTS, AI_WORKSPACE_RATE_LIMIT_KEY_PREFIX, AI_WORKSPACE_RATE_LIMIT_WINDOW_MS (+30 more)
+Nodes (37): AI_AUDIT_ACTIONS, AI_AUDIT_ENTITY_TYPE, AI_CREDENTIAL_AAD_PREFIX, AI_LIMITER_PROVIDER, AI_MODEL_PRICES, AI_SETTINGS_DEFAULTS, AI_WORKSPACE_RATE_LIMIT_KEY_PREFIX, AI_WORKSPACE_RATE_LIMIT_WINDOW_MS (+29 more)
 
-### Community 48 - "export.integration.test.ts"
-Cohesion: 0.04
-Nodes (53): EXPORT_GENERATE_IDEMPOTENCY_PREFIX, exportGenerateIdempotencyKey(), ExportGeneratePayload, ExportJobProducer, ScheduleExportGenerationInput, ADR-0006, Injectable, CANCELLABLE_STATUSES (+45 more)
+### Community 48 - "activeWorkspaceId"
+Cohesion: 0.17
+Nodes (3): NotificationService, Injectable, activeWorkspaceId()
 
 ### Community 49 - "webhooks/requests.ts"
 Cohesion: 0.09
 Nodes (41): create, deliveries, delivery, list, remove, retry, update, verify (+33 more)
 
 ### Community 50 - "GlobalSearchDialog.tsx"
-Cohesion: 0.05
-Nodes (58): browserStorage(), formatDate(), GlobalSearchDialog(), HighlightedText(), Recents(), SearchRequestError, statusMessage(), mocks (+50 more)
+Cohesion: 0.06
+Nodes (32): job(), mocks, open(), view(), browserStorage(), formatDate(), GlobalSearchDialog(), Recents() (+24 more)
 
 ### Community 51 - "TiptapEditor.tsx"
-Cohesion: 0.07
-Nodes (57): isAllowedDocumentLink(), NoteDocumentHtmlResult, noteDocumentToSafeHtml(), prepareNoteDocumentForEditor(), createNoteLowlight(), CommentAnchorTarget, makeEditor(), AttachmentFilePickerHandler (+49 more)
+Cohesion: 0.06
+Nodes (57): AttachmentDirectory, isAllowedDocumentLink(), NoteDocumentHtmlResult, noteDocumentToSafeHtml(), prepareNoteDocumentForEditor(), createNoteLowlight(), CommentAnchorTarget, makeEditor() (+49 more)
 
 ### Community 52 - "note-index.repository.ts"
-Cohesion: 0.04
-Nodes (61): main(), parseSearchReindexArguments(), renderSearchReindexResult(), SearchReindexCliError, SearchReindexSelection, NOTE_INDEX_NAME, NOTE_INDEX_PRIMARY_KEY, NOTE_INDEX_SETTINGS (+53 more)
-
-### Community 53 - "docs/README.md"
 Cohesion: 0.06
-Nodes (27): Application, Database migration policy, Generate and review, Immutability, Migration 0007 note-version preflight, Required tests, Rollback, ADR 0003: Make Better Auth the authentication and session authority (+19 more)
+Nodes (37): NOTE_INDEX_NAME, NOTE_INDEX_PRIMARY_KEY, NOTE_INDEX_SETTINGS, NOTE_INDEX_VERSION, noteIndexDocumentSchema, noteIndexUid(), appendTimestampRange(), buildSearchFilterExpression() (+29 more)
 
-### Community 54 - "maintenance/index.ts"
+### Community 53 - "threat-model.md"
+Cohesion: 0.08
+Nodes (20): ADR 0003: Make Better Auth the authentication and session authority, Alternatives considered, Consequences, Context, Decision, Migration and rollback impact, ADR 0006: Use durable job intent with idempotent BullMQ workers, Alternatives considered (+12 more)
+
+### Community 54 - "storage-maintenance.service.ts"
 Cohesion: 0.11
-Nodes (31): AttachmentObjectVariant, AbandonedUploadCandidate, AbandonedUploadDecision, AttachmentLifecycleStatus, decideAbandonedUpload(), decideExportSweep(), decideOrphanObject(), DeletedNoteCandidate (+23 more)
+Nodes (36): AttachmentObjectVariant, STORAGE_MAINTENANCE_AUDIT_ACTION, STORAGE_MAINTENANCE_AUDIT_ENTITY_TYPE, STORAGE_MAINTENANCE_NOTES, AbandonedUploadCandidate, AbandonedUploadDecision, AttachmentLifecycleStatus, decideAbandonedUpload() (+28 more)
 
 ### Community 55 - ".userId"
-Cohesion: 0.07
-Nodes (34): request(), request(), request(), principal(), request(), setAuthPrincipal(), commentRow(), queuedJob (+26 more)
+Cohesion: 0.05
+Nodes (44): request(), request(), request(), principal(), request(), setAuthPrincipal(), commentRow(), setRequestId() (+36 more)
 
 ### Community 56 - "zip.test.ts"
-Cohesion: 0.10
-Nodes (26): documentToMarkdown(), DEFAULT_ZIP_BOUNDS, entryName(), headingFor(), jsonBytes(), renderZipArchive(), attachment(), bundle() (+18 more)
+Cohesion: 0.11
+Nodes (24): DEFAULT_ZIP_BOUNDS, headingFor(), jsonBytes(), renderZipArchive(), attachment(), bundle(), comment(), Manifest (+16 more)
 
 ### Community 57 - "dev-tooling.mjs"
 Cohesion: 0.11
 Nodes (40): assertLocalDockerEndpoint(), assertResetEnvironment(), assertResetTarget(), checkEnvironment(), composeArguments(), composeFile, E2E_ONE_SHOT_SERVICES, E2E_PERSISTENT_SERVICES (+32 more)
 
-### Community 58 - "NoteEditorSurface.tsx"
-Cohesion: 0.05
-Nodes (55): AttachmentEntry, AttachmentResolution, createAttachmentDirectory(), documentHasAttachment(), documentHasImage(), documentHasNodeType(), attachmentDetail(), AttachmentDialogs() (+47 more)
+### Community 58 - "use-image-uploads.test.tsx"
+Cohesion: 0.08
+Nodes (31): AttachmentEntry, AttachmentResolution, createAttachmentDirectory(), documentHasAttachment(), documentHasImage(), documentHasNodeType(), attachmentDetail(), AttachmentDialogs() (+23 more)
 
 ### Community 59 - "image-upload-placeholder.ts"
 Cohesion: 0.15
-Nodes (22): applyAction(), button(), createDecoration(), createImageInsertionController(), createImageUploadPlaceholderPlugin(), createPlaceholderDom(), DOM_CACHE, findDecoration() (+14 more)
+Nodes (23): decoration(), applyAction(), button(), createDecoration(), createImageInsertionController(), createImageUploadPlaceholderPlugin(), createPlaceholderDom(), DOM_CACHE (+15 more)
 
-### Community 60 - "AttachmentsService"
-Cohesion: 0.21
-Nodes (3): AttachmentsService, SERVABLE_FILE_MIME_TYPES, Injectable
+### Community 60 - ".transaction"
+Cohesion: 0.13
+Nodes (9): AttachmentsService, SERVABLE_FILE_MIME_TYPES, Injectable, assertIdempotencyPayload(), createApiIdempotencyIdentity(), loadApiIdempotency(), lockApiIdempotency(), storeApiIdempotency() (+1 more)
 
-### Community 61 - "useImageUploads.ts"
+### Community 61 - "image-uploads.ts"
 Cohesion: 0.05
-Nodes (53): Options, AttachmentFilePickerRequest, AttachmentUploadRequest, ImageFilePickerRequest, ImageUploadRequest, ImageInsertionController, createObjectUrlRegistry(), attachmentNodeName() (+45 more)
+Nodes (45): ImageInsertionController, attachmentNodeName(), storedDimension(), useImageUploads(), ATTACHMENT_EXTENSIONS, ATTACHMENT_FILE_TYPES, attachmentFileExtension(), checkAttachmentFile() (+37 more)
 
-### Community 62 - "NoteComments.tsx"
-Cohesion: 0.08
-Nodes (21): Loading(), CommentAction, FAILURE_MESSAGE, failureMessage(), formatTimestamp(), isCommentFrameForNote(), NoteComments(), NoteCommentsProps (+13 more)
+### Community 62 - "ImageToolbar.tsx"
+Cohesion: 0.07
+Nodes (19): Loading(), IMAGE_EXTENSION_NAME, ImageAttributePatch, updateSelectedImage(), ALIGN_CAPTIONS, ALIGN_LABELS, IMAGE_TOOLBAR_LABEL, ImageToolbar() (+11 more)
 
 ### Community 64 - "dependencies"
 Cohesion: 0.05
-Nodes (37): dependencies, clsx, @dnd-kit/core, @dnd-kit/utilities, pdfjs-dist, @radix-ui/react-slot, tailwind-merge, @tiptap/extension-collaboration (+29 more)
+Nodes (39): dependencies, better-auth, @better-auth/passkey, clsx, highlight.js, lucide-react, @notted/shared-validators, @radix-ui/react-slot (+31 more)
 
-### Community 65 - "DatabaseTransaction"
-Cohesion: 0.03
-Nodes (119): ApiKeyRow, CreateApiKeyServiceInput, ListApiKeysServiceInput, RevokeApiKeyServiceInput, ScopedInput, ADR-0009, attachmentObjectExtension, AttachmentMutation (+111 more)
+### Community 65 - "tasks.service.ts"
+Cohesion: 0.10
+Nodes (33): addMonthsClamped(), advance(), advanceFixed(), assertCron(), invalidCron(), nextOccurrence(), next(), CreateTaskStatusServiceInput (+25 more)
 
-### Community 66 - "DomainsService"
-Cohesion: 0.19
-Nodes (7): DomainResolveController, Controller, Get, Query, DomainReader, DomainsService, Injectable
+### Community 66 - "recordAudit"
+Cohesion: 0.20
+Nodes (7): recordAudit(), DomainResolveController, Controller, Get, Query, DomainsService, Injectable
 
 ### Community 67 - "PageContainer.tsx"
 Cohesion: 0.05
-Nodes (43): breakCount(), nodeTypes(), EDITOR_CASES, expectMark(), GLOBAL_CASE_IDS, ShortcutCase, Commands, PAGE_BREAK_CLASS (+35 more)
+Nodes (48): breakCount(), nodeTypes(), Commands, PAGE_BREAK_CLASS, PAGE_BREAK_LABEL, PAGE_BREAK_NODE_NAME, @tiptap/core, FOCUS_TOOLBAR_GROUPS (+40 more)
 
 ### Community 68 - "scripts"
 Cohesion: 0.05
-Nodes (38): scripts, audit:prod, build, build:packages, clean, clean:deps, db:check, db:generate (+30 more)
+Nodes (39): scripts, audit:prod, build, build:packages, clean, clean:deps, db:check, db:generate (+31 more)
 
 ### Community 69 - "note.ts"
-Cohesion: 0.08
-Nodes (36): FolderId, NoteId, Progress, FolderCreateResult, FolderDeleteResult, FolderPage, FolderSummary, FolderUpdateResult (+28 more)
+Cohesion: 0.07
+Nodes (37): FolderId, NoteId, Progress, FolderCreateResult, FolderDeleteResult, FolderPage, FolderSummary, FolderUpdateResult (+29 more)
 
 ### Community 70 - "search.schema.ts"
 Cohesion: 0.12
@@ -834,21 +844,21 @@ Nodes (21): RecentSearchesPayloadOutput, recentSearchesPayloadSchema, RecentSear
 Cohesion: 0.06
 Nodes (30): ClipboardEventStub, compilerOptions, baseUrl, isolatedModules, jsx, lib, module, moduleResolution (+22 more)
 
-### Community 72 - "redirects.ts"
-Cohesion: 0.08
-Nodes (32): ForgotPasswordPage(), LoginPage(), MagicLinkResultPage(), RegisterPage(), ResetPasswordPage(), TwoFactorPage(), VerifyEmailPage(), DashboardLayout() (+24 more)
-
-### Community 73 - "request-json.ts"
+### Community 72 - "perf-bench.mjs"
 Cohesion: 0.09
-Nodes (25): claim, domain, load, remove, verify, CustomDomainSettings(), ERROR_REMEDIES, STATUS_LABELS (+17 more)
+Nodes (47): actionLink(), BenchHttpError, call(), clamp(), connect(), corpusPageSettled(), corpusProbe(), createNote() (+39 more)
+
+### Community 73 - "apiOrigin"
+Cohesion: 0.06
+Nodes (50): claim, domain, load, remove, verify, CustomDomainSettings(), ERROR_REMEDIES, STATUS_LABELS (+42 more)
 
 ### Community 74 - "devDependencies"
 Cohesion: 0.06
-Nodes (33): devDependencies, jsdom, @next/env, @playwright/test, postcss, tailwindcss, @tailwindcss/postcss, @testing-library/jest-dom (+25 more)
+Nodes (35): devDependencies, axe-core, jsdom, @next/env, @playwright/test, postcss, tailwindcss, @tailwindcss/postcss (+27 more)
 
-### Community 75 - "tasks/index.ts"
-Cohesion: 0.15
-Nodes (17): addMonthsClamped(), advance(), advanceFixed(), assertCron(), invalidCron(), nextOccurrence(), next(), TASK_AUDIT_ENTITY_TYPE (+9 more)
+### Community 75 - "server-shell.ts"
+Cohesion: 0.17
+Nodes (8): WorkspaceTasksPage(), SelectedWorkspaceRedirect(), cookieHeader(), getServerShell(), requestBootstrap(), ServerShellResult, bootstrap, { cookieStore }
 
 ### Community 76 - "image-processing.service.test.ts"
 Cohesion: 0.14
@@ -856,51 +866,51 @@ Nodes (27): DEFAULTS, allRasterFixtures(), alphaPngFixture(), animatedGifFixture
 
 ### Community 77 - "workspace.ts"
 Cohesion: 0.09
-Nodes (23): MEMBERSHIP_API_PATHS, MembershipListQuery, StorageMaintenanceReport, StorageMaintenanceSweepName, StorageMaintenanceSweepReport, WORKSPACE_API_PATHS, WorkspaceCreateResult, WorkspaceInvitationAcceptResult (+15 more)
+Nodes (22): MEMBERSHIP_API_PATHS, MembershipListQuery, StorageMaintenanceSweepName, StorageMaintenanceSweepReport, WORKSPACE_API_PATHS, WorkspaceCreateResult, WorkspaceInvitationAcceptResult, WorkspaceInvitationPage (+14 more)
 
-### Community 78 - "image-transfer.ts"
-Cohesion: 0.10
-Nodes (17): createImageTransferPlugin(), dataTransferOf(), setDropActive(), DataTransferItemLike, DataTransferLike, hasImageFiles(), hasMeaningfulHtml(), IMAGE_MIME_TYPES (+9 more)
+### Community 78 - "AiSettings.tsx"
+Cohesion: 0.06
+Nodes (31): config, emptyUsage, loadConfig, loadUsage, save, usage, AiFieldName, AiSettings() (+23 more)
 
 ### Community 79 - "AiService"
-Cohesion: 0.12
-Nodes (10): parseAiSettings(), additionalAuthenticatedData(), AiCredentialService, KEY_ONE, KEY_TWO, Inject, Injectable, AiService (+2 more)
+Cohesion: 0.13
+Nodes (9): parseAiSettings(), additionalAuthenticatedData(), AiCredentialService, KEY_ONE, KEY_TWO, Inject, Injectable, AiService (+1 more)
 
 ### Community 80 - "email-renderer.service.ts"
-Cohesion: 0.06
-Nodes (62): brandingSettingsSchema, DEFAULT_ACCENT_COLOR, EmailBranding, PLATFORM_BRANDING_NAME, resolveBranding(), safeAccentColor(), safeLogoUrl(), appConfig (+54 more)
+Cohesion: 0.05
+Nodes (65): AuthEmailQueueHandler, Injectable, brandingSettingsSchema, BrandingWorkspaceRow, DEFAULT_ACCENT_COLOR, EmailBranding, PLATFORM_BRANDING_NAME, resolveBranding() (+57 more)
 
 ### Community 81 - "dependencies"
 Cohesion: 0.05
-Nodes (37): dependencies, better-auth, @bull-board/api, @bull-board/express, bullmq, busboy, docx, ioredis (+29 more)
+Nodes (37): dependencies, @bull-board/api, @bull-board/express, bullmq, compression, cron-parser, heic-convert, meilisearch (+29 more)
 
 ### Community 82 - "server-workspaces.ts"
-Cohesion: 0.08
-Nodes (29): requestedPage(), items, WorkspacesPage(), WorkspacesPageProps, formatDate(), { notFound }, renderPage(), WorkspaceOverviewPage() (+21 more)
+Cohesion: 0.13
+Nodes (17): requestedPage(), items, WorkspacesPage(), WorkspacesPageProps, buildListQuery(), cookieHeader(), getServerWorkspaceList(), getServerWorkspaceStorageUsage() (+9 more)
 
 ### Community 83 - "RequireAuthorization"
-Cohesion: 0.06
-Nodes (47): RequireAuthorization(), domainAuthorization(), DomainsController, Body, Controller, Delete, Get, HttpCode (+39 more)
+Cohesion: 0.08
+Nodes (40): RequireAuthorization(), commentAuthorization(), CommentsController, noteAuthorization(), routeUuid(), Body, Controller, Delete (+32 more)
 
 ### Community 84 - "RedisService"
-Cohesion: 0.10
-Nodes (7): identifierHash(), BetterAuthRedisStorage, secondsToMilliseconds(), Injectable, RedisService, Inject, Injectable
+Cohesion: 0.06
+Nodes (17): AUTH_LOCKOUT_MESSAGE, AuthLockoutCode, AuthLockoutError, AuthLockoutService, identifierHash(), FakeLogger, FakeRedis, Overrides (+9 more)
 
-### Community 85 - "image-signature.ts"
-Cohesion: 0.11
-Nodes (20): AVIF_BRANDS, brandAt(), HEIF_BRANDS, IMAGE_SIGNATURE_HEAD_BYTES, JPEG_SIGNATURE, PNG_SIGNATURE, SNIFFED_IMAGE_TYPES, sniffImageMediaType() (+12 more)
+### Community 85 - "image-signature.test.ts"
+Cohesion: 0.17
+Nodes (8): avif, gif87, gif89, heic, heifWithAvifCompatible, jpeg, png, webp
 
 ### Community 86 - "meeting-extraction.service.ts"
 Cohesion: 0.10
-Nodes (20): buildJsonRepairPrompt(), AiStreamService, Injectable, GrammarService, ADR-0007, Injectable, Attempt, describeIssues() (+12 more)
+Nodes (19): AiStreamService, Injectable, GrammarService, ADR-0007, Injectable, Attempt, describeIssues(), parseJsonWithRepair() (+11 more)
 
 ### Community 87 - "devDependencies"
 Cohesion: 0.06
 Nodes (35): devDependencies, drizzle-kit, @nestjs/cli, socket.io-client, supertest, tsx, @types/busboy, @types/compression (+27 more)
 
 ### Community 88 - "meilisearch.service.ts"
-Cohesion: 0.07
-Nodes (28): MEILISEARCH_CONFIG, MeilisearchConfig, ImportedMeilisearchModule, MeilisearchModule, Module, hasProviderCode(), MeilisearchService, parseSearchHit() (+20 more)
+Cohesion: 0.08
+Nodes (21): MEILISEARCH_CONFIG, MeilisearchConfig, ImportedMeilisearchModule, hasProviderCode(), MeilisearchService, parseSearchHit(), parseSearchResponse(), safeMeilisearchError() (+13 more)
 
 ### Community 89 - "pdf-preview.ts"
 Cohesion: 0.09
@@ -915,16 +925,16 @@ Cohesion: 0.06
 Nodes (30): dependencies, zod, description, devDependencies, typescript, vitest, exports, ./print.css (+22 more)
 
 ### Community 92 - "auth.schema.ts"
-Cohesion: 0.09
-Nodes (26): authPasswordSchema, CreateUserProfileInput, emailSchema, OAuthProviderIdInput, oauthProviderIdSchema, optionalCallbackUrlSchema, passkeyNameSchema, profileFields (+18 more)
+Cohesion: 0.08
+Nodes (29): authPasswordSchema, CreateUserProfileInput, createUserProfileSchema, emailSchema, OAuthProviderIdInput, oauthProviderIdSchema, optionalCallbackUrlSchema, passkeyNameSchema (+21 more)
 
 ### Community 94 - "DatabaseService"
 Cohesion: 0.02
-Nodes (138): Inject, Inject, Inject, Inject, AuditLogFilterInput, AuditLogRow, ExportAuditLogsServiceInput, ListAuditLogsServiceInput (+130 more)
+Nodes (119): Inject, Inject, Inject, Inject, Inject, AuthEmailJobContext, appConfig, Inject (+111 more)
 
 ### Community 95 - "Part NN — Part Title"
-Cohesion: 0.07
-Nodes (25): Completed Parts, Cross-cutting records, Index, Naming and Scope, Required Workflow, Status Values, API, Configuration, and Operational Changes, Database and Data Changes (+17 more)
+Cohesion: 0.13
+Nodes (13): API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work, Objective (+5 more)
 
 ### Community 96 - "project.schema.ts"
 Cohesion: 0.10
@@ -940,11 +950,11 @@ Nodes (6): anchors, comment(), fakeEditor(), requests, thread(), view()
 
 ### Community 99 - "ai-prompts.ts"
 Cohesion: 0.12
-Nodes (29): AI_PROMPT_FEATURES, AI_PROMPT_GUARDRAILS, AiPromptFeature, buildContinuePrompt(), buildGrammarCheckPrompt(), buildMeetingExtractionPrompt(), buildRewritePrompt(), buildSummarizePrompt() (+21 more)
+Nodes (29): AI_PROMPT_FEATURES, AI_PROMPT_GUARDRAILS, buildContinuePrompt(), buildGrammarCheckPrompt(), buildJsonRepairPrompt(), buildMeetingExtractionPrompt(), buildRewritePrompt(), buildSummarizePrompt() (+21 more)
 
-### Community 100 - "whereWorkspace"
-Cohesion: 0.04
-Nodes (89): harness(), noteFacts(), NOW, principal, TransportAuthorizationInput, ApiKeyAuthorizationActor, ApiKeyScope, AUTHORIZATION_ACTIONS (+81 more)
+### Community 100 - "authorization-entry.service.ts"
+Cohesion: 0.03
+Nodes (107): AuthorizationAdaptersService, harness(), noteFacts(), NOW, principal, TransportAuthorizationInput, Injectable, actorFromPrincipal() (+99 more)
 
 ### Community 101 - "shared-types/package.json"
 Cohesion: 0.08
@@ -966,29 +976,29 @@ Nodes (24): For /graphify add and --watch, For /graphify query, For the commit h
 Cohesion: 0.08
 Nodes (24): compilerOptions, allowSyntheticDefaultImports, composite, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, lib, module (+16 more)
 
-### Community 106 - ".authorizeUser"
-Cohesion: 0.14
-Nodes (7): AuditLogsService, Injectable, AuthorizationAdaptersService, Injectable, actorFromPrincipal(), AuthorizedOperation, assertAllowed()
+### Community 106 - "webhooks.integration.test.ts"
+Cohesion: 0.06
+Nodes (28): allowAuditDelete(), AUDIT_METADATA_MAX_DEPTH, AUDIT_REDACTED, AUDIT_TRUNCATED, AuditEvent, AuditSessionRunner, AuditWriter, DENIED_KEYS (+20 more)
 
-### Community 107 - "StorageMaintenanceService"
-Cohesion: 0.21
-Nodes (4): attachmentObjectKeys(), SweepAccumulator, StorageMaintenanceService, Injectable
+### Community 107 - "attachments/index.ts"
+Cohesion: 0.11
+Nodes (33): AdmissionRejection, AdmissionResult, AdmittedFileUpload, AdmittedImageUpload, AdmittedUpload, admitUpload(), ATTACHMENT_SIGNATURE_HEAD_BYTES, PDF (+25 more)
 
 ### Community 108 - "AiController"
-Cohesion: 0.23
-Nodes (12): AiController, routeUuid(), Body, Controller, Get, Post, Put, Query (+4 more)
+Cohesion: 0.11
+Nodes (23): AiController, routeUuid(), Body, Controller, Get, Post, Put, Query (+15 more)
 
 ### Community 109 - "TagsController"
 Cohesion: 0.15
 Nodes (13): routeUuid(), tagAuthorization(), TagsController, Body, Controller, Delete, Get, HttpCode (+5 more)
 
-### Community 110 - "shell.ts"
-Cohesion: 0.14
-Nodes (14): ProjectMember, NotificationEmailPreference, NotificationKind, NotificationPage, NotificationReadResult, NotificationsMarkAllResult, NotificationSummary, NotificationTargetType (+6 more)
+### Community 110 - "UserId"
+Cohesion: 0.09
+Nodes (29): API_KEY_SECRET_PREFIX, ApiKeyCreateResult, ApiKeyListQuery, ApiKeyPage, ApiKeyRevokeResult, ApiKeyScope, ApiKeySortField, ApiKeySummary (+21 more)
 
-### Community 111 - "task.ts"
-Cohesion: 0.11
-Nodes (25): ProjectId, TaskId, TaskStatusId, ProjectDeleteResult, SearchResult, CustomTaskStatus, CustomTaskStatusList, TaskBulkResult (+17 more)
+### Community 111 - "common.ts"
+Cohesion: 0.08
+Nodes (37): JsonPrimitive, JsonValue, PaginationMeta, PaginationQuery, ProjectId, Sort, SortDirection, TagId (+29 more)
 
 ### Community 112 - "TasksController"
 Cohesion: 0.18
@@ -1010,9 +1020,9 @@ Nodes (21): A01 — Broken access control, A02 — Cryptographic failures, A03 �
 Cohesion: 0.18
 Nodes (11): ExportCancelResult, ExportFormat, ExportJob, ExportOptions, ExportPage, ExportSource, ExportStatus, SUPPORTED_EXPORT_FORMATS (+3 more)
 
-### Community 117 - "NoteBoard.tsx"
-Cohesion: 0.14
-Nodes (9): item(), NoteViewProps, buildNoteColumns(), NoteBoard(), NoteBoardColumn, noteColumnIdOf(), NoteList(), NoteMoveDestination (+1 more)
+### Community 117 - "config.module.ts"
+Cohesion: 0.07
+Nodes (29): AiConfigProvider, Injectable, AppConfigProvider, Injectable, AuthConfigProvider, Injectable, ExportConfigProvider, Injectable (+21 more)
 
 ### Community 118 - "compilerOptions"
 Cohesion: 0.09
@@ -1022,21 +1032,21 @@ Nodes (22): compilerOptions, emitDecoratorMetadata, experimentalDecorators, jsx,
 Cohesion: 0.11
 Nodes (12): Account, apiPost(), createTask(), dayKeyInZone(), NoteRow, register(), selectView(), signIn() (+4 more)
 
-### Community 120 - "Notted Coding Conventions"
-Cohesion: 0.05
-Nodes (33): Authority, Automatic Skill and Agent Routing, Part Completion Checklist, graphify, Notted Agent Instructions, opencode Support, Project-Wide Rules, Required Part Workflow (+25 more)
+### Community 120 - "README.md"
+Cohesion: 0.10
+Nodes (10): Part Completion Checklist, 1. Inventory and stop writers, 2. Back up the legacy volumes, 3. Choose recovery, do not merge blindly, 4. Verify and retain rollback, Legacy development volume recovery, API Standard, Browser support (+2 more)
 
-### Community 121 - "WorkspaceId"
-Cohesion: 0.09
-Nodes (23): AiConfigView, API_KEY_SECRET_PREFIX, ApiKeyCreateResult, ApiKeyListQuery, ApiKeyPage, ApiKeyRevokeResult, ApiKeyScope, ApiKeySortField (+15 more)
+### Community 121 - "Part 78 — Add observability and operational diagnostics"
+Cohesion: 0.07
+Nodes (28): 10. Job correlation — one line, 11. Endpoint, auth and configuration, 12–14. Compose, `ops/`, docs, 1. `prom-client` registry with two label guards, 2. HTTP metrics on the existing middleware, 3. `ReadinessService`, 4. Queue, 5. Collectors — the failure-isolation requirement (+20 more)
 
 ### Community 122 - "common.schema.ts"
 Cohesion: 0.04
-Nodes (55): AUDIT_LOG_EXPORT_MAX_ROWS, auditLogActionSchema, auditLogEntityTypeSchema, auditLogEntrySchema, AuditLogExportQueryInput, auditLogExportQuerySchema, auditLogFilterShape, AuditLogListQueryInput (+47 more)
+Nodes (63): AUDIT_LOG_EXPORT_MAX_ROWS, auditLogActionSchema, auditLogEntityTypeSchema, auditLogEntrySchema, AuditLogExportQueryInput, auditLogExportQuerySchema, auditLogFilterShape, AuditLogListQueryInput (+55 more)
 
-### Community 123 - "apiOrigin"
+### Community 123 - "DashboardShell.tsx"
 Cohesion: 0.06
-Nodes (51): WorkspaceSettingsPage(), noteNavigation, shell, tagNavigation, NotificationCenter(), alpha, beta, WorkspaceSwitcher() (+43 more)
+Nodes (45): LogoutButton(), Breadcrumb(), BreadcrumbItem, noteNavigation, shell, tagNavigation, breadcrumbsFor(), DashboardShell() (+37 more)
 
 ### Community 124 - "Part 48 — Add board, calendar, and progress views"
 Cohesion: 0.10
@@ -1050,17 +1060,17 @@ Nodes (21): scripts, build, db:check, db:generate, db:migrate, db:seed, db:studi
 Cohesion: 0.11
 Nodes (19): scripts, build, contracts:build, dev, env:validate, format, format:check, lint (+11 more)
 
-### Community 127 - "CommentsService"
-Cohesion: 0.21
-Nodes (5): CommentQueryRunner, CommentsService, isRecord(), Injectable, buildCommentSubrouter()
+### Community 127 - "comments.service.ts"
+Cohesion: 0.13
+Nodes (16): CommentQueryRunner, CommentRow, CommentScopedInput, CommentsService, CreateCommentServiceInput, DeleteCommentServiceInput, isRecord(), ListCommentsServiceInput (+8 more)
 
-### Community 128 - "public-environment.ts"
-Cohesion: 0.05
-Nodes (44): validateEnvironment(), SelectedWorkspaceRedirect(), initialsFromName(), subscribeNever(), WorkspaceAvatar(), ALLOWED_PROTOCOLS, DEVELOPMENT_DEFAULTS, parsePublicEnvironment() (+36 more)
+### Community 128 - "proxy.ts"
+Cohesion: 0.13
+Nodes (17): CustomHostDecision, CustomHostRouteInput, decideCustomHostRoute(), isPrimaryHost(), ResolvedCustomHost, decide(), resolved, WORKSPACE_SELECTION_COOKIE (+9 more)
 
-### Community 129 - "ApiKeys.tsx"
-Cohesion: 0.15
-Nodes (14): apiKey, create, list, revoke, ApiKeys(), formatDate(), SCOPES, apiKeySearch() (+6 more)
+### Community 129 - "NoteIndexRepository"
+Cohesion: 0.06
+Nodes (37): main(), parseSearchReindexArguments(), renderSearchReindexResult(), SearchReindexCliError, SearchReindexSelection, CommonModule, Global, Module (+29 more)
 
 ### Community 130 - "Part 43 — Add image manipulation UI"
 Cohesion: 0.11
@@ -1070,25 +1080,25 @@ Nodes (18): Accessibility Notes, API, Configuration, and Operational Changes, Ch
 Cohesion: 0.11
 Nodes (19): API, Configuration, and Operational Changes, Cleanup (`apps/api/src/maintenance/`), Configuration and tooling, Database and Data Changes, Derived usage accounting (`apps/api/src/storage/`), Files and Components, Frontend (`apps/web`), Handoff Notes (+11 more)
 
-### Community 132 - "AiConfig"
-Cohesion: 0.14
-Nodes (8): Inject, AiConfig, EmbeddingProviderError, EmbeddingResult, OpenAiCompatibleEmbeddingProvider, responseSchema, Inject, Injectable
+### Community 132 - "semantic-search.repository.ts"
+Cohesion: 0.08
+Nodes (21): EMBEDDING_DIMENSIONS, EMBEDDING_PROVIDER, EmbeddingAvailability, EmbeddingProvider, EmbeddingProviderError, EmbeddingResult, isUsableEmbeddingVector(), MIN_EMBEDDING_VECTOR_NORM (+13 more)
 
 ### Community 133 - "api-key.schema.ts"
 Cohesion: 0.13
 Nodes (19): bearerSecret(), API_KEY_PREFIX_LENGTH, API_KEY_SECRET_PATTERN, API_KEY_SECRET_PREFIX, apiKeyCreateResultSchema, ApiKeyListQueryInput, apiKeyListQuerySchema, apiKeyNameSchema (+11 more)
 
-### Community 134 - "audit-logs.controller.test.ts"
+### Community 134 - "audit-logs.controller.ts"
 Cohesion: 0.11
-Nodes (18): auditLogsToCsv(), DANGEROUS_LEADING_CHARS, escapeField(), field(), HEADER, metadataField(), rowToCsv(), AuditLogsController (+10 more)
+Nodes (19): contentDisposition(), auditLogsToCsv(), DANGEROUS_LEADING_CHARS, escapeField(), field(), HEADER, metadataField(), rowToCsv() (+11 more)
 
 ### Community 135 - "TaskStatusesController"
 Cohesion: 0.17
 Nodes (11): routeUuid(), TaskStatusesController, Body, Controller, Delete, Get, HttpCode, Patch (+3 more)
 
-### Community 136 - "extensions/index.ts"
-Cohesion: 0.06
-Nodes (69): node(), paint(), ATTACHMENT_KIND_LABELS, attachmentIconKind, CODE_EXTENSIONS, createAttachmentIcon(), ICON_PATHS, SPREADSHEET_EXTENSIONS (+61 more)
+### Community 136 - "CustomAttachment.ts"
+Cohesion: 0.05
+Nodes (55): node(), paint(), ATTACHMENT_KIND_LABELS, attachmentIconKind, CODE_EXTENSIONS, createAttachmentIcon(), ICON_PATHS, SPREADSHEET_EXTENSIONS (+47 more)
 
 ### Community 137 - "components.json"
 Cohesion: 0.11
@@ -1139,8 +1149,8 @@ Cohesion: 0.12
 Nodes (16): compilerOptions, composite, declaration, module, moduleResolution, noEmit, outDir, rootDir (+8 more)
 
 ### Community 149 - "attachment-storage-key.ts"
-Cohesion: 0.12
-Nodes (21): FULL, fullRecord(), imageVariant(), MEDIUM, ORIGINAL, PREVIEW, THUMBNAIL, assertUuid() (+13 more)
+Cohesion: 0.11
+Nodes (22): FULL, fullRecord(), imageVariant(), MEDIUM, ORIGINAL, PREVIEW, THUMBNAIL, assertUuid() (+14 more)
 
 ### Community 150 - "VersionHistory.tsx"
 Cohesion: 0.11
@@ -1150,9 +1160,9 @@ Nodes (23): currentDocument, historical, refresh, requestNoteVersion, requestNot
 Cohesion: 0.10
 Nodes (21): 10.1 Caches to know about before you debug anything, 10.2 Symptoms, 10. Troubleshooting, 11. Security notes, 1.1 The prerequisite, 1. What the feature is, 2.1 What happens with the flag off, 2. Enabling it (+13 more)
 
-### Community 152 - "tags-templates.spec.ts"
-Cohesion: 0.13
-Nodes (5): inviteAndJoin(), ListPage, NoteRow, register(), TagRow
+### Community 152 - "StorageMaintenanceService"
+Cohesion: 0.20
+Nodes (4): attachmentObjectKeys(), SweepAccumulator, StorageMaintenanceService, Injectable
 
 ### Community 153 - "Coverage remediation — making `pnpm test:ci` pass"
 Cohesion: 0.12
@@ -1170,16 +1180,16 @@ Nodes (16): API, Configuration, and Operational Changes, Backend, Database and D
 Cohesion: 0.16
 Nodes (15): AttachmentBlurPlaceholder, AttachmentDeleteResult, AttachmentDetail, AttachmentListResult, AttachmentMedia, AttachmentMediaType, AttachmentServableVariant, AttachmentStatus (+7 more)
 
-### Community 157 - "DashboardShell.tsx"
-Cohesion: 0.08
-Nodes (28): LogoutButton(), Breadcrumb(), BreadcrumbItem, breadcrumbsFor(), DashboardShell(), Sidebar(), TopBar(), NoteNavigationState (+20 more)
+### Community 157 - "NoteDetailView.tsx"
+Cohesion: 0.07
+Nodes (34): ConvertNoteTypeControl(), note, item(), NoteViewProps, buildNoteColumns(), NoteBoard(), NoteBoardColumn, noteColumnIdOf() (+26 more)
 
 ### Community 158 - ".create"
-Cohesion: 0.20
+Cohesion: 0.19
 Nodes (13): exportAuthorization(), ExportController, invalidRequest(), principalOf(), routeUuid(), Body, Controller, Get (+5 more)
 
 ### Community 159 - "NoteSharesController"
-Cohesion: 0.22
+Cohesion: 0.24
 Nodes (8): NoteSharesController, routeUuid(), Body, Controller, Delete, Get, Put, Req
 
 ### Community 160 - "Part 50 — Establish BullMQ queues and workers"
@@ -1190,13 +1200,13 @@ Nodes (9): Architecture and security decisions, Commands, Corrective verificatio
 Cohesion: 0.13
 Nodes (14): compilerOptions, declaration, noEmit, rootDir, sourceMap, tsBuildInfoFile, exclude, extends (+6 more)
 
-### Community 162 - "ImageToolbar.tsx"
-Cohesion: 0.17
-Nodes (13): IMAGE_EXTENSION_NAME, ImageAttributePatch, updateSelectedImage(), ALIGN_CAPTIONS, ALIGN_LABELS, IMAGE_TOOLBAR_LABEL, ImageToolbar(), ImageToolbarProps (+5 more)
+### Community 162 - "auth-email-producer.service.ts"
+Cohesion: 0.14
+Nodes (15): additionalAuthenticatedData(), AuthEmailContext, AuthEmailEncryptionMetadata, AuthEmailEncryptionService, EncryptedAuthEmailContext, config, Inject, Injectable (+7 more)
 
-### Community 163 - "search.ts"
-Cohesion: 0.12
-Nodes (15): ATTACHMENT_API_PATHS, AUDIT_LOG_API_PATHS, Paginated, APP_NAME, RecentSearch, RecentSearchesPayload, SEARCH_API_PATHS, SearchAvailability (+7 more)
+### Community 163 - "Part 77 — Test performance and scale limits"
+Cohesion: 0.08
+Nodes (26): API, Configuration, and Operational Changes, Benchmark results — measured 2026-08-26, Command sequence for the reviewer, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions (+18 more)
 
 ### Community 164 - "Part 04 — Scaffold the Next.js Web Application"
 Cohesion: 0.13
@@ -1214,9 +1224,9 @@ Nodes (14): API, Configuration, and Operational Changes, Completion Verification
 Cohesion: 0.13
 Nodes (14): API, Configuration, and Operational Changes, Completion Verification Update, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work (+6 more)
 
-### Community 168 - ".failure"
-Cohesion: 0.17
-Nodes (3): createPool(), QueueLifecycleService, Injectable
+### Community 168 - "queue.module.ts"
+Cohesion: 0.08
+Nodes (15): OutboxDispatcherService, Injectable, QueueInfrastructureService, Inject, Injectable, QueueLifecycleService, Inject, Injectable (+7 more)
 
 ### Community 169 - "webhook.schema.ts"
 Cohesion: 0.09
@@ -1226,13 +1236,13 @@ Nodes (24): WEBHOOK_SECRET_PATTERN, WEBHOOK_SECRET_PREFIX, WebhookCreateInput, w
 Cohesion: 0.13
 Nodes (15): Architecture Principles, Codex commands, Completion Records, Contributing, Current Documentation, Deployment, Development Workflow, License (+7 more)
 
-### Community 171 - "workspace-logo.service.test.ts"
-Cohesion: 0.14
-Nodes (11): build(), fakeDatabase(), LogoRow, mutationInput(), NOT_AN_IMAGE, PNG, principal(), THUMBNAIL_BODY (+3 more)
+### Community 171 - "getServerWorkspaceDetail"
+Cohesion: 0.26
+Nodes (13): StandaloneNotePage(), ProjectNotePage(), WorkspaceSettingsPage(), TagsPage(), TagManager(), cookieHeader(), readJson(), ServerReadResult (+5 more)
 
 ### Community 172 - ".info"
-Cohesion: 0.17
-Nodes (6): CollaborationDb, NoteCollaborationRepository, Injectable, NoteCollaborationService, Injectable, noteDocumentToYDoc()
+Cohesion: 0.16
+Nodes (6): decideCollaborativeCheckpoint(), CollaborationDb, NoteCollaborationRepository, Injectable, NoteCollaborationService, Injectable
 
 ### Community 174 - "Part 01 — Record architecture decisions and resolve specification gaps"
 Cohesion: 0.14
@@ -1330,32 +1340,36 @@ Nodes (13): API, Configuration, and Operational Changes, Database and Data Chang
 Cohesion: 0.14
 Nodes (13): API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work, Objective (+5 more)
 
-### Community 198 - "queue-outbox.repository.ts"
-Cohesion: 0.22
-Nodes (5): OutboxDispatcherService, Injectable, DeadLetterRecord, deadLetterRecordSchema, outboxRuntimeRowSchema
+### Community 198 - "queue-infrastructure.service.ts"
+Cohesion: 0.13
+Nodes (20): AiProviderQueueLimitConfig, frozenWorker(), QUEUE_CONFIG, QueueConfig, QueueConfigProvider, QueueWorkerConfig, Injectable, REDIS_CLIENT (+12 more)
 
 ### Community 199 - "Part 39 — Implement reliable save behavior"
 Cohesion: 0.14
 Nodes (13): API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work, Objective (+5 more)
 
-### Community 200 - "Decision"
+### Community 200 - "Third-Party Notices"
+Cohesion: 0.13
+Nodes (12): 1. `libheif-js@1.19.8` — LGPL-3.0, 2. `@img/sharp-libvips-linux-x64@1.3.0` — LGPL-3.0-or-later, Copyleft components, Direct runtime dependencies added by Plan parts 40–44, Dual-licensed: `jszip@3.10.1` — `(MIT OR GPL-3.0-or-later)`, MIT elected (Part 64), Non-LGPL copyleft: `lightningcss` — MPL-2.0 (triaged, no obligation in the shipped product), Ongoing obligations, Re-auditing for new copyleft (+4 more)
+
+### Community 201 - "Database Schema (Drizzle ORM)"
 Cohesion: 0.07
-Nodes (27): ADR 0008: Runtime and package compatibility baseline, Alternatives considered, Consequences, Context, Decision, Development container baseline, Migration and rollback, Part 41 image-pipeline dependency review (+19 more)
+Nodes (27): AI Coding Conventions (CLAUDE.md), API Keys Table, Attachments Table, Audit Logs Table, Available Make Commands, Comments Table, Database Schema (Drizzle ORM), Development Stack (`compose.yaml`) (+19 more)
 
-### Community 201 - "Notted — Corporate Notes Platform"
-Cohesion: 0.22
-Nodes (8): AI Coding Conventions (CLAUDE.md), Development Steps, Environment Variables, Notted — Corporate Notes Platform, Project Overview, Project Structure, Tech Stack, What This Project Demonstrates
+### Community 202 - "note-block-tab.ts"
+Cohesion: 0.18
+Nodes (17): BlockTabContext, BlockTabDirection, contextForNodeName(), NoteBlockTab, runBlockTab(), runListTab(), runTableTab(), canAddTableCells() (+9 more)
 
-### Community 202 - "StorageBucket"
-Cohesion: 0.07
-Nodes (11): expectNoCredentialLeak(), key(), MemoryObjectStore, PutObjectResult, StorageBucket, PrefixedObjectStore, MemoryObjectStore, expectObjectsAbsent() (+3 more)
+### Community 203 - "defineQueueJobRegistration"
+Cohesion: 0.09
+Nodes (5): AuditLogRetentionQueueService, Injectable, NoteVersionRetentionQueueService, Injectable, defineQueueJobRegistration()
 
-### Community 204 - "workspaceId"
-Cohesion: 0.04
-Nodes (45): principal(), scope(), createInput(), dbRow(), exportRow(), principal(), whereValuesFixture(), attachmentRow() (+37 more)
+### Community 204 - "database.module.ts"
+Cohesion: 0.16
+Nodes (12): DATABASE_CONFIG, DatabaseConfig, DatabaseConfigProvider, parseDatabaseConfig(), readConnectionString(), SUPPORTED_SCHEMES, Injectable, createPool() (+4 more)
 
 ### Community 205 - "All-in-Docker development stack"
-Cohesion: 0.15
+Cohesion: 0.12
 Nodes (13): 2026-08-04 registration and email-verification flow, 2026-08-04 runtime verification, All-in-Docker development stack, API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Implemented Work, Important Decisions (+5 more)
 
 ### Community 206 - "Part 16 — Implement Tags, Attachments, Comments, and Note Versions"
@@ -1398,17 +1412,17 @@ Nodes (16): 1. Assets, 2. Actors, 3. Trust boundaries, 4.1 Authentication and se
 Cohesion: 0.15
 Nodes (11): CI, eslint.config.mjs, NODE_ENV, .npmrc, pnpm-workspace.yaml, .prettierignore, .prettierrc.json, globalDependencies (+3 more)
 
-### Community 216 - "common.ts"
-Cohesion: 0.09
-Nodes (22): ApiError, ApiErrorCode, ApiFailure, ApiSuccess, ValidationErrorDetails, ValidationIssue, CommentAnchor, CommentAnchorScheme (+14 more)
+### Community 216 - "comment.ts"
+Cohesion: 0.20
+Nodes (9): CommentAnchor, CommentAnchorScheme, CommentAuthor, CommentChangedEvent, CommentDeleteResult, CommentMutationResult, CommentPage, CommentSummary (+1 more)
 
 ### Community 217 - "better-auth.setup.ts"
-Cohesion: 0.11
-Nodes (23): builder(), database(), principal, Inject, attemptedIdentifier(), AUTH_IDENTIFIER_PATHS, betterAuthCookieAttributes(), BetterAuthInstance (+15 more)
+Cohesion: 0.12
+Nodes (25): attemptedIdentifier(), AUTH_IDENTIFIER_PATHS, betterAuthCookieAttributes(), configuredSocialProviders(), createBetterAuthNodeHandler(), identifierPaths, isNonRememberedSession(), passkeyPluginOptions() (+17 more)
 
-### Community 218 - "AiSettings.tsx"
-Cohesion: 0.09
-Nodes (24): config, emptyUsage, loadConfig, loadUsage, save, usage, AiFieldName, AiSettings() (+16 more)
+### Community 218 - "memberships.service.ts"
+Cohesion: 0.10
+Nodes (16): noteShares, InvitationTokenService, Injectable, INVITATION_EMAIL_IDEMPOTENCY_PREFIX, INVITATION_EMAIL_JOB_TYPE, INVITATION_EMAIL_PAYLOAD_VERSION, INVITATION_EMAIL_QUEUE_NAME, INVITATION_EMAIL_TEMPLATE_KEY (+8 more)
 
 ### Community 219 - "webhooks.service.test.ts"
 Cohesion: 0.09
@@ -1418,33 +1432,33 @@ Nodes (15): Awaitable, byId, deliveryRow, dialect, HarnessOptions, outboxPayload
 Cohesion: 0.30
 Nodes (7): isMode(), NoteViewMode, noteViewPreferenceKey(), PreferenceStorage, readNoteViewPreference(), VALUES, writeNoteViewPreference()
 
-### Community 221 - "note-collaboration.repository.ts"
-Cohesion: 0.22
-Nodes (9): AllocateRevisionInput, AppendUpdateInput, CollaborationRecordRow, CollaborationStateRow, MarkProjectedInput, ResetEpochInput, stateSelection, WriteSnapshotInput (+1 more)
+### Community 221 - "task-statuses.service.test.ts"
+Cohesion: 0.14
+Nodes (13): baseStatus, createInput, denial(), deniedService(), dialect, Fixture, forbiddenDatabase(), mockEntry() (+5 more)
 
 ### Community 222 - "Part 24 — Implement centralized authorization"
 Cohesion: 0.18
 Nodes (11): Authored verification (not run), Completion Verification Update, Database, API, and operational changes, Files and components, Important decisions, Known limitations and follow-up, Objective and implemented work, Part 24 — Implement centralized authorization (+3 more)
 
 ### Community 223 - "MeetingExtractionDialog.tsx"
-Cohesion: 0.07
-Nodes (42): AiFeature, AiPanel(), AiPanelProps, inlineOrParagraphNodes(), paragraphNodes(), rangeText(), RewriteCapture, titleCase() (+34 more)
+Cohesion: 0.04
+Nodes (63): AiFeature, AiPanel(), AiPanelProps, inlineOrParagraphNodes(), paragraphNodes(), rangeText(), RewriteCapture, titleCase() (+55 more)
 
 ### Community 224 - "package.json"
 Cohesion: 0.25
 Nodes (7): description, engines, pnpm, name, packageManager, private, version
 
 ### Community 225 - "inputs"
-Cohesion: 0.39
-Nodes (12): package.json, scripts/**/*, src/**/*, test/**/*, $TURBO_DEFAULT$, vitest.config.ts, inputs, tsconfig*.json (+4 more)
+Cohesion: 0.24
+Nodes (18): .env.example, .env.local, .env.production, next.config.{js,ts,mjs,cjs}, package.json, public/**/*, scripts/**/*, src/**/* (+10 more)
 
 ### Community 226 - "tasks"
-Cohesion: 0.20
-Nodes (10): cache, persistent, cache, cache, tasks, dev, format, format:check (+2 more)
+Cohesion: 0.14
+Nodes (15): ^build, cache, persistent, cache, cache, tasks, dev, format (+7 more)
 
 ### Community 227 - "print-export.spec.ts"
 Cohesion: 0.18
-Nodes (5): inflatedStreams(), pdfSource(), PRINT_HIDDEN_SELECTORS, register(), ADR-0008
+Nodes (5): inflatedStreams(), pdfSource(), register(), ADR-0008, PRINT_HIDDEN_SELECTORS
 
 ### Community 228 - "ApiResponse"
 Cohesion: 0.16
@@ -1459,8 +1473,8 @@ Cohesion: 0.18
 Nodes (10): compilerOptions, outDir, rootDir, exclude, extends, include, dist, node_modules (+2 more)
 
 ### Community 232 - "test:ci"
-Cohesion: 0.17
-Nodes (13): ^build, coverage/**, DATABASE_URL, test-results/**, test, test:ci, type-check, dependsOn (+5 more)
+Cohesion: 0.40
+Nodes (5): coverage/**, test-results/**, test:ci, dependsOn, outputs
 
 ### Community 233 - "Part 74 — Security hardening and abuse controls"
 Cohesion: 0.15
@@ -1474,9 +1488,9 @@ Nodes (11): ALLOWED_DATA_URI_PREFIXES, FOREIGN_OBJECT, isAllowedReference(), ref
 Cohesion: 0.11
 Nodes (16): allRoutes(), bearer(), call(), ENVIRONMENT_KEYS, EnvironmentSnapshot, freshPrincipal(), LOOPBACK(), Method (+8 more)
 
-### Community 236 - "workspace-logo.service.ts"
-Cohesion: 0.10
-Nodes (26): LOGO_BUCKET, newWorkspaceLogoToken(), parseWorkspaceLogoUrl(), tokenMatches(), ADR-0005, Injectable, WORKSPACE_LOGO_CACHE_CONTROL, WORKSPACE_LOGO_FILE_FIELD (+18 more)
+### Community 236 - "workspaces.service.ts"
+Cohesion: 0.07
+Nodes (37): whereWorkspaceId(), LOGO_BUCKET, newWorkspaceLogoToken(), parseWorkspaceLogoUrl(), tokenMatches(), ADR-0005, Injectable, WORKSPACE_LOGO_FILE_FIELD (+29 more)
 
 ### Community 237 - "Disposable end-to-end stack, and the production defect it uncovered"
 Cohesion: 0.20
@@ -1487,8 +1501,8 @@ Cohesion: 0.20
 Nodes (9): API and security boundaries, Authored verification (not run), Completion Verification Update, Database and migration, Known limitations and ownership handoff, Objective and implemented work, Part 25 — Build the dashboard shell, Revision history (+1 more)
 
 ### Community 239 - "server-notes.ts"
-Cohesion: 0.06
-Nodes (63): DashboardPage(), StandaloneNotePage(), NotesPage(), PinnedNotesPage(), RecentNotesPage(), browser, params, searchParams (+55 more)
+Cohesion: 0.13
+Nodes (20): DashboardPage(), NotesPage(), PinnedNotesPage(), RecentNotesPage(), browser, params, searchParams, WorkspaceTemplatesPage() (+12 more)
 
 ### Community 240 - "Phase 3 — Database Design and Tenant Safety"
 Cohesion: 0.20
@@ -1504,7 +1518,7 @@ Nodes (10): !.next/cache/**, NEXT_PUBLIC_API_URL, NEXT_PUBLIC_APP_URL, NEXT_PUBL
 
 ### Community 243 - "image-processing.service.ts"
 Cohesion: 0.08
-Nodes (36): sharp, AdmittedImageUpload, ImageProcessingRequest, ProcessedImage, ProcessedImageBlur, ProcessedImageObject, ANIMATION_CAPABLE, DecodedSource (+28 more)
+Nodes (36): sharp, decodeHeicToJpeg(), isHeicDecoderAvailable(), ImageProcessingRequest, ProcessedImage, ProcessedImageBlur, ANIMATION_CAPABLE, DecodedSource (+28 more)
 
 ### Community 244 - "Part 59 — Presence and collaboration UI"
 Cohesion: 0.15
@@ -1514,13 +1528,13 @@ Nodes (13): API, Configuration, and Operational Changes, Database and Data Chang
 Cohesion: 0.15
 Nodes (13): API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work, Objective (+5 more)
 
-### Community 246 - "bull-board-policy.ts"
-Cohesion: 0.09
-Nodes (21): boundedInteger(), BULL_BOARD_PATH, BullBoardAuditAction, BullBoardMutation, bullBoardRequestPolicy, hasSafeBullBoardQuery(), isQueue(), isStatus() (+13 more)
-
-### Community 247 - "note-collaboration.projection.ts"
+### Community 246 - "bull-board.service.ts"
 Cohesion: 0.16
-Nodes (12): COMPACTION_MIN_BYTES, COMPACTION_MIN_UPDATES, CompactionInput, PROJECTION_DEBOUNCE_MS, PROJECTION_MAX_WAIT_MS, shouldCompact(), NoteCollaborationProjectionService, PendingProjection (+4 more)
+Nodes (6): BullBoardService, Injectable, REDACTED, RedactedBullMqAdapter, redactedJob(), safeJobJson()
+
+### Community 247 - "note-collaboration.policy.ts"
+Cohesion: 0.39
+Nodes (6): COMPACTION_MIN_BYTES, COMPACTION_MIN_UPDATES, CompactionInput, PROJECTION_DEBOUNCE_MS, PROJECTION_MAX_WAIT_MS, shouldCompact()
 
 ### Community 248 - "graphify reference: extra exports and benchmark"
 Cohesion: 0.22
@@ -1531,8 +1545,8 @@ Cohesion: 0.22
 Nodes (7): Part Completion Checklist, Actions, Deliver a Notted Plan Part, Establish context, Execute, Synchronous Delegation Protocol in Claude Code, Verify and hand off
 
 ### Community 250 - "pdf-export.service.test.ts"
-Cohesion: 0.06
-Nodes (25): EXPORT_CONFIG, ExportConfig, ChromiumUnavailableError, LAUNCH_ARGS, config(), fakeBrowser(), fakeContext(), logger() (+17 more)
+Cohesion: 0.11
+Nodes (14): EXPORT_CONFIG, ExportConfig, Inject, escapeHtml(), PdfExportService, asPage(), fakeBrowserPool(), fakePage() (+6 more)
 
 ### Community 251 - "graphify reference: extra exports and benchmark"
 Cohesion: 0.22
@@ -1542,25 +1556,25 @@ Nodes (8): graphify reference: extra exports and benchmark, Step 6b - Wiki (only
 Cohesion: 0.12
 Nodes (14): baseStyle(), buildStandaloneHtml(), escapeHtml(), printStylesheet(), requireFrom, DOCUMENT, puppeteerLauncherProvider, HAS_CHROMIUM (+6 more)
 
-### Community 253 - "webhook-url-guard.ts"
-Cohesion: 0.15
-Nodes (21): BLOCKED_ADDRESSES, BLOCKED_HOST_SUFFIXES, BLOCKED_HOSTS, defaultLookup(), guardedLookup(), inspectWebhookUrl(), isBlockedAddress(), LOOPBACK_ADDRESSES (+13 more)
+### Community 253 - "webhook-sender.ts"
+Cohesion: 0.12
+Nodes (29): ANSI_SEQUENCE, buildSnippet(), classifySocketError(), sendWebhook(), TLS_ERROR_CODES, WebhookSendRequest, BLOCKED_ADDRESSES, BLOCKED_HOST_SUFFIXES (+21 more)
 
 ### Community 254 - "latestActionLink"
-Cohesion: 0.08
-Nodes (16): registerAndVerify(), clearMailpit(), isObject(), latestActionLink(), MailpitList, MailpitMessage, MailpitMessageSummary, parseList() (+8 more)
+Cohesion: 0.04
+Nodes (26): decodeBase32(), registerAndVerify(), totpFromUri(), registerAndVerify(), register(), clearMailpit(), isObject(), latestActionLink() (+18 more)
 
 ### Community 255 - "presence-client.test.ts"
 Cohesion: 0.20
 Nodes (6): AckCallback, EmittedFrame, Harness, mount(), SocketListener, { socketRef }
 
 ### Community 256 - "storage-maintenance.integration.test.ts"
-Cohesion: 0.02
-Nodes (114): OBJECT_BEARING_VARIANTS, ATTACHMENT_AUDIT_ACTIONS, ATTACHMENT_DOMAIN_EVENT_QUEUE, ATTACHMENT_DOMAIN_EVENTS, AttachmentRow, build(), fakeDatabase(), FakeRow (+106 more)
+Cohesion: 0.01
+Nodes (167): expectNoCredentialLeak(), OBJECT_BEARING_VARIANTS, key(), ATTACHMENT_AUDIT_ACTIONS, ATTACHMENT_DOMAIN_EVENT_QUEUE, ATTACHMENT_DOMAIN_EVENTS, AttachmentRow, ATTACHMENTS_BUCKET (+159 more)
 
 ### Community 257 - "Environment contracts"
-Cohesion: 0.09
-Nodes (18): Authentication, freshness, rate limiting, and errors, Canonical contracts, Centralized authorization, Known boundaries, Permissions matrix, Tenant scoping and loading, Transport and job invocation, Authentication and email queue values (+10 more)
+Cohesion: 0.20
+Nodes (10): Authentication and email queue values, BETTER_AUTH_SECRET is also the API-key pepper, Cross-file development consistency, Custom-domain values, Environment contracts, Observability values, Outbound webhook values, Portable secret generation (+2 more)
 
 ### Community 258 - "WebhooksController"
 Cohesion: 0.17
@@ -1570,9 +1584,9 @@ Nodes (13): routeUuid(), Body, Controller, Delete, Get, HttpCode, Patch, Post (+
 Cohesion: 0.22
 Nodes (8): ADR 0004: Yjs collaborative document authority over Socket.io transport, Alternatives considered, Consequences, Context, Decision, Migration and rollback, Part 58 amendment — asynchronous projection, cadence, and presence identity, Safe defaults and unresolved details
 
-### Community 260 - "ExportNoteDialog.tsx"
-Cohesion: 0.11
-Nodes (25): ConvertNoteTypeControl(), ExportNoteDialog(), FAILURE_COPY, failureCopy(), FORMAT_LABELS, requestFailureCopy(), note, NoteCard() (+17 more)
+### Community 260 - "server-projects.ts"
+Cohesion: 0.16
+Nodes (18): ProjectsPage(), { notFound }, query, workspace, projectListHref(), apiCollectionPath(), apiMemberPath(), cookieHeader() (+10 more)
 
 ### Community 261 - "overrides"
 Cohesion: 0.25
@@ -1580,7 +1594,7 @@ Nodes (8): body-parser@<1.20.6, esbuild@<0.25.0, file-type@<21.3.2, @nestjs/plat
 
 ### Community 262 - "note-yjs-document.ts"
 Cohesion: 0.09
-Nodes (26): document, harness(), Mocked, noteRow, records, snapshot, state, childrenToJson() (+18 more)
+Nodes (27): document, harness(), Mocked, noteRow, records, snapshot, state, childrenToJson() (+19 more)
 
 ### Community 263 - "Phase 1 — Product Decisions and Repository Foundation"
 Cohesion: 0.29
@@ -1603,8 +1617,8 @@ Cohesion: 0.29
 Nodes (6): collection, compilerOptions, deleteOutDir, tsConfigPath, $schema, sourceRoot
 
 ### Community 268 - "note-version-checkpoint.policy.ts"
-Cohesion: 0.27
-Nodes (9): CHECKPOINT_MIN_INTERVAL_MS, CollaborativeCheckpointDecision, CollaborativeCheckpointInput, CollaborativeCheckpointReason, decideCollaborativeCheckpoint(), isCheckpointEligibleMutation(), NON_COLLABORATIVE_CHECKPOINT_MUTATIONS, NOW (+1 more)
+Cohesion: 0.29
+Nodes (8): CHECKPOINT_MIN_INTERVAL_MS, CollaborativeCheckpointDecision, CollaborativeCheckpointInput, CollaborativeCheckpointReason, isCheckpointEligibleMutation(), NON_COLLABORATIVE_CHECKPOINT_MUTATIONS, NOW, ADR-0004
 
 ### Community 269 - "app/layout.tsx"
 Cohesion: 0.38
@@ -1630,9 +1644,9 @@ Nodes (6): Authority chain, Completion payload, Delegation (Synchronous Delegati
 Cohesion: 0.29
 Nodes (6): Author Reliable Journeys, Build and Diagnose Notted Playwright Integration Tests, Completion Evidence, Diagnose Failures, Stable Runner Setup, Test the Real Boundary
 
-### Community 275 - "TaskBoard.tsx"
-Cohesion: 0.24
-Nodes (5): BoardColumn, buildColumns(), BUILT_IN_COLUMNS, columnIdOf(), TaskBoard()
+### Community 275 - "SearchContainer.tsx"
+Cohesion: 0.16
+Nodes (18): WorkspaceSearchPage(), parseMode(), parsePage(), parseSortBy(), parseSortDirection(), SearchContainer(), SearchPageError, toIsoEnd() (+10 more)
 
 ### Community 276 - "ADR 0002: Separate first-party tRPC and public REST transports"
 Cohesion: 0.29
@@ -1663,8 +1677,8 @@ Cohesion: 0.29
 Nodes (7): Part 61 — Build the email subsystem, Part 62 — Implement export job lifecycle, Part 63 — Implement PDF and HTML export, Part 64 — Implement Markdown, TXT, DOCX, and ZIP export, Part 65 — Implement public REST API and API key management, Part 66 — Implement webhooks and delivery logs, Phase 11 — Export, Email, API Keys, and Webhooks
 
 ### Community 283 - "Notted Development Plan"
-Cohesion: 0.40
-Nodes (5): Completion Records, Milestone Checkpoints, Notted Development Plan, Recommended Tracking for Every Part, Working Principles and Definition of Done
+Cohesion: 0.20
+Nodes (10): Completion Records, Milestone Checkpoints, Notted Development Plan, Part 71 — Add audit logging and administrative views, Part 72 — Implement branding and customization, Part 73 — Implement custom-domain support, Part 74 — Harden security and abuse controls, Phase 13 — Enterprise Controls and Customization (+2 more)
 
 ### Community 284 - "tsconfig.json"
 Cohesion: 0.29
@@ -1675,8 +1689,8 @@ Cohesion: 0.15
 Nodes (16): Account, apiGet(), apiPatch(), apiPost(), characterCounts(), collabStatus(), containsEveryCharacter(), editorBody() (+8 more)
 
 ### Community 286 - "Part 38 — Add page breaks, focus mode, and print styling"
-Cohesion: 0.06
-Nodes (30): Amendment — 2026-08-16: `print.css` and page geometry relocated for Part 63, API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work (+22 more)
+Cohesion: 0.08
+Nodes (22): Amendment — 2026-08-16: `print.css` and page geometry relocated for Part 63, API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work (+14 more)
 
 ### Community 287 - "graphify reference: query, path, explain"
 Cohesion: 0.33
@@ -1702,9 +1716,9 @@ Nodes (6): Part 21 — Integrate Better Auth on the backend, Part 22 — Build a
 Cohesion: 0.33
 Nodes (6): Part 50 — Establish BullMQ queues and workers, Part 51 — Build the Meilisearch indexing pipeline, Part 52 — Implement full-text search APIs and UI, Part 53 — Add embeddings and semantic search, Part 54 — Implement hybrid ranking, Phase 9 — Search and Indexing
 
-### Community 293 - "inputs"
-Cohesion: 0.33
-Nodes (6): .env.example, .env.local, .env.production, next.config.{js,ts,mjs,cjs}, public/**/*, inputs
+### Community 293 - "hybrid-ranking.service.ts"
+Cohesion: 0.12
+Nodes (17): AuthoritativeRankingFact, finite(), HybridRankedCandidate, HybridRankingService, LEXICAL_WEIGHT, LexicalRankingCandidate, normalizeRelativeScores(), SEMANTIC_WEIGHT (+9 more)
 
 ### Community 294 - "Build Notted Frontend and Editor Features"
 Cohesion: 0.40
@@ -1720,15 +1734,15 @@ Nodes (4): description, name, private, version
 
 ### Community 297 - "notes.service.ts"
 Cohesion: 0.03
-Nodes (95): attachments, jobOutbox, JobOutboxPayload, notes, projects, tasks, checklistSum(), DateColumn (+87 more)
+Nodes (78): anchor, CHAIN_METHODS, principal, Row, scope, RealtimeConfig, noteCollaborationUpdates, ShareRow (+70 more)
 
 ### Community 298 - "Part 52 — Authorized full-text search"
 Cohesion: 0.14
 Nodes (13): API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work, Objective (+5 more)
 
-### Community 299 - "tag.ts"
-Cohesion: 0.24
-Nodes (9): TagId, NoteListQuery, TagCreateResult, TagDeleteResult, TagListQuery, TagPage, TagSortField, TagSummary (+1 more)
+### Community 299 - "main.ts"
+Cohesion: 0.06
+Nodes (22): PlatformOperatorService, Injectable, unavailable(), ApiExceptionFilter, Denial, collectIssues(), validationExceptionFactory(), canonicalHost() (+14 more)
 
 ### Community 300 - "1. Workspace-scoping strategy"
 Cohesion: 0.15
@@ -1751,12 +1765,12 @@ Cohesion: 0.14
 Nodes (13): API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work, Objective (+5 more)
 
 ### Community 305 - "project.ts"
-Cohesion: 0.15
-Nodes (14): PROJECT_API_PATHS, ProjectAccessRole, ProjectCreateResult, ProjectDetail, ProjectListQuery, ProjectMemberAccessSource, ProjectMutationProject, ProjectPage (+6 more)
+Cohesion: 0.14
+Nodes (15): PROJECT_API_PATHS, ProjectAccessRole, ProjectCreateResult, ProjectDeleteResult, ProjectDetail, ProjectListQuery, ProjectMemberAccessSource, ProjectMutationProject (+7 more)
 
-### Community 306 - "advanced-auth.spec.ts"
-Cohesion: 0.29
-Nodes (3): decodeBase32(), registerAndVerify(), totpFromUri()
+### Community 306 - "WorkspacesController"
+Cohesion: 0.22
+Nodes (11): Body, Controller, Delete, Get, Patch, Post, Query, Req (+3 more)
 
 ### Community 307 - "Phase 16 — Release Preparation and Incremental Delivery"
 Cohesion: 0.40
@@ -1802,25 +1816,29 @@ Nodes (3): For git commit hook, For native CLAUDE.md integration, graphify refer
 Cohesion: 0.50
 Nodes (3): For --cluster-only, For --update (incremental re-extraction), graphify reference: incremental update and cluster-only
 
-### Community 326 - "storage-report.ts"
-Cohesion: 0.33
-Nodes (8): assertReportOnlyArguments(), main(), renderReport(), renderSweepDetails(), renderSweepTable(), REPORT_COLUMNS, ReportColumn, StorageReportError
+### Community 326 - "ProjectCollection.tsx"
+Cohesion: 0.31
+Nodes (7): ProjectCollection(), ProjectGrid(), PreferenceStorage, ProjectViewPreference, projectViewPreferenceKey(), readProjectViewPreference(), writeProjectViewPreference()
 
 ### Community 331 - "Part 72 — Branding and customization"
 Cohesion: 0.15
 Nodes (13): API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work, Objective (+5 more)
 
-### Community 332 - "domains.service.ts"
-Cohesion: 0.08
-Nodes (25): CacheEntry, canonicalHost(), Injectable, VerifiedHostsService, DOMAIN_AUDIT_ACTIONS, DOMAIN_AUDIT_ENTITY_TYPE, DOMAIN_VERIFICATION_TOKEN_BYTES, WORKSPACE_DOMAINS_HOSTNAME_UNIQUE (+17 more)
+### Community 332 - "ai-panel.test.tsx"
+Cohesion: 0.17
+Nodes (13): aiRequests, fakeEditor(), PanelOptions, renderPanel(), streamState, AiContinueHandler, isAiContinueAvailable(), listeners (+5 more)
 
 ### Community 333 - "ai.service.test.ts"
 Cohesion: 0.13
 Nodes (12): Awaitable, configRow, credentialRow, featureRow, harness(), HarnessOptions, principal, Row (+4 more)
 
+### Community 334 - "WorkspaceLogoController"
+Cohesion: 0.21
+Nodes (9): Controller, Delete, Get, HttpCode, Post, Req, Res, workspaceIdFromRoute() (+1 more)
+
 ### Community 335 - "IsoTimestamp"
-Cohesion: 0.13
-Nodes (24): AuditLogEntry, AuditLogFilters, AuditLogListQuery, AuditLogPage, AUTH_API_PATHS, AuthCapabilities, AuthEmailAccepted, AuthenticatedPrincipal (+16 more)
+Cohesion: 0.07
+Nodes (33): AuditLogEntry, AuditLogFilters, AuditLogListQuery, AuditLogPage, AUTH_API_PATHS, AuthCapabilities, AuthEmailAccepted, AuthenticatedPrincipal (+25 more)
 
 ### Community 336 - "user-color.ts"
 Cohesion: 0.73
@@ -1831,76 +1849,88 @@ Cohesion: 0.13
 Nodes (19): ACK_ERRORS, AckError, AckOutcome, asBinary(), asInteger(), asRecord(), EVENT, isForNote() (+11 more)
 
 ### Community 338 - "realtime.gateway.test.ts"
-Cohesion: 0.11
-Nodes (17): awarenessFrame(), config, Handler, handlerFor(), harness(), invoke(), joinNote(), otherSelector (+9 more)
+Cohesion: 0.16
+Nodes (14): awarenessFrame(), config, Handler, handlerFor(), harness(), invoke(), joinNote(), otherSelector (+6 more)
 
 ### Community 339 - "Part 71 — Add audit logging and administrative views"
 Cohesion: 0.15
 Nodes (13): API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work, Objective (+5 more)
 
-### Community 340 - "part-58-yjs-collaborative-editing.md"
-Cohesion: 0.24
-Nodes (6): Implemented, Migration, Operations and integration contract, Part 57 — Build authenticated Socket.io infrastructure, Risks, Verification
+### Community 340 - "Part 56 — Version history, diff, and restore"
+Cohesion: 0.12
+Nodes (14): API, Diff and preview, Part 56 — Version history, diff, and restore, Result, Risks and follow-up, Search and collaboration boundaries, Status, Tests authored and verification (+6 more)
 
-### Community 341 - "shell.schema.ts"
-Cohesion: 0.10
-Nodes (20): hexColorSchema, NotificationEmailPreferenceInput, notificationEmailPreferenceSchema, notificationKindSchema, NotificationListQueryInput, notificationListQuerySchema, notificationPageSchema, notificationReadResultSchema (+12 more)
+### Community 341 - "WebhookSecretService"
+Cohesion: 0.20
+Nodes (7): SECURITY_CONFIG, additionalAuthenticatedData(), KEY_ONE, KEY_TWO, Inject, Injectable, WebhookSecretService
 
 ### Community 342 - "ApiController"
 Cohesion: 0.40
 Nodes (4): ApiController, Controller, Get, Req
 
-### Community 343 - "job-registry.ts"
+### Community 343 - "export.integration.test.ts"
 Cohesion: 0.02
-Nodes (137): AuthEmailJobContext, APP_CONFIG, QueueConfig, emailDeliveries, DeliveryRow, RoutedTemplateKey, ADR-0005, WorkspaceEmailContext (+129 more)
+Nodes (87): jobOutbox, InsertedRow, mentionInput, ADR-0006, WORKSPACE_EMAIL_IDEMPOTENCY_PREFIX, workspaceEmailIdempotencyKey(), WorkspaceEmailPayload, EXPORT_GENERATE_IDEMPOTENCY_PREFIX (+79 more)
 
-### Community 345 - "api-keys.e2e.test.ts"
-Cohesion: 0.05
-Nodes (37): ApiKeyAuthService, invalidApiKey(), KeyRow, liveRow, Injectable, formatScopes(), generateApiKeySecret(), GeneratedApiKeySecret (+29 more)
+### Community 345 - "ApiKeysController"
+Cohesion: 0.17
+Nodes (11): ApiKeysController, routeUuid(), Body, Controller, Delete, Get, HttpCode, Post (+3 more)
 
 ### Community 347 - "next.config.js"
 Cohesion: 0.47
 Nodes (4): { buildSecurityHeaders }, nextConfig, buildSecurityHeaders(), safeOrigin()
 
-### Community 349 - "TaskListView.tsx"
-Cohesion: 0.04
-Nodes (47): CreateTaskForm(), alpha, beta, delta, epsilon, gamma, mocks, openBoard() (+39 more)
+### Community 349 - "task-board.test.tsx"
+Cohesion: 0.18
+Nodes (11): alpha, beta, delta, epsilon, gamma, mocks, openBoard(), page (+3 more)
 
-### Community 351 - "QueueOutboxRepository"
-Cohesion: 0.33
-Nodes (3): parseRows(), QueueOutboxRepository, Injectable
+### Community 350 - "[projectId]/page.tsx"
+Cohesion: 0.36
+Nodes (9): formatActivity(), ProjectDetailPage(), { notFound }, formatProjectDate(), ProjectCard(), ProjectCompactList(), getServerFolders(), projectCollectionPath() (+1 more)
 
-### Community 352 - "ObjectStorageService"
-Cohesion: 0.19
-Nodes (6): ABSENT_OBJECT_CODES, BUCKET_ALREADY_OWNED_CODES, errorCode(), isAbsent(), ObjectStorageService, Injectable
+### Community 351 - "Part 76 — Accessibility and cross-browser validation"
+Cohesion: 0.08
+Nodes (24): All six are now ported and executing — 6 of 6, Already satisfied before this part — verified, not built, API, Configuration, and Operational Changes, axe coverage widened during remediation, axe scope, stated honestly, `dashboard-shell.spec.ts` is still dead, Database and Data Changes, Files and Components (+16 more)
+
+### Community 352 - "editor-slash-commands.test.tsx"
+Cohesion: 0.20
+Nodes (10): activeOptionIndex(), COMMAND_EXPECTATIONS, CommandContext, EMPTY_DOCUMENT, menuOptions(), openSlashMenu(), optionLabelled(), slashMenu() (+2 more)
 
 ### Community 355 - "RealtimeRateLimitService"
-Cohesion: 0.31
+Cohesion: 0.32
 Nodes (3): RealtimeRateLimitService, Inject, Injectable
 
-### Community 356 - "WorkspacesService"
-Cohesion: 0.07
-Nodes (31): StoragePlanDefaults, buildWorkspaceStorageUsage(), fitsWithinQuota(), QUOTA_CHARGED_STATUSES, QUOTA_RESERVED_STATUSES, resolveEffectiveLimitBytes(), safeBytes(), ReadWorkspaceStorageUsageInput (+23 more)
+### Community 356 - "storage/index.ts"
+Cohesion: 0.29
+Nodes (11): StoragePlanDefaults, buildWorkspaceStorageUsage(), fitsWithinQuota(), QUOTA_CHARGED_STATUSES, QUOTA_RESERVED_STATUSES, resolveEffectiveLimitBytes(), safeBytes(), ReadWorkspaceStorageUsageInput (+3 more)
 
 ### Community 357 - "folder-controls.test.tsx"
 Cohesion: 0.33
 Nodes (4): child, grandchild, mocks, root
 
 ### Community 358 - "part-72-branding-and-customization.md"
-Cohesion: 0.17
-Nodes (8): Dependency note, Deviations, Fixed after review, Implemented Work, Objective, Open risks and follow-ups, Part 64 — Markdown, TXT, DOCX and ZIP export, and the export UI, Status
+Cohesion: 0.21
+Nodes (7): Files and architecture, Limits and follow-up, Migration, Part 55 — Version snapshots and retention, Result, Status, Tests authored and verification
 
-### Community 359 - "Part 56 — Version history, diff, and restore"
-Cohesion: 0.22
-Nodes (8): API, Diff and preview, Part 56 — Version history, diff, and restore, Result, Risks and follow-up, Search and collaboration boundaries, Status, Tests authored and verification
+### Community 359 - "env"
+Cohesion: 0.20
+Nodes (18): importMeilisearch(), APP_ORIGIN, APP_URL, AUTH_E2E, AUTH_LOCKOUT_ATTEMPTS, BETTER_AUTH_*, DATA_ENCRYPTION_KEYS, DATABASE_URL (+10 more)
 
-### Community 362 - "stream.ts"
+### Community 360 - "tags.service.ts"
+Cohesion: 0.13
+Nodes (17): TAG_AUDIT_ENTITY_TYPE, TAG_DOMAIN_EVENT_IDEMPOTENCY_PREFIX, TAG_DOMAIN_EVENT_PAYLOAD_VERSION, TAG_DOMAIN_EVENT_QUEUE, TAG_DOMAIN_EVENTS, TAG_MAX_PER_WORKSPACE, TAG_NAME_UNIQUE_CONSTRAINT, TagMutation (+9 more)
+
+### Community 362 - "api-keys.service.ts"
 Cohesion: 0.08
-Nodes (22): aiRequests, fakeEditor(), noteRequests, renderSuggestions(), SUGGESTIONS, tagRequests, AI_FAILURE_MESSAGES, AiStreamCallbacks (+14 more)
+Nodes (25): formatScopes(), generateApiKeySecret(), GeneratedApiKeySecret, hashApiKey(), parseScopes(), API_KEY_AUDIT_ACTIONS, API_KEY_AUDIT_ENTITY_TYPE, API_KEY_LAST_USED_THROTTLE_MS (+17 more)
 
-### Community 364 - "webhook-sender.ts"
-Cohesion: 0.17
-Nodes (12): ANSI_SEQUENCE, buildSnippet(), classifySocketError(), sendWebhook(), RELAXED, servers, TestServer, TLS_ERROR_CODES (+4 more)
+### Community 363 - "webhooks.service.ts"
+Cohesion: 0.23
+Nodes (12): CreateWebhookServiceInput, DELIVERY_ERROR_CODES, DeliveryRow, ListDeliveriesServiceInput, ListWebhooksServiceInput, RetryDeliveryServiceInput, ScopedInput, SUBSCRIBABLE_EVENTS (+4 more)
+
+### Community 364 - "webhook-sender.test.ts"
+Cohesion: 0.33
+Nodes (3): RELAXED, servers, TestServer
 
 ### Community 365 - "note-collaboration-provider.test.ts"
 Cohesion: 0.22
@@ -1910,21 +1940,33 @@ Nodes (6): AckCallback, completeHandshake(), EmittedFrame, flush(), Harness, Soc
 Cohesion: 0.19
 Nodes (12): COLLAB_STATUS_TEST_ID, CollaborationStatus(), CollaborationStatusProps, MESSAGE, PresenceBarProps, NoteCollaborationSnapshot, NoteCollaborationStatus, DISABLED_SNAPSHOT (+4 more)
 
+### Community 367 - "public-environment.ts"
+Cohesion: 0.13
+Nodes (15): validateEnvironment(), ALLOWED_PROTOCOLS, DEVELOPMENT_DEFAULTS, parsePublicEnvironment(), PUBLIC_ENVIRONMENT_KEYS, PublicEnvironment, PublicEnvironmentInput, PublicEnvironmentKey (+7 more)
+
 ### Community 369 - "ai-governance.service.test.ts"
-Cohesion: 0.08
-Nodes (20): AiGovernanceService, numeric(), acquireInput, Awaitable, configuredRow, grant(), harness(), HarnessOptions (+12 more)
+Cohesion: 0.14
+Nodes (11): AiGovernanceService, numeric(), acquireInput, Awaitable, configuredRow, grant(), harness(), HarnessOptions (+3 more)
 
-### Community 370 - "Part 62 — Export job lifecycle"
-Cohesion: 0.25
-Nodes (8): Deviations, Fixed after review, Implemented Work, Objective, Open risks and follow-ups, Part 62 — Export job lifecycle, Status, Verification
+### Community 370 - "QueueAdminRemediationService"
+Cohesion: 0.31
+Nodes (3): QueueAdminRemediationService, rowsOf(), Injectable
 
-### Community 371 - "attachments/index.ts"
-Cohesion: 0.12
-Nodes (23): ATTACHMENT_AUDIT_ENTITY_TYPE, ATTACHMENT_DOMAIN_EVENT_IDEMPOTENCY_PREFIX, ATTACHMENT_DOMAIN_EVENT_PAYLOAD_VERSION, ATTACHMENT_PROCESSING_ERRORS, ATTACHMENT_UPLOAD_FILE_FIELD, ATTACHMENT_VARIANT_FALLBACKS, AttachmentProcessingErrorCode, ADR-0005 (+15 more)
+### Community 371 - "attachments.constants.ts"
+Cohesion: 0.10
+Nodes (22): ATTACHMENT_AUDIT_ENTITY_TYPE, ATTACHMENT_DOMAIN_EVENT_IDEMPOTENCY_PREFIX, ATTACHMENT_DOMAIN_EVENT_PAYLOAD_VERSION, ATTACHMENT_PROCESSING_ERRORS, ATTACHMENT_UPLOAD_FILE_FIELD, ATTACHMENT_VARIANT_FALLBACKS, AttachmentMutation, AttachmentProcessingErrorCode (+14 more)
 
 ### Community 391 - "Resources"
 Cohesion: 0.10
 Nodes (20): API keys, Attachments, Audit logs, Branding, Comments, Custom domains, Exports, Folders (+12 more)
+
+### Community 395 - "Testing Standard"
+Cohesion: 0.12
+Nodes (17): Accessibility scans, Assert exact status codes in denial tests, axe severity and scope, as configured, Coverage thresholds are a ratchet, Cross-browser runs, Disposable end-to-end stack, Do not run the browser suite straight after the performance benchmark, Edge (+9 more)
+
+### Community 396 - "Warning"
+Cohesion: 0.04
+Nodes (44): 1. Redis down, 2. Meilisearch down, 3. MinIO down, 4. Failed export, 5. Database pool saturation, 6. Forced 500, Alert reference, Allowed (+36 more)
 
 ### Community 397 - ".runMaintenance"
 Cohesion: 0.22
@@ -1942,57 +1984,89 @@ Nodes (20): A table, not `workspaces.domain`, Accent color in the settings jsonb
 Cohesion: 0.12
 Nodes (22): broken, designDoc, kickoff, mocks, note(), onePage, task(), DATE_FORMAT (+14 more)
 
-### Community 425 - "CommentsController"
-Cohesion: 0.19
-Nodes (13): commentAuthorization(), CommentsController, noteAuthorization(), routeUuid(), Body, Controller, Delete, Get (+5 more)
+### Community 423 - "Notted Agent Instructions"
+Cohesion: 0.22
+Nodes (9): Authority, Automatic Skill and Agent Routing, graphify, Notted Agent Instructions, opencode Support, Project-Wide Rules, Required Part Workflow, Skills and Codex Agents (+1 more)
+
+### Community 425 - "SearchResults.tsx"
+Cohesion: 0.18
+Nodes (12): HighlightedText(), formatDateTime(), HighlightedText(), ResultRow(), SearchPageData, SearchResults(), SearchResultsStatus, titleSnippet() (+4 more)
+
+### Community 429 - "storage-report.ts"
+Cohesion: 0.33
+Nodes (8): assertReportOnlyArguments(), main(), renderReport(), renderSweepDetails(), renderSweepTable(), REPORT_COLUMNS, ReportColumn, StorageReportError
 
 ### Community 430 - "presence-bar.test.tsx"
-Cohesion: 0.28
-Nodes (5): memberPage(), mocks, PEOPLE, userIdAt(), view()
+Cohesion: 0.24
+Nodes (6): memberPage(), mocks, PEOPLE, userIdAt(), view(), PRESENCE_ROSTER_MAX
 
 ### Community 431 - "Public REST API"
 Cohesion: 0.20
 Nodes (10): API keys, Authentication, Base URL and versioning, Breaking changes in `v1`, Effective permission: scope ∩ creator's live role, Machine-readable specification, Public REST API, Reachable routes (+2 more)
 
-### Community 432 - "Deployment Instructions"
-Cohesion: 0.25
-Nodes (8): Deployment Instructions, Server Requirements, Step 1: Server Setup, Step 2: SSL Certificate (Let's Encrypt), Step 3: Nginx Configuration, Step 4: Deploy Application, Step 5: Database Migrations, Step 6: Backup Script
+### Community 432 - "audit-logs.service.ts"
+Cohesion: 0.38
+Nodes (6): AuditLogFilterInput, AuditLogRow, ExportAuditLogsServiceInput, ListAuditLogsServiceInput, ScopedInput, ADR-0009
 
 ### Community 433 - "Part 65 — Implement public REST API and API key management"
 Cohesion: 0.15
 Nodes (13): API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work, Objective (+5 more)
-
-### Community 434 - "markdown.test.ts"
-Cohesion: 0.43
-Nodes (5): body(), doc(), OPTIONS, source(), text()
 
 ### Community 435 - "Part 66 — Implement webhooks and delivery logs"
 Cohesion: 0.14
 Nodes (13): API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work, Objective (+5 more)
 
 ### Community 436 - "AuditLog.tsx"
-Cohesion: 0.18
-Nodes (10): entry, exportUrl, list, AuditLog(), failureMessage(), auditLogExportUrl(), auditLogSearch(), listAuditLogs() (+2 more)
-
-### Community 438 - "ShellService"
 Cohesion: 0.17
-Nodes (9): ShellController, Controller, Get, Query, Req, UseGuards, accentColorOf(), ShellService (+1 more)
+Nodes (11): entry, exportUrl, list, AuditLog(), failureMessage(), auditLogExportUrl(), auditLogSearch(), listAuditLogs() (+3 more)
+
+### Community 438 - ".bootstrap"
+Cohesion: 0.25
+Nodes (6): ShellController, Controller, Get, Query, Req, UseGuards
+
+### Community 439 - "recent-searches.ts"
+Cohesion: 0.23
+Nodes (13): clearRecentSearches(), normalizeRecentQuery(), parseStoredPayload(), persist(), readRecentSearches(), ReadStorage, RECENT_SEARCH_LIMIT, RECENT_SEARCH_MAX_QUERY_LENGTH (+5 more)
 
 ### Community 440 - "Part 58 — Integrate Yjs collaborative editing"
 Cohesion: 0.15
 Nodes (13): API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work, Objective (+5 more)
 
-### Community 448 - "Database Schema (Drizzle ORM)"
-Cohesion: 0.15
-Nodes (13): API Keys Table, Attachments Table, Audit Logs Table, Comments Table, Database Schema (Drizzle ORM), Note Embeddings Table (Semantic Search), Note Versions Table, Notes Table (+5 more)
+### Community 442 - "AiProviderRateLimiterService"
+Cohesion: 0.36
+Nodes (3): AiProviderRateLimiterService, Inject, Injectable
+
+### Community 443 - "markdown.test.ts"
+Cohesion: 0.39
+Nodes (6): documentToMarkdown(), body(), doc(), OPTIONS, source(), text()
+
+### Community 445 - "bull-board-policy.ts"
+Cohesion: 0.20
+Nodes (14): boundedInteger(), BullBoardAuditAction, BullBoardMutation, bullBoardRequestPolicy, hasSafeBullBoardQuery(), isQueue(), isStatus(), match() (+6 more)
+
+### Community 447 - "Performance Standard"
+Cohesion: 0.25
+Nodes (8): Performance Standard, Pre-committed decision rules, Resource rules, Running the harness, The budgets that are deliberately `null`, The standing rule, What each budget means, What is already satisfied
+
+### Community 448 - "Deployment Instructions"
+Cohesion: 0.25
+Nodes (8): Deployment Instructions, Server Requirements, Step 1: Server Setup, Step 2: SSL Certificate (Let's Encrypt), Step 3: Nginx Configuration, Step 4: Deploy Application, Step 5: Database Migrations, Step 6: Backup Script
+
+### Community 449 - "Centralized authorization"
+Cohesion: 0.29
+Nodes (7): Authentication, freshness, rate limiting, and errors, Canonical contracts, Centralized authorization, Known boundaries, Permissions matrix, Tenant scoping and loading, Transport and job invocation
+
+### Community 451 - "Decision"
+Cohesion: 0.12
+Nodes (17): ADR 0008: Runtime and package compatibility baseline, Alternatives considered, Consequences, Context, Decision, Development container baseline, Migration and rollback, Part 41 image-pipeline dependency review (+9 more)
 
 ### Community 452 - "webhooks/index.ts"
-Cohesion: 0.18
-Nodes (20): ScheduleWebhookDeliveriesInput, ScheduleWebhookReplayInput, WEBHOOK_DELIVER_IDEMPOTENCY_PREFIX, canonicalString(), HEADER_PATTERN, signatureHeader(), FIXTURE_INPUT, verifyWebhookSignature() (+12 more)
+Cohesion: 0.14
+Nodes (25): WEBHOOK_DELIVER_JOB_DEFINITION, ScheduleWebhookDeliveriesInput, ScheduleWebhookReplayInput, ADR-0006, WEBHOOK_DELIVER_IDEMPOTENCY_PREFIX, webhookDeliverIdempotencyKey(), WebhookDeliverPayload, webhookRetryIdempotencyKey() (+17 more)
 
-### Community 455 - "ApiKeyRouteGuard"
-Cohesion: 0.40
-Nodes (3): ApiKeyRouteGuard, SAFE_METHODS, Injectable
+### Community 455 - "api-key-route.guard.test.ts"
+Cohesion: 0.11
+Nodes (12): ApiKeyAuthService, invalidApiKey(), Injectable, setApiKeyActor(), ApiKeyRouteGuard, SAFE_METHODS, apiKeyRequest(), GuardedController (+4 more)
 
 ### Community 457 - "editor-mentions.test.tsx"
 Cohesion: 0.18
@@ -2002,25 +2076,33 @@ Nodes (10): ADA, afterMention(), EMPTY_DOCUMENT, GRACE, mentionCount(), mentionM
 Cohesion: 0.40
 Nodes (4): description, name, private, version
 
-### Community 461 - "AuthController"
-Cohesion: 0.14
-Nodes (12): AuthController, Controller, Delete, Get, HttpCode, Param, Post, Req (+4 more)
+### Community 460 - "queue-worker-processor.service.test.ts"
+Cohesion: 0.40
+Nodes (5): config(), invocation, payload, runtimeRow, setup()
 
-### Community 462 - "domain.schema.ts"
-Cohesion: 0.16
-Nodes (13): customDomainHostnameSchema, DomainResolveQueryInput, domainResolveQuerySchema, domainResolveResultSchema, normalizeHostname(), RESERVED_HOSTS, RESERVED_SUFFIXES, SetWorkspaceDomainInput (+5 more)
-
-### Community 463 - "projects/requests.ts"
-Cohesion: 0.17
-Nodes (17): CreateProjectModal(), { router }, ProjectCollection(), ProjectLifecycleActions(), apiPath(), createProject(), deleteProject(), ProjectRequestResult (+9 more)
+### Community 461 - "auth-security.service.ts"
+Cohesion: 0.09
+Nodes (19): AuthController, Controller, Delete, Get, HttpCode, Param, Post, Req (+11 more)
 
 ### Community 468 - "meeting-extraction.service.test.ts"
 Cohesion: 0.16
 Nodes (12): principal, reply(), segments, streamStub(), THEIR_FIX, boundWorkspaceId(), databaseStub(), FULL_EXTRACTION (+4 more)
 
+### Community 469 - "note-projection.repository.ts"
+Cohesion: 0.14
+Nodes (12): NoteIndexDocument, parseDocuments(), clampPageSize(), dedupeAndCapTags(), NoteProjectionCursor, NoteProjectionPage, NoteProjectionRepository, NoteRow (+4 more)
+
+### Community 470 - "Part 75 — Complete the automated test pyramid"
+Cohesion: 0.09
+Nodes (22): API, Configuration, and Operational Changes, Coverage ratchet — measured, Database and Data Changes, Files and Components, Found by the remediation session, and fixed here, Full chromium baseline — three runs, and it now passes repeatedly, Handoff Notes, Implemented Work (+14 more)
+
+### Community 473 - "completed-parts/README.md"
+Cohesion: 0.13
+Nodes (12): Completed Parts, Cross-cutting records, Index, Naming and Scope, Required Workflow, Status Values, ADR 0012: Shared package charters cover runtime helpers and rendering assets, Alternatives considered (+4 more)
+
 ### Community 476 - "BrowserPoolService"
-Cohesion: 0.22
-Nodes (3): BrowserPoolService, Injectable, LaunchedBrowser
+Cohesion: 0.07
+Nodes (15): BrowserPoolService, ChromiumUnavailableError, LAUNCH_ARGS, config(), fakeBrowser(), fakeContext(), logger(), service() (+7 more)
 
 ### Community 478 - "Part 73 — Custom-domain support"
 Cohesion: 0.15
@@ -2030,17 +2112,9 @@ Nodes (13): API, Configuration, and Operational Changes, Database and Data Chang
 Cohesion: 0.40
 Nodes (5): Part 10 — Add developer commands and onboarding documentation, Part 11 — Implement configuration and dependency clients, Part 8 — Define environment contracts, Part 9 — Build the development Compose stack, Phase 2 — Local Infrastructure and Configuration
 
-### Community 480 - "request-context.middleware.ts"
-Cohesion: 0.17
-Nodes (9): getRequestContext(), RequestContextMiddleware, selectRequestId(), Inject, Injectable, REQUEST_IP_MAX_LENGTH, REQUEST_USER_AGENT_MAX_LENGTH, runWithRequestContext() (+1 more)
-
-### Community 482 - "notes-api-indexes.test.ts"
-Cohesion: 0.33
-Nodes (5): boardColumnMigrationPath, correctionMigrationPath, expected, journalPath, migrationPath
-
-### Community 483 - "embedding-reindex.ts"
-Cohesion: 0.50
-Nodes (4): main(), parseEmbeddingReindexArguments(), EmbeddingReindexCliModule, Module
+### Community 480 - "metrics.registry.ts"
+Cohesion: 0.04
+Nodes (57): errorSite(), statusForUnknownException(), RequestContextMiddleware, selectRequestId(), Inject, Injectable, REQUEST_IP_MAX_LENGTH, REQUEST_USER_AGENT_MAX_LENGTH (+49 more)
 
 ### Community 484 - "Part 67 — Build provider-neutral AI configuration and governance"
 Cohesion: 0.15
@@ -2063,28 +2137,32 @@ Cohesion: 0.15
 Nodes (13): API, Configuration, and Operational Changes, Database and Data Changes, Files and Components, Handoff Notes, Implemented Work, Important Decisions, Known Limitations and Follow-up Work, Objective (+5 more)
 
 ### Community 490 - "tenant/index.ts"
-Cohesion: 0.04
-Nodes (62): DatabaseModule, Global, Module, invitations, INVITATION_EMAIL_IDEMPOTENCY_PREFIX, INVITATION_EMAIL_JOB_TYPE, INVITATION_EMAIL_PAYLOAD_VERSION, INVITATION_EMAIL_QUEUE_NAME (+54 more)
+Cohesion: 0.05
+Nodes (56): main(), parseEmbeddingReindexArguments(), RecordAcceptedStateInput, ADR-0004, NOTE_EMBEDDING_GENERATE_JOB_DEFINITION, NOTE_EMBEDDING_GENERATE_SOURCE_QUEUE_NAME, EmbeddingReindexCliModule, Module (+48 more)
 
 ### Community 491 - "color-contrast.ts"
 Cohesion: 0.44
 Nodes (7): ACCENT_CONTRAST_MIN_RATIO, ACCENT_CONTRAST_TARGET_RATIO, accentContrast, AccentContrastLevel, contrastRatio(), linearChannel(), relativeLuminance()
 
 ### Community 492 - "SearchController"
-Cohesion: 0.35
+Cohesion: 0.30
 Nodes (7): routeUuid(), SearchController, Controller, Get, Query, Req, workspaceAuthorization()
 
 ### Community 493 - "filename.ts"
-Cohesion: 0.23
-Nodes (14): basename(), boundName(), canonicalDisplayExtension(), declaredFileExtension(), DISPLAY_EXTENSION_BY_TYPE, RESERVED_DEVICE_NAMES, sanitizeAttachmentFilename(), SanitizedAttachmentFilename (+6 more)
+Cohesion: 0.22
+Nodes (15): basename(), boundName(), canonicalDisplayExtension(), declaredFileExtension(), DISPLAY_EXTENSION_BY_TYPE, RESERVED_DEVICE_NAMES, sanitizeAttachmentFilename(), SanitizedAttachmentFilename (+7 more)
 
 ### Community 494 - "Phase 15 — Production Packaging and Operations"
 Cohesion: 0.29
 Nodes (7): Part 79 — Create production Docker images, Part 80 — Build the production Compose stack, Part 81 — Implement safe migrations and deployment scripts, Part 82 — Configure reverse proxy, TLS, and network policy, Part 83 — Implement backup, restore, and disaster recovery, Part 84 — Write complete technical documentation, Phase 15 — Production Packaging and Operations
 
-### Community 497 - "object-storage.service.test.ts"
-Cohesion: 0.40
-Nodes (4): config, logger(), security, service()
+### Community 495 - "RealtimeRedisAdapterService"
+Cohesion: 0.08
+Nodes (14): parseRealtimeConfig(), REALTIME_CONFIG, RealtimeConfigProvider, Injectable, RedisConfig, Inject, client(), RealtimeRedisAdapterService (+6 more)
+
+### Community 497 - "Notted Coding Conventions"
+Cohesion: 0.15
+Nodes (13): API design, Architecture, Code style, Database, Docker and operations, End-to-end runs (local resource budget), Frontend, graphify (+5 more)
 
 ### Community 498 - "Phase 8 — Tasks, Tags, Templates, and Advanced Organization"
 Cohesion: 0.40
@@ -2094,13 +2172,17 @@ Nodes (5): Part 46 — Implement tags and templates, Part 47 — Implement stand
 Cohesion: 0.40
 Nodes (5): Part 67 — Build provider-neutral AI configuration and governance, Part 68 — Implement summarize, continue writing, and tone rewrite, Part 69 — Implement meeting extraction and auto-tagging, Part 70 — Implement grammar and style assistance, Phase 12 — AI Capabilities
 
-### Community 500 - "Phase 13 — Enterprise Controls and Customization"
-Cohesion: 0.40
-Nodes (5): Part 71 — Add audit logging and administrative views, Part 72 — Implement branding and customization, Part 73 — Implement custom-domain support, Part 74 — Harden security and abuse controls, Phase 13 — Enterprise Controls and Customization
+### Community 500 - "axe.ts"
+Cohesion: 0.21
+Nodes (10): ACCEPTED_VIOLATIONS, AcceptedViolation, axeBundlePath(), AxeGlobal, AxeViolation, AxeViolationNode, EXTRA_RULES, scan() (+2 more)
 
-### Community 501 - ".deliver"
-Cohesion: 0.31
-Nodes (4): authorizationTarget(), classify(), Injectable, WebhookDeliveryWorkerService
+### Community 501 - "webhook-delivery.worker.service.ts"
+Cohesion: 0.12
+Nodes (14): webhooks, authorizationTarget(), classify(), DeliveryOutcome, Harness, run(), sent, ADR-0006 (+6 more)
+
+### Community 502 - "task-calendar.test.tsx"
+Cohesion: 0.18
+Nodes (10): done, mocks, openCalendar(), overdue, page, startOfToday, task(), today (+2 more)
 
 ### Community 505 - "ignoreGhsas"
 Cohesion: 0.20
@@ -2114,45 +2196,57 @@ Nodes (5): ADR 0013 — Successful REST responses return the bare resource paylo
 Cohesion: 0.40
 Nodes (5): Part 75 — Complete the automated test pyramid, Part 76 — Perform accessibility and browser validation, Part 77 — Test performance and scale limits, Part 78 — Add observability and operational diagnostics, Phase 14 — Testing, Performance, Accessibility, and Observability
 
-### Community 513 - "NoteExportSourceService"
-Cohesion: 0.25
-Nodes (3): Inject, NoteExportSourceService, Injectable
-
-### Community 514 - "note-embedding-producer.ts"
-Cohesion: 0.06
-Nodes (28): EMBEDDING_DIMENSIONS, EMBEDDING_PROVIDER, EmbeddingAvailability, EmbeddingProvider, isUsableEmbeddingVector(), MIN_EMBEDDING_VECTOR_NORM, EmbeddingsModule, Module (+20 more)
-
-### Community 517 - "FakeObjectStore"
+### Community 516 - "[workspaceId]/page.tsx"
 Cohesion: 0.18
-Nodes (3): ago(), busyFixture(), FakeObjectStore
+Nodes (12): formatDate(), { notFound }, renderPage(), WorkspaceOverviewPage(), WorkspaceStorageLimit(), WorkspaceStorageUsage(), clampPercent(), storageSeverityMessage() (+4 more)
 
-### Community 519 - "ConfigModule"
-Cohesion: 0.67
-Nodes (3): ConfigModule, Global, Module
+### Community 522 - "note-browser.test.tsx"
+Cohesion: 0.18
+Nodes (9): base(), first, mocks, page, projectDescriptor, query, second, tagMocks (+1 more)
 
-### Community 520 - "Development Workflow"
-Cohesion: 0.67
-Nodes (3): Available Make Commands, Development Workflow, Local Development Setup
-
-### Community 522 - "Docker Compose Configuration"
-Cohesion: 0.67
-Nodes (3): Development Stack (`compose.yaml`), Docker Compose Configuration, Production Stack (`docker/docker-compose.yml`)
-
-### Community 523 - "Part 55 — Version snapshots and retention"
-Cohesion: 0.25
-Nodes (7): Files and architecture, Limits and follow-up, Migration, Part 55 — Version snapshots and retention, Result, Status, Tests authored and verification
+### Community 524 - "note-board.test.tsx"
+Cohesion: 0.22
+Nodes (9): first, mocks, note(), openBoard(), page, query, review, second (+1 more)
 
 ### Community 525 - "security-scan.mjs"
 Cohesion: 0.36
 Nodes (8): composeFile, imageExistsLocally(), imagesFromCompose(), main(), scanContainers(), scanImage(), spawnCode(), workspace
 
+### Community 530 - "Part 63 — PDF and HTML export"
+Cohesion: 0.22
+Nodes (9): Corrections made during implementation, Fixed after review, Implemented Work, Objective, Open risks and follow-ups, Part 63 — PDF and HTML export, Status, The central problem: the app→app boundary (+1 more)
+
+### Community 531 - "tag-manager.test.tsx"
+Cohesion: 0.25
+Nodes (6): created, design, mocks, page, research, tag()
+
 ### Community 532 - "Part 61 — Email subsystem"
 Cohesion: 0.25
 Nodes (8): Deviations and deferrals, Fixed after review, Implemented Work, Objective, Open risks and follow-ups, Part 61 — Email subsystem, Status, Verification
 
+### Community 534 - "Part 64 — Markdown, TXT, DOCX and ZIP export, and the export UI"
+Cohesion: 0.25
+Nodes (8): Dependency note, Deviations, Fixed after review, Implemented Work, Objective, Open risks and follow-ups, Part 64 — Markdown, TXT, DOCX and ZIP export, and the export UI, Status
+
+### Community 535 - "ADR 0001: pnpm and Turborepo monorepo boundaries"
+Cohesion: 0.25
+Nodes (7): ADR 0001: pnpm and Turborepo monorepo boundaries, Alternatives considered, Consequences, Context, Decision, Migration and rollback, Tenancy and data flow
+
 ### Community 536 - "security-headers.test.ts"
 Cohesion: 0.50
 Nodes (4): { buildSecurityHeaders }, cspDirectives(), headerValue(), require
+
+### Community 538 - "NoteCollaborationProjectionService"
+Cohesion: 0.33
+Nodes (3): NoteCollaborationProjectionService, reasonOf(), Injectable
+
+### Community 539 - "Database migration policy"
+Cohesion: 0.29
+Nodes (7): Application, Database migration policy, Generate and review, Immutability, Migration 0007 note-version preflight, Required tests, Rollback
+
+### Community 543 - "decodeAwarenessClientIds"
+Cohesion: 0.60
+Nodes (3): decodeAwarenessClientIds(), awarenessUpdate(), varUint()
 
 ### Community 544 - "Requests and responses"
 Cohesion: 0.40
@@ -2163,24 +2257,24 @@ Cohesion: 0.50
 Nodes (4): 404 instead of 403 across workspaces, 421 UNTRUSTED_HOST, Accent color contrast, Errors
 
 ## Knowledge Gaps
-- **3454 isolated node(s):** `$schema`, `.opencode/plugins/graphify.js`, `semi`, `singleQuote`, `trailingComma` (+3449 more)
+- **3631 isolated node(s):** `$schema`, `.opencode/plugins/graphify.js`, `semi`, `singleQuote`, `trailingComma` (+3626 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **101 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **90 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `workspaceId()` connect `workspaceId` to `storage-maintenance.integration.test.ts`, `grouping.ts`, `audit-logs.controller.test.ts`, `AuthService`, `TaskStatusesController`, `useExportJob.ts`, `requestJson`, `NoteTimeline.tsx`, `workspace-logo.service.test.ts`, `createTenantContext`, `export.integration.test.ts`, `note-index.repository.ts`, `.userId`, `zip.test.ts`, `NoteEditorSurface.tsx`, `useImageUploads.ts`, `domains.service.ts`, `server-workspaces.ts`, `TaskListView.tsx`, `NoteBoard.tsx`?**
-  _High betweenness centrality (0.096) - this node is a cross-community bridge._
-- **Why does `StructuredLogger` connect `DatabaseService` to `storage-maintenance.integration.test.ts`, `AiConfig`, `config.module.ts`, `health.module.ts`, `auth.module.ts`, `webhooks.integration.test.ts`, `main.ts`, `seed.ts`, `rate-limit.guard.test.ts`, `.failure`, `notes.service.ts`, `search.service.ts`, `.info`, `ai/index.ts`, `export.integration.test.ts`, `note-index.repository.ts`, `DatabaseTransaction`, `RedisService`, `job-registry.ts`, `meilisearch.service.ts`, `better-auth.setup.ts`, `api-keys.e2e.test.ts`, `BrowserPoolService`, `.metadata`, `ObjectStorageService`, `request-context.middleware.ts`, `whereWorkspace`, `ai-governance.service.test.ts`, `object-storage.service.test.ts`, `note-collaboration.projection.ts`, `pdf-export.service.test.ts`, `export-pdf.integration.test.ts`?**
-  _High betweenness centrality (0.042) - this node is a cross-community bridge._
-- **Why does `bearerSecret()` connect `api-key.schema.ts` to `api-keys.e2e.test.ts`?**
-  _High betweenness centrality (0.035) - this node is a cross-community bridge._
+- **Why does `workspaceId()` connect `createTenantContext` to `storage-maintenance.integration.test.ts`, `NoteIndexRepository`, `[workspaceId]/page.tsx`, `TaskListView.tsx`, `audit-logs.controller.ts`, `AuthService`, `TaskStatusesController`, `requestJson`, `note-browser.test.tsx`, `note-board.test.tsx`, `NoteTimeline.tsx`, `tag-manager.test.tsx`, `NoteDetailView.tsx`, `seed.ts`, `notes.service.ts`, `GlobalSearchDialog.tsx`, `.userId`, `zip.test.ts`, `use-image-uploads.test.tsx`, `image-uploads.ts`, `task-board.test.tsx`, `task-calendar.test.tsx`?**
+  _High betweenness centrality (0.101) - this node is a cross-community bridge._
+- **Why does `setup()` connect `use-image-uploads.test.tsx` to `image-uploads.ts`, `createTenantContext`?**
+  _High betweenness centrality (0.046) - this node is a cross-community bridge._
+- **Why does `bearerSecret()` connect `api-key.schema.ts` to `AuthService`, `api-key-route.guard.test.ts`?**
+  _High betweenness centrality (0.036) - this node is a cross-community bridge._
 - **What connects `$schema`, `.opencode/plugins/graphify.js`, `semi` to the rest of the system?**
-  _3454 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _3631 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `note.schema.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.03135135135135135 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.027323799795709907 - nodes in this community are weakly interconnected._
 - **Should `schema/index.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.022355535045890374 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.02434861759016953 - nodes in this community are weakly interconnected._
 - **Should `document.schema.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.03986928104575163 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.042278332354668234 - nodes in this community are weakly interconnected._

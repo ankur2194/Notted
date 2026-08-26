@@ -1,0 +1,294 @@
+# promtool unit tests for `alerts.yml` (Part 78).
+#
+#   promtool test rules ops/prometheus/alerts_test.yml
+#
+# WHY THIS FILE EXISTS. An alert rule is production code that runs exactly once,
+# during an incident, and is otherwise never executed. The three ways it goes
+# wrong — a typo'd metric name that silently matches nothing, a `for:` that
+# never elapses, and the `sum` vs `max by` aggregation error described at the
+# top of `alerts.yml` — are all invisible to review and all invisible to a
+# running Prometheus, which reports "0 firing" identically for "healthy" and
+# "this rule can never fire". These tests replay the failure-injection
+# procedures in `docs/runbooks/observability.md` against synthetic series, so
+# the rules are verified with no Prometheus, no Notted and no outage.
+#
+# The negative cases matter as much as the positive ones: several assert that a
+# rule does NOT fire, which is the only way the aggregation rule gets tested.
+
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # ── Injection: stop the API process ───────────────────────────────────────
+  - interval: 1m
+    name: API instance stops answering scrapes
+    input_series:
+      - series: 'up{job="notted-api", instance="127.0.0.1:3001", service="notted-api"}'
+        values: "1 1 0+0x10"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: NottedApiDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: NottedApiDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: notted-api
+              instance: 127.0.0.1:3001
+              service: notted-api
+            exp_annotations:
+              summary: "Notted API instance is not scrapeable"
+              description: "Prometheus cannot scrape the Notted API. Check the process, the port and METRICS_TOKEN."
+              runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedapidown"
+
+  # ── Injection: docker compose stop redis ──────────────────────────────────
+  - interval: 1m
+    name: Redis readiness fails for longer than the failover window
+    input_series:
+      - series: 'notted_dependency_up{dependency="redis", instance="a", job="notted-api"}'
+        values: "1 1 0+0x12"
+      - series: 'notted_dependency_up{dependency="database", instance="a", job="notted-api"}'
+        values: "1+0x14"
+    alert_rule_test:
+      # Below the 5m window a failover must stay silent.
+      - eval_time: 5m
+        alertname: NottedDependencyDown
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: NottedDependencyDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              dependency: redis
+            exp_annotations:
+              summary: "Notted dependency is down"
+              description: "Dependency redis has failed readiness for five minutes."
+              runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#notteddependencydown"
+
+  # ── Injection: docker compose stop meilisearch, then minio ────────────────
+  # AGGREGATION CHECK. Dependency health is a GLOBAL fact: both instances probe
+  # the same Meilisearch. One instance reporting down while another reports up
+  # is a probe blip, not an outage, and `max by (dependency)` is what makes the
+  # rule say so. With `min by` this test would fire.
+  - interval: 1m
+    name: One instance failing a probe is not a dependency outage
+    input_series:
+      - series: 'notted_dependency_up{dependency="meilisearch", instance="a", job="notted-api"}'
+        values: "0+0x12"
+      - series: 'notted_dependency_up{dependency="meilisearch", instance="b", job="notted-api"}'
+        values: "1+0x12"
+      - series: 'notted_dependency_up{dependency="minio", instance="a", job="notted-api"}'
+        values: "0+0x12"
+      - series: 'notted_dependency_up{dependency="minio", instance="b", job="notted-api"}'
+        values: "0+0x12"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: NottedDependencyDown
+        exp_alerts:
+          # Only MinIO, which is down on every instance.
+          - exp_labels:
+              severity: critical
+              dependency: minio
+            exp_annotations:
+              summary: "Notted dependency is down"
+              description: "Dependency minio has failed readiness for five minutes."
+              runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#notteddependencydown"
+
+  # ── Injection: force a 500 from a handler ─────────────────────────────────
+  - interval: 1m
+    name: Sustained 5xx responses
+    input_series:
+      - series: 'notted_http_request_duration_seconds_count{status_class="5xx", method="GET", route="/api/v1/notes", instance="a"}'
+        values: "0+20x30"
+      - series: 'notted_http_request_duration_seconds_count{status_class="2xx", method="GET", route="/api/v1/notes", instance="a"}'
+        values: "0+80x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: NottedHighErrorRate
+        exp_alerts:
+          # `sum(...)` without `by` drops every label, so only `severity` remains.
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Notted API is returning 5xx responses"
+              description: "More than 5% of HTTP responses have been 5xx for ten minutes."
+              runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedhigherrorrate"
+
+  # ── Injection: exhaust the pool (DATABASE_POOL_MAX_CONNECTIONS=1) ─────────
+  - interval: 1m
+    name: Requests queue for a database connection
+    input_series:
+      - series: 'notted_database_pool_connections{state="waiting", instance="a", job="notted-api"}'
+        values: "0 0 3+0x12"
+      - series: 'notted_database_pool_connections{state="idle", instance="a", job="notted-api"}'
+        values: "0+0x14"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: NottedDatabasePoolSaturated
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: NottedDatabasePoolSaturated
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Notted database pool is saturated"
+              description: "Requests have been queueing for a PostgreSQL connection for five minutes."
+              runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#notteddatabasepoolsaturated"
+
+  # ── AGGREGATION CHECK, the one this whole convention exists for ───────────
+  # Queue depth is a GLOBAL fact: three replicas each report the SAME 400
+  # waiting jobs from the SAME Redis. `max by (queue)` sees 400 and stays quiet.
+  # `sum by (queue)` would see 1200 and page for a backlog that is under budget
+  # — the threshold would effectively be 167, and it would MOVE every time the
+  # replica count changed.
+  - interval: 1m
+    name: Replica count does not inflate queue depth
+    input_series:
+      - series: 'notted_queue_jobs{queue="notted-export", state="waiting", instance="a"}'
+        values: "400+0x25"
+      - series: 'notted_queue_jobs{queue="notted-export", state="waiting", instance="b"}'
+        values: "400+0x25"
+      - series: 'notted_queue_jobs{queue="notted-export", state="waiting", instance="c"}'
+        values: "400+0x25"
+      - series: 'notted_queue_job_duration_seconds_count{queue="notted-export", outcome="completed", instance="a"}'
+        values: "0+30x25"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: NottedQueueBacklog
+        exp_alerts: []
+
+  - interval: 1m
+    name: A genuine queue backlog fires
+    input_series:
+      - series: 'notted_queue_jobs{queue="notted-export", state="waiting", instance="a"}'
+        values: "600+0x25"
+      - series: 'notted_queue_job_duration_seconds_count{queue="notted-export", outcome="completed", instance="a"}'
+        values: "0+30x25"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: NottedQueueBacklog
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              queue: notted-export
+            exp_annotations:
+              summary: "Notted queue backlog is growing"
+              description: "Queue notted-export has held more than 500 waiting jobs for fifteen minutes."
+              runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedqueuebacklog"
+
+  # ── The failure no health check sees ──────────────────────────────────────
+  # Work is waiting and the completion counter is flat. Depth alone would not
+  # distinguish this from a busy queue, and throughput alone would not
+  # distinguish it from an idle one.
+  - interval: 1m
+    name: Queue holds work but completes none
+    input_series:
+      - series: 'notted_queue_jobs{queue="notted-default", state="waiting", instance="a"}'
+        values: "40+0x45"
+      - series: 'notted_queue_job_duration_seconds_count{queue="notted-default", outcome="completed", instance="a"}'
+        values: "1000+0x45"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: NottedQueueStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              queue: notted-default
+            exp_annotations:
+              summary: "Notted queue has work but is not processing it"
+              description: "Queue notted-default has waiting jobs and has completed none for fifteen minutes."
+              runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedqueuestalled"
+
+  - interval: 1m
+    name: A draining queue does not look stalled
+    input_series:
+      - series: 'notted_queue_jobs{queue="notted-default", state="waiting", instance="a"}'
+        values: "40+0x45"
+      - series: 'notted_queue_job_duration_seconds_count{queue="notted-default", outcome="completed", instance="a"}'
+        values: "1000+5x45"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: NottedQueueStalled
+        exp_alerts: []
+
+  # ── The dispatcher's own failure mode ─────────────────────────────────────
+  - interval: 1m
+    name: Outbox intents commit but are never published
+    input_series:
+      - series: 'notted_job_outbox_rows{status="pending", consumable="yes", instance="a"}'
+        values: "10+20x25"
+      - series: 'notted_job_outbox_rows{status="failed", consumable="yes", instance="a"}'
+        values: "0+0x25"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: NottedOutboxStuck
+        exp_alerts:
+          # `max(...)` without `by` drops every label.
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Notted job outbox is not draining"
+              description: "More than 100 consumable job_outbox rows have stayed pending for fifteen minutes; the dispatcher may be stalled. Rows whose job type has no registered consumer are excluded — see the runbook."
+              runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedoutboxstuck"
+
+  # ── The regression guard for the alert's own worst failure mode ───────────
+  # A large, permanently pending backlog of rows whose job type has NO
+  # registered consumer must NOT page anybody. This is the product's real
+  # steady state — every domain event with no subscriber lands here and the
+  # dispatcher re-defers it forever by design — so an unfiltered `pending`
+  # expression would fire fifteen minutes into any deployment and never clear.
+  - interval: 1m
+    name: Unconsumable outbox intents never fire the stalled-dispatcher alert
+    input_series:
+      - series: 'notted_job_outbox_rows{status="pending", consumable="no", instance="a"}'
+        values: "3000+0x25"
+      - series: 'notted_job_outbox_rows{status="pending", consumable="yes", instance="a"}'
+        values: "0+0x25"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: NottedOutboxStuck
+        exp_alerts: []
+
+  # ── Injection: revoke note access, then request an export ─────────────────
+  - interval: 1m
+    name: Half of exports settle with a failure outcome
+    input_series:
+      - series: 'notted_export_duration_seconds_count{format="pdf", outcome="ready", instance="a"}'
+        values: "0+1x60"
+      - series: 'notted_export_duration_seconds_count{format="pdf", outcome="source_forbidden", instance="a"}'
+        values: "0+1x60"
+    alert_rule_test:
+      - eval_time: 50m
+        alertname: NottedExportFailureRate
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Notted exports are failing"
+              description: "More than 20% of export jobs have settled with a failure outcome for fifteen minutes."
+              runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedexportfailurerate"
+
+  # ── A blocked event loop is per-instance and must not be averaged away ────
+  - interval: 1m
+    name: One wedged instance is an incident
+    input_series:
+      - series: 'notted_nodejs_eventloop_lag_p99_seconds{instance="a", job="notted-api"}'
+        values: "0.4+0x15"
+      - series: 'notted_nodejs_eventloop_lag_p99_seconds{instance="b", job="notted-api"}'
+        values: "0.01+0x15"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: NottedEventLoopLag
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              instance: a
+              job: notted-api
+            exp_annotations:
+              summary: "Notted API event loop is lagging"
+              description: "p99 event-loop lag on a has exceeded 250ms for ten minutes; something is blocking the loop."
+              runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedeventlooplag"

@@ -1,0 +1,256 @@
+# Notted alert rules (Part 78).
+#
+# Every rule has a `for:` duration and a `runbook_url` pointing at its own
+# anchor in `docs/runbooks/observability.md`. An alert with no runbook is an
+# alert someone silences at 3am; an alert with no `for:` fires on a single
+# scrape blip and teaches the on-call engineer to ignore the channel.
+#
+# ══════════════════════════════════════════════════════════════════════════════
+#  AGGREGATION RULE — READ THIS BEFORE ADDING OR EDITING A RULE
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Notted's metrics come in TWO kinds, and mixing up their aggregation silently
+# breaks the threshold by a factor of N (the number of API instances):
+#
+#   PER-INSTANCE FACTS — HTTP rate, in-flight requests, the `pg` pool, sockets,
+#   event-loop lag. Each instance observes only its own share, so the fleet
+#   total is `sum(...)`.
+#
+#   GLOBAL FACTS READ FROM A SHARED STORE — queue depth, `job_outbox` rows,
+#   storage bytes, dependency health. Every instance queries the SAME Redis and
+#   the SAME PostgreSQL and reports the SAME number, so these MUST use
+#   `max by (...)`. `sum()` over three replicas turns a 500-job backlog into
+#   1500 and fires the alert at one third of the intended threshold — or, on a
+#   rolling deploy where instance count changes, at a threshold that moves.
+#
+# The rules below are grouped and commented accordingly.
+
+groups:
+  # ─────────────────────────────────────────────────────────── critical ──
+  - name: notted-critical
+    rules:
+      - alert: NottedApiDown
+        # `up` is synthesized by Prometheus itself, so this fires even when the
+        # process is too broken to serve `/metrics` — which is exactly the case
+        # no application metric can cover.
+        expr: up{job="notted-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Notted API instance is not scrapeable"
+          description: "Prometheus cannot scrape the Notted API. Check the process, the port and METRICS_TOKEN."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedapidown"
+
+      - alert: NottedDependencyDown
+        # GLOBAL FACT: every instance probes the same PostgreSQL/Redis/MinIO, so
+        # `max by (dependency)` — one instance briefly failing a probe is not an
+        # outage, and `min` would page for it.
+        #
+        # 5m, deliberately long. A Redis failover, a MinIO restart or a
+        # Meilisearch reindex all produce a sub-minute `down`; readiness already
+        # takes the instance out of rotation, so paging a human before five
+        # minutes have passed adds nothing a load balancer has not done.
+        expr: max by (dependency) (notted_dependency_up) == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Notted dependency is down"
+          description: "Dependency {{ $labels.dependency }} has failed readiness for five minutes."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#notteddependencydown"
+
+      - alert: NottedHighErrorRate
+        # PER-INSTANCE FACT: `sum` across the fleet, then a ratio so the
+        # threshold is traffic-independent. `> 0` in the denominator guard keeps
+        # the rule silent on an idle deployment instead of dividing by zero.
+        expr: |
+          sum(rate(notted_http_request_duration_seconds_count{status_class="5xx"}[5m]))
+            /
+          sum(rate(notted_http_request_duration_seconds_count[5m]))
+            > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Notted API is returning 5xx responses"
+          description: "More than 5% of HTTP responses have been 5xx for ten minutes."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedhigherrorrate"
+
+      - alert: NottedDatabasePoolSaturated
+        # PER-INSTANCE FACT (`pg` counters are per process): `sum`.
+        # `waiting > 0` means a request is blocked waiting for a connection,
+        # which is a latency cliff rather than a gradual slowdown.
+        expr: sum(notted_database_pool_connections{state="waiting"}) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Notted database pool is saturated"
+          description: "Requests have been queueing for a PostgreSQL connection for five minutes."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#notteddatabasepoolsaturated"
+
+  # ──────────────────────────────────────────────────────────── warning ──
+  - name: notted-queue
+    rules:
+      - alert: NottedQueueBacklog
+        # GLOBAL FACT (one Redis): `max by (queue)`. With `sum` and three
+        # replicas this would fire at a real backlog of 167, not 500.
+        expr: max by (queue) (notted_queue_jobs{state="waiting"}) > 500
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notted queue backlog is growing"
+          description: "Queue {{ $labels.queue }} has held more than 500 waiting jobs for fifteen minutes."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedqueuebacklog"
+
+      - alert: NottedQueueStalled
+        # THE FAILURE NO HEALTH CHECK SEES. Redis is up, the queue client is
+        # connected, `/health/ready` is green — and nothing is being processed.
+        # Depth alone cannot express it (a busy queue is also deep) and
+        # throughput alone cannot either (an idle queue also has zero
+        # throughput). The conjunction is the signal: work waiting AND no
+        # completions. Left side is a global fact (`max by`), right side is a
+        # per-instance fact (`sum by`).
+        expr: |
+          max by (queue) (notted_queue_jobs{state="waiting"}) > 0
+            and
+          sum by (queue) (rate(notted_queue_job_duration_seconds_count[15m])) == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notted queue has work but is not processing it"
+          description: "Queue {{ $labels.queue }} has waiting jobs and has completed none for fifteen minutes."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedqueuestalled"
+
+      - alert: NottedDeadLettersRising
+        # PER-INSTANCE FACT (each worker counts its own terminal failures).
+        expr: sum(increase(notted_queue_dead_letter_total[15m])) > 5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notted jobs are dead-lettering"
+          description: "More than five jobs reached the dead-letter queue in the last fifteen minutes."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#notteddeadlettersrising"
+
+      - alert: NottedOutboxStuck
+        # GLOBAL FACT (one PostgreSQL): `max`. This is the dispatcher's own
+        # failure mode — durable intents committed but never published — and it
+        # is invisible to every BullMQ metric, because the jobs never reach
+        # BullMQ at all.
+        # `consumable="yes"` is load-bearing, not a refinement. A job type with
+        # no registered handler is re-claimed and re-deferred by the
+        # dispatcher's rollout safety gate forever, so those rows are
+        # PERMANENTLY pending by design. Alerting on unfiltered `pending` fires
+        # fifteen minutes into any real deployment and never clears — and the
+        # operator it pages cannot fix it, because nothing is broken.
+        expr: max(notted_job_outbox_rows{status="pending", consumable="yes"}) > 100
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notted job outbox is not draining"
+          description: "More than 100 consumable job_outbox rows have stayed pending for fifteen minutes; the dispatcher may be stalled. Rows whose job type has no registered consumer are excluded — see the runbook."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedoutboxstuck"
+
+  - name: notted-features
+    rules:
+      - alert: NottedExportSlow
+        # PER-INSTANCE FACT. p95 over the fleet's merged buckets.
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(notted_export_duration_seconds_bucket[30m]))
+          ) > 60
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notted export generation is slow"
+          description: "The p95 export generation time has exceeded 60 seconds for fifteen minutes."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedexportslow"
+
+      - alert: NottedExportFailureRate
+        # `outcome` is a bounded enum, so "not ready and not replayed" is a
+        # complete description of failure without listing six outcomes that a
+        # future format could extend.
+        expr: |
+          sum(rate(notted_export_duration_seconds_count{outcome!~"ready|replayed"}[30m]))
+            /
+          sum(rate(notted_export_duration_seconds_count[30m]))
+            > 0.2
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notted exports are failing"
+          description: "More than 20% of export jobs have settled with a failure outcome for fifteen minutes."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedexportfailurerate"
+
+      - alert: NottedAiRefusals
+        # A refusal is a real usage event (`recordRefusal` writes one), so this
+        # is the signal that a workspace is hitting its ceiling rather than that
+        # "AI stopped working". Warning, never critical: refusing is the gate
+        # working correctly.
+        expr: sum(rate(notted_ai_requests_total{status="rate_limited"}[15m])) > 0.1
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notted AI requests are being refused"
+          description: "The AI governance gate has been refusing requests for thirty minutes; a workspace quota or the provider limiter is saturated."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedairefusals"
+
+      - alert: NottedStorageGrowth
+        # GLOBAL FACT (one PostgreSQL aggregate): `max`.
+        #
+        # ⚠️ CALIBRATION KNOB — THE ONLY RULE HERE WITH NO DEFENSIBLE DEFAULT.
+        # 5 GiB/day is a guess. A single-team deployment that never uploads
+        # anything will page on the day someone imports a photo library; a
+        # deployment used for scanned documents will sit above this threshold
+        # permanently and the rule becomes noise the first week. Set it from
+        # YOUR OWN baseline: watch `notted_storage_bytes` for a fortnight, take
+        # the ordinary daily delta, and set this to roughly three times it. The
+        # thing being detected is a runaway — a retry loop re-uploading, a sweep
+        # that stopped reclaiming — not growth as such.
+        expr: max(increase(notted_storage_bytes{status="ready"}[24h])) > 5368709120
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notted attachment storage is growing unusually fast"
+          description: "Ready attachment bytes grew by more than 5 GiB in 24 hours. Recalibrate this threshold to the deployment's own baseline."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedstoragegrowth"
+
+  - name: notted-runtime
+    rules:
+      - alert: NottedEventLoopLag
+        # PER-INSTANCE FACT, and deliberately NOT aggregated: one wedged
+        # instance is the incident, and `avg` across the fleet would hide it.
+        expr: notted_nodejs_eventloop_lag_p99_seconds > 0.25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notted API event loop is lagging"
+          description: "p99 event-loop lag on {{ $labels.instance }} has exceeded 250ms for ten minutes; something is blocking the loop."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedeventlooplag"
+
+      - alert: NottedWebsocketRejections
+        # PER-INSTANCE FACT. A ratio, because the absolute number scales with
+        # ordinary reconnection traffic and would need re-tuning per deployment.
+        expr: |
+          sum(rate(notted_websocket_connections_total{outcome="rejected"}[15m]))
+            /
+          sum(rate(notted_websocket_connections_total[15m]))
+            > 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Notted is rejecting most realtime connections"
+          description: "More than half of realtime connection attempts have been refused for fifteen minutes."
+          runbook_url: "https://github.com/notted/notted/blob/main/docs/runbooks/observability.md#nottedwebsocketrejections"

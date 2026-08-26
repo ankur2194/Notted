@@ -48,6 +48,28 @@ export class DatabaseService implements OnModuleDestroy {
     return this.db.transaction(work, config);
   }
 
+  /**
+   * Part 78 — pool saturation, read straight off `pg`'s own in-memory counters.
+   *
+   * A COUNT-ONLY VIEW rather than exporting `DATABASE_POOL` from
+   * `DatabaseModule`: the token is currently a module-private provider (a
+   * `@Global()` module makes its EXPORTS global, not its providers), and the
+   * fix that widens the module's public surface to hand a metrics collector a
+   * live `Pool` — which can `connect`, `query` and `end` — is the wrong one for
+   * three numbers. Same reasoning as `QUEUE_METRICS_SOURCE`.
+   *
+   * `waiting` is the saturation signal: clients queued because `max` is
+   * exhausted. It is the number that turns "the API is slow" into "the API is
+   * slow because it is waiting for a connection".
+   */
+  poolStats(): { readonly total: number; readonly idle: number; readonly waiting: number } {
+    return {
+      total: this.pool.totalCount,
+      idle: this.pool.idleCount,
+      waiting: this.pool.waitingCount,
+    };
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.pool.end();
   }

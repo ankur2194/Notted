@@ -66,7 +66,16 @@ export class PdfExportService {
     const margins = clampMargins(input.margins);
     const pdfOptions = this.buildPdfOptions(margins, input.headerText, input.footerText);
 
+    // Part 77 residual — sub-stage attribution inside the render, so the ~36 s
+    // that `job.export.wait` cannot account for can be pinned on browser-context
+    // acquisition, `setContent`, or `page.pdf` instead of on "rendering". Marks
+    // only; nothing branches on them.
+    const startedAt = performance.now();
+
     return this.browserPool.withPage(async (page) => {
+      // Includes the incognito-context + page creation, and a cold Chromium
+      // launch on the one job in a batch that pays for it.
+      const pageAcquiredAt = performance.now();
       page.setDefaultTimeout(this.config.renderTimeoutMs);
       await page.setJavaScriptEnabled(false);
 
@@ -83,21 +92,36 @@ export class PdfExportService {
 
       await page.setOfflineMode(true);
       await page.emulateMediaType("print");
+      const pageConfiguredAt = performance.now();
 
       await page.setContent(input.html, {
         waitUntil: "load",
         timeout: this.config.renderTimeoutMs,
       });
+      const contentSetAt = performance.now();
+
+      const bytes = await page.pdf(pdfOptions);
 
       // A COUNT ONLY — never a URL. `buildStandaloneHtml` emits no external
       // reference at all, so the expected value is 0 and any non-zero count
       // means a document tried to leave the sandbox and was stopped.
+      //
+      // Emitted AFTER `page.pdf` so the same line can carry the stage timings;
+      // interception is still armed during printing, so a request aborted then
+      // is now counted rather than missed.
       this.logger.info(
-        { component: "export-pdf", outcome: "rendered", abortedRequestCount },
+        {
+          component: "export-pdf",
+          outcome: "rendered",
+          abortedRequestCount,
+          pageAcquireMs: Math.round(pageAcquiredAt - startedAt),
+          pageConfigureMs: Math.round(pageConfiguredAt - pageAcquiredAt),
+          setContentMs: Math.round(contentSetAt - pageConfiguredAt),
+          pdfMs: Math.round(performance.now() - contentSetAt),
+        },
         "PDF export blocked outbound requests",
       );
 
-      const bytes = await page.pdf(pdfOptions);
       if (bytes.byteLength > this.config.maxArtifactBytes) {
         throw new Error("Generated PDF exceeds the maximum export artifact size");
       }

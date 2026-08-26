@@ -56,8 +56,13 @@ function variant(result: ProcessedImage, name: string): ProcessedImageObject {
   return found;
 }
 
-/** Wall-clock budget for "rejected within resource limits". */
-const REJECTION_BUDGET_MS = 2_000;
+/**
+ * Wall-clock budget for "rejected within resource limits". Loose on purpose:
+ * under v8 coverage instrumentation the same work costs a variable multiple of
+ * its uninstrumented time, and the assertion is that a decompression bomb is
+ * refused promptly rather than expanded — not a latency SLO.
+ */
+const REJECTION_BUDGET_MS = 5_000;
 
 afterEach(() => {
   resetHeicConverter();

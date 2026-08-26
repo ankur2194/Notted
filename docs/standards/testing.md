@@ -207,3 +207,205 @@ single IP of the shared network namespace.
 pattern (`notted_e2e*_test`) that no development or production name can match, and `redis-reset-e2e`
 hardcodes logical database 1. Never point either at development data, and never use
 `pnpm infra:reset:dev` to prepare an end-to-end run.
+
+<!-- BEGIN Part 75 — automated test pyramid. Append new sections below this block, not inside it. -->
+
+## Infrastructure gates
+
+Around thirty API suites are wrapped in `describe.skipIf(...)` on a piece of infrastructure —
+`DATABASE_URL`, `MINIO_ENDPOINT`, `MEILISEARCH_HOST`, `REDIS_URL`, a Mailpit URL, and a handful of
+opt-in switches. That gate is right on a laptop with no stack running. In CI it is a trap: Turbo 2
+filters the environment strictly, so a variable that is not declared in `turbo.json` never reaches
+vitest, every gated suite skips, and the run still prints green.
+
+Two things keep that honest:
+
+- `turbo.json` declares the full set on both `test` and `test:ci`, wildcards included
+  (`MINIO_*`, `MEILISEARCH_*`, `MAILPIT_*`, `BETTER_AUTH_*`, `RATE_LIMIT_*`, `FEATURE_*`).
+  **Adding a suite that reads a new variable means adding it there in the same change.**
+- `apps/api/test/integration-gates.test.ts` asserts that when `DATABASE_URL` is set under CI, the
+  other stack variables are set too — turning "thirty suites skipped" into one red test.
+
+Note the name: the application reads `MEILISEARCH_HOST`. `MEILISEARCH_URL` is read only by
+`apps/api/src/search/hybrid-search.integration.test.ts` and is set nowhere in `compose.yaml`, so
+that one suite is permanently skipped by design.
+
+### Two suites that only run in a specific container
+
+- `apps/api/test/search-reindex.integration.test.ts` requires
+  `MEILISEARCH_INDEX_PREFIX=notted_e2e_`, which only the `api-e2e` service sets. It refuses to run
+  against the development prefix on purpose: it deletes and rebuilds index documents.
+- `apps/api/test/export-pdf.integration.test.ts` needs a Chromium binary but no database, so it runs
+  in the **development** `api` container, which already carries one, and needs no e2e stack:
+
+  ```bash
+  docker compose -p notted-dev exec -T --workdir /workspace/apps/api api \
+    pnpm exec vitest run test/export-pdf.integration.test.ts
+  ```
+
+  `5 passed` is the pass condition. `skipped` is unproven, not passed.
+
+## Shared Playwright fixtures
+
+New browser specs import `apps/web/e2e/accounts.ts` for identities, registration, workspace
+creation, and invitations, instead of copying those helpers again. It is a plain module, not a
+`*.spec.ts`, so Playwright's `testMatch` does not collect it — the same arrangement as
+`apps/web/e2e/mailpit.ts`.
+
+Provisioning there is API-driven. The sign-up and sign-in *forms* are already covered by
+`auth.spec.ts`; a spec about something else should not spend browser time re-proving them. The
+session cookie lands in the browser context either way, so `page.goto` afterwards is authenticated
+exactly as a form login would be.
+
+**Existing specs were deliberately not migrated.** Their copies diverged for real reasons — 503
+route injection, focus-order assertions, passkey and OAuth variants — and rewriting them would trade
+working coverage for tidiness. Migrate one only when it is already being edited for another reason.
+
+### Assert exact status codes in denial tests
+
+`apps/web/e2e/role-denial.spec.ts` asserts that the **server** refuses when the UI is bypassed, which
+is the assertion that matters: a hidden button is a convenience, an API is the boundary. Two rules
+apply to any spec of that kind:
+
+- Assert the **exact** status. "Not 2xx" lets a `429` from a rate limiter masquerade as an
+  authorization decision.
+- Preserve the **403-vs-404 split**. `docs/authorization.md` promises that cross-tenant and guessed
+  identifiers are concealed as `404` while known same-tenant permission failures are `403`.
+  Collapsing the two is a tenant-existence oracle that every layer below still calls "denied".
+
+Because a wrong path also returns `404`, and `404` is a *passing* result for half of those
+assertions, the spec first checks every path it uses against the OpenAPI document the running API
+serves. Route drift then fails loudly instead of hollowing the spec out.
+
+## Verifying that traces carry no deployment secret
+
+A failed Playwright run keeps a trace, and a trace is a full record of the requests the browser made.
+The claim worth verifying is **"no deployment secret"**, not "no credentials" — a trace legitimately
+contains the fixture password and the session token it produced, because that is what the browser
+sent. Those are per-run: the identity is created with a `randomUUID()` suffix inside a disposable
+database that the next `pnpm e2e:up` drops.
+
+What must never appear is a value that outlives the run:
+
+```bash
+unzip trace.zip -d ./trace-inspect
+grep -rlF -e 'notted-development-auth-secret-change-me' -e 'notted_dev_password' \
+  -e 'notted-dev-minio-secret' -e 'notted-dev-meili-master-key' \
+  -e 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=' ./trace-inspect   # expect 0 hits
+```
+
+Zero hits is the pass condition. Any hit means a secret reached the browser and the leak, not the
+trace, is the bug.
+
+## Coverage thresholds are a ratchet
+
+`apps/api/vitest.config.ts` keeps the global floor at 70/70/70/70 and adds per-path floors for
+`src/authorization/**`, `src/auth/**`, `src/tenant/**`, and `src/common/idempotency/**` — the four
+places where a missed branch is a security bug rather than a statistic. The global number is
+deliberately not raised: pushing one aggregate up is satisfied by covering whatever is cheapest.
+
+Raise a per-path floor to that path's **measured** value, rounded down to the nearest 5, read from
+`coverage/coverage-summary.json` after a full `pnpm test:ci` with `DATABASE_URL` exported and the dev
+stack up. Never write a threshold that was not measured, and never lower one to make a run pass.
+
+<!-- END Part 75 -->
+
+<!-- BEGIN Part 76 — accessibility and cross-browser validation. Append new sections below this block, not inside it. -->
+
+## Accessibility scans
+
+`apps/web/e2e/axe.ts` is the shared axe helper — a plain module, not a `*.spec.ts`, so Playwright's
+`testMatch` does not collect it. It injects `axe.min.js` from the exact-pinned `axe-core` devDependency
+of `apps/web`, runs against the tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, `wcag22aa`, and keeps
+only `serious` and `critical` results. `best-practice` and every AAA tag are deliberately out of scope:
+they are advice, not the conformance target, and a failing gate full of advice stops being read.
+
+`apps/web/e2e/accessibility.spec.ts` scans `/login` unauthenticated, the dashboard shell, the note
+editor, the tasks surface, search results, and one open dialog, then adds the three assertions axe
+cannot make: a focus indicator under `forced-colors: active`, focus order with dialog focus restore,
+and a polite-live-region invariant.
+
+That last one is **not** "exactly one region per page", and the difference matters. The root layout's
+sonner `Toaster` mounts a polite region on every page, and `PageContainer` documents in its own source
+why the note editor deliberately runs a second (a layout announcement must not be able to overwrite
+"Couldn't save"). The defect that actually harms someone is **nesting** — a region inside a region makes
+every announcement arrive twice, and it only appears once components are composed, which is precisely
+what a component test cannot see. So the spec asserts no polite region contains another, and pins
+`toHaveCount(1)` only inside `main` on the tasks route, where `TaskListView` is the sole content and its
+source states that guarantee outright.
+
+**One rule governs known violations.** They are listed in `ACCEPTED_VIOLATIONS` with a rationale and
+subtracted *after* the run, and every run prints what it subtracted. They are never suppressed with
+axe's own `rules: { enabled: false }` — a disabled rule produces no evidence, so the day the underlying
+markup changes, nothing says so.
+
+Be honest about what a green scan means. Automated tooling detects roughly a third to a half of WCAG
+issues. It is a floor that stops regressions, not a conformance claim, and it is not a substitute for
+the manual keyboard and screen-reader pass.
+
+## Cross-browser runs
+
+`apps/web/e2e/cross-browser.spec.ts` covers only the surfaces where the engines actually diverge:
+contenteditable, clipboard, print, reduced motion and reflow, and WebAuthn degradation. It runs on
+whichever project is selected, so the default chromium run exercises it as a canary.
+
+Run it explicitly under the other two engines:
+
+```
+pnpm e2e:test --project=firefox e2e/cross-browser.spec.ts
+pnpm e2e:test --project=webkit  e2e/cross-browser.spec.ts
+```
+
+**Firefox and webkit are always invoked with an explicit spec path, never the whole suite.** A full
+serial chromium run is already 7–13 minutes on this host, and the one-worker limit in
+`apps/web/playwright.config.ts` is a standing invariant, so a second engine over the whole suite doubles
+that for coverage that only matters where the engines diverge. Chromium remains the maintained default
+and the only project the unqualified command runs.
+
+Neither command needs setup. `apps/web/playwright.config.ts` already declares all three projects;
+`scripts/dev-tooling.mjs` `playwrightTestArguments()` only *defaults* to chromium, injecting
+`--project=chromium` when the caller passes no `--project` of their own; and the runner image,
+`mcr.microsoft.com/playwright:v1.62.0-noble`, ships all three browser binaries.
+
+### Edge
+
+Edge has no project and is not run. It is Chromium-equivalent for everything this application uses, and
+its `msedge` channel needs a host-installed binary the Playwright image does not carry. Its documented
+divergences from upstream Chromium — its own PDF viewer, its `mica`/`acrylic` window surfaces, WebView2
+embedding — touch nothing here. Chromium coverage stands in for Edge; that substitution is recorded
+here rather than silently assumed, and the day one of those surfaces becomes load-bearing this note is
+the thing to revisit.
+
+### The axe helper cannot use `import.meta`
+
+`apps/web/e2e/axe.ts` resolves the bundled `axe-core/axe.min.js` with **`require.resolve`**, not
+`createRequire(import.meta.url)`. Playwright transpiles these specs to **CommonJS** — `apps/web` is not
+`"type": "module"` — so `import.meta` is a *syntax* error at run time, and the failure mode is not one
+broken scan: collection of every spec that imports the file dies with `SyntaxError: Cannot use
+'import.meta' outside a module` followed by `Error: No tests found`. That is how the accessibility spec
+managed to be written, reviewed, and never once executed.
+
+### axe severity and scope, as configured
+
+- `serious`, `critical`, **and ungraded (`impact: null`)** fail. axe leaves `impact` unset when it cannot
+  grade a finding, and reading "ungraded" as "harmless" is the one interpretation that can only hide
+  things. `minor` and `moderate` are not gating.
+- The conformance tags are the WCAG A/AA set. `best-practice` stays excluded **except for two rules named
+  individually** in a second `runOnly: { type: "rule" }` pass: `aria-treeitem-name` and
+  `aria-dialog-name`, both `serious`, both describing a control a screen reader announces with no name.
+  Add to that list only with the same justification; never widen the tag.
+- `incomplete` results are **printed and never gating**. They are what axe could not decide — almost
+  always `color-contrast` over a gradient, an image, or a partly transparent background. Discarding them
+  (which the helper originally did) means contrast can be entirely undecidable on a surface while the run
+  reads as a clean pass.
+- Never silence a finding with `rules: { <id>: { enabled: false } }`. Add a rationale to
+  `ACCEPTED_VIOLATIONS`, which still runs the rule and prints what it subtracted.
+
+### Do not run the browser suite straight after the performance benchmark
+
+`scripts/perf-bench.mjs seed` leaves roughly **7,000 `pending` rows in `job_outbox`**, and verification
+email queues behind them. Every spec that provisions an account then times out at `waiting for
+authentication mail` — 30 specs, none of them a real defect. Run the browser suite first, or `pnpm e2e:up`
+between the two. Full rules in [`performance.md`](performance.md#resource-rules).
+
+<!-- END Part 76 -->

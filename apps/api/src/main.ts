@@ -354,7 +354,11 @@ export async function createApplication(): Promise<NestExpressApplication> {
     }),
   );
   app.setGlobalPrefix("api/v1", {
-    exclude: ["health/live", "health/ready"],
+    // Operational routes, deliberately unversioned: an orchestrator's probe and
+    // a Prometheus scraper are configured by an operator, not by a client that
+    // negotiates an API version. `/metrics` authenticates with its own bearer
+    // token and answers 404 when `METRICS_TOKEN` is unset (Part 78).
+    exclude: ["health/live", "health/ready", "metrics"],
   });
   app.useGlobalPipes(
     new ValidationPipe({

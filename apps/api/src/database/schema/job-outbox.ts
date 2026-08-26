@@ -11,7 +11,7 @@
 // action only—never note/comment bodies, credentials, tokens, provider secrets,
 // signed URLs, reusable sessions, or other user content.
 
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -23,6 +23,8 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+
+import { getRequestContext } from "../../common/request/request-context";
 
 import { workspaces } from "./workspaces";
 
@@ -65,7 +67,32 @@ export const jobOutbox = pgTable(
     lockedAt: timestamp("locked_at", { withTimezone: true }),
     dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
-    correlationId: uuid("correlation_id"),
+    // Part 78 — THE JOB-CORRELATION FIX, and deliberately one line.
+    //
+    // The column, its index and every consumer already existed: the dispatcher
+    // carries it to the worker log lines, `QueueJobContext.correlationId`, and
+    // the dead-letter record. What did not exist was a producer that set it —
+    // twenty-two services insert into `job_outbox` directly and exactly one
+    // (`export-job.producer.ts`) passed a correlation id, so the header-to-job
+    // half of the correlation chain was broken for the other twenty-one.
+    //
+    // `$defaultFn` runs in JavaScript and ONLY when the caller omits the key,
+    // which is what makes this the right shape rather than a helper plus
+    // twenty-two call-site edits: the explicit producer still wins, every
+    // future producer is covered by construction, and — because it is a client
+    // default, not `DEFAULT` in DDL — it emits no migration.
+    //
+    // A sweep, a worker or a CLI script has no request store, so
+    // `getRequestContext()` returns null there and the row records NULL. That is
+    // the truth: an intent created by a scheduled sweep has no originating
+    // request to correlate it with. An SQL `null` literal rather than a bare
+    // `null`, because `$defaultFn` is typed to return the column data type or an
+    // `SQL` fragment, and a `uuid` column's data type is `string`;
+    // drizzle inlines an `SQL` result into the VALUES list as-is, so the emitted
+    // statement is the same explicit NULL the column already accepted.
+    correlationId: uuid("correlation_id").$defaultFn(
+      () => getRequestContext()?.requestId ?? sql`null`,
+    ),
     lastErrorCode: varchar("last_error_code", { length: 100 }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

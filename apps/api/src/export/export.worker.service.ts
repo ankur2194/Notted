@@ -46,6 +46,7 @@ import { DatabaseService } from "../database/database.service";
 import { notes, users } from "../database/schema";
 import { WorkspaceEmailProducerService } from "../email/workspace-email-producer.service";
 import { ObjectStorageService } from "../infrastructure/minio/object-storage.service";
+import { exportBytes, exportDurationSeconds, metricLabel } from "../metrics/metrics.registry";
 import { NotificationService } from "../notifications/notification.service";
 import { defineQueueJobRegistration, type QueueJobContext } from "../queue/job-contracts";
 import { EXPORT_GENERATE_JOB_DEFINITION } from "../queue/job-registry";
@@ -70,6 +71,34 @@ type ExportGenerateContext = QueueJobContext<
 
 const truncate = (value: string, max: number): string =>
   value.length <= max ? value : value.slice(0, max);
+
+/**
+ * Part 78 — what `generate` now hands back so the duration can be labelled.
+ *
+ * The worker already KNEW its outcome at all seven of its exits and threw the
+ * knowledge away. Returning it is what makes `notted_export_duration_seconds`
+ * splittable by outcome, which is the difference between "exports are slow" and
+ * "exports fail fast and one format is slow".
+ *
+ * The clock starts in `handle` and there is deliberately NO `exports.started_at`
+ * column: `created_at → completed_at` would measure queue wait as well as
+ * generation, and the known stuck-`processing` rows would poison every
+ * table-derived percentile.
+ */
+interface ExportGenerationResult {
+  readonly outcome:
+    | "format_unsupported"
+    | "generation_failed"
+    | "lost_race"
+    | "ready"
+    | "replayed"
+    | "source_forbidden"
+    | "source_unavailable"
+    | "storage_unavailable";
+  /** `"unknown"` before the claim tells us which format was requested. */
+  readonly format: string;
+  readonly byteLength?: number;
+}
 
 @Injectable()
 export class ExportGenerationWorkerService implements OnModuleInit, OnModuleDestroy {
@@ -121,9 +150,16 @@ export class ExportGenerationWorkerService implements OnModuleInit, OnModuleDest
       resource: { kind: "workspace" },
       correlationId: context.correlationId,
     });
-    await this.authorization.run(operation, () =>
+    const startedAt = performance.now();
+    const result = await this.authorization.run(operation, () =>
       this.generate(context, workspaceId, exportId, requestedById),
     );
+    const format = metricLabel(result.format, 16);
+    exportDurationSeconds.observe(
+      { format, outcome: result.outcome },
+      (performance.now() - startedAt) / 1_000,
+    );
+    if (result.byteLength !== undefined) exportBytes.observe({ format }, result.byteLength);
   }
 
   private async generate(
@@ -131,7 +167,17 @@ export class ExportGenerationWorkerService implements OnModuleInit, OnModuleDest
     workspaceId: string,
     exportId: string,
     payloadRequestedById: string,
-  ): Promise<void> {
+  ): Promise<ExportGenerationResult> {
+    // Part 77 residual — PER-STAGE ATTRIBUTION, not optimization.
+    //
+    // `job.export.wait` misses its 30 s budget with a WARM browser (p95 69 s,
+    // warm min 41 s) while a bare A4 render measures 4.65 s, and the ~36 s
+    // difference had no owner because nothing here was timed. These marks are
+    // the cheapest thing that can name it: monotonic `performance.now()` deltas
+    // logged once on the success path, no counter, no metric, no branch. Delete
+    // them only once the gap has an owner.
+    const enteredAt = performance.now();
+
     // THE ONE AND ONLY REPLAY GUARD. `claim` is the conditional
     // `queued -> processing` transition, so exactly one attempt can proceed.
     // `null` means the row was already claimed by a live attempt or already
@@ -153,7 +199,7 @@ export class ExportGenerationWorkerService implements OnModuleInit, OnModuleDest
         },
         "Export generation skipped an already-claimed job",
       );
-      return;
+      return { outcome: "replayed", format: "unknown" };
     }
 
     // Defence in depth. `ExportService.create` refuses anything but a note
@@ -161,9 +207,14 @@ export class ExportGenerationWorkerService implements OnModuleInit, OnModuleDest
     // Refuse it as a clean, machine-readable failure rather than crashing.
     if (claim.sourceType !== "note" || claim.sourceId === null) {
       await this.exports.markFailed({ workspaceId, exportId, errorCode: "format_unsupported" });
-      return;
+      return { outcome: "format_unsupported", format: claim.format };
     }
     const sourceId = claim.sourceId;
+    const claimedAt = performance.now();
+    // Wall clock on purpose: `created_at` is PostgreSQL's clock and there is no
+    // monotonic bridge between the two processes. Both run on the same host, so
+    // the skew is far below the tens of seconds this is measuring.
+    const queueWaitMs = Date.now() - claim.createdAt.getTime();
 
     // RE-AUTHORIZE THE REQUESTER AGAINST THE LIVE SOURCE, not their membership.
     // Access may have been revoked between the request and this attempt, and a
@@ -181,10 +232,12 @@ export class ExportGenerationWorkerService implements OnModuleInit, OnModuleDest
     } catch (error: unknown) {
       if (error instanceof AuthorizationDeniedError) {
         await this.exports.markFailed({ workspaceId, exportId, errorCode: "source_forbidden" });
-        return;
+        return { outcome: "source_forbidden", format: claim.format };
       }
       throw error;
     }
+
+    const authorizedAt = performance.now();
 
     // Authoritative state, re-read now. Never the payload, never the object key.
     const [note] = await this.database.db
@@ -206,8 +259,10 @@ export class ExportGenerationWorkerService implements OnModuleInit, OnModuleDest
     // incident: record `source_unavailable` on the row and finish cleanly.
     if (note === undefined || note.isDeleted) {
       await this.exports.markFailed({ workspaceId, exportId, errorCode: "source_unavailable" });
-      return;
+      return { outcome: "source_unavailable", format: claim.format };
     }
+
+    const sourceLoadedAt = performance.now();
 
     let artifact: ExportArtifact;
     try {
@@ -253,8 +308,13 @@ export class ExportGenerationWorkerService implements OnModuleInit, OnModuleDest
         },
         "Export generation could not produce an artefact",
       );
-      return;
+      return {
+        outcome: unsupported ? "format_unsupported" : "generation_failed",
+        format: claim.format,
+      };
     }
+
+    const renderedAt = performance.now();
 
     const objectKey = exportObjectKey(workspaceId, exportId, artifact.fileExtension);
     try {
@@ -277,8 +337,10 @@ export class ExportGenerationWorkerService implements OnModuleInit, OnModuleDest
         },
         "Export artefact could not be stored",
       );
-      return;
+      return { outcome: "storage_unavailable", format: claim.format };
     }
+
+    const uploadedAt = performance.now();
 
     const ready = await this.exports.markReady({
       workspaceId,
@@ -317,10 +379,14 @@ export class ExportGenerationWorkerService implements OnModuleInit, OnModuleDest
         { jobId: exportId, workspaceId, jobType: this.jobType, outcome: "lost_race" },
         "Export was settled by another actor before it could be marked ready",
       );
-      return;
+      return { outcome: "lost_race", format: claim.format };
     }
 
+    const markedReadyAt = performance.now();
+
     await this.announce(context, claim, exportId, workspaceId, note.title);
+
+    const finishedAt = performance.now();
 
     this.logger.info(
       {
@@ -329,9 +395,23 @@ export class ExportGenerationWorkerService implements OnModuleInit, OnModuleDest
         jobType: this.jobType,
         outcome: "ready",
         byteLength: artifact.body.byteLength,
+        format: claim.format,
+        // Part 77 residual. Stage sum == `handlerMs`; `queueWaitMs` sits BEFORE
+        // it and is what `job.export.wait` adds on top of the handler.
+        queueWaitMs: Math.round(queueWaitMs),
+        claimMs: Math.round(claimedAt - enteredAt),
+        authorizeMs: Math.round(authorizedAt - claimedAt),
+        sourceLoadMs: Math.round(sourceLoadedAt - authorizedAt),
+        renderMs: Math.round(renderedAt - sourceLoadedAt),
+        uploadMs: Math.round(uploadedAt - renderedAt),
+        markReadyMs: Math.round(markedReadyAt - uploadedAt),
+        announceMs: Math.round(finishedAt - markedReadyAt),
+        handlerMs: Math.round(finishedAt - enteredAt),
       },
       "Export generation completed",
     );
+
+    return { outcome: "ready", format: claim.format, byteLength: artifact.body.byteLength };
   }
 
   /**

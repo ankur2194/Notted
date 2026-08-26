@@ -1,0 +1,46 @@
+# Notted — Prometheus scrape configuration (Part 78).
+#
+# THIS FILE ADDS NO CONTAINER. Notted's `compose.yaml` deliberately runs no
+# Prometheus and no Grafana: a monitoring stack that is only up when the thing
+# it watches is up tells you nothing during the outage you care about, and two
+# more always-on JVM-sized services on a VPS-class host is a real cost paid for
+# a development convenience. Point an EXISTING Prometheus at these files —
+# yours, your host's, or one you run beside the stack by hand.
+#
+# The API must be reachable from the scraper's network. In the development stack
+# only 3000/3001 are published on the loopback interface, so a host-side
+# Prometheus scrapes `127.0.0.1:3001`; a Prometheus on the `backend` Compose
+# network scrapes `api:3001`.
+
+global:
+  # 15s matches the collector cache in `metrics-collectors.service.ts`: queue
+  # depth is cached for 15s, so a faster scrape re-reads nothing but costs a
+  # Redis round trip and a database aggregate you already have.
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    # Set per deployment. Alertmanager routing and any federated view need to
+    # know which installation a series came from.
+    deployment: notted-dev
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+  - job_name: notted-api
+    metrics_path: /metrics
+    scheme: http
+    # THE TOKEN IS NEVER INLINE. `credentials_file` keeps `METRICS_TOKEN` out of
+    # this file, out of version control, and out of Prometheus's own
+    # `/api/v1/status/config` endpoint — which renders inline credentials as
+    # `<secret>` but happily serves the rest of the config to anyone who can
+    # reach the Prometheus UI. The file must be readable only by the Prometheus
+    # user (`chmod 0400`).
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/notted-metrics-token
+    static_configs:
+      - targets:
+          - "127.0.0.1:3001"
+        labels:
+          service: notted-api

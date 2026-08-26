@@ -11,9 +11,43 @@ import { createApplication } from "../src/main";
 
 import type { NestExpressApplication } from "@nestjs/platform-express";
 
+// Part 74's per-identifier authentication budget defaults to 5 requests per
+// minute (`RATE_LIMIT_AUTH_PER_MINUTE`, apps/api/src/config/app.config.ts).
+// This suite spends more than that on ONE identity before it reaches its first
+// assertion — sign-up, sign-in, then the two-factor enable/confirm exchange —
+// so without this the run measures the limiter instead of the feature. Set at
+// module scope because `parseAppConfig` reads it once, during the
+// `createApplication()` in `beforeAll`. `auth.e2e.test.ts` carries the same
+// override for the same reason; the `api-e2e` container sets it too, which is
+// why this only surfaced once `AUTH_E2E` reached the development stack.
+process.env.RATE_LIMIT_AUTH_PER_MINUTE = "10000";
+// The `/two-factor/*` paths sit on the SENSITIVE tier (default 10/minute,
+// `better-auth.setup.ts`), and Better Auth keeps that counter in
+// `secondary-storage` — Redis — keyed by IP and path. The counter is therefore
+// shared with every other suite in the run and with the long-lived API
+// container on the same stack, so this suite's own 2FA exchange starts partway
+// through a bucket somebody else opened. The LIMIT is read from this process's
+// config, which is what makes raising it here sufficient. Same reason the
+// `api-e2e` profile raises it in `compose.yaml`.
+process.env.RATE_LIMIT_SENSITIVE_PER_MINUTE = "10000";
+
 const runLive = process.env.AUTH_E2E === "true";
 const appOrigin = process.env.APP_URL ?? "http://localhost:3000";
 const rememberedDays = Number(process.env.SESSION_REMEMBER_ME_DAYS ?? "30");
+
+/**
+ * `session.createdAt` and `session.expiresAt` are stamped independently — the
+ * expiry from `Date.now() + ttl`, the creation timestamp separately — so their
+ * difference lands 1 ms short whenever the clock ticks between the two. Exact
+ * equality made this suite fail roughly one run in seven with
+ * `expected 2591999999 to be 2592000000`, which is the intermittent Part 75
+ * recorded and could not name. A 1 s window keeps every property the assertion
+ * exists for: the values under test are 1 day against 30 days apart.
+ */
+function expectSessionTtl(actualMs: number, expectedMs: number): void {
+  expect(actualMs).toBeLessThanOrEqual(expectedMs);
+  expect(actualMs).toBeGreaterThan(expectedMs - 1_000);
+}
 
 function decodeBase32(value: string): Buffer {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -112,7 +146,8 @@ describe.skipIf(!runLive)("advanced authentication", () => {
       .select({ createdAt: session.createdAt, expiresAt: session.expiresAt })
       .from(session)
       .where(eq(session.id, rotatedPrincipal.body.sessionId as string));
-    expect(rotatedRows[0]!.expiresAt.getTime() - rotatedRows[0]!.createdAt.getTime()).toBe(
+    expectSessionTtl(
+      rotatedRows[0]!.expiresAt.getTime() - rotatedRows[0]!.createdAt.getTime(),
       86_400_000,
     );
     const overwriteAttempt = await agent
@@ -223,14 +258,18 @@ describe.skipIf(!runLive)("advanced authentication", () => {
           eq(session.id, shortPrincipal.body.sessionId as string),
         ),
       );
-    expect(persisted[0]!.expiresAt.getTime() - persisted[0]!.createdAt.getTime()).toBe(86_400_000);
+    expectSessionTtl(
+      persisted[0]!.expiresAt.getTime() - persisted[0]!.createdAt.getTime(),
+      86_400_000,
+    );
     const rememberedPersisted = await database.db
       .select({ createdAt: session.createdAt, expiresAt: session.expiresAt })
       .from(session)
       .where(eq(session.id, rememberedPrincipal.body.sessionId as string));
-    expect(
+    expectSessionTtl(
       rememberedPersisted[0]!.expiresAt.getTime() - rememberedPersisted[0]!.createdAt.getTime(),
-    ).toBe(rememberedDays * 86_400_000);
+      rememberedDays * 86_400_000,
+    );
 
     const security = await shortAgent.get("/api/v1/auth/security").expect(200);
     expect(security.body.sessions).toEqual(

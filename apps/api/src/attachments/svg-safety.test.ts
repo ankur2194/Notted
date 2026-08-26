@@ -97,7 +97,14 @@ describe("scanSvgSource", () => {
     expect(typeof result.safe).toBe("boolean");
     // ...and it is reached in linear time. A prescan that can be made to
     // backtrack IS the denial of service it was added to prevent.
-    expect(elapsed).toBeLessThan(1_000);
+    //
+    // The budget is deliberately loose. This is pure-JS regex scanning, which
+    // v8 coverage instrumentation slows by a variable factor, and the previous
+    // 1 s bar sat close enough to the instrumented cost to fail intermittently
+    // in the container coverage run. Catastrophic backtracking on 20 000
+    // characters is seconds-to-minutes, so 5 s still separates linear from
+    // exponential by orders of magnitude — which is the property under test.
+    expect(elapsed).toBeLessThan(5_000);
   });
 
   it("is stateless across calls despite using a global-flagged regex", () => {

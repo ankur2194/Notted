@@ -954,13 +954,41 @@ describe.skipIf(!HAS_DATABASE_URL || !HAS_MINIO)(
               objectsRemoved: 0,
             });
           }
-          // The conservative system run is bounded by construction: with every
-          // window pushed past a century it must not touch a single row or byte.
-          expect(mutationCounts(systemLive)).toEqual({
-            rowsRemoved: 0,
-            rowsMarked: 0,
-            objectsRemoved: 0,
-          });
+          /*
+           * The conservative system run is bounded by construction FOR THE
+           * SWEEPS THE WINDOWS GOVERN: the abandoned-upload window is a year and
+           * the orphan and deleted-note windows are past a century, so none of
+           * them can select a row no matter what else is in the database.
+           *
+           * `expiredExports` is excluded, and that is a property of the sweep
+           * rather than a concession. An export is selected on its own
+           * `object_expires_at` column (`sweepExpiredExports`), which no
+           * retention window widens or narrows — so any database that already
+           * holds expired exports will legitimately have them swept. A blanket
+           * zero here was therefore asserting A PRISTINE DATABASE rather than a
+           * property of the code, and it held only while `MINIO_*` never reached
+           * the test process and this whole suite skipped. Run against a
+           * long-lived development database it reports 132 rows marked and 66
+           * objects removed, all of them expired exports from earlier work.
+           *
+           * What this test actually needs from the system run is that it never
+           * touches THIS fixture — stated directly by the `sampleIds` loop above
+           * and by the row and object assertions below.
+           */
+          const windowGoverned = systemLive.sweeps.filter(
+            (entry) => entry.sweep !== "expiredExports",
+          );
+          expect(windowGoverned.length).toBeGreaterThan(0);
+          for (const entry of windowGoverned) {
+            expect(
+              {
+                rowsRemoved: entry.rowsRemoved,
+                rowsMarked: entry.rowsMarked,
+                objectsRemoved: entry.objectsRemoved,
+              },
+              entry.sweep,
+            ).toEqual({ rowsRemoved: 0, rowsMarked: 0, objectsRemoved: 0 });
+          }
 
           // --- The whole point: the row and every one of its objects survive. ---
           const [row] = await tx

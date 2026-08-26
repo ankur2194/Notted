@@ -79,6 +79,44 @@
   }
 
   /*
+   * Part 76 forced-colors focus indicator.
+   *
+   * The rule directly above is the app's only global focus indicator, and
+   * Tailwind's `ring-*` compiles to a `box-shadow`. Forced colours (Windows High
+   * Contrast Mode) force `box-shadow` to `none`, so that indicator disappears
+   * entirely — and `outline-none` has already removed the UA default that would
+   * otherwise have covered for it. The result is a keyboard user with no visible
+   * focus anywhere in the app: WCAG 2.2 SC 2.4.7 (Focus Visible), and with it SC
+   * 2.4.11 (Focus Not Obscured), failing for exactly the users who depend on the
+   * mode. A real `outline` survives, and `Highlight` is a system colour keyword,
+   * which is the only kind of colour forced colours keeps. No `box-shadow: none`
+   * is needed here: the mode has already discarded the ring.
+   *
+   * The browser-side proof is in `e2e/accessibility.spec.ts`, which emulates
+   * `forcedColors: "active"` and reads `outlineStyle` / `outlineWidth` off the
+   * focused element — an assertion a `box-shadow` ring cannot satisfy, which is
+   * the point of asserting on the outline rather than on any painted pixel.
+   *
+   * `!important` is load-bearing and is the whole reason this rule works.
+   * `focus-visible:outline-none` is written into more than twenty component
+   * class strings (`ui/button.tsx`, `editor/EditorToolbar.tsx`,
+   * `notes/PageContainer.tsx`, `notes/NoteTree.tsx`, …), and Tailwind compiles
+   * every one of them into `@layer utilities` — a LATER cascade layer than this
+   * `@layer base` block, and with a higher specificity besides. Without the
+   * flag this rule loses to each of them and forced colours still paints no
+   * focus ring on a single button, which is the exact bug it exists to fix.
+   * Overriding those declarations one file at a time would be a twenty-file
+   * diff that the next component to write `outline-none` silently reopens; one
+   * forced-colors floor here cannot be reopened.
+   */
+  @media (forced-colors: active) {
+    :focus-visible {
+      outline: 2px solid Highlight !important;
+      outline-offset: 2px !important;
+    }
+  }
+
+  /*
    * Part 58 collaborator presence palette.
    *
    * Eight fixed slots picked by `lib/collaboration/user-color.ts` from a stable
@@ -367,6 +405,21 @@
 
   .notted-editor-content ul[data-type="taskList"] li > label {
     @apply mt-1 flex select-none items-center;
+  }
+
+  /*
+   * WCAG 2.2 SC 2.5.8 Target Size (Minimum), found by the Part 76 axe scan of
+   * the editor. A user-agent default checkbox is about 13x13 CSS px, and two
+   * adjacent task items sit close enough together that the criterion's spacing
+   * exception does not rescue either of them — axe failed both boxes as
+   * `target-size`. 24px is the criterion's floor. Stated in `px` and as a
+   * MINIMUM rather than in `rem`: a reader who has reduced their root font size
+   * has not agreed to a smaller touch target, and a reader who has increased it
+   * still gets a proportionally larger box from the surrounding line box.
+   */
+  .notted-editor-content ul[data-type="taskList"] li > label > input[type="checkbox"] {
+    min-width: 24px;
+    min-height: 24px;
   }
 
   .notted-editor-content ul[data-type="taskList"] li > div {

@@ -312,14 +312,24 @@ test.describe.serial("Part 47 real-stack task lists", () => {
     }
 
     /*
-     * Both halves, and their order. The two level-2 headings inside `main` are
-     * the sr-only "Note content" that labels the paper and the visible "Tasks"
-     * that labels the list, so reading them in document order is exactly the
+     * Both halves, and their order. The level-2 headings inside `main` are the
+     * sr-only "Note content" that labels the paper and the visible "Tasks" that
+     * labels the list, so reading them in document order is exactly the
      * assertion "the task list is BELOW the editor, and the editor is still
      * there" — a check that a regression hiding either one would fail.
+     *
+     * "Suggested tags" sits between them and is NOT stale slack in this list:
+     * Part 69's `ai/TagSuggestions.tsx` renders it as a third `h2` on this
+     * route, and this exact-list assertion has been failing since that part
+     * landed — it went unnoticed only because no full chromium baseline had
+     * been run between Part 69 and Part 75. The list stays exact rather than
+     * being loosened to `toContainText`, because exactness is the whole point:
+     * it is what makes a heading that disappears, or one that appears in the
+     * wrong place, a failure.
      */
     await expect(owner.getByRole("main").getByRole("heading", { level: 2 })).toHaveText([
       "Note content",
+      "Suggested tags",
       "Tasks",
     ]);
     await expect(owner.getByRole("textbox", { name: `Note content: ${noteTitle}` })).toBeVisible();

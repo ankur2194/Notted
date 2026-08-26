@@ -37,6 +37,9 @@ const claim: ExportClaim = {
     footerText: null,
     margins: null,
   },
+  // Part 77 residual — only the `queueWaitMs` log field reads this; a fixed
+  // instant keeps the fixture deterministic.
+  createdAt: new Date("2026-08-26T00:00:00.000Z"),
 };
 
 const noteRow = {

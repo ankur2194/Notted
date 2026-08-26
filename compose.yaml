@@ -26,6 +26,18 @@
 
 name: notted-dev
 
+# Bounded container logs. Docker's default `json-file` driver has NO size limit,
+# so a crash-looping service or a debug log level can fill the host disk — which
+# takes down every other container on the daemon, not just Notted's. 10 MB × 5
+# files caps each service at 50 MB and keeps enough history to read a failure
+# that happened a few minutes ago. Applied to the four long-running application
+# services; the one-shot init containers exit and are not worth the noise.
+x-log-rotation: &log-rotation
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 x-workspace-image: &workspace-image
   build:
     context: .
@@ -113,6 +125,13 @@ x-workspace-volumes: &workspace-volumes
 # source of truth.
 x-api-environment: &api-environment
   NODE_ENV: development
+  # Part 78. `LOG_LEVEL` was never set here, so the stack silently ran on the
+  # `info` default and there was no obvious knob to turn when debugging.
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  # Empty by default, which makes `GET /metrics` answer 404. Set it in the root
+  # `.env` (`METRICS_TOKEN=$(openssl rand -hex 32)`) to point a Prometheus at the
+  # dev stack; see `ops/README.md`. No monitoring container is added here.
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
   API_HOST: 0.0.0.0
   # Match the browser-facing host port because `web` shares this network
   # namespace and its server-side requests also use NEXT_PUBLIC_API_URL.
@@ -132,6 +151,26 @@ x-api-environment: &api-environment
   MEILISEARCH_HOST: http://meilisearch:7700
   MEILISEARCH_API_KEY: ${MEILI_MASTER_KEY:-notted-dev-meili-master-key}
   MEILISEARCH_INDEX_PREFIX: ${MEILISEARCH_INDEX_PREFIX:-notted_dev_}
+  # Part 75 gate variables. `test/auth.e2e.test.ts` and
+  # `test/advanced-auth.e2e.test.ts` are gated on `AUTH_E2E` and read Mailpit
+  # directly; `test/realtime.integration.test.ts` reads `APP_ORIGIN` and
+  # `MAILPIT_URL`. Without these the auth suites skipped inside the API
+  # container, which is the only place `pnpm test:ci` can run against real
+  # infrastructure — and a skipped suite still counts its sources as uncovered,
+  # so `src/auth/**` could not reach its per-path coverage floor no matter what
+  # the floor was set to. Every one of these is read ONLY by files under
+  # `apps/api/test/`; nothing in `src/` consults them, so the dev stack's
+  # runtime behaviour is unchanged.
+  AUTH_E2E: "${AUTH_E2E:-true}"
+  # Two names because two suites read two names: `auth.e2e.test.ts` reads
+  # `MAILPIT_API_URL`, `realtime.integration.test.ts` reads `MAILPIT_URL`. Both
+  # must be the container-internal address; the published host port is not
+  # reachable from inside this network.
+  MAILPIT_API_URL: ${MAILPIT_API_URL:-http://mailpit:8025}
+  MAILPIT_URL: ${MAILPIT_URL:-http://mailpit:8025}
+  # Mirrors APP_URL. Kept as its own variable because the realtime suite sends
+  # it as a websocket `Origin` header, where it must equal the browser origin.
+  APP_ORIGIN: http://localhost:${NOTTED_WEB_PORT:-3000}
   EMAIL_SMTP_HOST: mailpit
   EMAIL_SMTP_PORT: "1025"
   EMAIL_SMTP_SECURE: "false"
@@ -192,6 +231,7 @@ x-api-e2e-environment: &api-e2e-environment
   <<: *api-environment
   API_PORT: "${NOTTED_E2E_API_PORT:-3011}"
   APP_URL: http://localhost:${NOTTED_E2E_WEB_PORT:-3010}
+  APP_ORIGIN: http://localhost:${NOTTED_E2E_WEB_PORT:-3010}
   API_URL: http://localhost:${NOTTED_E2E_API_PORT:-3011}
   WS_URL: ws://localhost:${NOTTED_E2E_API_PORT:-3011}
   DATABASE_URL: postgres://${POSTGRES_USER:-notted}:${POSTGRES_PASSWORD:-notted_dev_password}@postgres:5432/${POSTGRES_E2E_DB:-notted_e2e_test}
@@ -473,6 +513,7 @@ services:
       mailpit:
         condition: service_healthy
     restart: unless-stopped
+    logging: *log-rotation
     working_dir: /workspace/apps/api
     environment: *api-environment
     # `pnpm dev` cannot be used: it is `node --env-file=.env …`, which fails
@@ -516,6 +557,7 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
+    logging: *log-rotation
     network_mode: "service:api"
     working_dir: /workspace/apps/web
     environment:
@@ -676,6 +718,9 @@ services:
     extends:
       service: api
     profiles: ["e2e"]
+    # `extends` already carries `logging` over from `api`; restated because a
+    # disposable stack is exactly where a crash loop writes the most output.
+    logging: *log-rotation
     depends_on: !override
       db-init-e2e:
         condition: service_completed_successfully
@@ -717,6 +762,7 @@ services:
     extends:
       service: web
     profiles: ["e2e"]
+    logging: *log-rotation
     depends_on: !override
       api-e2e:
         condition: service_healthy

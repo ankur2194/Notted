@@ -10,6 +10,12 @@ import {
   authorizationDenialToHttpException,
   AuthorizationDeniedError,
 } from "../../authorization/authorization.errors";
+import {
+  apiErrorsTotal,
+  httpRouteLabel,
+  metricLabel,
+  statusClassLabel,
+} from "../../metrics/metrics.registry";
 import { StructuredLogger } from "../logging/structured-logger.service";
 import { getRequestId } from "../request/request-context";
 
@@ -42,6 +48,34 @@ const ERROR_BY_STATUS: Readonly<Record<number, ApiError>> = {
     message: "The media type is not supported.",
   },
 };
+
+/**
+ * The FIRST stack frame, reduced to `file:line:col` and nothing else.
+ *
+ * A raw stack string must never reach a log: a frame's function name can be a
+ * closure named after the value it closed over, and the `Error` message on the
+ * stack's first line routinely quotes the note title, the email address or the
+ * object key that caused the failure. A log line is persistence in exactly the
+ * way a mailbox is, so the message line is skipped outright and the frame is
+ * rebuilt from three captured groups whose charset excludes slashes, spaces,
+ * quotes and parentheses. That makes it structurally incapable of carrying
+ * content while still naming the file and line an engineer opens.
+ */
+const STACK_FRAME = /([^\s()/\\:]+):(\d+):(\d+)\)?\s*$/u;
+
+function errorSite(exception: unknown): string | undefined {
+  if (!(exception instanceof Error) || typeof exception.stack !== "string") return undefined;
+  for (const line of exception.stack.split("\n")) {
+    if (!/^\s*at\s/u.test(line)) continue;
+    const frame = STACK_FRAME.exec(line);
+    if (frame === null) return undefined;
+    const [, file, row, column] = frame;
+    return file === undefined || row === undefined || column === undefined
+      ? undefined
+      : `${file}:${row}:${column}`;
+  }
+  return undefined;
+}
 
 function statusForUnknownException(exception: unknown): number {
   if (exception instanceof HttpException) {
@@ -90,12 +124,29 @@ export class ApiExceptionFilter implements ExceptionFilter {
         : { code: "REQUEST_FAILED", message: "The request could not be completed." });
     const safeResponse = exception instanceof ApiHttpException ? exception.safeResponse : fallback;
 
+    const errorType = exception instanceof Error ? exception.name : "UnknownError";
+    // Log label only — it is deliberately NOT an `apiErrorsTotal` label, because
+    // an error counter keyed by route is the cardinality risk the labeller
+    // exists to avoid. It is also safe to compute here for an unmatched path: a
+    // request that reached no route can no longer register a new label
+    // (`httpRouteLabel`), so a 404 scan through this filter cannot fill the cap.
+    const route = httpRouteLabel(request);
+    apiErrorsTotal.inc({
+      error_type: metricLabel(errorType),
+      status_class: statusClassLabel(status),
+    });
+
     if (status >= 500) {
       this.logger.failure(
         {
           requestId,
+          method: request.method,
+          // The bounded label, not `request.path`: a raw path carries workspace
+          // and note identifiers straight into the log line.
+          route,
           statusCode: status,
-          errorType: exception instanceof Error ? exception.name : "UnknownError",
+          errorType,
+          errorSite: errorSite(exception),
           outcome: "error",
         },
         "Unhandled HTTP exception",

@@ -5,7 +5,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { HybridRankingService } from "./hybrid-ranking.service";
 
-const meilisearchUrl = process.env.MEILISEARCH_URL;
+// `MEILISEARCH_HOST`, the name the application config and `compose.yaml` both
+// use. This file used to read `MEILISEARCH_URL`, which nothing sets anywhere in
+// the repository, so the suite was permanently dead: it reported green by
+// skipping, on every stack, forever.
+const meilisearchUrl = process.env.MEILISEARCH_HOST;
 const meilisearchKey = process.env.MEILISEARCH_API_KEY;
 const databaseUrl = process.env.DATABASE_URL;
 const live = databaseUrl !== undefined && meilisearchUrl !== undefined;

@@ -1,0 +1,59 @@
+{
+  "host": "Budgets describe a VPS-class host: 2 dedicated vCPU, 4 GB RAM, local NVMe, the whole compose stack (PostgreSQL, Redis, Meilisearch, MinIO, API, web) on that one machine. They are sampled against the disposable `e2e` profile, whose `api-e2e` serves compiled `dist`. A developer laptop or a memory-capped WSL2 VM sharing a Docker daemon is NOT this host; numbers taken there are a floor, never a certification.",
+  "note": "This file is the only place a performance number lives. Prose in docs/standards/performance.md justifies these values and never restates them.",
+  "scenarios": {
+    "api.notes.list": {
+      "p95Ms": 200,
+      "why": "A list is hard-capped at 100 rows by `paginationQuerySchema` (packages/shared-validators/src/common.schema.ts) and answered from the workspace/sort indexes in apps/api/src/database/schema/notes.ts, so the query itself is a bounded index read. The budget is the interaction budget, not the query budget: past roughly a quarter second the sidebar stops reading as 'appeared' and starts reading as 're-rendered'. 200 ms leaves the authorization hop and JSON serialization comfortable room above a warm index scan."
+    },
+    "api.notes.navigation": {
+      "p95Ms": 500,
+      "why": "The sidebar tree, and the only list in the product that is NOT capped at 100 rows: apps/web/src/lib/notes/server-notes.ts requests limit=500 against a schema ceiling of 1000 (packages/shared-validators/src/note.schema.ts), and apps/web/src/components/notes/NoteTree.tsx renders every returned row on every dashboard page. Five times the row count of api.notes.list gets 2.5x its budget, not 5x: the rows are navigation projections (id, title, parent, order) rather than full notes, so the marginal cost per row is serialization rather than lookup, and the query is the same workspace index scan. It is a server-render budget, not an interaction budget \u2014 this response blocks the dashboard's first paint, so anything past half a second is felt as the app not having loaded. If this one fails, the fix that docs/standards/performance.md pre-commits to is to lower the requested limit and paginate the tree, before virtualization is discussed: virtualization changes render cost, not the transfer and serialization this measures."
+    },
+    "api.notes.read": {
+      "p95Ms": 300,
+      "why": "One row, but the row carries a `content` document of up to 512000 serialized bytes (`NOTE_DOCUMENT_LIMITS.serializedBytes`) plus a computed capability set. 100 ms above the list budget because the payload is an order of magnitude larger while the row count is one; the extra is transfer and serialization, not lookup."
+    },
+    "api.notes.create": {
+      "p95Ms": 400,
+      "why": "A write transaction \u2014 note row, version snapshot, idempotency row \u2014 followed by a post-commit search-index intent. Writes get more headroom than reads because they pay a durable commit and because the user is already inside a 'saving' affordance, which buys latency tolerance a navigation does not."
+    },
+    "api.search": {
+      "p95Ms": 300,
+      "why": "Meilisearch answers a corpus this size in single-digit milliseconds; the budget is dominated by the hop that filters hits down to notes the caller may actually read. Set equal to `api.notes.read` on purpose: opening search results and opening a note are the same interaction to a user, so they get the same promise."
+    },
+    "api.tasks.list": {
+      "p95Ms": 250,
+      "why": "The same 100-row page cap as notes, but with status, assignee, and grouping resolution on top. 50 ms above `api.notes.list` is the price of that extra shaping, and nothing more \u2014 a larger gap would mean the grouping is being done somewhere it should not be."
+    },
+    "ws.propagation": {
+      "p95Ms": 1000,
+      "why": "Derived from limits the client already commits to, not invented. `apps/web/src/lib/collaboration/note-collaboration-provider.ts` budgets 1500 ms for the join+sync handshake and batches outbound updates in a 200 ms window. A remote keystroke must land inside the handshake budget with the batching window already spent: 1500 - 200 = 1300, rounded down to 1000 so the budget fails before the client's own timeout does."
+    },
+    "job.export.wait": {
+      "p95Ms": 30000,
+      "why": "Wall time from `POST /exports` to `status: \"ready\"` for a single-note PDF: queue wait plus a Puppeteer render. A capacity promise, not an interaction budget — 30 s is the point past which the UI should stop showing a spinner and start offering the artefact by email. MEASURED 2026-08-26 AND MISSED: p95 69242 ms, min 41289 ms, on the WSL2 host described in the Part 77 record. Recorded as a known miss owned by Phase 15; the number is deliberately NOT raised to make the row green, because `docs/standards/performance.md` pre-commits that an optimization needs a failing measurement first and the mirror of that rule is that a failing measurement is not answered by editing the budget. The cause is NOT established: `apps/api/src/export/browser-pool.service.ts` already keeps one Chromium warm for 60 s of idle, so 19 of the 20 samples cannot have paid a launch, and `QUEUE_DISPATCH_INTERVAL_MS` is 1000 ms against a 41 s floor. Phase 15 starts with per-stage instrumentation on VPS-class hardware, not with an optimization."
+    },
+    "web.firstLoadJs": {
+      "p95Ms": null,
+      "kilobytes": 350,
+      "why": "A build-time budget, not a runtime measurement, and currently UNREADABLE. It was written to be read from the \"Size / First Load JS\" column of `next build`, but Next 16.2.11 (ADR 0008's pinned version) no longer prints that column, and the Turbopack build output carries no `app-build-manifest.json` to derive it from \u2014 so there is no honest way to fill this cell today and a summed-chunk approximation would be a different metric wearing this one's name. Stated in kilobytes because that is the unit that predicts time-to-interactive on a constrained connection. `p95Ms` is null because this harness never samples it. Unblocks with a bundle-analyzer step or a Next release that restores the column."
+    },
+    "editor.inputLatency": {
+      "p95Ms": null,
+      "why": "BLOCKED: needs a production web build. `web-e2e` runs `next dev` (compose.yaml), where a keystroke can sit behind an on-demand route compile and React refresh instrumentation. A number measured there describes the dev server, not the product. There is no production web image until Phase 15; a null is honest, a number from `next dev` would not be."
+    },
+    "web.interactionLatency": {
+      "p95Ms": null,
+      "why": "BLOCKED: same blocker as `editor.inputLatency`. Click-to-paint on `next dev` measures compilation, not the shipped bundle. Unblocks when Phase 15 produces a production web image."
+    },
+    "web.firstLoadRuntime": {
+      "p95Ms": null,
+      "why": "BLOCKED: same blocker again, and the sharpest case of it \u2014 `next dev` ships unminified modules over a per-request compile, so a runtime first-load number would be wrong by a multiple rather than by a margin. The build-time proxy `web.firstLoadJs` above is what we hold ourselves to until Phase 15."
+    },
+    "bulk.upload": {
+      "p95Ms": null,
+      "why": "DELIBERATELY SKIPPED on this host, not blocked upstream. Sampling it means MinIO multipart traffic and a Puppeteer-capable API container competing for the same few gigabytes of free memory, which is how a benchmark run takes the whole VM down with it. The harness prints the volume it would have used so the omission is legible. Measure it on real VPS-class hardware."
+    }
+  }
+}

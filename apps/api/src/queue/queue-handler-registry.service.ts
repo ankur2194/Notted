@@ -57,6 +57,24 @@ export class QueueHandlerRegistry {
     return definition === undefined ? undefined : this.handlers.get(definition.jobType);
   }
 
+  /**
+   * Part 78 — the job types that currently have a concrete consumer.
+   *
+   * `OutboxDispatcherService` re-claims and re-defers a `job_outbox` row whose
+   * type is not in this set, by design: that is its rollout safety gate, and it
+   * holds the intent intact until the deploy that registers the consumer lands.
+   * Such rows are therefore pending without being evidence of a stalled
+   * dispatcher, so `notted_job_outbox_rows` labels them separately rather than
+   * letting them dominate the backlog alert.
+   *
+   * This set is per process, so nothing outside metrics may key off it — the
+   * dispatcher's claim exclusion and the retention sweep use the static
+   * `consumer: "none"` marker instead. See `OutboxJobDefinition.consumer`.
+   */
+  registeredJobTypes(): readonly DomainJobType[] {
+    return [...this.handlers.keys()];
+  }
+
   activePhysicalQueues(): readonly PhysicalQueueName[] {
     return [
       ...new Set(

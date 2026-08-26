@@ -67,6 +67,18 @@ export interface OutboxJobDefinition<
    * budget the other job types are also drawing from.
    */
   readonly maximumAttempts?: number;
+  /**
+   * `"none"` marks a type that no process consumes and none is planned to:
+   * the intent is written for durability and for future subscribers, and until
+   * one exists the dispatcher must not spend claim budget on it.
+   *
+   * This is a property of the TYPE, declared here rather than read from
+   * `QueueHandlerRegistry`, because the registry is per process. Phase 15 splits
+   * the API and worker processes, and a filter driven by one process's
+   * registrations would strand — or a retention sweep would cancel — intents the
+   * other process handles.
+   */
+  readonly consumer?: "none";
 }
 
 /** Context supplied after Task 50.2 has loaded and validated authoritative intent. */

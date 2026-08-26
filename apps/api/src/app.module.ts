@@ -17,6 +17,7 @@ import { ExportModule } from "./export/export.module";
 import { HealthModule } from "./health/health.module";
 import { MaintenanceModule } from "./maintenance/maintenance.module";
 import { MembershipsModule } from "./memberships/memberships.module";
+import { MetricsModule } from "./metrics/metrics.module";
 import { NotesModule } from "./notes/notes.module";
 import { NotificationModule } from "./notifications/notification.module";
 import { OpenApiModule } from "./openapi/openapi.module";
@@ -69,6 +70,10 @@ import { WorkspacesModule } from "./workspaces/workspaces.module";
     MaintenanceModule,
     StorageModule,
     MembershipsModule,
+    // Part 78. Owns `GET /metrics` and the scrape-time collectors. Every other
+    // metric is written through module-scope consts in `metrics.registry.ts`,
+    // so no other module imports this one.
+    MetricsModule,
     ShellModule,
     NotificationModule,
     NotesModule,

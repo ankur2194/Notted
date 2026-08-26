@@ -13,6 +13,12 @@ import { AuthService, toWebHeadersFromRaw } from "../auth/auth.service";
 import { AuthorizationAdaptersService } from "../authorization/authorization-adapters.service";
 import { FEATURES_CONFIG, type FeaturesConfig } from "../config/features.config";
 import { REALTIME_CONFIG, type RealtimeConfig } from "../config/realtime.config";
+import {
+  setCollect,
+  websocketConnections,
+  websocketConnectionsTotal,
+  websocketRooms,
+} from "../metrics/metrics.registry";
 
 import { decodeAwarenessClientIds } from "./awareness-client-ids";
 import { presenceColorIndex } from "./presence-color";
@@ -201,6 +207,34 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   /** Hands the io server to the room service so timer-driven code can fan out. */
   afterInit(server: Server): void {
     this.rooms.attach(server);
+
+    // Part 78. Both gauges are read at SCRAPE time from counters Socket.IO
+    // already maintains, so they are O(1) and cost nothing between scrapes —
+    // there is no per-connection bookkeeping to drift out of step with reality.
+    //
+    // `server` from this callback rather than `this.server`: the same object,
+    // but it is provably non-null here and inside the closure.
+    //
+    // ROOM COUNT ONLY. A room name is a per-note identifier, so a per-room gauge
+    // would be both unbounded cardinality and a tenant-shaped label on the
+    // surface with the weakest authentication in the API. With the Redis
+    // adapter, `rooms` is this instance's local view, which is what a
+    // per-instance gauge should report; `sum()` across instances over-counts
+    // rooms held on more than one, and the dashboard says so.
+    setCollect(websocketConnections, () => {
+      try {
+        websocketConnections.set(server.engine.clientsCount);
+      } catch {
+        // Keep the previous value: a throwing collect() fails the WHOLE scrape.
+      }
+    });
+    setCollect(websocketRooms, () => {
+      try {
+        websocketRooms.set(server.sockets.adapter.rooms.size);
+      } catch {
+        // Keep the previous value.
+      }
+    });
   }
 
   async handleConnection(socket: RealtimeSocket): Promise<void> {
@@ -240,7 +274,13 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       this.installTimers(socket, state, principal);
       this.installHandlers(socket, state);
       socket.emit("realtime:ready", { ok: true });
+      websocketConnectionsTotal.inc({ outcome: "accepted" });
     } catch {
+      // Every refusal funnels here — unauthenticated, rate-limited, over the
+      // concurrent-socket lease, or Redis unavailable — so one counter covers
+      // them all. No reason label: the reasons are distinguishable only by
+      // rethrown `Error` messages, and a client controls half of them.
+      websocketConnectionsTotal.inc({ outcome: "rejected" });
       await this.disconnect(socket);
     }
   }

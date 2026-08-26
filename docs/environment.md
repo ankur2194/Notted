@@ -169,6 +169,13 @@ origins; external or protocol-relative targets are rejected.
 Provider failures return to a generic local `/login` error state; provider error descriptions
 and credential material are never rendered.
 
+## Observability values
+
+| Variable | Default | Range | Notes |
+| --- | --- | --- | --- |
+| `LOG_LEVEL` | `info` | `fatal`/`error`/`warn`/`info`/`debug`/`trace`/`silent` | Pino level for the structured logger. `compose.yaml` now sets it explicitly (`LOG_LEVEL: ${LOG_LEVEL:-info}`) so there is a knob to turn without editing the file. `debug` and `trace` do **not** relax redaction, but they do raise log volume against a bounded 10 MB × 5 rotation. |
+| `METRICS_TOKEN` | unset | any string; **≥ 32 characters in production** | Bearer token for `GET /metrics`. **Unset means the endpoint answers `404`, not `401`**, so a deployment is never accidentally exporting its internals and the route's existence is not discoverable without the token. A value shorter than 32 characters **fails startup in production** rather than silently disabling the endpoint — a deployment that meant to enable metrics must hear about a weak token instead of wondering why Prometheus gets 404s. Generate with `openssl rand -hex 32` and give the scraper the same value through Prometheus's `credentials_file`, never inline in a scrape config. The endpoint is **not** exempt from the trusted-host check, so with `CUSTOM_DOMAINS_ENABLED=true` a scraper dialling a raw IP receives `421`; see [`docs/runbooks/observability.md`](runbooks/observability.md). |
+
 ## Rate-limit values
 
 Five independent token buckets guard the API. Each value is requests per minute for one

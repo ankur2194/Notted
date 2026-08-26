@@ -398,8 +398,22 @@ export function TaskBoard({
         onDragEnd={dragEnd}
       >
         {/* A row of columns that scrolls sideways rather than squeezing: a
-            column narrower than a card is not a board. */}
-        <div className="flex gap-4 overflow-x-auto pb-2">
+            column narrower than a card is not a board.
+
+            `tabIndex`/`role`/`aria-label`: WCAG 2.2 SC 2.1.1. A horizontally
+            scrolling container that holds no focusable descendant — which is
+            exactly what an empty board is — can be reached by a pointer and by
+            nothing else. axe's `scrollable-region-focusable` rule failed this
+            element on the Part 76 board scan. Making it a named region that
+            takes focus gives the keyboard the arrow keys the mouse already
+            has. */}
+        <div
+          className="flex gap-4 overflow-x-auto pb-2"
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scrollable region is the documented exception to this rule: axe's `scrollable-region-focusable` requires exactly this, and the rule's own allowlist covers only `tabpanel`.
+          tabIndex={0}
+          role="region"
+          aria-label="Task board columns"
+        >
           {columns.map((column) => {
             const headingId = `task-board-column-${column.id}`;
             return (

@@ -141,6 +141,13 @@ export interface ExportClaim {
   readonly sourceType: ExportSource;
   readonly sourceId: string | null;
   readonly options: ExportOptions;
+  /**
+   * Part 77 residual — the row's own creation instant, carried so the worker can
+   * report `queueWaitMs` (request commit -> handler pickup). Nothing authorizes
+   * on it and nothing branches on it; it exists purely so the export budget miss
+   * can be attributed to a stage instead of guessed at.
+   */
+  readonly createdAt: Date;
 }
 
 export interface MarkExportReadyInput extends ExportSelector {
@@ -452,6 +459,7 @@ export class ExportService {
       sourceType: claimed.sourceType as ExportSource,
       sourceId: claimed.sourceId,
       options: this.readOptions(claimed.options),
+      createdAt: claimed.createdAt,
     });
   }
 

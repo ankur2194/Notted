@@ -62,6 +62,7 @@ function config(timeoutMs = 1): QueueConfig {
       claude: { maximum: 1, durationMs: 1_000 },
     },
     idempotencyRetentionDays: 30,
+    outboxRetentionDays: 30,
     retention: {
       completedAgeSeconds: 60,
       completedCount: 10,

@@ -4,6 +4,7 @@ import { Queue, UnrecoverableError, Worker, type Job } from "bullmq";
 import { StructuredLogger } from "../common/logging/structured-logger.service";
 import { QUEUE_CONFIG, type QueueConfig } from "../config/queue.config";
 import { REDIS_CLIENT } from "../infrastructure/redis/redis.tokens";
+import { queueClientErrorsTotal, queueDeadLetterTotal } from "../metrics/metrics.registry";
 
 import {
   DEAD_LETTER_QUEUE_NAME,
@@ -13,6 +14,7 @@ import {
 
 import type { BullJobEnvelope } from "./job-contracts";
 import type { RegisteredQueueHandler } from "./queue-handler-registry.service";
+import type { QueueDepthSample } from "./queue-metrics.source";
 import type { DeadLetterRecord } from "./queue-runtime.types";
 import type Redis from "ioredis";
 
@@ -32,6 +34,10 @@ export interface QueueWorkerInvocation {
 type WorkerProcessor = (invocation: QueueWorkerInvocation) => Promise<void>;
 
 @Injectable()
+// Supplies the `jobCounts` half of `QueueMetricsSource`; `QueueModule`'s
+// factory pairs it with the handler registry to satisfy the whole interface.
+// Deliberately not `implements QueueMetricsSource`: the consumer set is the
+// registry's fact, and this class has no business learning it.
 export class QueueInfrastructureService {
   private readonly queues = new Map<string, Queue<unknown>>();
   private readonly workers: Worker<unknown>[] = [];
@@ -142,6 +148,7 @@ export class QueueInfrastructureService {
       );
       worker.on("error", () => {
         this.status = "down";
+        queueClientErrorsTotal.inc({ queue: sourceQueue, component: "worker" });
         this.logger.failure({ queue: sourceQueue, reason: "worker" }, "Queue worker error");
       });
       this.workers.push(worker);
@@ -197,11 +204,50 @@ export class QueueInfrastructureService {
   async publishDeadLetter(record: DeadLetterRecord): Promise<void> {
     const queue = this.queues.get(DEAD_LETTER_QUEUE_NAME);
     if (queue === undefined) return;
+    // The single terminal-failure funnel, so one counter here covers every job
+    // type. Counted before the `add` rather than after: a dead letter that
+    // cannot even be published is the worse incident, not a reason to under-report.
+    queueDeadLetterTotal.inc({ queue: record.sourceQueue });
     await queue.add("terminal-failure", record, {
       jobId: `dlq-${record.outboxIntentId}`,
       attempts: 1,
       removeOnComplete: false,
     });
+  }
+
+  /**
+   * Part 78 — depth per physical queue, reached through `QUEUE_METRICS_SOURCE`.
+   *
+   * `getJobCounts` had no caller before this: queue depth was the one queue
+   * fact nothing measured, and a backlog is invisible to `/health/ready`
+   * (a queue that is up and 40 000 jobs behind is "ready").
+   *
+   * One queue's failure must not blank the other four, so each is counted
+   * independently and a failing one is simply omitted; the collector keeps that
+   * gauge's previous value. `[]` when Redis is absent or we are shutting down.
+   */
+  async jobCounts(): Promise<readonly QueueDepthSample[]> {
+    if (this.redis === null || this.stopping) return [];
+    const names = [...Object.values(PHYSICAL_QUEUE_NAMES), DEAD_LETTER_QUEUE_NAME];
+    const samples = await Promise.all(
+      names.map(async (name): Promise<QueueDepthSample | null> => {
+        const queue = this.queues.get(name);
+        if (queue === undefined) return null;
+        try {
+          const counts = await queue.getJobCounts("waiting", "active", "delayed", "failed");
+          return {
+            queue: name,
+            waiting: counts.waiting ?? 0,
+            active: counts.active ?? 0,
+            delayed: counts.delayed ?? 0,
+            failed: counts.failed ?? 0,
+          };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    return samples.filter((sample): sample is QueueDepthSample => sample !== null);
   }
 
   /** QueueModule-internal seam; QueueModule never exports this owner or clients. */
@@ -279,6 +325,7 @@ export class QueueInfrastructureService {
   private observeQueue(queueName: string, queue: Queue<unknown>): void {
     queue.on("error", () => {
       this.status = "down";
+      queueClientErrorsTotal.inc({ queue: queueName, component: "queue" });
       this.logger.failure({ queue: queueName, reason: "queue" }, "Queue client error");
     });
   }

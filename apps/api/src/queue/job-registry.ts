@@ -22,6 +22,17 @@ const route = (
     sourceQueueNames: Object.freeze([sourceQueueName]),
   });
 
+/**
+ * The `note.*` / `folder.*` / `project.*` / `tag.*` / `task.*` / `attachment.*`
+ * domain events. Producers commit one inside the mutation transaction; nothing
+ * subscribes today and Part 66 deliberately gave webhooks their own dedicated
+ * `webhook.deliver` intent rather than claiming these shared types.
+ *
+ * They therefore carry `consumer: "none"`, which keeps the durable record and
+ * the extension point while excluding them from the dispatcher's claim budget
+ * and admitting them to the retention sweep. Registering a handler for one of
+ * these types means dropping its marker in the same change.
+ */
 const actorDefinition = <const TType extends DomainJobType>(
   jobType: TType,
   sourceQueueName: string,
@@ -32,6 +43,7 @@ const actorDefinition = <const TType extends DomainJobType>(
     payloadSchema: identifierPayloadSchema(jobType),
     route: route(PHYSICAL_QUEUE_NAMES.default, sourceQueueName),
     authority: "actor",
+    consumer: "none",
   });
 
 export const AUTH_EMAIL_JOB_DEFINITION = defineOutboxJob({
@@ -341,6 +353,21 @@ export const JOB_REGISTRY: ReadonlyMap<DomainJobType, AnyOutboxJobDefinition> = 
 
 export function registeredJobDefinition(jobType: string): AnyOutboxJobDefinition | undefined {
   return JOB_REGISTRY.get(jobType as DomainJobType);
+}
+
+/**
+ * Types declared `consumer: "none"`. The dispatcher excludes them from its claim
+ * query and the maintenance sweep is allowed to cancel aged rows of these types;
+ * both need the list as a plain array to bind into SQL.
+ */
+export const UNCONSUMED_JOB_TYPES: readonly DomainJobType[] = Object.freeze(
+  registryEntries
+    .filter((definition) => definition.consumer === "none")
+    .map((definition) => definition.jobType),
+);
+
+export function isUnconsumedJobType(jobType: string): boolean {
+  return registeredJobDefinition(jobType)?.consumer === "none";
 }
 
 export function isRegisteredOutboxRoute(

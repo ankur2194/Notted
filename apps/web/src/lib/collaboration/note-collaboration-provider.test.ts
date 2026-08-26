@@ -745,4 +745,88 @@ describe("NoteCollaborationProvider", () => {
 
     provider.destroy();
   });
+
+  /**
+   * `setLocalName` is the non-destructive half of the fix for the editor
+   * remount race: the display name arrives late from the member directory, and
+   * before this existed the only way to publish it was to rebuild the session.
+   *
+   * These four cases exist because the browser probe cannot see them. That
+   * probe counts editor mounts, so gutting this method to `{ return; }` leaves
+   * it green while every peer's caret silently reads the placeholder name
+   * forever. What is destructive is guarded there; what is published is
+   * guarded here.
+   */
+  describe("setLocalName", () => {
+    it("publishes the name through awareness without touching the session", async () => {
+      const harness = fakeSocket();
+      const provider = createProvider(harness);
+      const connected = provider.connect();
+      await completeHandshake(harness, { epoch: 1, ...seed("hello") });
+      await connected;
+
+      const documentBefore = provider.document;
+      const { epoch, generation } = provider.snapshot;
+      const color = provider.binding.user.color;
+
+      provider.setLocalName("Grace");
+
+      // (a) the binding reports the new name — through the getter, so a
+      // consumer that captured the binding earlier still reads current state.
+      expect(provider.binding.user.name).toBe("Grace");
+      // (b) awareness carries it, and `color` survives the field rewrite.
+      expect(provider.awareness.getLocalState()?.user).toEqual({
+        name: "Grace",
+        color,
+      });
+      // (c) nothing about the session moved. An epoch or generation change is
+      // exactly what tears the editor down and loses keystrokes.
+      expect(provider.snapshot.epoch).toBe(epoch);
+      expect(provider.snapshot.generation).toBe(generation);
+      expect(provider.document).toBe(documentBefore);
+      expect(provider.document.getText("body").toString()).toBe("hello");
+
+      provider.destroy();
+    });
+
+    it("does not emit a document frame", async () => {
+      const harness = fakeSocket();
+      const provider = createProvider(harness);
+      const connected = provider.connect();
+      await completeHandshake(harness, { epoch: 1, ...seed("hello") });
+      await connected;
+
+      const before = harness.events().length;
+      provider.setLocalName("Grace");
+      await flush();
+      expect(harness.events().length).toBe(before);
+
+      provider.destroy();
+    });
+
+    it("no-ops when the name is unchanged", async () => {
+      const harness = fakeSocket();
+      const provider = createProvider(harness);
+      const connected = provider.connect();
+      await completeHandshake(harness, { epoch: 1, ...seed("hello") });
+      await connected;
+
+      const stateBefore = provider.awareness.getLocalState()?.user;
+      provider.setLocalName("Ada");
+      expect(provider.awareness.getLocalState()?.user).toEqual(stateBefore);
+
+      provider.destroy();
+    });
+
+    it("no-ops after destroy", async () => {
+      const harness = fakeSocket();
+      const provider = createProvider(harness);
+      const connected = provider.connect();
+      await completeHandshake(harness, { epoch: 1, ...seed("hello") });
+      await connected;
+
+      provider.destroy();
+      expect(() => provider.setLocalName("Grace")).not.toThrow();
+    });
+  });
 });

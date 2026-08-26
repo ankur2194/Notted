@@ -274,6 +274,33 @@ describe("server environment contract", () => {
     ).toBe("edge.example.test");
   });
 
+  it("ships metrics off and refuses a weak metrics token in production", () => {
+    // `null` is what makes `GET /metrics` answer 404 rather than exposing the
+    // endpoint before an operator has configured it.
+    expect(parseAppConfig({}).metricsToken).toBeNull();
+    expect(parseAppConfig({ METRICS_TOKEN: "  " }).metricsToken).toBeNull();
+    expect(parseAppConfig({ METRICS_TOKEN: " scrape-token " }).metricsToken).toBe("scrape-token");
+
+    const production = {
+      NODE_ENV: "production",
+      API_HOST: "0.0.0.0",
+      APP_URL: "https://app.example.test",
+      API_URL: "https://api.example.test",
+      WS_URL: "wss://api.example.test",
+    } as const;
+
+    expect(() => parseAppConfig({ ...production, METRICS_TOKEN: "short-token" })).toThrow(
+      "METRICS_TOKEN",
+    );
+    // Unset stays valid in production: the endpoint is simply off.
+    expect(parseAppConfig(production).metricsToken).toBeNull();
+    expect(parseAppConfig({ ...production, METRICS_TOKEN: "a".repeat(32) }).metricsToken).toBe(
+      "a".repeat(32),
+    );
+    // A short value outside production is a developer convenience, not a risk.
+    expect(parseAppConfig({ METRICS_TOKEN: "dev" }).metricsToken).toBe("dev");
+  });
+
   it("rejects a malformed or loopback CNAME target", () => {
     expect(() => parseAppConfig({ CUSTOM_DOMAIN_CNAME_TARGET: "https://edge.example" })).toThrow(
       "CUSTOM_DOMAIN_CNAME_TARGET",

@@ -31,6 +31,20 @@ export interface AppConfig {
   readonly apiUrl: URL;
   readonly websocketUrl: URL;
   readonly logLevel: LogLevel;
+  /**
+   * Part 78 — the bearer token `GET /metrics` requires. `null` (the default)
+   * makes the endpoint answer **404**, not 401.
+   *
+   * WHY 404 AND WHY DEFAULT-OFF. A Prometheus scraper cannot hold a Better Auth
+   * cookie session, so `/metrics` cannot reuse the operator boundary Bull Board
+   * uses; it needs a shared secret. That makes the shipped default the whole
+   * question, and "off, and indistinguishable from a route that does not exist"
+   * is the only default with no window in which a deployment is exporting its
+   * internals before an operator has thought about it. A 401 would confirm the
+   * endpoint is there and worth attacking; a 404 is what every other unrouted
+   * path returns.
+   */
+  readonly metricsToken: string | null;
   readonly trustProxyHops: number;
   readonly requestBodyLimitBytes: number;
   readonly unauthenticatedRateLimitPerMinute: number;
@@ -99,6 +113,16 @@ export function parseAppConfig(environment: Environment): AppConfig {
       throw new Error("APP_URL, API_URL, and WS_URL must use HTTPS/WSS in production");
     }
 
+    const metricsToken = readOptionalString(environment, "METRICS_TOKEN") ?? null;
+    // Long enough that the token is not guessable at scrape-endpoint request
+    // rates. Enforced only in production so a developer can set a short value
+    // locally, and NOT enforced by silently disabling the endpoint: a
+    // deployment that meant to enable metrics must hear about a weak token at
+    // startup rather than wonder why Prometheus gets 404s.
+    if (nodeEnv === "production" && metricsToken !== null && metricsToken.length < 32) {
+      throw new Error("METRICS_TOKEN must be at least 32 characters in production");
+    }
+
     const customDomainsEnabled = readBoolean(environment, "CUSTOM_DOMAINS_ENABLED", false);
     const customDomainCnameTarget = (
       readOptionalString(environment, "CUSTOM_DOMAIN_CNAME_TARGET") ?? appUrl.hostname
@@ -126,6 +150,7 @@ export function parseAppConfig(environment: Environment): AppConfig {
       apiUrl,
       websocketUrl,
       logLevel: readEnum(environment, "LOG_LEVEL", LOG_LEVELS, "info"),
+      metricsToken,
       trustProxyHops: readInteger(environment, "TRUST_PROXY_HOPS", 0, 0, 16),
       requestBodyLimitBytes: readInteger(
         environment,

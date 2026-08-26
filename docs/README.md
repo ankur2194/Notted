@@ -212,6 +212,20 @@ That is required for `pnpm db:studio`, `pnpm db:check`, the MinIO console, and h
 `pnpm test:ci`. The alternative that needs no host prerequisites is to run the command
 inside the stack, for example `docker compose exec api pnpm test`.
 
+Run an in-container suite from the **package** directory, not the repository root:
+
+```bash
+docker compose -p notted-dev exec -T --workdir /workspace/apps/api api \
+  env CI=true AUTH_E2E=true REALTIME_INTEGRATION=true pnpm run test:ci
+```
+
+`/workspace` is mounted `read_only: true` (`compose.yaml`) with writable volumes only for
+`node_modules`, `dist`, `.next`, `coverage` and `test-results`. Turbo writes a per-package
+`.turbo/*.log`, so invoking the root script — which is `turbo run test:ci` — fails before any
+test runs with `error with cache: Failed to replay logs: Cannot write logs: Read-only file
+system (os error 30)`. Calling the package script runs Vitest directly and needs no cache
+write.
+
 ## Infrastructure lifecycle
 
 ```bash

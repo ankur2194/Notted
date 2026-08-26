@@ -82,9 +82,26 @@ export function useNoteCollaboration(options: UseNoteCollaborationOptions): Note
   const onProjectedRef = useRef(options.onProjected);
   const onResetRef = useRef(options.onReset);
 
+  /*
+   * Part 75 residual, and the same discipline as the callbacks above: the
+   * display name is read at CONSTRUCTION but is not a dependency of the effect.
+   *
+   * It used to be. `NoteEditorSurface` resolves this writer's name from the
+   * workspace member directory and latches it, so the name changes exactly once
+   * per session — whenever that request lands. As a dependency that latch
+   * destroyed the provider, pushed `mode` back to `"pending"` (which unmounts
+   * the editor entirely), and re-handshook onto a fresh `Y.Doc`, silently losing
+   * every keystroke that had not yet reached the server. It was benign only
+   * while the directory beat the socket handshake, which is a race, not an
+   * invariant — and losing it is what made `note-images.spec.ts` fail on a
+   * different member every run.
+   */
+  const userNameRef = useRef(userName);
+
   useEffect(() => {
     onProjectedRef.current = options.onProjected;
     onResetRef.current = options.onReset;
+    userNameRef.current = userName;
   });
 
   useEffect(() => {
@@ -98,7 +115,7 @@ export function useNoteCollaboration(options: UseNoteCollaborationOptions): Note
       socket: getRealtimeSocket(),
       workspaceId,
       noteId,
-      user: { id: userId, name: userName },
+      user: { id: userId, name: userNameRef.current },
     });
     let active = true;
 
@@ -144,7 +161,15 @@ export function useNoteCollaboration(options: UseNoteCollaborationOptions): Note
       instance.destroy();
       setProvider(null);
     };
-  }, [enabled, workspaceId, noteId, userId, userName]);
+  }, [enabled, workspaceId, noteId, userId]);
+
+  /*
+   * The name, published in place. Awareness only — no document, no epoch, no
+   * generation, and therefore no remount.
+   */
+  useEffect(() => {
+    provider?.setLocalName(userName);
+  }, [provider, userName]);
 
   const snapshot = useSyncExternalStore(
     useCallback(

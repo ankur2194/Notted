@@ -216,6 +216,12 @@ export const OPENAPI_ROUTES: Record<string, OpenApiRouteDoc> = {
     tags: ["Meta"],
     description: "Excluded from the /api/v1 prefix. 503 while any dependency is down.",
   },
+  "GET /metrics": {
+    summary: "Prometheus metrics exposition.",
+    tags: ["Meta"],
+    description:
+      "Excluded from the /api/v1 prefix, like the health probes: an operator configures a scraper, not a versioned client. Requires `Authorization: Bearer $METRICS_TOKEN`; answers 404 — not 401 — when the token is unset or wrong, so the endpoint is neither discoverable nor ever shipped open. Responds with Prometheus text exposition, not JSON. No label on any metric identifies a workspace, user, note, request, address or object key. See docs/runbooks/observability.md.",
+  },
 
   // Auth. Browser-session surface; API keys are not accepted here.
   "GET /auth/capabilities": {

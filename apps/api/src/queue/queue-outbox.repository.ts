@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { QUEUE_CONFIG, type QueueConfig } from "../config/queue.config";
 import { DatabaseService } from "../database/database.service";
 
+import { UNCONSUMED_JOB_TYPES } from "./job-registry";
 import { outboxRuntimeRowSchema, type OutboxRuntimeRow } from "./queue-runtime.types";
 
 import type { QueueFailureCode } from "./queue-errors";
@@ -20,12 +21,23 @@ export class QueueOutboxRepository {
     @Inject(QUEUE_CONFIG) private readonly config: QueueConfig,
   ) {}
 
+  /**
+   * Types declared `consumer: "none"` are excluded here rather than claimed and
+   * re-deferred by the dispatcher. Re-deferring costs a claim slot every
+   * `staleClaimMs`, so `count / staleClaimMs` rows per second are drawn from a
+   * fixed `batchSize / intervalMs` budget: past `batchSize * staleClaimMs /
+   * intervalMs` unconsumable rows the dispatcher has no capacity left for real
+   * work. The exclusion covers the stale-claim arms too, so rows already
+   * stranded in `dispatching`/`dispatched` by the previous behaviour are not
+   * reclaimed either; the maintenance sweep retires them.
+   */
   async claimBatch(batchSize: number, staleClaimMs: number): Promise<readonly OutboxRuntimeRow[]> {
     const result = await this.database.db.execute(sql`
       with candidates as (
         select id
         from job_outbox
-        where (
+        where job_type <> all(${sql.param([...UNCONSUMED_JOB_TYPES])}::text[])
+        and (
           (status = 'pending' and available_at <= now())
            or (status = 'dispatching' and locked_at < now() - (${staleClaimMs} * interval '1 millisecond'))
            or (status = 'dispatched' and updated_at < now() - (${staleClaimMs} * interval '1 millisecond'))

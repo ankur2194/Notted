@@ -207,6 +207,13 @@ describe.sequential("unauthenticated rate-limit trust boundary", () => {
     Object.assign(process.env, {
       NODE_ENV: "test",
       APP_URL: "http://localhost:3000",
+      // Pinned for the same reason the first block pins it (see the file header):
+      // the container exports a real `BETTER_AUTH_TRUSTED_ORIGINS`, and boot
+      // aborts with "must include APP_URL" if the overridden APP_URL is not in
+      // the inherited list. Leaving it out made this block fail only on a stack
+      // that exports the variable — which is every stack since Part 75 widened
+      // the turbo env passthrough.
+      BETTER_AUTH_TRUSTED_ORIGINS: "http://localhost:3000",
       LOG_LEVEL: "silent",
       RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE: "1",
       RATE_LIMIT_AUTHENTICATED_PER_MINUTE: "1000",

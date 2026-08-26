@@ -4,6 +4,7 @@ import { inflateSync } from "node:zlib";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 import { latestActionLink } from "./mailpit";
+import { PRINT_HIDDEN_SELECTORS } from "./print-selectors";
 
 /**
  * Part 38 browser verification.
@@ -32,16 +33,6 @@ const A4_WIDTH_PT = 595.28;
 const A4_HEIGHT_PT = 841.89;
 const LETTER_WIDTH_PT = 612;
 const LETTER_HEIGHT_PT = 792;
-
-/** Chrome that `print.css` must remove from every snapshot. */
-const PRINT_HIDDEN_SELECTORS = [
-  ".notted-page-controls",
-  ".notted-page-breaks",
-  '[data-testid="note-layout-status"]',
-  '[role="toolbar"]',
-  "#workspace-navigation",
-  ".skip-link",
-];
 
 function identity(role: string) {
   const suffix = randomUUID();
@@ -198,7 +189,11 @@ test.describe.serial("Part 38 real-stack print and page breaks", () => {
             );
             return JSON.stringify(detail.content ?? null);
           },
-          { timeout: 20_000 },
+          // 60 s, matching `note-images.spec.ts`'s `UPLOAD_MS` for the same
+          // condition against the same contended stack: the Yjs projection
+          // landing in `notes.content`. A serial full run is the slow case and
+          // 20 s was the tightest budget in the suite for that wait.
+          { timeout: 60_000 },
         )
         .toContain('"pageBreak"');
 

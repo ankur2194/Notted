@@ -16,6 +16,21 @@ import type { PresenceEntry } from "../src/realtime/realtime.contracts";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { AddressInfo } from "node:net";
 
+// Part 74's per-identifier authentication budget defaults to 5 requests per
+// minute (`RATE_LIMIT_AUTH_PER_MINUTE`, apps/api/src/config/app.config.ts).
+// This suite registers and signs in at least two identities per test across
+// four tests, so on the default budget it measures the limiter and never
+// reaches an assertion — `expected 200 "OK", got 429 "Too Many Requests"` from
+// `identity()`. Set at module scope because `parseAppConfig` reads it once,
+// during the `createApplication()` in `beforeAll`. `advanced-auth.e2e.test.ts`
+// and `auth.e2e.test.ts` carry the same override for the same reason.
+process.env.RATE_LIMIT_AUTH_PER_MINUTE = "10000";
+// The counter behind the sensitive tier lives in Redis, shared with the
+// long-lived API container on the same stack, so this suite starts partway
+// through a bucket somebody else opened. The LIMIT is read from this process's
+// config, which is what makes raising it here sufficient.
+process.env.RATE_LIMIT_SENSITIVE_PER_MINUTE = "10000";
+
 const enabled = process.env.REALTIME_INTEGRATION === "true";
 const origin = process.env.APP_ORIGIN ?? "http://localhost:3000";
 const mailpitUrl = process.env.MAILPIT_URL ?? "http://localhost:8025";

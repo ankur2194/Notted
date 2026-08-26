@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
 import { DOMAIN_JOB_TYPES } from "./job-identifiers";
-import { registeredJobDefinition } from "./job-registry";
+import { isUnconsumedJobType, registeredJobDefinition } from "./job-registry";
 import { OutboxDispatcherService } from "./outbox-dispatcher.service";
 import { QueueHandlerRegistry } from "./queue-handler-registry.service";
 
@@ -61,7 +61,26 @@ function setup(claimed: readonly OutboxRuntimeRow[]) {
 
 describe("OutboxDispatcherService", () => {
   it("keeps a known historical intent pending until a concrete handler registers", async () => {
-    const context = setup([row()]);
+    // `workspace.deleted`, NOT one of the `consumer: "none"` domain events: the
+    // rollout safety gate applies to a type whose consumer is still to be
+    // deployed, and the claim query now excludes the marked types before the
+    // dispatcher ever sees them.
+    const payload = {
+      action: DOMAIN_JOB_TYPES.workspaceDeleted,
+      intentId: OUTBOX_ID,
+      workspaceId: WORKSPACE_ID,
+      resourceIds: [RESOURCE_ID],
+      actorId: ACTOR_ID,
+    };
+    const context = setup([
+      row({
+        queueName: "workspace-cleanup",
+        jobType: DOMAIN_JOB_TYPES.workspaceDeleted,
+        payload,
+        payloadHash: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
+      }),
+    ]);
+    expect(isUnconsumedJobType(DOMAIN_JOB_TYPES.workspaceDeleted)).toBe(false);
     await context.dispatcher.dispatchOnce(10, 30_000);
     expect(context.repository.releaseUnhandled).toHaveBeenCalledWith(OUTBOX_ID, 30_000);
     expect(context.infrastructure.publish).not.toHaveBeenCalled();

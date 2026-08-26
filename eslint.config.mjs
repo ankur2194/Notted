@@ -89,6 +89,11 @@ export default tseslint.config(
         global: "readonly",
         Buffer: "readonly",
         URL: "readonly",
+        // Node 22 globals. `pnpm lint` runs per workspace package and never
+        // reaches `scripts/`, so the only thing that lints these files is the
+        // pre-commit hook — which is where a missing global surfaces.
+        fetch: "readonly",
+        performance: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
         setInterval: "readonly",

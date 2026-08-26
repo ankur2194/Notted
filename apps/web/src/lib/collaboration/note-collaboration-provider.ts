@@ -282,7 +282,13 @@ function sameBytes(first: Uint8Array, second: Uint8Array): boolean {
 export class NoteCollaborationProvider {
   private readonly socket: Socket;
   private readonly selector: NoteRoomSelector;
-  private readonly localUser: NoteCollaborationUser;
+  /**
+   * Mutable ON PURPOSE (Part 75 residual). The display name is awareness
+   * metadata, not session identity: it arrives from the member directory
+   * whenever that request happens to land, and rebuilding the session for it
+   * discarded the live `Y.Doc` — see `setLocalName`.
+   */
+  private localUser: NoteCollaborationUser;
   private readonly syncTimeoutMs: number;
   private readonly readyTimeoutMs: number;
 
@@ -389,6 +395,31 @@ export class NoteCollaborationProvider {
 
   get document(): Y.Doc {
     return this.doc;
+  }
+
+  /**
+   * Part 75 residual — the fix for the `note-images.spec.ts` flake.
+   *
+   * A writer's display name is resolved from the workspace member directory,
+   * which lands whenever it lands. It used to be part of the identity this
+   * provider was CONSTRUCTED with, so resolving it tore the session down,
+   * remounted the editor onto a fresh `Y.Doc`, and dropped every keystroke that
+   * had not yet reached the server. Nothing about the name belongs to the
+   * session: it never goes on the wire as identity, it decides no authorization,
+   * and the only thing that reads it is the awareness state peers render as a
+   * caret label. So it is published in place here, touching neither the
+   * document, nor the epoch, nor the generation.
+   *
+   * `CollaborationCursor` writes the same awareness field ONCE, when the editor
+   * is created, and never re-asserts it, so a later call here is not clobbered.
+   */
+  setLocalName(name: string): void {
+    if (this.destroyed || name === this.localUser.name) return;
+    this.localUser = Object.freeze({ ...this.localUser, name });
+    this.awarenessInstance.setLocalStateField("user", {
+      name: this.localUser.name,
+      color: this.localUser.color,
+    });
   }
 
   get binding(): NoteCollaborationBinding {
@@ -1115,6 +1146,8 @@ export class NoteCollaborationProvider {
 
   private adoptDocument(): void {
     this.generation += 1;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- captured for the binding's `user` getter, which must not rebind `this`.
+    const provider = this;
 
     const doc = new Y.Doc();
     const awareness = new Awareness(doc);
@@ -1124,7 +1157,17 @@ export class NoteCollaborationProvider {
 
     this.doc = doc;
     this.awarenessInstance = awareness;
-    this.currentBinding = Object.freeze({ document: doc, awareness, user: this.localUser });
+    // `user` is a GETTER, not a snapshot: `setLocalName` must reach every holder
+    // of this binding, including a `TiptapEditor` that captured it at creation.
+    // A replaced binding object would leave that editor configuring
+    // `CollaborationCursor` from a name that is already stale.
+    this.currentBinding = Object.freeze({
+      document: doc,
+      awareness,
+      get user(): NoteCollaborationUser {
+        return provider.localUser;
+      },
+    });
 
     // Announced only once the fields are swapped: the awareness listener reads
     // them back, and mid-swap it would read the document that was just thrown

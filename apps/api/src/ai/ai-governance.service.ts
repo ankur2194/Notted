@@ -29,6 +29,12 @@ import { AI_CONFIG, type AiConfig } from "../config/ai.config";
 import { DatabaseService } from "../database/database.service";
 import { aiProviderConfig, aiUsage } from "../database/schema";
 import { REDIS_CLIENT } from "../infrastructure/redis/redis.tokens";
+import {
+  aiCostMicrosTotal,
+  aiRequestsTotal,
+  aiTokensTotal,
+  metricLabel,
+} from "../metrics/metrics.registry";
 import { AiProviderRateLimiterService } from "../queue/ai-provider-rate-limiter.service";
 
 import { AiCredentialService } from "./ai-credential.service";
@@ -403,6 +409,10 @@ export class AiGovernanceService {
       promptTokens === null && completionTokens === null
         ? null
         : (promptTokens ?? 0) + (completionTokens ?? 0);
+    // No tokens measured means no cost claimed, even for a priced model:
+    // a refused request never reached the provider.
+    const costMicros =
+      totalTokens === null ? null : estimateCostMicros(model, promptTokens, completionTokens);
     try {
       await this.database.db.insert(aiUsage).values({
         workspaceId: input.workspaceId,
@@ -413,13 +423,32 @@ export class AiGovernanceService {
         promptTokens,
         completionTokens,
         totalTokens,
-        // No tokens measured means no cost claimed, even for a priced model:
-        // a refused request never reached the provider.
-        costMicros:
-          totalTokens === null ? null : estimateCostMicros(model, promptTokens, completionTokens),
+        costMicros,
         status: outcome.status,
         errorCode: outcome.errorCode ?? null,
       });
+      // Part 78. AFTER the insert, so the counter and the table agree: a metric
+      // claiming spend that no `ai_usage` row backs is worse than a missing
+      // sample, because reconciling a bill starts from the table.
+      //
+      // NO WORKSPACE LABEL, deliberately. Per-workspace usage is already
+      // available, authorized, at `GET /api/v1/ai/usage`; putting it here would
+      // put a tenant identifier — and the shape of every tenant's AI spend —
+      // behind the scrape token instead of behind a membership check. `model` is
+      // admin-authored `varchar(100)`, so it is the one label that is bounded by
+      // `metricLabel` rather than by an enum.
+      const modelLabel = metricLabel(model);
+      const labels = { provider, model: modelLabel };
+      aiRequestsTotal.inc({
+        ...labels,
+        feature: metricLabel(input.feature),
+        status: outcome.status,
+      });
+      if (promptTokens !== null) aiTokensTotal.inc({ ...labels, kind: "prompt" }, promptTokens);
+      if (completionTokens !== null) {
+        aiTokensTotal.inc({ ...labels, kind: "completion" }, completionTokens);
+      }
+      if (costMicros !== null && costMicros > 0) aiCostMicrosTotal.inc(labels, costMicros);
     } catch {
       this.logger.failure(
         { workspaceId: input.workspaceId, feature: input.feature, status: outcome.status },

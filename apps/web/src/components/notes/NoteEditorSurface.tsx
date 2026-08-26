@@ -233,14 +233,17 @@ export function NoteEditorSurface({
 
   /*
    * Part 59. The first name the directory yields for this session, and then
-   * never again.
+   * never again — so a later directory refetch cannot relabel a live caret.
    *
-   * `collaborationUser` is a dependency of `useNoteCollaboration`'s effect, so
-   * every change to the name tears the provider down and re-runs the handshake.
-   * Latching the first non-fallback resolution bounds that at exactly one
-   * re-handshake, which happens while the directory request is still in flight —
-   * before anyone has typed — instead of on every directory refetch for the rest
-   * of the session.
+   * Part 75 residual: this latch used to be load-bearing for correctness, and it
+   * was not enough. The name was part of the identity `useNoteCollaboration`
+   * built its provider from, so resolving it destroyed the session, unmounted
+   * the editor, and re-handshook onto a fresh `Y.Doc`. The comment here claimed
+   * that happened "before anyone has typed", which is true only while the
+   * directory beats the socket handshake — a race, and the one that made
+   * `note-images.spec.ts` fail on a different member every run. The name is now
+   * published into awareness in place (`NoteCollaborationProvider.setLocalName`)
+   * and this latch is back to being the cosmetic guard it reads as.
    */
   const [resolvedName, setResolvedName] = useState<string | null>(null);
 

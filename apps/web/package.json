@@ -86,6 +86,7 @@
     "@types/react": "19.0.1",
     "@types/react-dom": "19.0.1",
     "@vitejs/plugin-react": "5.2.0",
+    "axe-core": "4.12.1",
     "jsdom": "25.0.1",
     "postcss": "8.5.22",
     "tailwindcss": "4.3.3",

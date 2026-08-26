@@ -34,6 +34,13 @@ export interface QueueConfig {
     readonly claude: AiProviderQueueLimitConfig;
   };
   readonly idempotencyRetentionDays: number;
+  /**
+   * Age past which the maintenance sweep retires `job_outbox` rows: terminal
+   * rows are deleted, and non-terminal rows of a `consumer: "none"` type are
+   * cancelled. Nothing else bounds that table, and it grows by one row per
+   * mutation.
+   */
+  readonly outboxRetentionDays: number;
   readonly retention: {
     readonly completedAgeSeconds: number;
     readonly completedCount: number;
@@ -121,6 +128,7 @@ export function parseQueueConfig(environment: Environment): QueueConfig {
         1,
         365,
       ),
+      outboxRetentionDays: readInteger(environment, "QUEUE_OUTBOX_RETENTION_DAYS", 30, 1, 365),
       retention: Object.freeze({
         completedAgeSeconds: readInteger(
           environment,

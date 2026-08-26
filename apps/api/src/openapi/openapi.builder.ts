@@ -13,7 +13,7 @@ import type { ZodType } from "zod";
 
 /** Mirrors `app.setGlobalPrefix("api/v1", { exclude: [...] })` in `main.ts`. */
 const GLOBAL_PREFIX = "/api/v1";
-const PREFIX_EXCLUDED = new Set(["/health/live", "/health/ready"]);
+const PREFIX_EXCLUDED = new Set(["/health/live", "/health/ready", "/metrics"]);
 
 const SUPPORTED_VERBS = new Set(["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]);
 

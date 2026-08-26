@@ -5,6 +5,7 @@ import { UnrecoverableError } from "bullmq";
 
 import { StructuredLogger } from "../common/logging/structured-logger.service";
 import { QUEUE_CONFIG, type QueueConfig } from "../config/queue.config";
+import { queueJobDurationSeconds } from "../metrics/metrics.registry";
 
 import { bullJobEnvelopeSchema } from "./job-contracts";
 import { isRegisteredOutboxRoute } from "./job-registry";
@@ -17,6 +18,10 @@ import {
 import { QueueOutboxRepository } from "./queue-outbox.repository";
 import { deadLetterRecordSchema, type OutboxRuntimeRow } from "./queue-runtime.types";
 
+/** Two decimal places, matching `RequestContextMiddleware`'s HTTP duration. */
+const elapsedMs = (startedAt: number): number =>
+  Math.round((performance.now() - startedAt) * 100) / 100;
+
 @Injectable()
 export class QueueWorkerProcessorService {
   constructor(
@@ -28,6 +33,12 @@ export class QueueWorkerProcessorService {
   ) {}
 
   async process(invocation: QueueWorkerInvocation): Promise<void> {
+    // ONE clock reading for two consumers: the duration histogram below and the
+    // `durationMs` field on both log lines. Before Part 78 the worker logged a
+    // completion and a failure with no duration at all, so "jobs are slow" had
+    // no evidence anywhere — and taking a second `performance.now()` for the log
+    // would let the two numbers disagree about the same job.
+    const startedAt = performance.now();
     const envelope = bullJobEnvelopeSchema.safeParse(invocation.envelope);
     const fallbackId = typeof invocation.bullJobId === "string" ? invocation.bullJobId : undefined;
     const outboxId = envelope.success ? envelope.data.outboxIntentId : fallbackId;
@@ -48,12 +59,18 @@ export class QueueWorkerProcessorService {
 
     try {
       await this.validateAndHandle(row, invocation);
+      const durationMs = elapsedMs(startedAt);
+      queueJobDurationSeconds.observe(
+        { queue: invocation.sourceQueue, outcome: "completed" },
+        durationMs / 1_000,
+      );
       this.logger.info(
         {
           queue: invocation.sourceQueue,
           jobId: row.id,
           correlationId: row.correlationId ?? undefined,
           outcome: "completed",
+          durationMs,
         },
         "Queue job completed",
       );
@@ -72,12 +89,18 @@ export class QueueWorkerProcessorService {
         await this.repository.releaseExecution(row, runtimeError.reasonCode);
         await this.repository.recordRetry(row.id, runtimeError.reasonCode);
       }
+      const outcome = runtimeError.permanent || finalAttempt ? "failed" : "retry";
+      const durationMs = elapsedMs(startedAt);
+      queueJobDurationSeconds.observe(
+        { queue: invocation.sourceQueue, outcome },
+        durationMs / 1_000,
+      );
       this.logger.failure(
         {
           queue: invocation.sourceQueue,
           jobId: row.id,
           correlationId: row.correlationId ?? undefined,
-          outcome: runtimeError.permanent || finalAttempt ? "failed" : "retry",
+          outcome,
           reason: runtimeError.reasonCode,
         },
         "Queue job attempt failed",
