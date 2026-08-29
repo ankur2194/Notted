@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { imagesFromCompose } from "./security-scan.mjs";
+import { imagesFromCompose, TRIVY_IMAGE, trivyRunArguments } from "./security-scan.mjs";
 
 const FIXTURE = `
 services:
@@ -133,4 +133,38 @@ test("every suppressed advisory names a Plan part as its deadline", () => {
       );
     }
   }
+});
+
+/*
+ * The scanner's own image was the only image reference in the repository pinned
+ * by tag rather than digest, and the digest rule above cannot see it: that rule
+ * reads compose.yaml, and this one lives in a `.mjs`.
+ */
+test("the Trivy image is pinned by digest, like every compose image", () => {
+  assert.match(
+    TRIVY_IMAGE,
+    /@sha256:[0-9a-f]{64}$/u,
+    "the scanner must be pinned by digest, not by a floating tag",
+  );
+});
+
+/*
+ * `--volume /var/run/docker.sock:...:ro` gave the scanner container the full
+ * daemon API: read-only on a unix socket restricts writing the socket file, not
+ * what can be asked through it. On this shared daemon that is the ability to
+ * delete images and volumes belonging to every other project on the machine.
+ */
+test("the scan container is handed a tarball, never the Docker socket", () => {
+  const argv = trivyRunArguments("/tmp/notted-trivy-abc", "image.tar");
+
+  assert.equal(
+    argv.some((argument) => argument.includes("docker.sock")),
+    false,
+    "the Docker socket must not be mounted into the scanner",
+  );
+  assert.ok(argv.includes("/tmp/notted-trivy-abc:/scan:ro"), "the tarball mount must be read-only");
+  assert.ok(argv.includes("--input"), "the image must be scanned from the exported tarball");
+  assert.ok(argv.includes("/scan/image.tar"));
+  // The severity gate is what makes a non-zero exit mean something.
+  assert.ok(argv.includes("--exit-code") && argv.includes("1"));
 });

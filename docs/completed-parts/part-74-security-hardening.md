@@ -96,8 +96,12 @@ in the checklist with the file that carries the control, not re-built.
   hyphenated path is not a valid redact path.
 - **On-demand scanning (`scripts/security-scan.mjs`, `pnpm security:check`).** `security:deps` is
   `pnpm audit --prod --audit-level=high` reusing the existing suppression verbatim;
-  `security:containers` runs Trivy through Docker, **pinned to `aquasec/trivy:0.68.0`** because an
-  unpinned scanner is itself a supply-chain risk, against the images named in `compose.yaml`. A run
+  `security:containers` runs Trivy through Docker, **pinned by digest** because an
+  unpinned scanner is itself a supply-chain risk, against the images named in `compose.yaml`. The
+  scanner receives the image as a tarball written by `docker save` and bind-mounted read-only; it
+  is never handed the Docker socket. (Corrected after the Part 74 review: the original pin,
+  `aquasec/trivy:0.68.0`, was a tag upstream never published, so every run failed to start and was
+  counted as a scan finding. See `scripts/security-scan.mjs`.) A run
   in which every image was absent locally exits 0 but prints an explicit "nothing scanned … this is
   not a pass" line, so an empty run can never be misread as a clean one. Not wired into CI, which
   this project does not have by design.
