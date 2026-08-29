@@ -100,9 +100,12 @@ export function DashboardShell({
   children,
   noteNavigation,
   tagNavigation,
+  canSwitchWorkspace,
 }: {
   readonly shell: ShellBootstrap;
   readonly children: ReactNode;
+  /** False on a tenant's custom domain; see `WorkspaceSwitcher`. */
+  readonly canSwitchWorkspace: boolean;
   readonly noteNavigation: NoteNavigationState;
   /**
    * Required, like `noteNavigation`: the non-ready branches (`no-workspace`,
@@ -172,6 +175,7 @@ export function DashboardShell({
             onToggle={toggleSidebar}
             noteNavigation={noteNavigation}
             tagNavigation={tagNavigation}
+            canSwitchWorkspace={canSwitchWorkspace}
           />
         </div>
         <Dialog open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -192,6 +196,7 @@ export function DashboardShell({
               mobile
               noteNavigation={noteNavigation}
               tagNavigation={tagNavigation}
+              canSwitchWorkspace={canSwitchWorkspace}
             />
           </DialogContent>
         </Dialog>

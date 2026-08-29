@@ -39,6 +39,26 @@ describe("WorkspaceSwitcher", () => {
     );
   });
 
+  it("shows a static label instead of a control that cannot work on a tenant host", () => {
+    /*
+     * On a workspace's own custom domain the switch is refused twice over, both
+     * correctly: the proxy 404s `POST /api/shell/workspace` on a non-primary
+     * host, and the route handler requires the primary origin. The dropdown was
+     * still rendered, so every attempt ended in "Workspace access changed or the
+     * server is unavailable" -- a permissions error the visitor cannot act on,
+     * for something that was never going to work.
+     */
+    render(
+      <WorkspaceSwitcher workspaces={[alpha, beta]} currentWorkspace={alpha} canSwitch={false} />,
+    );
+
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.getByText("Alpha")).toBeVisible();
+    // And it says where the switch does work, rather than just refusing.
+    expect(screen.getByRole("link")).toHaveAttribute("href", expect.stringContaining("http"));
+    expect(selectWorkspace).not.toHaveBeenCalled();
+  });
+
   it("disables a one-workspace selector", () => {
     render(<WorkspaceSwitcher workspaces={[alpha]} currentWorkspace={alpha} />);
     expect(screen.getByRole("combobox", { name: "Current workspace" })).toBeDisabled();

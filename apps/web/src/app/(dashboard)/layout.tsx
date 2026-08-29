@@ -7,8 +7,10 @@ import type { TagNavigationState } from "@/components/tags/TagFilterList";
 import type { ReactNode } from "react";
 
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { publicEnvironment } from "@/config/public-environment";
 import { loginPathFor } from "@/lib/auth/redirects";
 import { getServerSession } from "@/lib/auth/server-session";
+import { isPrimaryHost } from "@/lib/domains/custom-host";
 import { getServerFolders, getServerNoteNavigation } from "@/lib/notes/server-notes";
 import { getServerShell } from "@/lib/shell/server-shell";
 import { getServerTags } from "@/lib/tags/server-tags";
@@ -44,7 +46,8 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   // The page the visitor actually asked for, stamped on by `proxy.ts` because
   // the App Router hands a layout no pathname. Absent (a request the proxy
   // matcher skipped) falls back to "/", which is what this always did.
-  const intendedPath = (await headers()).get(PATHNAME_HEADER) ?? "/";
+  const requestHeaders = await headers();
+  const intendedPath = requestHeaders.get(PATHNAME_HEADER) ?? "/";
   const session = await getServerSession();
   if (session.status === "unauthenticated") redirect(loginPathFor(intendedPath));
   if (session.status === "unavailable") {
@@ -92,11 +95,22 @@ export default async function DashboardLayout({ children }: { children: ReactNod
         ? { status: "ready", tags: tags.data.items, truncated: tags.data.hasMore }
         : { status: "unavailable" };
   }
+  // Switching workspaces is refused on a tenant's own domain by two independent
+  // guards -- the proxy 404s the POST, and the route handler requires the
+  // primary origin -- both correctly, because a branded host must never render
+  // another tenant's workspace. The switcher renders as a static label there
+  // rather than as a control that always fails.
+  const requestHost = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "";
+  const canSwitchWorkspace = isPrimaryHost(
+    requestHost,
+    new URL(publicEnvironment.NEXT_PUBLIC_APP_URL).host,
+  );
   return (
     <DashboardShell
       shell={shell.data}
       noteNavigation={noteNavigation}
       tagNavigation={tagNavigation}
+      canSwitchWorkspace={canSwitchWorkspace}
     >
       {children}
     </DashboardShell>

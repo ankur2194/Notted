@@ -32,7 +32,13 @@ vi.mock("@/lib/notes/server-notes", () => ({
   getServerFolders: vi.fn(),
 }));
 vi.mock("@/lib/tags/server-tags", () => ({ getServerTags: vi.fn() }));
-vi.mock("@/components/layout/DashboardShell", () => ({ DashboardShell: () => null }));
+const shellProps = vi.fn();
+vi.mock("@/components/layout/DashboardShell", () => ({
+  DashboardShell: (props: { readonly canSwitchWorkspace: boolean }) => {
+    shellProps(props);
+    return null;
+  },
+}));
 
 const NOTE_PATH = "/workspaces/40000000-0000-4000-8000-000000000001/notes/n";
 
@@ -61,6 +67,23 @@ describe("dashboard layout redirects", () => {
 
     await expect(renderLayout()).rejects.toThrow("REDIRECT:");
     expect(redirect).toHaveBeenCalledWith(`/login?redirect=${encodeURIComponent(NOTE_PATH)}`);
+  });
+
+  it("offers the workspace switch on the primary host and withholds it on a tenant host", async () => {
+    // Two guards refuse the switch on a tenant host -- the proxy 404 and the
+    // route handler's origin check -- so offering the control there is offering
+    // an action that always fails.
+    headerValues.set("host", "localhost:3000");
+    await renderLayout();
+    expect(shellProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ canSwitchWorkspace: true }),
+    );
+
+    headerValues.set("x-forwarded-host", "notes.acme.example");
+    await renderLayout();
+    expect(shellProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ canSwitchWorkspace: false }),
+    );
   });
 
   it("falls back to the root for a request the proxy matcher skipped", async () => {

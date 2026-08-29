@@ -35,6 +35,7 @@ export function Sidebar({
   mobile = false,
   noteNavigation,
   tagNavigation,
+  canSwitchWorkspace,
 }: {
   readonly shell: ShellBootstrap;
   readonly collapsed: boolean;
@@ -42,6 +43,8 @@ export function Sidebar({
   readonly mobile?: boolean;
   readonly noteNavigation: NoteNavigationState;
   readonly tagNavigation: TagNavigationState;
+  /** False on a tenant's custom domain; see `WorkspaceSwitcher`. */
+  readonly canSwitchWorkspace: boolean;
 }) {
   const hideLabels = collapsed && !mobile;
   const current = shell.currentWorkspace;
@@ -98,6 +101,7 @@ export function Sidebar({
               workspaces={shell.workspaces}
               currentWorkspace={shell.currentWorkspace}
               compact={mobile}
+              canSwitch={canSwitchWorkspace}
             />
           </div>
         )}

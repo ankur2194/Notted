@@ -6,16 +6,32 @@ import { useState } from "react";
 
 import type { ShellWorkspaceMembership } from "@notted/shared-types";
 
+import { publicEnvironment } from "@/config/public-environment";
 import { selectWorkspace } from "@/lib/shell/requests";
 
 export function WorkspaceSwitcher({
   workspaces,
   currentWorkspace,
   compact = false,
+  canSwitch = true,
 }: {
   readonly workspaces: readonly ShellWorkspaceMembership[];
   readonly currentWorkspace: ShellWorkspaceMembership | null;
   readonly compact?: boolean;
+  /**
+   * False on a tenant's custom domain, where switching CANNOT work and must not
+   * be offered. Two independent guards refuse it there, both correctly: the
+   * proxy 404s `POST /api/shell/workspace` on a non-primary host, and the route
+   * handler itself requires the request origin to be the primary app URL. A
+   * branded host rendering another tenant's workspace under that tenant's
+   * certificate is the incoherence Part 73 exists to prevent.
+   *
+   * So the fix is not to relax either guard — it is to stop rendering a control
+   * whose every use ends in "Workspace access changed or the server is
+   * unavailable", which reads as a permissions problem the visitor cannot act
+   * on.
+   */
+  readonly canSwitch?: boolean;
 }) {
   const router = useRouter();
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
@@ -50,6 +66,29 @@ export function WorkspaceSwitcher({
             View workspaces
           </Link>
         ) : null}
+      </div>
+    );
+  }
+
+  if (!canSwitch) {
+    return (
+      <div className="space-y-1" data-testid="workspace-switcher-static">
+        <p className="text-xs font-medium text-muted-foreground">Current workspace</p>
+        <p className="text-sm font-medium">
+          {currentWorkspace === null ? "No workspace selected" : currentWorkspace.name}
+        </p>
+        {!compact && (
+          <p className="text-xs text-muted-foreground">
+            This workspace has its own domain. Switch workspaces on{" "}
+            <a
+              href={publicEnvironment.NEXT_PUBLIC_APP_URL}
+              className="font-medium text-primary hover:underline"
+            >
+              {new URL(publicEnvironment.NEXT_PUBLIC_APP_URL).host}
+            </a>
+            .
+          </p>
+        )}
       </div>
     );
   }

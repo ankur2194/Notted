@@ -90,6 +90,7 @@ describe("DashboardShell", () => {
         shell={{ ...shell, currentWorkspace: null }}
         noteNavigation={{ status: "no-workspace" }}
         tagNavigation={{ status: "no-workspace" }}
+        canSwitchWorkspace
       >
         <p>Content</p>
       </DashboardShell>,
@@ -100,7 +101,12 @@ describe("DashboardShell", () => {
   it("provides landmarks, permission-aware navigation, placeholders and a mobile focus trap", async () => {
     const user = userEvent.setup();
     render(
-      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+      <DashboardShell
+        shell={shell}
+        noteNavigation={noteNavigation}
+        tagNavigation={tagNavigation}
+        canSwitchWorkspace
+      >
         <h1>Dashboard content</h1>
       </DashboardShell>,
     );
@@ -126,7 +132,12 @@ describe("DashboardShell", () => {
   it("opens the search palette with Ctrl+K and closes the user menu with Escape", async () => {
     const user = userEvent.setup();
     render(
-      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+      <DashboardShell
+        shell={shell}
+        noteNavigation={noteNavigation}
+        tagNavigation={tagNavigation}
+        canSwitchWorkspace
+      >
         <p>Content</p>
       </DashboardShell>,
     );
@@ -145,7 +156,12 @@ describe("DashboardShell", () => {
   it("opens the user menu as a disclosure and closes it on a click outside", async () => {
     const user = userEvent.setup();
     render(
-      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+      <DashboardShell
+        shell={shell}
+        noteNavigation={noteNavigation}
+        tagNavigation={tagNavigation}
+        canSwitchWorkspace
+      >
         <p>Content</p>
       </DashboardShell>,
     );
@@ -194,7 +210,12 @@ describe("DashboardShell", () => {
       );
     }
     render(
-      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+      <DashboardShell
+        shell={shell}
+        noteNavigation={noteNavigation}
+        tagNavigation={tagNavigation}
+        canSwitchWorkspace
+      >
         <LinkChord />
       </DashboardShell>,
     );
@@ -233,7 +254,12 @@ describe("DashboardShell", () => {
     });
     const user = userEvent.setup();
     render(
-      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+      <DashboardShell
+        shell={shell}
+        noteNavigation={noteNavigation}
+        tagNavigation={tagNavigation}
+        canSwitchWorkspace
+      >
         <p>Content</p>
       </DashboardShell>,
     );
@@ -259,7 +285,12 @@ describe("DashboardShell", () => {
     });
     const user = userEvent.setup();
     render(
-      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+      <DashboardShell
+        shell={shell}
+        noteNavigation={noteNavigation}
+        tagNavigation={tagNavigation}
+        canSwitchWorkspace
+      >
         <p>Content</p>
       </DashboardShell>,
     );
@@ -281,7 +312,12 @@ describe("DashboardShell", () => {
 
   it("emits no accent custom properties when the workspace has no accent", () => {
     const { container } = render(
-      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+      <DashboardShell
+        shell={shell}
+        noteNavigation={noteNavigation}
+        tagNavigation={tagNavigation}
+        canSwitchWorkspace
+      >
         <p>Content</p>
       </DashboardShell>,
     );
@@ -298,7 +334,12 @@ describe("DashboardShell", () => {
           : { ...shell.currentWorkspace, accentColor: "#0f766e" },
     };
     const { container } = render(
-      <DashboardShell shell={branded} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+      <DashboardShell
+        shell={branded}
+        noteNavigation={noteNavigation}
+        tagNavigation={tagNavigation}
+        canSwitchWorkspace
+      >
         <p>Content</p>
       </DashboardShell>,
     );
@@ -316,7 +357,12 @@ describe("DashboardShell", () => {
           : { ...shell.currentWorkspace, accentColor: "red;} :root{--color-primary:blue" },
     };
     const { container } = render(
-      <DashboardShell shell={hostile} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+      <DashboardShell
+        shell={hostile}
+        noteNavigation={noteNavigation}
+        tagNavigation={tagNavigation}
+        canSwitchWorkspace
+      >
         <p>Content</p>
       </DashboardShell>,
     );
@@ -325,7 +371,12 @@ describe("DashboardShell", () => {
 
   it("shows the Notted mark when the workspace has no logo", () => {
     render(
-      <DashboardShell shell={shell} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+      <DashboardShell
+        shell={shell}
+        noteNavigation={noteNavigation}
+        tagNavigation={tagNavigation}
+        canSwitchWorkspace
+      >
         <p>Content</p>
       </DashboardShell>,
     );
@@ -346,7 +397,12 @@ describe("DashboardShell", () => {
             },
     };
     render(
-      <DashboardShell shell={branded} noteNavigation={noteNavigation} tagNavigation={tagNavigation}>
+      <DashboardShell
+        shell={branded}
+        noteNavigation={noteNavigation}
+        tagNavigation={tagNavigation}
+        canSwitchWorkspace
+      >
         <p>Content</p>
       </DashboardShell>,
     );
