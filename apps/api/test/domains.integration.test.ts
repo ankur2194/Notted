@@ -21,7 +21,7 @@ import { resolve as resolvePath } from "node:path";
 import { and, eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
@@ -34,6 +34,8 @@ import { SEED_IDS, seedDatabase } from "../src/database/seed";
 import { DomainsService } from "../src/domains/domains.service";
 import { TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { ApiHttpException } from "../src/common/errors/api-http.exception";
 import type { VerifiedHostsService } from "../src/common/verified-hosts.service";
 import type { DatabaseService, DatabaseTransaction } from "../src/database/database.service";
@@ -41,9 +43,7 @@ import type { DomainDnsResolver } from "../src/domains/domain-verifier";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolvePath(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
 const CNAME_TARGET = "edge.notted.test";
 const ALPHA_HOST = "notes.alpha.test";
 const BETA_HOST = "notes.beta.test";
@@ -77,19 +77,6 @@ async function rejectionStatus(work: Promise<unknown>): Promise<number> {
     return (error as ApiHttpException).getStatus();
   }
   throw new Error("expected the call to reject");
-}
-
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
 }
 
 function principal(userId: string): AuthenticatedPrincipal {
@@ -157,14 +144,13 @@ async function status(tx: DatabaseTransaction, workspaceId: string) {
   return row;
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 73 custom domains (live)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 73 custom domains (live)", () => {
   let pool: Pool | undefined;
   let db: Database | undefined;
-  let reachable = false;
 
   beforeAll(async () => {
-    reachable = await isDatabaseReachable(DATABASE_URL as string);
-    if (!reachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 1 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -175,7 +161,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 73 custom domains (live)", () => {
   });
 
   it("claims, verifies, mirrors, resolves, and releases a hostname", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -245,7 +231,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 73 custom domains (live)", () => {
 
   // Two tenants racing for one address is a race only the database can settle.
   it("refuses a hostname another workspace already claimed", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -292,7 +278,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 73 custom domains (live)", () => {
   });
 
   it("denies every operation to a member of another workspace", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -328,7 +314,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 73 custom domains (live)", () => {
   });
 
   it("takes the claim with the workspace when the workspace is deleted", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

@@ -19,7 +19,7 @@ import { resolve } from "node:path";
 import { and, eq, sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
@@ -28,6 +28,7 @@ import { AuthorizationRepository } from "../src/authorization/authorization.repo
 import { CommentsService } from "../src/comments/comments.service";
 import { DatabaseService, type DatabaseTransaction } from "../src/database/database.service";
 import {
+  auditLogs,
   jobOutbox,
   notes,
   notifications,
@@ -49,6 +50,8 @@ import { REALTIME_EVENTS } from "../src/realtime/realtime.contracts";
 import { NoteSearchIndexProducer } from "../src/search/note-search-index-producer";
 import { TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { StructuredLogger } from "../src/common/logging/structured-logger.service";
 import type { QueueHandlerRegistry } from "../src/queue/queue-handler-registry.service";
 import type { AuthenticatedPrincipal, NoteDocument } from "@notted/shared-types";
@@ -56,7 +59,6 @@ import type { PgTransactionConfig } from "drizzle-orm/pg-core/session";
 import type { Server } from "socket.io";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
 
 function principal(userId: string): AuthenticatedPrincipal {
@@ -69,18 +71,6 @@ function principal(userId: string): AuthenticatedPrincipal {
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     isFresh: true,
   });
-}
-
-async function reachable(url: string): Promise<boolean> {
-  const client = new Client({ connectionString: url, connectionTimeoutMillis: 2_000 });
-  try {
-    await client.connect();
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
 }
 
 /** One paragraph per mentioned user; the label is the untrusted display snapshot. */
@@ -172,14 +162,13 @@ async function createNote(
   return { id: created.note.id, version: created.note.version };
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 60 comments and mentions (live PostgreSQL)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 60 comments and mentions (live PostgreSQL)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
-  let databaseReachable = false;
 
   beforeAll(async () => {
-    databaseReachable = await reachable(DATABASE_URL as string);
-    if (!databaseReachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 8 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -189,7 +178,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 60 comments and mentions (live PostgreS
   afterAll(async () => pool?.end());
 
   it("conceals a foreign-workspace comment id as 404 rather than 403", async ({ skip }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const { commentsService, notesService } = build(db);
     const betaOwner = principal(SEED_IDS.users.betaOwner);
     const alphaOwner = principal(SEED_IDS.users.alphaOwner);
@@ -243,7 +232,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 60 comments and mentions (live PostgreS
   });
 
   it("lets a viewer comment but never resolve", async ({ skip }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const { commentsService, notesService } = build(db);
     const owner = principal(SEED_IDS.users.alphaOwner);
     const viewer = principal(SEED_IDS.users.alphaViewer);
@@ -288,7 +277,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 60 comments and mentions (live PostgreS
   });
 
   it("refuses to let a non-creator edit or delete another member's comment", async ({ skip }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const { commentsService, notesService } = build(db);
     const owner = principal(SEED_IDS.users.alphaOwner);
     const note = await createNote(notesService, owner, SEED_IDS.workspaces.alpha, "Ownership");
@@ -344,10 +333,99 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 60 comments and mentions (live PostgreS
     });
     expect(after.items).toHaveLength(1);
     expect(after.items[0]?.content).toBe("Original wording, authored by the owner.");
+
+    /*
+     * `update` was the only mutator in this file writing no audit row — create,
+     * delete and resolve all do — so a comment could be rewritten after the fact
+     * with nothing in the trail naming who did it or when.
+     */
+    await commentsService.update({
+      ...scope,
+      principal: owner,
+      commentId: created.comment.id,
+      content: "owner rewrite",
+    });
+    const editAudit = await db
+      .select({ metadata: auditLogs.metadata, userId: auditLogs.userId })
+      .from(auditLogs)
+      .where(
+        and(eq(auditLogs.entityId, created.comment.id), eq(auditLogs.action, "comment.update")),
+      );
+    expect(editAudit).toHaveLength(1);
+    expect(editAudit[0]?.userId).toBe(owner.userId);
+    expect(editAudit[0]?.metadata).toMatchObject({ noteId: note.id });
+    // Identifiers only: the body is never copied into a row every admin can export.
+    expect(JSON.stringify(editAudit[0]?.metadata)).not.toContain("owner rewrite");
+  });
+
+  /*
+   * `readReplies` had NO limit: every reply on every visible root came back in
+   * one response, however long the argument ran. A flat cap would have been
+   * worse than none — one hot thread would eat the budget and silently truncate
+   * every other thread on the page — so the bound is per `parent_id`, and it is
+   * reported rather than applied silently.
+   */
+  it("bounds replies per thread and says so, without starving the other threads", async ({
+    skip,
+  }) => {
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
+    const { commentsService, notesService } = build(db);
+    const owner = principal(SEED_IDS.users.alphaOwner);
+    const note = await createNote(notesService, owner, SEED_IDS.workspaces.alpha, "Reply cap");
+    const scope = { workspaceId: SEED_IDS.workspaces.alpha, noteId: note.id, requestId: null };
+
+    const root = async (content: string) =>
+      commentsService.create({
+        ...scope,
+        principal: owner,
+        content,
+        parentId: null,
+        anchor: null,
+        idempotencyKey: randomUUID(),
+      });
+    const busy = await root("Busy thread");
+    const quiet = await root("Quiet thread");
+
+    // One past the cap on the busy thread; one reply on the quiet one.
+    const cap = 100;
+    for (let index = 0; index <= cap; index += 1) {
+      await commentsService.create({
+        ...scope,
+        principal: owner,
+        content: `reply ${index}`,
+        parentId: busy.comment.id,
+        anchor: null,
+        idempotencyKey: randomUUID(),
+      });
+    }
+    await commentsService.create({
+      ...scope,
+      principal: owner,
+      content: "only reply",
+      parentId: quiet.comment.id,
+      anchor: null,
+      idempotencyKey: randomUUID(),
+    });
+
+    const page = await commentsService.list({
+      ...scope,
+      principal: owner,
+      page: 1,
+      limit: 20,
+      status: "all",
+    });
+    const busyThread = page.items.find((item) => item.id === busy.comment.id);
+    const quietThread = page.items.find((item) => item.id === quiet.comment.id);
+
+    expect(busyThread?.replies).toHaveLength(cap);
+    expect(busyThread?.repliesTruncated).toBe(true);
+    // THE POINT OF PER-THREAD: the busy thread does not starve the quiet one.
+    expect(quietThread?.replies).toHaveLength(1);
+    expect(quietThread?.repliesTruncated).toBe(false);
   });
 
   it("returns one member's reply to every other member of the workspace", async ({ skip }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const { commentsService, notesService } = build(db);
     const owner = principal(SEED_IDS.users.alphaOwner);
     const editor = principal(SEED_IDS.users.alphaEditor);
@@ -401,7 +479,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 60 comments and mentions (live PostgreS
   it("broadcasts every comment mutation to the note room the room service names", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     // The `realtime:comment:changed` fan-out is what makes a second client's
     // sidebar refetch. Nothing else covers it: the browser journey asserts the
     // OUTCOME (a reply appearing) and cannot distinguish a broadcast from a
@@ -494,7 +572,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 60 comments and mentions (live PostgreS
   it("never notifies a mention of someone who cannot read the restricted note", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     // Workspace membership is NOT what `note.read` means. A note inside a
     // restricted project is readable only by members of that project — and by
     // the workspace's own owners and admins, who read everything — so a
@@ -601,7 +679,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 60 comments and mentions (live PostgreS
   it("notifies each newly mentioned member exactly once and drops forged outsiders", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const { notesService, worker } = build(db);
     const owner = principal(SEED_IDS.users.alphaOwner);
     const note = await createNote(notesService, owner, SEED_IDS.workspaces.alpha, "Mentions");

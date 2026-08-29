@@ -43,7 +43,7 @@ async function signIn(page: Page, email: string, password: string, redirect = "/
 }
 
 async function signOut(page: Page) {
-  const menuButton = page.getByRole("button", { name: "Open user menu" });
+  const menuButton = page.getByRole("button", { name: "User menu" });
   await expect(async () => {
     if ((await menuButton.getAttribute("aria-expanded")) !== "true") await menuButton.click();
     await expect(menuButton).toHaveAttribute("aria-expanded", "true", { timeout: 1_000 });

@@ -9,7 +9,7 @@ import {
   tagIdsSchema,
   uuidSchema,
 } from "./common.schema";
-import { NOTE_DOCUMENT_LIMITS, noteDocumentSchema } from "./document.schema";
+import { NOTE_DOCUMENT_LIMITS, noteDocumentSchema, stripUnsafeText } from "./document.schema";
 
 // Shared with tasks (Part 47); the rule now lives in `common.schema`.
 export { tagIdsSchema } from "./common.schema";
@@ -57,8 +57,38 @@ export const noteSortFieldSchema = z.enum([
 ]);
 export const noteSharePermissionSchema = z.enum(["view", "comment", "edit"]);
 export const noteShareMutationPermissionSchema = z.enum(["view", "edit"]);
-const titleSchema = z.string().trim().min(1).max(500);
-const folderNameSchema = z.string().trim().min(1).max(255);
+/*
+ * Titles STRIP rather than reject, unlike the document-contract predicates.
+ *
+ * Two reasons, both about who can act on the failure. A title is an input
+ * schema that already transforms (`.trim()`), so a transform is in character;
+ * and a rejection here fails a save over a character the author cannot see,
+ * which is a support ticket with no diagnosis. A document node is different —
+ * the contract validates and never silently rewrites, and it has a migration
+ * path that can salvage an existing bad value. A stored title has neither.
+ *
+ * ORDER MATTERS TWICE. The bounds come FIRST so `docs/openapi.json` keeps
+ * documenting `minLength`/`maxLength` to integrators — leading with
+ * `.transform()` makes zod-to-openapi emit a bare `string` and silently drops
+ * both from the public contract, which `test/openapi.contract.test.ts` catches.
+ * And the strip is followed by a second `.min(1)`, so a title made only of
+ * zero-width characters fails rather than passing on the strength of characters
+ * that were about to be removed.
+ */
+const titleSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(500)
+  .transform(stripUnsafeText)
+  .pipe(z.string().min(1));
+const folderNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255)
+  .transform(stripUnsafeText)
+  .pipe(z.string().min(1));
 const versionSchema = z.number().int().min(1).max(2_147_483_647);
 
 export const createNoteSchema = z

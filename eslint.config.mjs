@@ -89,9 +89,11 @@ export default tseslint.config(
         global: "readonly",
         Buffer: "readonly",
         URL: "readonly",
-        // Node 22 globals. `pnpm lint` runs per workspace package and never
-        // reaches `scripts/`, so the only thing that lints these files is the
-        // pre-commit hook — which is where a missing global surfaces.
+        // Node 22 globals. `pnpm lint` fans out per workspace package, and
+        // `scripts/` is not one — so the root `lint` script names it explicitly
+        // (`eslint eslint.config.mjs scripts`). Before that it was linted only
+        // by the optional pre-commit hook, which meant the tooling that deletes
+        // Docker volumes was the least-checked code in the repository.
         fetch: "readonly",
         performance: "readonly",
         setTimeout: "readonly",

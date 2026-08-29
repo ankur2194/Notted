@@ -58,6 +58,8 @@ export interface ProjectTaskProgress {
 export interface ProjectDetail extends ProjectMutationProject {
   readonly lastActivityAt: IsoTimestamp;
   readonly members: readonly ProjectMember[];
+  /** `true` when the project has more members than this response carries. */
+  readonly membersTruncated: boolean;
   readonly taskProgress: ProjectTaskProgress;
 }
 

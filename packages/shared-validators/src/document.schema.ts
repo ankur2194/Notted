@@ -110,6 +110,22 @@ export const NOTE_DOCUMENT_LIMITS = Object.freeze({
   maxDepth: 32,
   maxNodes: 2_000,
   maxChildren: 200,
+  /*
+   * The ROOT's child count, deliberately separate from `maxChildren`.
+   *
+   * `maxChildren: 200` is a per-node fan-out guard, and applying it to the
+   * document root turned it into a cap on how many top-level blocks a whole
+   * note may contain: 201 paragraphs is about 21 KB, roughly four pages, and it
+   * was refused while the note was nominally allowed 2 000 nodes and 512 KB.
+   * `Notted.md` promises no document size limit at all, and the Part 77
+   * benchmark's own 380-paragraph fixture was being rejected by it.
+   *
+   * 2 000 matches `maxNodes` so this can never bind BEFORE the node budget —
+   * a paragraph costs two nodes, so real headroom is around 1 000 blocks, and
+   * `maxTotalText` and `serializedBytes` bound it further. This removes an
+   * artificially low second ceiling; it does not add one.
+   */
+  maxRootChildren: 2_000,
   maxMarks: 20,
   maxAttributes: 32,
   maxAttributeDepth: 6,
@@ -215,9 +231,39 @@ export interface NoteDocumentMentionAttrs {
   readonly label: string;
 }
 
-/** C0 and C1 control characters, which a display name never legitimately contains. */
-// eslint-disable-next-line no-control-regex -- matching control characters is the point.
-const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f]/gu;
+/**
+ * Text that must never survive into a name a human reads.
+ *
+ * C0 controls (including NUL), DEL/C1, the zero-width characters, and the
+ * Unicode bidirectional overrides and isolates. U+202E is the one that matters
+ * most: `photo<RLO>gnp.exe` renders to a reader as `photoexe.png`, so a name
+ * that passes review can execute as something else. The zero-width characters
+ * are the quieter half — they break search and make two visually identical
+ * names distinct.
+ *
+ * THIS TABLE IS THE SINGLE COPY. `apps/api/src/attachments/filename.ts` used to
+ * carry its own, correct and wider, list while this one covered only C0/C1 —
+ * so the upload sanitiser stripped `U+202E` and the document contract happily
+ * accepted it in an attachment name, an image alt, a caption, and a cached
+ * mention label. Two copies of a security table drift, and nothing fails when
+ * they do; per ADR 0001 the shared fact lives in the package and the app reads
+ * it, never the reverse.
+ *
+ * NO `g` FLAG. A global regex carries mutable `lastIndex` across `.test()`
+ * calls, which is why every caller below used to need a `lastIndex = 0` reset;
+ * exporting a global regex would make that footgun cross-package.
+ */
+export const UNSAFE_TEXT_PATTERN =
+  // eslint-disable-next-line no-control-regex -- matching them is the point.
+  /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/u;
+
+/** The same table as a global regex, for the replace-based salvage paths. */
+const UNSAFE_TEXT_PATTERN_GLOBAL = new RegExp(UNSAFE_TEXT_PATTERN.source, "gu");
+
+/** Remove every unsafe character. Used where rejecting would strand a caller. */
+export function stripUnsafeText(value: string): string {
+  return value.replace(UNSAFE_TEXT_PATTERN_GLOBAL, "");
+}
 
 /**
  * A cached display name is untrusted text that is echoed back to every reader,
@@ -229,8 +275,7 @@ const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f]/gu;
 function isUsableMentionLabel(value: unknown): value is string {
   if (typeof value !== "string") return false;
   if (value.length === 0 || value.length > NOTE_DOCUMENT_LIMITS.maxMentionLabel) return false;
-  CONTROL_CHARACTER_PATTERN.lastIndex = 0;
-  return !CONTROL_CHARACTER_PATTERN.test(value);
+  return !UNSAFE_TEXT_PATTERN.test(value);
 }
 
 function isUuidValue(value: unknown): value is string {
@@ -260,7 +305,7 @@ function mentionPlainText(node: PlainRecord): string {
   const rawLabel = isRecord(node.attrs) ? node.attrs.label : undefined;
   if (typeof rawLabel !== "string") return "";
   const cleaned = rawLabel
-    .replace(CONTROL_CHARACTER_PATTERN, " ")
+    .replace(UNSAFE_TEXT_PATTERN_GLOBAL, " ")
     .trim()
     .slice(0, NOTE_DOCUMENT_LIMITS.maxMentionLabel);
   return cleaned.length === 0 ? "" : `${NOTE_DOCUMENT_MENTION_PREFIX}${cleaned}`;
@@ -280,11 +325,35 @@ function mentionPlainText(node: PlainRecord): string {
  * than at the producer keeps the "what is a mention" rule in the one file that
  * already owns the node contract.
  */
+/*
+ * DEPTH GUARD, shared by the five walkers below.
+ *
+ * These read RAW PERSISTED JSON. Every write path validates first — and
+ * `validateNode` refuses anything past `maxDepth` — so no document written
+ * today can reach them over-deep. That makes this defence in depth, not a live
+ * crash: it is here because `export-renderers.ts` and `export-html.ts` both
+ * already CLAIM these walkers "walk defensively" and they did not, and because
+ * a restore, a hand-written migration, or a future lowering of `maxDepth` would
+ * make the claim load-bearing overnight. A stack overflow in the export worker
+ * is a crashed process, not a failed-export record.
+ *
+ * Truncate, never throw, and never diverge between a collector and a renderer:
+ * a collector that throws fails a save, and a renderer that throws turns a
+ * degraded export into no export. Both export converters
+ * (`converters/docx.ts`, `converters/markdown.ts`) already settled on exactly
+ * this, importing the same constant rather than copying 32 — see their headers.
+ */
+const MAX_WALK_DEPTH = NOTE_DOCUMENT_LIMITS.maxDepth;
+
 export function collectNoteDocumentMentionIds(document: unknown): readonly string[] {
   const ids = new Set<string>();
-  const visit = (node: unknown): void => {
+  const visit = (node: unknown, depth: number): void => {
+    if (depth > MAX_WALK_DEPTH) return;
     if (Array.isArray(node)) {
-      for (const child of node) visit(child);
+      // An array is a `content` list, not a nesting level: descending into it
+      // must NOT cost depth, or this walker would count every level twice and
+      // truncate documents `validateNode` accepts.
+      for (const child of node) visit(child, depth);
       return;
     }
     if (!isRecord(node)) return;
@@ -294,9 +363,9 @@ export function collectNoteDocumentMentionIds(document: unknown): readonly strin
       // A mention is an atom: no content to descend into.
       return;
     }
-    visit(node.content);
+    visit(node.content, depth + 1);
   };
-  visit(document);
+  visit(document, 0);
   return Object.freeze([...ids]);
 }
 
@@ -395,8 +464,7 @@ export function resolveNoteImageWrap(attrs: {
 function isUsableImageAlt(value: unknown): value is string {
   if (typeof value !== "string") return false;
   if (value.length > NOTE_DOCUMENT_LIMITS.maxImageAlt) return false;
-  CONTROL_CHARACTER_PATTERN.lastIndex = 0;
-  return !CONTROL_CHARACTER_PATTERN.test(value);
+  return !UNSAFE_TEXT_PATTERN.test(value);
 }
 
 /**
@@ -407,8 +475,7 @@ function isUsableImageAlt(value: unknown): value is string {
 function isUsableImageCaption(value: unknown): value is string {
   if (typeof value !== "string") return false;
   if (value.length > NOTE_DOCUMENT_LIMITS.maxImageCaption) return false;
-  CONTROL_CHARACTER_PATTERN.lastIndex = 0;
-  return !CONTROL_CHARACTER_PATTERN.test(value);
+  return !UNSAFE_TEXT_PATTERN.test(value);
 }
 
 /** Absent/`undefined` means "use the default"; any other unusable value is invalid. */
@@ -488,7 +555,7 @@ function imagePlainText(node: PlainRecord): string {
   const raw = isRecord(node.attrs) ? node.attrs.alt : undefined;
   if (typeof raw !== "string") return "";
   return raw
-    .replace(CONTROL_CHARACTER_PATTERN, " ")
+    .replace(UNSAFE_TEXT_PATTERN_GLOBAL, " ")
     .trim()
     .slice(0, NOTE_DOCUMENT_LIMITS.maxImageAlt);
 }
@@ -498,7 +565,7 @@ function imageCaptionPlainText(node: PlainRecord): string {
   const raw = isRecord(node.attrs) ? node.attrs.caption : undefined;
   if (typeof raw !== "string") return "";
   return raw
-    .replace(CONTROL_CHARACTER_PATTERN, " ")
+    .replace(UNSAFE_TEXT_PATTERN_GLOBAL, " ")
     .trim()
     .slice(0, NOTE_DOCUMENT_LIMITS.maxImageCaption);
 }
@@ -566,8 +633,7 @@ export interface NoteDocumentAttachmentAttrs {
 function isUsableAttachmentName(value: unknown): value is string {
   if (typeof value !== "string") return false;
   if (value.length === 0 || value.length > NOTE_DOCUMENT_LIMITS.maxAttachmentName) return false;
-  CONTROL_CHARACTER_PATTERN.lastIndex = 0;
-  return !CONTROL_CHARACTER_PATTERN.test(value);
+  return !UNSAFE_TEXT_PATTERN.test(value);
 }
 
 function isUsableAttachmentMimeType(value: unknown): value is string {
@@ -616,7 +682,7 @@ function attachmentPlainText(node: PlainRecord): string {
   const raw = isRecord(node.attrs) ? node.attrs.name : undefined;
   if (typeof raw !== "string") return "";
   return raw
-    .replace(CONTROL_CHARACTER_PATTERN, " ")
+    .replace(UNSAFE_TEXT_PATTERN_GLOBAL, " ")
     .trim()
     .slice(0, NOTE_DOCUMENT_LIMITS.maxAttachmentName);
 }
@@ -1041,20 +1107,22 @@ export function sanitizeDocumentUrl(value: unknown): string | null {
 export function extractNoteContentPlain(document: unknown): string {
   const blocks: string[] = [];
 
-  const collectInline = (node: unknown): string => {
+  const collectInline = (node: unknown, depth: number): string => {
+    if (depth > MAX_WALK_DEPTH) return "";
     if (!isRecord(node)) return "";
     if (node.type === "text") return typeof node.text === "string" ? node.text : "";
     if (node.type === "hardBreak") return "\n";
     // A mention reads as `@Ada Lovelace` so search and exports see a name.
     if (node.type === "mention") return mentionPlainText(node);
     if (!Array.isArray(node.content)) return "";
-    return node.content.map(collectInline).join("");
+    return node.content.map((child) => collectInline(child, depth + 1)).join("");
   };
 
-  const visit = (node: unknown, sink: string[]): void => {
+  const visit = (node: unknown, sink: string[], depth: number): void => {
+    if (depth > MAX_WALK_DEPTH) return;
     if (!isRecord(node)) return;
     if (node.type === "paragraph" || node.type === "heading" || node.type === "codeBlock") {
-      sink.push(collectInline(node));
+      sink.push(collectInline(node, depth));
       return;
     }
     /*
@@ -1088,18 +1156,18 @@ export function extractNoteContentPlain(document: unknown): string {
     if (node.type === "tableRow") {
       const cells = (Array.isArray(node.content) ? node.content : []).map((cell) => {
         const cellBlocks: string[] = [];
-        visit(cell, cellBlocks);
+        visit(cell, cellBlocks, depth + 1);
         return cellBlocks.join(" ");
       });
       sink.push(cells.join("\t"));
       return;
     }
     if (Array.isArray(node.content)) {
-      for (const child of node.content) visit(child, sink);
+      for (const child of node.content) visit(child, sink, depth + 1);
     }
   };
 
-  visit(document, blocks);
+  visit(document, blocks, 0);
   return blocks.join("\n");
 }
 
@@ -1119,15 +1187,16 @@ export function countChecklist(document: unknown): {
 } {
   let done = 0;
   let total = 0;
-  const visit = (node: unknown): void => {
+  const visit = (node: unknown, depth: number): void => {
+    if (depth > MAX_WALK_DEPTH) return;
     if (!isRecord(node)) return;
     if (node.type === "taskItem") {
       total += 1;
       if (isRecord(node.attrs) && node.attrs.checked === true) done += 1;
     }
-    if (Array.isArray(node.content)) for (const child of node.content) visit(child);
+    if (Array.isArray(node.content)) for (const child of node.content) visit(child, depth + 1);
   };
-  visit(document);
+  visit(document, 0);
   return { done, total };
 }
 
@@ -1401,7 +1470,8 @@ function renderAttachmentHtml(node: PlainRecord): string {
   );
 }
 
-function renderNodeHtml(node: unknown): string {
+function renderNodeHtml(node: unknown, depth = 0): string {
+  if (depth > MAX_WALK_DEPTH) return "";
   if (!isRecord(node)) return "";
   if (node.type === "text") {
     return typeof node.text === "string" ? renderTextWithMarks(node.text, node.marks) : "";
@@ -1415,7 +1485,9 @@ function renderNodeHtml(node: unknown): string {
   if (node.type === "image") return renderImageHtml(node);
   if (node.type === "attachment") return renderAttachmentHtml(node);
 
-  const children = Array.isArray(node.content) ? node.content.map(renderNodeHtml).join("") : "";
+  const children = Array.isArray(node.content)
+    ? node.content.map((child) => renderNodeHtml(child, depth + 1)).join("")
+    : "";
   switch (node.type) {
     case "doc":
       return children;
@@ -1973,7 +2045,12 @@ function validateNode(
       errors.push("Document child content must be an array");
     } else {
       content = node.content;
-      if (content.length > NOTE_DOCUMENT_LIMITS.maxChildren) {
+      // `validateNode` already carries `depth`, and depth 0 IS the document
+      // root — the one place where "children of this node" means "blocks in
+      // this note" rather than "fan-out under one node".
+      const childLimit =
+        depth === 0 ? NOTE_DOCUMENT_LIMITS.maxRootChildren : NOTE_DOCUMENT_LIMITS.maxChildren;
+      if (content.length > childLimit) {
         errors.push("Document child array is too large");
       }
     }
@@ -1997,7 +2074,12 @@ function validateDocumentContract(value: unknown, errors: string[]): void {
     return;
   }
   if (utf8ByteLength(serialized) > NOTE_DOCUMENT_LIMITS.serializedBytes) {
+    // Return rather than continue. Walking a document already known to exceed
+    // the byte budget only manufactures thousands of structural errors nobody
+    // reads, each able to interpolate an attacker-supplied field name, and
+    // "too large" is the more useful message on its own.
     errors.push("Document is too large");
+    return;
   }
   if (!isRecord(value) || value.type !== "doc") {
     errors.push('Document root must be { type: "doc" }');
@@ -2020,9 +2102,35 @@ export function safeParseNoteDocument(value: unknown): NoteDocumentSafeParseResu
     : { success: false, errors };
 }
 
+const MAX_REPORTED_ERRORS = 10;
+const MAX_REPORTED_ERROR_CHARS = 200;
+
+/**
+ * A bounded, human-readable summary of a validation failure.
+ *
+ * Never the whole array joined. Both dimensions are capped, and both are load
+ * bearing: the count, because a large document produces thousands of entries;
+ * and the length of each entry, because several of them interpolate a caller
+ * string of arbitrary size (`Document ${type} node has unknown field: ${key}`).
+ * Capping only the count would still let one 512 KB entry through, which is how
+ * an 840 KB request used to produce a megabyte-scale exception message.
+ */
+export function formatNoteDocumentErrors(errors: readonly string[]): string {
+  const shown = errors
+    .slice(0, MAX_REPORTED_ERRORS)
+    .map((error) =>
+      error.length > MAX_REPORTED_ERROR_CHARS
+        ? `${error.slice(0, MAX_REPORTED_ERROR_CHARS)}…`
+        : error,
+    );
+  const remaining = errors.length - shown.length;
+  return remaining > 0 ? `${shown.join("; ")} (+${remaining} more)` : shown.join("; ");
+}
+
 export function parseNoteDocument(value: unknown): NoteDocument {
   const result = safeParseNoteDocument(value);
-  if (!result.success) throw new Error(`Invalid note document: ${result.errors.join("; ")}`);
+  if (!result.success)
+    throw new Error(`Invalid note document: ${formatNoteDocumentErrors(result.errors)}`);
   return result.doc;
 }
 
@@ -2037,6 +2145,22 @@ export class NoteDocumentMigrationError extends Error {
     super(`Note document migration failed: ${message}`);
     this.name = "NoteDocumentMigrationError";
   }
+}
+
+/*
+ * The child budget at a given depth, for the migration walker.
+ *
+ * Depth 0 is the document itself — either the `{ type: "doc" }` record or a
+ * bare content array — so its child count is "blocks in this note". Every
+ * deeper node is per-node fan-out and keeps the 200 guard.
+ *
+ * This MUST agree with `validateNode`, or a note passes validation and then
+ * cannot be OPENED. That was the sharper half of the defect: the migration
+ * threw before any recovery could run, so a note already stored with more than
+ * 200 top-level blocks was unreadable, not merely unsaveable.
+ */
+function childLimitAt(depth: number): number {
+  return depth === 0 ? NOTE_DOCUMENT_LIMITS.maxRootChildren : NOTE_DOCUMENT_LIMITS.maxChildren;
 }
 
 function assertMigrationInputBounds(input: unknown): void {
@@ -2069,7 +2193,7 @@ function assertMigrationInputBounds(input: unknown): void {
       if (depth > NOTE_DOCUMENT_LIMITS.maxDepth) {
         throw new NoteDocumentMigrationError("input exceeds the nesting depth limit");
       }
-      if (node.length > NOTE_DOCUMENT_LIMITS.maxChildren) {
+      if (node.length > childLimitAt(depth)) {
         throw new NoteDocumentMigrationError("input exceeds the children-per-node limit");
       }
       for (const child of node) visit(child, depth + 1);
@@ -2114,7 +2238,7 @@ function assertMigrationInputBounds(input: unknown): void {
       }
     }
     if (!Array.isArray(node.content)) return;
-    if (node.content.length > NOTE_DOCUMENT_LIMITS.maxChildren) {
+    if (node.content.length > childLimitAt(depth)) {
       throw new NoteDocumentMigrationError("input exceeds the children-per-node limit");
     }
     for (const child of node.content) visit(child, depth + 1);
@@ -2632,7 +2756,7 @@ export function normalizeUnsupportedNodes(input: unknown): {
   });
   if (!textOnly.success) {
     throw new NoteDocumentMigrationError(
-      `recovered output is invalid (${textOnly.errors.join("; ")})`,
+      `recovered output is invalid (${formatNoteDocumentErrors(textOnly.errors)})`,
     );
   }
   return { doc: textOnly.doc, changed: true };

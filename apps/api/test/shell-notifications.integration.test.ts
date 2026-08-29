@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { and, eq, isNull } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
@@ -16,11 +16,12 @@ import { NotificationService } from "../src/notifications/notification.service";
 import { ShellService } from "../src/shell/shell.service";
 import { TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { DatabaseService } from "../src/database/database.service";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
 type Database = NodePgDatabase<typeof schema>;
 
@@ -38,27 +39,13 @@ function principal(userId: string): AuthenticatedPrincipal {
   };
 }
 
-async function reachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: 2_000 });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
-}
-
-describe.skipIf(!HAS_DATABASE_URL)("Part 25 shell and notifications (live)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 25 shell and notifications (live)", () => {
   let pool: Pool | undefined;
   let db: Database | undefined;
-  let databaseReachable = false;
 
   beforeAll(async () => {
-    databaseReachable = await reachable(DATABASE_URL as string);
-    if (!databaseReachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 1 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -71,7 +58,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 25 shell and notifications (live)", () 
   it("filters memberships, validates current workspace, scopes ownership, persists reads and rechecks revocation", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL");
       return;
     }
@@ -90,6 +77,26 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 25 shell and notifications (live)", () 
         const shell = new ShellService(database, entry, policy, tenant);
         const service = new NotificationService(database, tenant);
         const editor = principal(SEED_IDS.users.alphaEditor);
+
+        /*
+         * The count this test controls is the DELTA, not the total.
+         *
+         * `SEED_IDS.workspaces.alpha` is shared: every suite that mentions
+         * `alphaEditor` writes a notification into it, and several commit
+         * outside this rollback. Asserting an absolute `2` therefore passed only
+         * on a database no other suite had ever touched, and turned one unrelated
+         * leak into a permanent failure here — a green that depended on run
+         * history, which is the exact class of defect the integration gates
+         * exist to remove. Two rows are inserted below; two is what is asserted.
+         */
+        const unreadBefore = await tx.$count(
+          notifications,
+          and(
+            eq(notifications.recipientUserId, SEED_IDS.users.alphaEditor),
+            eq(notifications.workspaceId, SEED_IDS.workspaces.alpha),
+            isNull(notifications.readAt),
+          ),
+        );
 
         await tx.insert(notifications).values([
           {
@@ -132,7 +139,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 25 shell and notifications (live)", () 
           ),
         ).toBe(true);
         expect(bootstrap.currentWorkspace?.workspaceId).toBe(SEED_IDS.workspaces.alpha);
-        expect(bootstrap.notificationUnreadCount).toBe(2);
+        expect(bootstrap.notificationUnreadCount - unreadBefore).toBe(2);
         expect(bootstrap.permissions).toMatchObject({
           canViewSettings: true,
           canCreateContent: true,

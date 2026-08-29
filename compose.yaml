@@ -30,8 +30,13 @@ name: notted-dev
 # so a crash-looping service or a debug log level can fill the host disk — which
 # takes down every other container on the daemon, not just Notted's. 10 MB × 5
 # files caps each service at 50 MB and keeps enough history to read a failure
-# that happened a few minutes ago. Applied to the four long-running application
-# services; the one-shot init containers exit and are not worth the noise.
+# that happened a few minutes ago. Applied to every long-running service —
+# application AND infrastructure — because the disk is shared and the driver is
+# unbounded, so postgres or minio crash-looping fills it exactly as fast as api
+# would. (It once read "the four long-running application services", which is
+# how the five data services went five releases without it: the sentence
+# described the gap as a scope.) The one-shot init containers — deps, contracts,
+# db-init, minio-init and the e2e resets — exit, and are deliberately excluded.
 x-log-rotation: &log-rotation
   driver: json-file
   options:
@@ -275,6 +280,7 @@ services:
     # `psql` client instead of pulling a second, unpinned image.
     image: &postgres-image pgvector/pgvector:0.8.5-pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
     restart: unless-stopped
+    logging: *log-rotation
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-notted}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-notted_dev_password}
@@ -295,6 +301,7 @@ services:
     # `redis-cli` client instead of pulling a second, unpinned image.
     image: &redis-image redis:7.2.14-alpine@sha256:dfa18828cbc07b3ae6a95ec7343f6c214fdee2d836197b4be8e9904420762cd8
     restart: unless-stopped
+    logging: *log-rotation
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
@@ -309,6 +316,7 @@ services:
   meilisearch:
     image: getmeili/meilisearch:v1.45.1@sha256:ac40212f9e5a7526d8007586e3e46fb0441d29dd36c7b02fa2341d2c9a1f6493
     restart: unless-stopped
+    logging: *log-rotation
     environment:
       MEILI_ENV: ${MEILI_ENV:-development}
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-notted-dev-meili-master-key}
@@ -337,7 +345,14 @@ services:
       target: minio-server
       args:
         MINIO_SERVER_COMMIT: 7aac2a2c5b7c882e68c1ce017d8256be2feea27f
+    # Built, not pulled — so without an explicit tag this image has no `image:`
+    # key for `scripts/security-scan.mjs` to find, and `pnpm security:containers`
+    # printed "no vulnerabilities found" while never scanning it. The tag also
+    # keeps it out of `<none>:<none>`, which is only reclaimable by the
+    # `image prune -a` this shared daemon forbids.
+    image: notted-dev-minio-server:local
     restart: unless-stopped
+    logging: *log-rotation
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-nottedminio}
@@ -359,6 +374,7 @@ services:
       target: minio-client
       args:
         MINIO_CLIENT_COMMIT: 77f82e18b5401a65958f1619df6ebb994634bd88
+    image: notted-dev-minio-client:local
     depends_on:
       minio:
         condition: service_healthy
@@ -394,6 +410,7 @@ services:
   mailpit:
     image: axllent/mailpit:v1.30.0@sha256:0059ef81e492a7192af3816281eed6859eb078bd7bdc58b76757c13e10e53a7d
     restart: unless-stopped
+    logging: *log-rotation
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: "true"
       MP_SMTP_AUTH_ALLOW_INSECURE: "true"
@@ -454,6 +471,7 @@ services:
       - dev
     volumes: *workspace-volumes
     restart: unless-stopped
+    logging: *log-rotation
     healthcheck:
       test:
         - CMD-SHELL

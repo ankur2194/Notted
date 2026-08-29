@@ -183,6 +183,17 @@ function fakeMaintenanceDatabase(options: MaintenanceDatabaseOptions = {}, log: 
         return chain(next(`select:${name}`));
       },
     }),
+    /*
+     * `reconcileExportObjects` enumerates the workspaces that have export rows,
+     * because export keys are `<workspace>/<export>.<ext>` with no shared root
+     * and `listObjects` refuses an empty prefix. These tests queue no rows for
+     * it, so a system-scoped run finds no prefixes to scan and the phase is a
+     * no-op — which keeps every existing expectation about the attachments
+     * bucket unchanged.
+     */
+    selectDistinct: () => ({
+      from: () => ({ limit: () => Promise.resolve([]) }),
+    }),
     update: (table: unknown) => ({
       set: (values: Row) => ({
         where: () => ({

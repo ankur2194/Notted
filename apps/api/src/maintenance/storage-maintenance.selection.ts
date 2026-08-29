@@ -13,7 +13,6 @@
 
 import { ATTACHMENT_PROCESSING_ERRORS } from "../attachments/attachments.constants";
 
-import type { AttachmentObjectVariant } from "../attachments/attachment-storage-key";
 import type {
   StorageMaintenanceSweepName,
   StorageMaintenanceSweepReport,
@@ -130,11 +129,20 @@ export interface ObjectOwnerFacts {
 export interface OrphanObjectCandidate {
   readonly key: string;
   readonly lastModified: Date;
-  /** Result of `parseAttachmentObjectKey`; `null` when the key is not ours. */
+  /**
+   * The workspace and owning row parsed out of the key; `null` when the key is
+   * not ours.
+   *
+   * Deliberately generic over the key FAMILY. `decideOrphanObject` never reads
+   * anything beyond `workspaceId`, so the same age guard, the same
+   * `workspace_mismatch` rule and the same `claimed_by_row` rule serve both the
+   * `attachments` bucket (`w/<workspace>/<attachment>/<variant>`) and the
+   * `exports` bucket (`<workspace>/<export>.<ext>`). Two decision functions
+   * would be two places to forget the age window.
+   */
   readonly parsed: {
     readonly workspaceId: string;
-    readonly attachmentId: string;
-    readonly variant: AttachmentObjectVariant;
+    readonly ownerId: string;
   } | null;
   readonly owner: ObjectOwnerFacts | null;
 }

@@ -82,6 +82,8 @@ describe("VerifiedHostsService static hosts", () => {
       APP_URL: "https://app.example.test",
       API_URL: "https://api.example.test",
       WS_URL: "wss://api.example.test",
+      // Required in production: TLS terminates at a proxy, so hops is never 0.
+      TRUST_PROXY_HOPS: "1",
       BETTER_AUTH_URL: "https://api.example.test",
       BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef",
       BETTER_AUTH_TRUSTED_ORIGINS: "https://app.example.test",

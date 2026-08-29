@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 /**
  * Part 75: make a silently-skipped integration run fail loudly.
@@ -39,12 +39,12 @@ import { describe, expect, it } from "vitest";
  * `test/realtime.integration.test.ts` permanently dead in the same way
  * `MEILISEARCH_URL` had made the hybrid-search suite dead.
  *
- * ponytail: this proves the variable is SET, not that the service ANSWERS. The
- * ~32 copied `isDatabaseReachable`/`reachable` probes give a live-but-slow
- * database a 2 000 ms budget and degrade to a green skip when it is exceeded —
- * which a memory-capped host makes plausible. Upgrade path: one shared probe
- * helper beside `minio-test-helpers.ts` that THROWS rather than skips when the
- * variable is set but the service does not answer.
+ * This file used to carry a `ponytail:` note that it proved only that a variable
+ * was SET, never that the service ANSWERED — because thirty-three suites had
+ * each copied a 2 000 ms `isDatabaseReachable`/`reachable` probe that degraded a
+ * live-but-slow database into a green skip. `requireDatabase()` in
+ * `database-test-helpers.ts` is that upgrade path, landed: it throws instead of
+ * skipping, and the last test below is what holds it to that.
  */
 
 const DATABASE_CONFIGURED = (process.env.DATABASE_URL ?? "").trim() !== "";
@@ -66,3 +66,29 @@ describe.skipIf(!DATABASE_CONFIGURED)(
     );
   },
 );
+
+/*
+ * The other half of the same contract, and the one the guard above cannot state:
+ * a database that is CONFIGURED but does not answer must fail, not skip.
+ *
+ * This runs unconditionally — it drives the probe against a closed port rather
+ * than against the configured database, so it needs no stack and proves the
+ * semantics on a laptop with nothing running.
+ */
+describe("requireDatabase", () => {
+  it("throws rather than skipping when the configured database does not answer", async () => {
+    // A port nothing listens on. The helper reads DATABASE_URL at import time,
+    // so the stub has to be in place before the module is evaluated.
+    vi.stubEnv("DATABASE_URL", "postgresql://probe:probe@127.0.0.1:59999/probe");
+    vi.resetModules();
+    try {
+      const { requireDatabase } = await import("./database-test-helpers");
+      await expect(requireDatabase()).rejects.toThrow(
+        /DATABASE_URL is set but PostgreSQL did not answer/u,
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
+});

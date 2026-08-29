@@ -255,7 +255,23 @@ describe.skipIf(!enabled)("authenticated Socket.io multi-instance integration", 
     await expect(
       collaborationUpdate(outsiderClient, selector, ackA.epoch, localEdit(new Y.Doc(), "forged")),
     ).resolves.toEqual({ ok: false, error: "denied" });
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    /*
+     * A BARRIER, NOT A SLEEP. This used to be `setTimeout(300)` then
+     * `expect(leaked).toBe(false)`, which proves nothing under load: a frame
+     * that leaks and arrives at 310 ms passes.
+     *
+     * The barrier is published by the SAME gateway instance the outsider is
+     * connected to (`appB`), into a room this socket has joined, over the same
+     * Redis channel, after the denied write's ack has already been awaited. Any
+     * leaked frame would have to be produced while that write was handled — so
+     * it is strictly earlier in the publisher's queue, and Socket.IO preserves
+     * per-socket ordering across event names on one connection. Receiving the
+     * barrier therefore proves the socket has drained everything the denied
+     * write could have produced. That is a happens-before, not a hope.
+     */
+    const drained = once(a, "realtime:infrastructure:probe");
+    appB.get(RealtimeGateway).emitInfrastructureProbe(selector, { nonce: "denied-write-barrier" });
+    await expect(drained).resolves.toEqual({ nonce: "denied-write-barrier" });
     expect(leaked).toBe(false);
     a.off("realtime:note:remote");
 
@@ -607,13 +623,16 @@ describe.skipIf(!enabled)("authenticated Socket.io multi-instance integration", 
 
     const guessed = { ...selector, noteId: randomUUID() };
     await expect(join(a, guessed)).resolves.toEqual({ ok: false, error: "denied" });
-    let leaked = false;
-    a.once("realtime:infrastructure:probe", () => {
-      leaked = true;
-    });
+    /*
+     * Same barrier, and here the events match so the assertion absorbs the
+     * negative outright: publish the frame that must NOT arrive, then one that
+     * must, and require the first thing received to be the second one. A leak
+     * arrives first and fails the equality by name, rather than racing a timer.
+     */
+    const first = once(a, "realtime:infrastructure:probe");
     appB.get(RealtimeGateway).emitInfrastructureProbe(guessed, { nonce: "private" });
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect(leaked).toBe(false);
+    appB.get(RealtimeGateway).emitInfrastructureProbe(selector, { nonce: "room-barrier" });
+    await expect(first).resolves.toEqual({ nonce: "room-barrier" });
 
     const outsider = await identity(appB);
     const outsiderClient = connect(listenerUrl(appB), outsider.cookie);

@@ -80,6 +80,13 @@ function row(status: ProjectStatus = "active") {
   };
 }
 
+/** A stubbed query result that is awaitable and still accepts `.limit()`. */
+function withLimit<T>(
+  rows: readonly T[],
+): Promise<readonly T[]> & { limit: () => Promise<readonly T[]> } {
+  return Object.assign(Promise.resolve(rows), { limit: () => Promise.resolve(rows) });
+}
+
 describe("ProjectsService (unit)", () => {
   it("keeps status and isArchived mirrored for archive, complete, and restore", async () => {
     for (const [method, expectedStatus, expectedAudit, expectedEvent] of [
@@ -251,8 +258,11 @@ describe("ProjectsService (unit)", () => {
               innerJoin: () => ({
                 leftJoin: () => ({
                   where: () => ({
+                    // Resolves the rows AND stays chainable: `loadProjectMembers`
+                    // appends `.limit(cap + 1)` after ordering so it can report
+                    // truncation instead of silently returning a short list.
                     orderBy: () =>
-                      Promise.resolve([
+                      withLimit([
                         {
                           userId,
                           name: "Workspace Owner",

@@ -14,16 +14,19 @@ import {
   NOTE_DOCUMENT_PAGE_BREAK_CLASS,
   NOTE_DOCUMENT_SCHEMA_VERSION,
   NoteDocumentMigrationError,
+  collectNoteDocumentMentionIds,
   countChecklist,
   extractNoteContentPlain,
   migrateNoteDocument,
   noteDocumentAttachmentAttrs,
   noteDocumentImageAttrs,
   noteDocumentSchema,
+  parseNoteDocument,
   normalizeNoteDocumentCodeLanguage,
   renderDocumentHtml,
   resolveNoteImageWrap,
   safeParseNoteDocument,
+  stripUnsafeText,
   sanitizeDocumentUrl,
 } from "./document.schema";
 
@@ -2090,5 +2093,286 @@ describe("Part 48 checklist counting", () => {
     };
     expect(extractNoteContentPlain(document)).toBe("Item\nItem");
     expect(countChecklist(document)).toEqual({ done: 1, total: 2 });
+  });
+});
+
+describe("validation error reporting", () => {
+  /*
+   * THE DEFECT THIS BLOCK EXISTS FOR. Every error was joined into one string
+   * with no bound on the count OR on the length of any single entry — and
+   * several entries interpolate a caller-supplied field name, whose only limit
+   * is the 512 KB document budget. An 840 KB request produced a message around
+   * a megabyte, allocated and carried on a hot path for a throw.
+   */
+  it("bounds a validation message by both error count and error length", () => {
+    // Deliberately UNDER `serializedBytes`, so the size check does not
+    // short-circuit and the walker really does collect one long error per node.
+    const longKey = "k".repeat(4_000);
+    const document = {
+      type: "doc",
+      content: Array.from({ length: 50 }, () => ({
+        type: "paragraph",
+        [longKey]: 1,
+        content: [{ type: "text", text: "x" }],
+      })),
+    };
+    expect(JSON.stringify(document).length).toBeLessThan(NOTE_DOCUMENT_LIMITS.serializedBytes);
+
+    let message = "";
+    try {
+      parseNoteDocument(document);
+    } catch (error) {
+      message = error instanceof Error ? error.message : "";
+    }
+
+    expect(message).not.toBe("");
+    // Ten entries of at most 200 characters, plus the prefix and the suffix.
+    expect(message.length).toBeLessThan(4_000);
+    expect(message).toMatch(/\(\+\d+ more\)$/u);
+    expect(message).not.toContain(longKey);
+  });
+
+  /*
+   * A document already known to bust the byte budget used to be walked anyway,
+   * manufacturing thousands of structural errors nobody reads. "Too large" is
+   * both the true answer and the only useful one.
+   */
+  it("reports only the size failure for a document past the byte budget", () => {
+    const oversized = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "x".repeat(NOTE_DOCUMENT_LIMITS.serializedBytes + 1) }],
+        },
+      ],
+    };
+    const result = safeParseNoteDocument(oversized);
+    expect(result.success).toBe(false);
+    expect(result.errors).toEqual(["Document is too large"]);
+  });
+});
+
+describe("walker depth guards", () => {
+  /** A `blockquote` chain `levels` deep, with `leaf` at the bottom. */
+  function nest(levels: number, leaf: Record<string, unknown>): Record<string, unknown> {
+    let node: Record<string, unknown> = leaf;
+    for (let index = 0; index < levels; index += 1) {
+      node = { type: "blockquote", content: [node] };
+    }
+    return { type: "doc", content: [node] };
+  }
+
+  /*
+   * These five walkers read RAW PERSISTED JSON, so they cannot assume the
+   * validator has seen it. `export-renderers.ts` and `export-html.ts` both
+   * already claimed they "walk defensively"; until now they did not, and a
+   * document deep enough to exhaust the stack crashed the export worker instead
+   * of producing a failed-export record.
+   *
+   * Truncation, not an error: a collector that throws fails a save and a
+   * renderer that throws turns a degraded export into no export.
+   */
+  it("truncates past maxDepth instead of descending forever", () => {
+    const deep = nest(NOTE_DOCUMENT_LIMITS.maxDepth + 8, {
+      type: "paragraph",
+      content: [
+        { type: "text", text: "TOO-DEEP-LEAF" },
+        { type: "mention", attrs: { id: "11111111-2222-4333-8444-555555555555", label: "Ada" } },
+      ],
+    });
+
+    expect(renderDocumentHtml(deep)).not.toContain("TOO-DEEP-LEAF");
+    expect(extractNoteContentPlain(deep)).not.toContain("TOO-DEEP-LEAF");
+    expect(collectNoteDocumentMentionIds(deep)).toEqual([]);
+    const deepTask = nest(NOTE_DOCUMENT_LIMITS.maxDepth + 8, {
+      type: "taskItem",
+      attrs: { checked: true },
+      content: [{ type: "paragraph", content: [{ type: "text", text: "Item" }] }],
+    });
+    expect(countChecklist(deepTask)).toEqual({ done: 0, total: 0 });
+  });
+
+  /** A document at the documented limit must still be walked in full. */
+  it("still walks a document exactly at maxDepth", () => {
+    const atLimit = nest(NOTE_DOCUMENT_LIMITS.maxDepth - 2, {
+      type: "paragraph",
+      content: [
+        { type: "text", text: "DEEP-BUT-LEGAL" },
+        { type: "mention", attrs: { id: "11111111-2222-4333-8444-555555555555", label: "Ada" } },
+      ],
+    });
+
+    expect(renderDocumentHtml(atLimit)).toContain("DEEP-BUT-LEGAL");
+    expect(extractNoteContentPlain(atLimit)).toContain("DEEP-BUT-LEGAL");
+    expect(collectNoteDocumentMentionIds(atLimit)).toEqual([
+      "11111111-2222-4333-8444-555555555555",
+    ]);
+  });
+
+  /** The stack, not the limit: 20 000 levels is what actually crashed a worker. */
+  it("survives a document deep enough to overflow the call stack", () => {
+    const absurd = nest(20_000, { type: "paragraph", content: [{ type: "text", text: "x" }] });
+
+    expect(() => renderDocumentHtml(absurd)).not.toThrow();
+    expect(() => extractNoteContentPlain(absurd)).not.toThrow();
+    expect(() => countChecklist(absurd)).not.toThrow();
+    expect(() => collectNoteDocumentMentionIds(absurd)).not.toThrow();
+  });
+});
+
+describe("bidirectional and zero-width characters", () => {
+  const RLO = "\u202E"; // right-to-left override
+  const ZWSP = "\u200B"; // zero-width space
+  const LRI = "\u2066"; // left-to-right isolate
+
+  const docWith = (node: unknown) => ({ type: "doc", content: [node] });
+
+  /*
+   * THE DEFECT THIS BLOCK EXISTS FOR. The document contract filtered C0/C1
+   * controls only, while the upload sanitiser already stripped the bidi
+   * overrides and the zero-width set — so `photo<RLO>gnp.exe`, which a reader
+   * sees as `photoexe.png`, was rejected as a FILENAME and accepted as an
+   * attachment name inside a note. Same string, two answers, because the table
+   * existed twice.
+   */
+  it("rejects an attachment name, image alt, caption or mention label carrying them", () => {
+    const attachmentId = "33333333-4444-4555-8666-777777777777";
+    // Every fixture below is otherwise VALID — the character is the only reason
+    // it is refused, which is what makes the assertion mean anything.
+    const validAttachment = {
+      attachmentId,
+      name: "quarterly-report.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 245_760,
+    };
+    const validImage = { attachmentId, alt: "A chart", width: 800, height: 600 };
+
+    expect(
+      safeParseNoteDocument(docWith({ type: "attachment", attrs: validAttachment })).success,
+    ).toBe(true);
+    expect(safeParseNoteDocument(docWith({ type: "image", attrs: validImage })).success).toBe(true);
+
+    const attachment = docWith({
+      type: "attachment",
+      attrs: { ...validAttachment, name: `photo${RLO}gnp.exe` },
+    });
+    expect(safeParseNoteDocument(attachment).success).toBe(false);
+
+    const image = docWith({ type: "image", attrs: { ...validImage, alt: `logo${ZWSP}` } });
+    expect(safeParseNoteDocument(image).success).toBe(false);
+
+    const captioned = docWith({
+      type: "image",
+      attrs: { ...validImage, caption: `note${LRI}` },
+    });
+    expect(safeParseNoteDocument(captioned).success).toBe(false);
+
+    const mention = docWith({
+      type: "paragraph",
+      content: [
+        {
+          type: "mention",
+          attrs: { id: "11111111-2222-4333-8444-555555555555", label: `Ada${RLO}` },
+        },
+      ],
+    });
+    expect(safeParseNoteDocument(mention).success).toBe(false);
+  });
+
+  /*
+   * The half that stops the fix from bricking anything. Widening the predicate
+   * makes an EXISTING stored note fail validation — so the migration path has to
+   * salvage it, and it does, because the same widened table drives the salvage
+   * replace. Reject at the boundary, strip on the way out of history.
+   */
+  it("still opens an existing note that already contains them", () => {
+    const stored = docWith({
+      type: "image",
+      attrs: {
+        attachmentId: "33333333-4444-4555-8666-777777777777",
+        alt: `logo${ZWSP}mark`,
+        caption: `cap${RLO}tion`,
+        width: 800,
+        height: 600,
+      },
+    });
+
+    const migrated = migrateNoteDocument(stored);
+    const rendered = JSON.stringify(migrated.doc);
+    expect(rendered).not.toContain(ZWSP);
+    expect(rendered).not.toContain(RLO);
+    expect(safeParseNoteDocument(migrated.doc).success).toBe(true);
+  });
+
+  it("leaves ordinary text with accents and emoji alone", () => {
+    const ordinary = docWith({
+      type: "image",
+      attrs: {
+        attachmentId: "33333333-4444-4555-8666-777777777777",
+        alt: "Café résumé 🎉 — naïve",
+        width: 800,
+        height: 600,
+      },
+    });
+    expect(safeParseNoteDocument(ordinary).success).toBe(true);
+    expect(stripUnsafeText("Café résumé 🎉 — naïve")).toBe("Café résumé 🎉 — naïve");
+  });
+});
+
+describe("root block budget", () => {
+  const para = (text: string) => ({ type: "paragraph", content: [{ type: "text", text }] });
+  const paras = (count: number) => Array.from({ length: count }, (_v, i) => para(`p${i}`));
+
+  /*
+   * THE DEFECT THIS BLOCK EXISTS FOR. `maxChildren: 200` is a per-node fan-out
+   * guard, and it was also applied to the document ROOT — turning it into a cap
+   * on how many top-level blocks a whole note could hold. 201 paragraphs is
+   * about 21 KB, roughly four pages, and was refused while the note was
+   * nominally allowed 2 000 nodes and 512 KB. Neither of those could ever be
+   * reached.
+   */
+  it("accepts more than maxChildren top-level blocks", () => {
+    expect(safeParseNoteDocument({ type: "doc", content: paras(200) }).success).toBe(true);
+    expect(safeParseNoteDocument({ type: "doc", content: paras(201) }).success).toBe(true);
+    expect(safeParseNoteDocument({ type: "doc", content: paras(900) }).success).toBe(true);
+  });
+
+  /** The per-node guard is unchanged: fan-out under ONE node still caps at 200. */
+  it("still caps fan-out under a single nested node at maxChildren", () => {
+    const nested = {
+      type: "doc",
+      content: [{ type: "blockquote", content: paras(NOTE_DOCUMENT_LIMITS.maxChildren + 1) }],
+    };
+    const result = safeParseNoteDocument(nested);
+    expect(result.success).toBe(false);
+    expect(result.errors).toContain("Document child array is too large");
+  });
+
+  /** The node budget, not the child count, is what actually bounds a note. */
+  it("still refuses a document past the node budget", () => {
+    // Each paragraph is two nodes, so 1 200 paragraphs is 2 401 nodes.
+    expect(safeParseNoteDocument({ type: "doc", content: paras(1_200) }).success).toBe(false);
+  });
+
+  /*
+   * The sharper half. `assertMigrationInputBounds` threw BEFORE any recovery
+   * could run, so a note already stored in this state could not be opened at
+   * all — not merely unsaveable. The migration must agree with the validator.
+   */
+  it("opens an existing note that already has more than maxChildren blocks", () => {
+    expect(() => migrateNoteDocument({ type: "doc", content: paras(201) })).not.toThrow();
+    const migrated = migrateNoteDocument({ type: "doc", content: paras(400) });
+    expect(migrated.doc.content).toHaveLength(400);
+    expect(safeParseNoteDocument(migrated.doc).success).toBe(true);
+  });
+
+  it("still refuses to migrate fan-out past maxChildren under one nested node", () => {
+    expect(() =>
+      migrateNoteDocument({
+        type: "doc",
+        content: [{ type: "blockquote", content: paras(NOTE_DOCUMENT_LIMITS.maxChildren + 1) }],
+      }),
+    ).toThrow(NoteDocumentMigrationError);
   });
 });

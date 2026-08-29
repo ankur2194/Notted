@@ -124,6 +124,15 @@ export interface AttachmentUploadResult {
 
 export interface AttachmentListResult {
   readonly items: readonly AttachmentMedia[];
+  readonly limit: number;
+  readonly returned: number;
+  /**
+   * `true` when the note holds more attachments than the server returns.
+   *
+   * The same quartet as `NoteShareList`. This endpoint had no bound at all, so
+   * a note used as a dumping ground returned every row on every read.
+   */
+  readonly truncated: boolean;
 }
 
 export interface AttachmentDeleteResult {

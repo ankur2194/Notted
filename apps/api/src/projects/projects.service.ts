@@ -143,6 +143,9 @@ export interface UpdateProjectServiceInput extends ReadProjectInput {
  * authorized Part 19 context. Each mutation commits the business change,
  * append-only audit row, and identifier-only outbox intent atomically.
  */
+/** Members returned inside `ProjectDetail`. Reported via `membersTruncated`. */
+const MAX_PROJECT_MEMBERS_RETURNED = 200;
+
 @Injectable()
 export class ProjectsService {
   constructor(
@@ -317,7 +320,8 @@ export class ProjectsService {
       return Object.freeze({
         ...this.toMutationProject(project),
         lastActivityAt: lastActivityAt.toISOString(),
-        members: Object.freeze(members),
+        members: Object.freeze(members.members),
+        membersTruncated: members.truncated,
         // Task rows AND inline checklist items, summed into one bar. Both halves
         // use the shared aggregates, so this can never disagree with the
         // per-note `progress` the notes list reports.
@@ -382,7 +386,7 @@ export class ProjectsService {
     const operation = await this.authorizeProject(input, "project.delete");
     return this.authorizationEntry.run(operation, async () => {
       await this.database.transaction(async (tx) => {
-        await this.readRow(tx, input.projectId);
+        const project = await this.readRow(tx, input.projectId);
         // Part 51.3: capture the IDs of every note whose `projectId` will be
         // nulled BEFORE the update runs. After the update the project link is
         // gone, and although the notes still exist the index's `projectId`
@@ -393,6 +397,44 @@ export class ProjectsService {
           .where(
             and(eq(notes.projectId, input.projectId), whereWorkspace(notes, this.tenantContext)),
           );
+        const affectedTaskIds = await tx
+          .select({ id: tasks.id })
+          .from(tasks)
+          .where(
+            and(eq(tasks.projectId, input.projectId), whereWorkspace(tasks, this.tenantContext)),
+          );
+
+        /*
+         * DELETING A RESTRICTED PROJECT MUST NOT SILENTLY PUBLISH ITS CONTENT.
+         *
+         * Nulling `project_id` moves a note into the workspace-root state, and
+         * `NotesService.projectVisibility` — correctly — treats a null project as
+         * visible to every member: `or(isNull(notes.projectId), exists(...))`.
+         * So deleting a restricted project turned confidential notes into
+         * workspace-wide ones, with no prompt and no audit trail. The same leak
+         * exists symmetrically for tasks through `TasksService`'s own
+         * `projectVisibility`, which is why both are counted here.
+         *
+         * The predicate is not the bug and is left alone: `isNull` is the right
+         * rule for a note that genuinely has no project. The bug is this method
+         * manufacturing that state for content nobody said to publish. Refusing
+         * puts the decision back where it belongs — an operator moves or deletes
+         * the content first, and the widening becomes something they chose.
+         *
+         * ponytail: there is no "delete and release" affordance, so dissolving a
+         * restricted project is a two-step job. Upgrade path if that friction
+         * bites: a `strategy=release` flag that performs the same nulling behind
+         * a fresh (step-up) session and records `project.delete.released` with
+         * the affected ids.
+         */
+        if (project.isRestricted && affectedNoteIds.length + affectedTaskIds.length > 0) {
+          throw new ApiHttpException(HttpStatus.CONFLICT, {
+            code: "PROJECT_HAS_RESTRICTED_CONTENT",
+            message:
+              "Move or delete this project's notes and tasks before deleting it. " +
+              "Deleting it now would make them visible to the whole workspace.",
+          });
+        }
         // Both project links use workspace+project NO ACTION composite FKs.
         // Nullify only active-tenant rows first; the notes/tasks survive as
         // standalone rows and unrelated/cross-tenant rows cannot be touched.
@@ -408,7 +450,14 @@ export class ProjectsService {
           .where(
             and(eq(tasks.projectId, input.projectId), whereWorkspace(tasks, this.tenantContext)),
           );
-        await this.recordMutation(tx, "delete", input.projectId, input);
+        // The visibility change IS the thing worth auditing, so the counts and
+        // the restriction state go on the row rather than being inferable only
+        // from the notes' own history.
+        await this.recordMutation(tx, "delete", input.projectId, input, {
+          isRestricted: project.isRestricted,
+          releasedNoteCount: affectedNoteIds.length,
+          releasedTaskCount: affectedTaskIds.length,
+        });
         if (affectedNoteIds.length > 0) {
           await this.searchIndexProducer.scheduleSearchSync(
             tx,
@@ -536,7 +585,9 @@ export class ProjectsService {
     };
   }
 
-  private async loadProjectMembers(projectId: string): Promise<readonly ProjectMember[]> {
+  private async loadProjectMembers(
+    projectId: string,
+  ): Promise<{ readonly members: readonly ProjectMember[]; readonly truncated: boolean }> {
     const [restriction] = await this.database.db
       .select({ isRestricted: projects.isRestricted })
       .from(projects)
@@ -568,9 +619,20 @@ export class ProjectsService {
         ),
       )
       .where(and(...memberConditions))
-      .orderBy(asc(users.name), asc(users.id));
+      .orderBy(asc(users.name), asc(users.id))
+      // Bounded in practice by workspace seat count, but this is a NESTED
+      // projection inside `ProjectDetail` with no pager of its own, so an
+      // unbounded read here scales the detail response with the tenant.
+      // `limit + 1` so `membersTruncated` is measured, not guessed.
+      //
+      // ponytail: a hard cap, not pagination — a caller past
+      // `MAX_PROJECT_MEMBERS_RETURNED` sees the flag and cannot reach the rest.
+      // Upgrade path: a real `GET /projects/{id}/members` endpoint, which is a
+      // contract change across REST, tRPC, OpenAPI and the web client.
+      .limit(MAX_PROJECT_MEMBERS_RETURNED + 1);
 
-    return rows.map((member) => {
+    const truncated = rows.length > MAX_PROJECT_MEMBERS_RETURNED;
+    const members = rows.slice(0, MAX_PROJECT_MEMBERS_RETURNED).map((member) => {
       const workspaceAdministrator =
         member.workspaceRole === "owner" || member.workspaceRole === "admin";
       return Object.freeze({
@@ -586,6 +648,7 @@ export class ProjectsService {
           : ("workspace" as const),
       });
     });
+    return { members, truncated };
   }
 
   private async readIdempotentProject(

@@ -4,7 +4,7 @@ import { isTable, sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -39,13 +39,10 @@ import {
   webhooksRelations,
 } from "../src/database/schema";
 
-import { expectPostgresErrorCode } from "./database-test-helpers";
+import { expectPostgresErrorCode, HAS_DATABASE, requireDatabase } from "./database-test-helpers";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
-
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 
 /** The dimensionality of the `note_embeddings.embedding` vector column. */
 const EMBEDDING_DIMENSIONS = 1536;
@@ -582,21 +579,6 @@ describe("operations and integration tables schema (unit)", () => {
 // content or credential.
 // ----------------------------------------------------------------------------
 
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => {
-      /* connection cleanup is best-effort during the reachability probe */
-    });
-  }
-}
-
 /** Creates deterministic user + workspace + owner membership and returns their ids. */
 async function bootstrapTenant(
   db: NodePgDatabase,
@@ -640,16 +622,12 @@ function unitVectorLiteral(dimensions: number, oneAt: number): string {
   return `[${parts.join(",")}]`;
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("operations and integration tables schema (live)", () => {
+describe.skipIf(!HAS_DATABASE)("operations and integration tables schema (live)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase | undefined;
-  let reachable = false;
 
   beforeAll(async () => {
-    reachable = await isDatabaseReachable(DATABASE_URL as string);
-    if (!reachable) {
-      return;
-    }
+    await requireDatabase();
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 1 });
     const database = drizzle(pool);
     db = database;
@@ -665,7 +643,7 @@ describe.skipIf(!HAS_DATABASE_URL)("operations and integration tables schema (li
   });
 
   it("creates the Part 18 tables and enums", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -762,7 +740,7 @@ describe.skipIf(!HAS_DATABASE_URL)("operations and integration tables schema (li
   it("(a) accepts a 1536-dim vector insert into note_embeddings and runs a cosine <=> query", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -845,7 +823,7 @@ describe.skipIf(!HAS_DATABASE_URL)("operations and integration tables schema (li
   });
 
   it("(b) rejects a duplicate api_keys.key_hash via the UNIQUE constraint", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -878,7 +856,7 @@ describe.skipIf(!HAS_DATABASE_URL)("operations and integration tables schema (li
   it("(c) rejects an invalid webhook_deliveries.status via the enum constraint", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -919,7 +897,7 @@ describe.skipIf(!HAS_DATABASE_URL)("operations and integration tables schema (li
   });
 
   it("(d) creates the tenant-scoped and unique indexes declared by Part 18", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

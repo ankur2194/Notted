@@ -206,6 +206,31 @@ export class MembershipsService {
   async invite(
     input: WorkspaceInput & { readonly email: string; readonly role: WorkspaceRole },
   ): Promise<WorkspaceInviteResult> {
+    /*
+     * STEP-UP, and deliberately HERE rather than in `HIGH_RISK_ACTIONS`.
+     *
+     * Creating an invitation is exactly as consequential as `member.update` and
+     * `member.remove`, which are both in that set: a stolen but stale session
+     * can otherwise mint a new member, and an owner-role invitation is a
+     * standing route back in even after the session is revoked.
+     *
+     * But `member.invite` is NOT a write-only action. It also authorizes
+     * `listInvitations` (a read), `resend`, `revoke`, the invitation-email
+     * worker, and — decisively — `ShellService`'s `canManageMembers` capability
+     * probe. Adding it to `HIGH_RISK_ACTIONS` would evaluate freshness on all of
+     * them, so with `AUTH_RECENT_AUTH_SECONDS` at 600 the members section would
+     * disappear from the shell of every session older than ten minutes and
+     * listing invitations would start failing. Same intent, wrong site.
+     *
+     * `leave` already sets this precedent for the same reason: freshness is a
+     * property of the OPERATION, and the policy action is shared.
+     */
+    if (!input.principal.isFresh) {
+      throw new ApiHttpException(HttpStatus.FORBIDDEN, {
+        code: "RECENT_AUTHENTICATION_REQUIRED",
+        message: "Confirm your identity to continue.",
+      });
+    }
     const operation = await this.authorizationEntry.authorizeUser({
       principal: input.principal,
       workspaceId: input.workspaceId,

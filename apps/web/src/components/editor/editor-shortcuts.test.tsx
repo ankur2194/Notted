@@ -317,6 +317,20 @@ const EDITOR_CASES: Readonly<Record<string, ShortcutCase>> = {
     },
     assert: expectImageSize(368, 184),
   },
+  imageOptions: {
+    press: (harness, binding) => {
+      selectImage(harness.editor);
+      harness.pressBinding(binding);
+    },
+    // The only keyboard route to the image toolbar, and therefore to alt text:
+    // the toolbar is portalled to `document.body`, so reaching it by Tab means
+    // an arbitrarily long journey from the image it describes.
+    assert: async () => {
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Align image left" })).toHaveFocus(),
+      );
+    },
+  },
   undo: {
     setup: (editor) => {
       selectHello(editor);

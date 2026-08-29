@@ -108,11 +108,13 @@ describe("AuthLockoutService", () => {
     const identifier = "budget@example.test";
 
     for (let attempt = 0; attempt < appConfig.authRateLimitPerMinute; attempt += 1) {
-      await expect(service.consumeIdentifierBudget(identifier)).resolves.toBeUndefined();
+      await expect(
+        service.consumeIdentifierBudget(identifier, "/sign-in/email"),
+      ).resolves.toBeUndefined();
     }
 
     const error = await service
-      .consumeIdentifierBudget(identifier)
+      .consumeIdentifierBudget(identifier, "/sign-in/email")
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(AuthLockoutError);
     const lockoutError = error as AuthLockoutError;
@@ -181,7 +183,7 @@ describe("AuthLockoutService", () => {
     const identifier = "Secret.Person@Example.test";
     const hash = identifierHash(identifier);
 
-    await service.consumeIdentifierBudget(identifier);
+    await service.consumeIdentifierBudget(identifier, "/sign-in/email");
     await service.recordFailure(identifier);
     await service.recordFailure(identifier);
     await service.recordFailure(identifier);
@@ -209,5 +211,48 @@ describe("AuthLockoutService", () => {
     // padding, and a legitimate retry with different casing still counts
     // against the same lock.
     expect(identifierHash(" A@B.test ")).toBe(identifierHash("a@b.test"));
+  });
+});
+
+describe("AuthLockoutService budget scoping", () => {
+  /*
+   * THE DEFECT THIS BLOCK EXISTS FOR. Every path in `AUTH_IDENTIFIER_PATHS`
+   * shared one Redis key per email address, so an unauthenticated stranger who
+   * knew a victim's address could drain the victim's SIGN-IN budget by posting
+   * to `/notted/request-password-reset` — an endpoint that needs no password,
+   * no session, and answers the same either way.
+   */
+  it("does not let one endpoint spend another endpoint's budget", async () => {
+    const { service, appConfig } = buildService({ authRateLimitPerMinute: "3" });
+    const identifier = "victim@example.test";
+
+    // Drain the reset endpoint's budget completely.
+    for (let attempt = 0; attempt < appConfig.authRateLimitPerMinute; attempt += 1) {
+      await service.consumeIdentifierBudget(identifier, "/notted/request-password-reset");
+    }
+    await expect(
+      service.consumeIdentifierBudget(identifier, "/notted/request-password-reset"),
+    ).rejects.toBeInstanceOf(AuthLockoutError);
+
+    // The victim's real sign-in is untouched.
+    for (let attempt = 0; attempt < appConfig.authRateLimitPerMinute; attempt += 1) {
+      await expect(
+        service.consumeIdentifierBudget(identifier, "/sign-in/email"),
+      ).resolves.toBeUndefined();
+    }
+  });
+
+  it("still keys every scoped budget by hash, never by the address", async () => {
+    const { service, redis } = buildService({ authRateLimitPerMinute: "3" });
+    const identifier = "Secret.Person@Example.test";
+
+    await service.consumeIdentifierBudget(identifier, "/sign-in/email");
+    for (const key of redis.store.keys()) {
+      expect(key).not.toContain(identifier);
+      expect(key).not.toContain(identifier.toLowerCase());
+    }
+    expect([...redis.store.keys()].some((key) => key.includes(identifierHash(identifier)))).toBe(
+      true,
+    );
   });
 });

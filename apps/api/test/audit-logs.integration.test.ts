@@ -17,7 +17,7 @@ import { resolve } from "node:path";
 import { and, eq, sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ApiKeysService } from "../src/api-keys/api-keys.service";
@@ -32,6 +32,8 @@ import { SEED_IDS, seedDatabase } from "../src/database/seed";
 import { AuditLogRetentionService } from "../src/maintenance/audit-log-retention.service";
 import { TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { StructuredLogger } from "../src/common/logging/structured-logger.service";
 import type { AuthConfig } from "../src/config/auth.config";
 import type { RetentionConfig } from "../src/config/retention.config";
@@ -39,28 +41,13 @@ import type { DatabaseService, DatabaseTransaction } from "../src/database/datab
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
 const PEPPER = "audit-integration-pepper";
 const API_KEY_ACTOR_ID = "20000000-0000-4000-8d00-000000000001";
 
 type Database = NodePgDatabase<typeof schema>;
 
 class RollbackAuditTest extends Error {}
-
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
-}
 
 function principal(userId: string): AuthenticatedPrincipal {
   return Object.freeze({
@@ -110,14 +97,13 @@ async function seededAlphaRow(tx: DatabaseTransaction) {
   return row;
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 71 audit trail (live)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 71 audit trail (live)", () => {
   let pool: Pool | undefined;
   let db: Database | undefined;
-  let reachable = false;
 
   beforeAll(async () => {
-    reachable = await isDatabaseReachable(DATABASE_URL as string);
-    if (!reachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 1 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -130,7 +116,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 71 audit trail (live)", () => {
   it("refuses UPDATE and DELETE, but allows the purge flag and referential actions", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -251,7 +237,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 71 audit trail (live)", () => {
   it("records exactly one row per sensitive mutation, with the request facts and no secret", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -309,7 +295,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 71 audit trail (live)", () => {
   });
 
   it("lets owners and admins read the trail and refuses everyone else", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -404,7 +390,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 71 audit trail (live)", () => {
   });
 
   it("filters and pages the trail deterministically", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -483,7 +469,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 71 audit trail (live)", () => {
   it("purges only rows past the retention window, and dry runs delete nothing", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

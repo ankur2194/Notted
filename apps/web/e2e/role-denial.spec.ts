@@ -68,6 +68,33 @@ const ROUTES: readonly (readonly [string, string])[] = [
   ["get", "/api/v1/workspaces/{workspaceId}/audit-logs"],
   ["get", "/api/v1/workspaces/{workspaceId}/members"],
   ["patch", "/api/v1/workspaces/{workspaceId}/members/{memberId}"],
+  // Part 78 (R31): the rest of the workspace-scoped surface. Before these, the
+  // HTTP-level cross-tenant proof covered notes and members only — every other
+  // resource's 403-vs-404 split rested on service tests alone.
+  ["get", "/api/v1/workspaces/{workspaceId}/tasks"],
+  ["get", "/api/v1/workspaces/{workspaceId}/tasks/{taskId}"],
+  ["get", "/api/v1/workspaces/{workspaceId}/projects"],
+  ["get", "/api/v1/workspaces/{workspaceId}/projects/{projectId}"],
+  ["get", "/api/v1/workspaces/{workspaceId}/tags"],
+  ["delete", "/api/v1/workspaces/{workspaceId}/tags/{tagId}"],
+  ["get", "/api/v1/workspaces/{workspaceId}/folders"],
+  ["delete", "/api/v1/workspaces/{workspaceId}/folders/{folderId}"],
+  ["get", "/api/v1/workspaces/{workspaceId}/exports"],
+  ["get", "/api/v1/workspaces/{workspaceId}/exports/{exportId}"],
+  ["get", "/api/v1/workspaces/{workspaceId}/webhooks"],
+  ["delete", "/api/v1/workspaces/{workspaceId}/webhooks/{webhookId}"],
+  ["get", "/api/v1/workspaces/{workspaceId}/api-keys"],
+  ["delete", "/api/v1/workspaces/{workspaceId}/api-keys/{apiKeyId}"],
+  ["delete", "/api/v1/workspaces/{workspaceId}/attachments/{attachmentId}"],
+  ["get", "/api/v1/workspaces/{workspaceId}/task-statuses"],
+  ["get", "/api/v1/workspaces/{workspaceId}/storage"],
+  ["get", "/api/v1/workspaces/{workspaceId}/search"],
+  ["get", "/api/v1/workspaces/{workspaceId}/notifications"],
+  ["get", "/api/v1/workspaces/{workspaceId}/invitations"],
+  ["get", "/api/v1/workspaces/{workspaceId}/notes/{noteId}/attachments"],
+  ["get", "/api/v1/workspaces/{workspaceId}/notes/{noteId}/comments"],
+  ["get", "/api/v1/workspaces/{workspaceId}/notes/{noteId}/versions"],
+  ["get", "/api/v1/workspaces/{workspaceId}/notes/{noteId}/shares"],
 ];
 
 type Method = "get" | "post" | "patch" | "delete";
@@ -411,6 +438,143 @@ test.describe.serial("Part 75 server-side role denial", () => {
 
     for (const attempt of denied) {
       expectNoLeak(await expectStatus(pageFor("admin").request, attempt, 403), attempt.what);
+    }
+  });
+
+  /*
+   * Part 78 (R31). The HTTP-level cross-tenant proof used to cover notes and
+   * members only; every other workspace-scoped resource's concealment rested on
+   * service tests, which cannot see a transport that authorizes differently.
+   *
+   * The rule under test is one sentence: a caller with no membership must never
+   * receive 2xx from a workspace-scoped route, and must not be told the
+   * difference between "forbidden" and "no such workspace".
+   *
+   * **If any of these answers 403 rather than 404, that is a real
+   * tenant-existence oracle and a defect in the API — fix the API, do not adjust
+   * the expectation here.** A 200 with an empty body is equally a failure: it
+   * confirms the workspace resolves.
+   */
+  test("no workspace-scoped resource answers a non-member with anything but 404", async () => {
+    const foreign: readonly Attempt[] = [
+      { what: "tasks", method: "get", path: `/api/v1/workspaces/${workspaceId}/tasks` },
+      { what: "projects", method: "get", path: `/api/v1/workspaces/${workspaceId}/projects` },
+      { what: "tags", method: "get", path: `/api/v1/workspaces/${workspaceId}/tags` },
+      { what: "folders", method: "get", path: `/api/v1/workspaces/${workspaceId}/folders` },
+      { what: "exports", method: "get", path: `/api/v1/workspaces/${workspaceId}/exports` },
+      { what: "webhooks", method: "get", path: `/api/v1/workspaces/${workspaceId}/webhooks` },
+      { what: "api keys", method: "get", path: `/api/v1/workspaces/${workspaceId}/api-keys` },
+      { what: "audit logs", method: "get", path: `/api/v1/workspaces/${workspaceId}/audit-logs` },
+      {
+        what: "task statuses",
+        method: "get",
+        path: `/api/v1/workspaces/${workspaceId}/task-statuses`,
+      },
+      { what: "storage usage", method: "get", path: `/api/v1/workspaces/${workspaceId}/storage` },
+      {
+        what: "invitations",
+        method: "get",
+        path: `/api/v1/workspaces/${workspaceId}/invitations`,
+      },
+      {
+        what: "notifications",
+        method: "get",
+        path: `/api/v1/workspaces/${workspaceId}/notifications`,
+      },
+      {
+        what: "search",
+        method: "get",
+        path: `/api/v1/workspaces/${workspaceId}/search?q=denial`,
+      },
+      {
+        what: "note attachments",
+        method: "get",
+        path: `/api/v1/workspaces/${workspaceId}/notes/${noteId}/attachments`,
+      },
+      {
+        what: "note comments",
+        method: "get",
+        path: `/api/v1/workspaces/${workspaceId}/notes/${noteId}/comments`,
+      },
+      {
+        what: "note versions",
+        method: "get",
+        path: `/api/v1/workspaces/${workspaceId}/notes/${noteId}/versions`,
+      },
+      {
+        what: "note shares",
+        method: "get",
+        path: `/api/v1/workspaces/${workspaceId}/notes/${noteId}/shares`,
+      },
+    ];
+
+    for (const attempt of foreign) {
+      const what = `stranger reads another tenant's ${attempt.what}`;
+      expectNoLeak(
+        await expectStatus(pageFor("stranger").request, { ...attempt, what }, 404),
+        what,
+      );
+    }
+  });
+
+  /*
+   * The other half of the same rule, and the half a membership check alone does
+   * not give you: inside a workspace the caller DOES belong to, an identifier
+   * that names nothing must be 404 too.
+   *
+   * Every probe runs as the **owner** deliberately. An owner is refused nothing
+   * by role, so a non-404 here can only mean the resource lookup leaked — with a
+   * lesser role, a 403 would be an honest answer about the role and would prove
+   * nothing about concealment. `delete` is the verb wherever the item path has
+   * no `get`, because it carries no body and so cannot fail validation first.
+   */
+  test("an identifier that names nothing inside your own workspace is 404", async () => {
+    const missing: readonly Attempt[] = [
+      {
+        what: "task",
+        method: "get",
+        path: `/api/v1/workspaces/${workspaceId}/tasks/${randomUUID()}`,
+      },
+      {
+        what: "project",
+        method: "get",
+        path: `/api/v1/workspaces/${workspaceId}/projects/${randomUUID()}`,
+      },
+      {
+        what: "export",
+        method: "get",
+        path: `/api/v1/workspaces/${workspaceId}/exports/${randomUUID()}`,
+      },
+      {
+        what: "tag",
+        method: "delete",
+        path: `/api/v1/workspaces/${workspaceId}/tags/${randomUUID()}`,
+      },
+      {
+        what: "folder",
+        method: "delete",
+        path: `/api/v1/workspaces/${workspaceId}/folders/${randomUUID()}`,
+      },
+      {
+        what: "webhook",
+        method: "delete",
+        path: `/api/v1/workspaces/${workspaceId}/webhooks/${randomUUID()}`,
+      },
+      {
+        what: "attachment",
+        method: "delete",
+        path: `/api/v1/workspaces/${workspaceId}/attachments/${randomUUID()}`,
+      },
+      {
+        what: "api key",
+        method: "delete",
+        path: `/api/v1/workspaces/${workspaceId}/api-keys/${randomUUID()}`,
+      },
+    ];
+
+    for (const attempt of missing) {
+      const what = `owner guesses a ${attempt.what} id`;
+      expectNoLeak(await expectStatus(pageFor("owner").request, { ...attempt, what }, 404), what);
     }
   });
 

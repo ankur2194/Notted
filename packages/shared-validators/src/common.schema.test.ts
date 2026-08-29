@@ -39,6 +39,13 @@ describe("common schemas", () => {
       page: 2,
       limit: 100,
     });
+    // `docs/API.md` documents a maximum page of 10 000, which the schema did not
+    // enforce: `page` had a `.min(1)` and no ceiling, so any integer reached
+    // `offset: (page - 1) * limit` and produced an unbounded database offset.
+    expect(paginationQuerySchema.parse({ page: 10_000, limit: 25 })).toEqual({
+      page: 10_000,
+      limit: 25,
+    });
     expect(paginationQuerySchema.parse({ page: 3, limit: 10 })).toEqual({
       page: 3,
       limit: 10,
@@ -50,6 +57,7 @@ describe("common schemas", () => {
     { page: "1.5" },
     { page: " 2" },
     { page: 0 },
+    { page: 10_001 },
     { limit: 101 },
     { limit: "-1" },
     { extra: "rejected" },

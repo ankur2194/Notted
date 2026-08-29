@@ -58,6 +58,11 @@ supported implicit fallback.
 - AI remains disabled unless `FEATURE_AI_ENABLED=true`. Chat credentials are stored per
   workspace (Part 67), so no deployment-level provider key is required; `AI_REQUEST_TIMEOUT_MS`
   (default 120000, 1000–600000) bounds every outbound chat call.
+- `TRUST_PROXY_HOPS` must be at least `1` in production; `0` fails startup. Production
+  terminates TLS at a reverse proxy, so there is always at least one hop, and at `0`
+  Express disables `trust proxy` — every rate-limit tier then collapses into one bucket
+  keyed by the proxy's address, every audit row records the proxy instead of the caller,
+  and `X-Forwarded-Host` is ignored so tenant custom domains answer `421`.
 - Custom domains remain disabled unless `CUSTOM_DOMAINS_ENABLED=true`, and enabling them
   requires a reverse proxy that can obtain certificates for tenant hostnames on demand.
   `CUSTOM_DOMAIN_CNAME_TARGET` must be a public hostname in production — `localhost`,

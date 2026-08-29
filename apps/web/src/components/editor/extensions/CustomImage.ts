@@ -74,6 +74,14 @@ import type { EditorView } from "@tiptap/pm/view";
 
 export const IMAGE_EXTENSION_NAME = "image";
 
+/**
+ * Raised on `editor.view.dom` when the keyboard asks for the selected image's
+ * toolbar. A bubbling `CustomEvent` for the same reason `ATTACHMENT_EVENTS`
+ * are: the keymap runs inside ProseMirror, where there is no React prop to
+ * thread, and `ImageToolbar` already has the element to listen on.
+ */
+export const IMAGE_TOOLBAR_REQUEST_EVENT = "notted:image-toolbar";
+
 /** Wrapper painted around the `<img>`; owns the blur-up and aspect ratio. */
 export const IMAGE_FRAME_CLASS = "notted-image-frame";
 export const IMAGE_FALLBACK_CLASS = "notted-image-fallback";
@@ -1236,6 +1244,15 @@ export function createNoteImage(config: NoteImageConfig = {}) {
           this.editor.commands.nottedResizeSelectedImage(IMAGE_RESIZE_STEP_PX),
         [editorShortcutBinding("imageNarrow")]: () =>
           this.editor.commands.nottedResizeSelectedImage(-IMAGE_RESIZE_STEP_PX),
+        [editorShortcutBinding("imageOptions")]: () => {
+          // Returning false with no image selected lets the chord fall through
+          // to whatever else may claim it, exactly as the resize bindings do.
+          if (selectedImage(this.editor) === null) return false;
+          this.editor.view.dom.dispatchEvent(
+            new CustomEvent(IMAGE_TOOLBAR_REQUEST_EVENT, { bubbles: true, composed: false }),
+          );
+          return true;
+        },
       };
     },
 

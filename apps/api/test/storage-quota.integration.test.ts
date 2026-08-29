@@ -21,7 +21,7 @@
 // back, which is why it can create its own users, workspaces, and notes instead
 // of mutating the shared `SEED_IDS` rows that `vitest.config.ts` serializes on.
 //
-// Gating matches the existing idiom: `describe.skipIf(!HAS_DATABASE_URL)` for
+// Gating matches the existing idiom: `describe.skipIf(!HAS_DATABASE)` for
 // "not configured at all", plus a `beforeAll` reachability probe that calls
 // `skip()` for "configured but down". No MinIO is needed — quota accounting
 // never touches the object store.
@@ -32,7 +32,7 @@ import { resolve } from "node:path";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
@@ -50,14 +50,14 @@ import {
 import { StorageQuotaService } from "../src/storage/storage-quota.service";
 import { createTenantContext, TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { SecurityConfig } from "../src/config/security.config";
 import type { StorageConfig } from "../src/config/storage.config";
 import type { AuthenticatedPrincipal, WorkspacePlan } from "@notted/shared-types";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
 
 const GIB = 1_024 * 1_024 * 1_024;
 
@@ -101,19 +101,6 @@ function principal(userId: string): AuthenticatedPrincipal {
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     isFresh: true,
   });
-}
-
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
 }
 
 /** `DatabaseService` bound to the rolled-back fixture transaction. */
@@ -306,14 +293,13 @@ async function seedQuotaFixture(tx: DatabaseTransaction): Promise<QuotaFixture> 
 
 /* -------------------------------------------------------------------------- */
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 45 storage quotas (live PostgreSQL)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 45 storage quotas (live PostgreSQL)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
-  let reachable = false;
 
   beforeAll(async () => {
-    reachable = await isDatabaseReachable(DATABASE_URL as string);
-    if (!reachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 4 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -326,7 +312,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 45 storage quotas (live PostgreSQL)", (
   it("derives usage from attachment rows: ready is used, in-flight is pending, failed is neither", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -406,7 +392,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 45 storage quotas (live PostgreSQL)", (
   it("confines usage to one workspace and refuses a non-member without leaking existence", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -493,7 +479,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 45 storage quotas (live PostgreSQL)", (
   it("reserves under the workspace row lock, charging in-flight rows and refusing the byte over the limit", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

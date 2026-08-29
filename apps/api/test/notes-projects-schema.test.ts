@@ -4,7 +4,7 @@ import { isTable, sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -25,13 +25,15 @@ import {
   schema,
 } from "../src/database/schema";
 
-import { expectPostgresErrorCode, primaryKeyColumns } from "./database-test-helpers";
+import {
+  expectPostgresErrorCode,
+  primaryKeyColumns,
+  HAS_DATABASE,
+  requireDatabase,
+} from "./database-test-helpers";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
-
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 
 /** True when `value` looks like a Drizzle `Relations` object (config + table). */
 function isRelationsObject(value: unknown): boolean {
@@ -275,21 +277,6 @@ describe("projects, notes, hierarchy, and ordering schema (unit)", () => {
 // in CI without a database and skips cleanly when dev compose is not running.
 // ----------------------------------------------------------------------------
 
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => {
-      /* connection cleanup is best-effort during the reachability probe */
-    });
-  }
-}
-
 /** Creates deterministic user + workspace + owner membership and returns their ids. */
 async function bootstrapTenant(
   db: NodePgDatabase,
@@ -320,16 +307,12 @@ async function bootstrapTenant(
   return { userId, workspaceId };
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("projects, notes, hierarchy, and ordering schema (live)", () => {
+describe.skipIf(!HAS_DATABASE)("projects, notes, hierarchy, and ordering schema (live)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase | undefined;
-  let reachable = false;
 
   beforeAll(async () => {
-    reachable = await isDatabaseReachable(DATABASE_URL as string);
-    if (!reachable) {
-      return;
-    }
+    await requireDatabase();
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 1 });
     const database = drizzle(pool);
     db = database;
@@ -345,7 +328,7 @@ describe.skipIf(!HAS_DATABASE_URL)("projects, notes, hierarchy, and ordering sch
   });
 
   it("creates the Part 15 tables and enums", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -393,7 +376,7 @@ describe.skipIf(!HAS_DATABASE_URL)("projects, notes, hierarchy, and ordering sch
   it("inserts project notes, root notes, nested notes, templates, and soft-deleted notes", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -488,7 +471,7 @@ describe.skipIf(!HAS_DATABASE_URL)("projects, notes, hierarchy, and ordering sch
   });
 
   it("stores and orders notes by sort_order within a sibling group", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -528,7 +511,7 @@ describe.skipIf(!HAS_DATABASE_URL)("projects, notes, hierarchy, and ordering sch
   it("rejects a cross-tenant note whose project belongs to another workspace (composite FK)", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -567,7 +550,7 @@ describe.skipIf(!HAS_DATABASE_URL)("projects, notes, hierarchy, and ordering sch
   it("rejects a cross-tenant note whose folder belongs to another workspace (composite FK)", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -602,7 +585,7 @@ describe.skipIf(!HAS_DATABASE_URL)("projects, notes, hierarchy, and ordering sch
   it("enforces one share per (note, user) and cascades share deletion with the note", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -658,7 +641,7 @@ describe.skipIf(!HAS_DATABASE_URL)("projects, notes, hierarchy, and ordering sch
   it("cascades project deletion to project_access and workspace deletion to all tenant rows", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

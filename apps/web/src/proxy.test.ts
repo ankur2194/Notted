@@ -13,7 +13,13 @@
  *     caller credentials, because sending a tenant's cookies to a public route
  *     would be a needless disclosure;
  *   - that a resolve failure degrades to 404 rather than a 500, because a slow
- *     or down API must not take the tenant hostnames with it.
+ *     or down API must not take the tenant hostnames with it;
+ *   - that a definitive answer, in EITHER direction, is remembered, because the
+ *     memo is the only thing standing between a busy tenant hostname and one
+ *     resolve round trip per page view.
+ *
+ * The memo is module state that outlives a test, so every case that counts
+ * `fetch` calls uses its own hostname.
  *
  * A `node` environment on purpose: this module never runs in a browser, and the
  * default `jsdom` one would substitute its own `AbortSignal`/`Event` globals for
@@ -109,7 +115,7 @@ describe("custom-host proxy", () => {
   });
 
   it("refuses a host the API does not recognise, and remembers it", async () => {
-    // Its own hostname: the negative memo is module state that outlives a test.
+    // Its own hostname: the memo is module state that outlives a test.
     const host = "unrecognised.acme.test";
     fetchMock.mockResolvedValue(new Response("Not found", { status: 404 }));
 
@@ -169,24 +175,41 @@ describe("custom-host proxy", () => {
   // Behind the reverse proxy the `host` header is the internal upstream name;
   // only `x-forwarded-host` carries the name the visitor typed.
   it("prefers x-forwarded-host over host", async () => {
-    const response = await proxy(request({ host: "web:3000", forwardedHost: TENANT_HOST }));
+    const host = "forwarded.acme.test";
+    const response = await proxy(request({ host: "web:3000", forwardedHost: host }));
 
     expect(isPassThrough(response)).toBe(true);
-    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.get("host")).toBe(
-      TENANT_HOST,
-    );
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.get("host")).toBe(host);
   });
 
   it("resolves against the deployment's own API and sends no credentials", async () => {
-    await proxy(request());
+    const host = "credentials.acme.test";
+    await proxy(request({ host }));
 
     const [input, init] = fetchMock.mock.calls[0] ?? [];
     const url = new URL(String(input));
     expect(url.origin).toBe("https://api.notted.test");
     expect(url.pathname).toBe(DOMAIN_API_PATHS.resolve);
-    expect(url.searchParams.get("host")).toBe(TENANT_HOST);
+    expect(url.searchParams.get("host")).toBe(host);
     expect(init?.credentials).toBeUndefined();
     expect(init?.headers).toBeUndefined();
+  });
+
+  it("remembers a host the API resolved, and still decides per request", async () => {
+    const host = "memoized.acme.test";
+
+    expect(isPassThrough(await proxy(request({ host })))).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Second request on the same host: served from the memo, no round trip.
+    expect(isPassThrough(await proxy(request({ host })))).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // The DECISION is not memoized — only the resolve outcome. A path naming
+    // another workspace is still refused on the memo hit.
+    const response = await proxy(request({ host, pathname: `/workspaces/${OTHER_WORKSPACE_ID}` }));
+    expect(response.status).toBe(404);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

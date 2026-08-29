@@ -364,6 +364,27 @@ export const EDITOR_SHORTCUTS: readonly EditorShortcut[] = Object.freeze([
     handler: null,
   },
   {
+    /*
+     * The keyboard route to the image toolbar, and therefore the only keyboard
+     * route to alt text.
+     *
+     * The toolbar is portalled to `document.body`, so it is in the tab order
+     * but arbitrarily far from the image it describes — SC 2.4.3 Focus Order,
+     * not 2.1.1. This puts focus straight on it.
+     *
+     * `Mod-Alt-o` is free: the `Mod-Alt-*` bindings declared here are the six
+     * heading levels, m, 0, c and i, and no configured extension registers a
+     * `Mod-Alt` binding of its own.
+     */
+    id: "imageOptions",
+    group: "images",
+    description: "Open the selected image's options, including alt text",
+    binding: "Mod-Alt-o",
+    scope: "editor",
+    source: "notted",
+    handler: null,
+  },
+  {
     id: "undo",
     group: "history",
     description: "Undo",

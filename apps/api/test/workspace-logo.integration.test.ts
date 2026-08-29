@@ -23,7 +23,7 @@ import { Readable } from "node:stream";
 import { and, eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
@@ -40,6 +40,8 @@ import {
 } from "../src/workspaces/workspace-logo.service";
 import { WORKSPACE_AUDIT_ACTIONS } from "../src/workspaces/workspaces.constants";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { ImageProcessor } from "../src/attachments/image-processing";
 import type { ImageProcessingService } from "../src/attachments/image-processing.service";
 import type { DatabaseService, DatabaseTransaction } from "../src/database/database.service";
@@ -54,9 +56,7 @@ import type {
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
 
 /** A workspace id that is a well-formed UUID and belongs to nobody. */
 const ABSENT_WORKSPACE_ID = "30000000-0000-4000-8e00-0000000000ff";
@@ -80,19 +80,6 @@ const PNG_SOURCE = Buffer.concat([
 
 /** What the fake processor returns as the `thumbnail` rendition, WebP-shaped. */
 const WEBP_RENDITION = Buffer.from("RIFF\u0000\u0000\u0000\u0000WEBPVP8 logo", "latin1");
-
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
-}
 
 function principal(userId: string): AuthenticatedPrincipal {
   return Object.freeze({
@@ -251,14 +238,13 @@ function tokenOf(logoUrl: string | null, workspaceId: string): string {
   return parsed.token;
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 72 workspace logo (live)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 72 workspace logo (live)", () => {
   let pool: Pool | undefined;
   let db: Database | undefined;
-  let reachable = false;
 
   beforeAll(async () => {
-    reachable = await isDatabaseReachable(DATABASE_URL as string);
-    if (!reachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 1 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -269,7 +255,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 72 workspace logo (live)", () => {
   });
 
   it("stores one rendition, one app-relative URL and exactly one audit row", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -336,7 +322,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 72 workspace logo (live)", () => {
   });
 
   it("conceals Alpha from a Beta member on both upload and removal", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -387,7 +373,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 72 workspace logo (live)", () => {
   });
 
   it("refuses a viewer and an editor with 403 on both upload and removal", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -436,7 +422,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 72 workspace logo (live)", () => {
   });
 
   it("answers every public read miss with the same 404", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -484,7 +470,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 72 workspace logo (live)", () => {
   });
 
   it("supersedes the old token and its object when the logo is replaced", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -539,7 +525,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 72 workspace logo (live)", () => {
   it("removes the logo idempotently and audits only the removal that removed something", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

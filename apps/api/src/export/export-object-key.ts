@@ -25,6 +25,39 @@ export function exportObjectKey(
   return `${workspaceId}/${exportId}.${fileExtension}`;
 }
 
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const EXPORT_OBJECT_KEY_PATTERN = new RegExp(`^(${UUID})/(${UUID})\\.([a-z0-9]{1,8})$`, "u");
+
+export interface ParsedExportObjectKey {
+  readonly workspaceId: string;
+  readonly exportId: string;
+  readonly fileExtension: string;
+}
+
+/**
+ * Reconciliation/cleanup helper, mirroring `parseAttachmentObjectKey`.
+ *
+ * NEVER call this to make an access decision — a key is a storage ADDRESS and
+ * never authority (ADR 0005). It exists so the Part 45 storage sweep can
+ * attribute a stray object in the `exports` bucket to a workspace, which it
+ * could not do at all before: the sweep only ever listed `attachments`, so
+ * bytes written by a worker that died between `putObject` and `markReady` were
+ * referenced by no row and reclaimed by nothing.
+ *
+ * Returns `null` for any key that is not the canonical layout, which is what
+ * routes an unrecognised object to the `unparsable_key` branch rather than to
+ * deletion.
+ */
+export function parseExportObjectKey(key: string): ParsedExportObjectKey | null {
+  const match = EXPORT_OBJECT_KEY_PATTERN.exec(key);
+  if (match === null) return null;
+  const [, workspaceId, exportId, fileExtension] = match;
+  if (workspaceId === undefined || exportId === undefined || fileExtension === undefined) {
+    return null;
+  }
+  return Object.freeze({ workspaceId, exportId, fileExtension });
+}
+
 /** Longest filename stem we hand back; long enough to stay recognisable. */
 const MAX_FILENAME_STEM_LENGTH = 80;
 

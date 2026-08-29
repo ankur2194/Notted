@@ -78,6 +78,19 @@ import type { ILevelsOptions, IParagraphOptions, IRunOptions, ParagraphChild } f
  */
 const MAX_WALK_DEPTH = NOTE_DOCUMENT_LIMITS.maxDepth;
 
+/*
+ * The per-container slice.
+ *
+ * This is `maxRootChildren`, not `maxChildren`, because `blocksForAll` renders
+ * the DOCUMENT ROOT's children as well as nested containers — and slicing the
+ * root at 200 silently exported the first 200 blocks of a longer note with no
+ * error anywhere. For a valid document nothing else changes: the contract
+ * already refuses more than `maxChildren` under any nested node, so the wider
+ * slice can only ever be reached at the root. Total work stays bounded by
+ * `maxNodes` and `maxTotalText`, which are the real budget.
+ */
+const MAX_RENDER_CHILDREN = NOTE_DOCUMENT_LIMITS.maxRootChildren;
+
 /** Word's numbering model has nine levels (0-8); deeper nesting reuses the last. */
 const MAX_LIST_LEVEL = 8;
 
@@ -492,7 +505,7 @@ function inlineChildren(
   if (ctx.depth > MAX_WALK_DEPTH) return [];
   const next = { ...ctx, depth: ctx.depth + 1 };
   const children: ParagraphChild[] = [];
-  for (const node of content.slice(0, NOTE_DOCUMENT_LIMITS.maxChildren)) {
+  for (const node of content.slice(0, MAX_RENDER_CHILDREN)) {
     if (!isRecord(node)) continue;
     if (node.type === "text") {
       if (typeof node.text === "string") children.push(...textChildren(node.text, node.marks, ctx));
@@ -516,7 +529,7 @@ function inlineChildren(
 function plainText(content: readonly unknown[], depth: number): string {
   if (depth > MAX_WALK_DEPTH) return "";
   let text = "";
-  for (const node of content.slice(0, NOTE_DOCUMENT_LIMITS.maxChildren)) {
+  for (const node of content.slice(0, MAX_RENDER_CHILDREN)) {
     if (!isRecord(node)) continue;
     if (node.type === "text") text += typeof node.text === "string" ? node.text : "";
     else if (node.type === "hardBreak") text += "\n";
@@ -533,7 +546,7 @@ type Block = Paragraph | Table;
 
 function blocksForAll(content: readonly unknown[], ctx: WalkContext, state: RenderState): Block[] {
   const blocks: Block[] = [];
-  for (const child of content.slice(0, NOTE_DOCUMENT_LIMITS.maxChildren)) {
+  for (const child of content.slice(0, MAX_RENDER_CHILDREN)) {
     blocks.push(...blocksFor(child, ctx, state));
   }
   return blocks;
@@ -631,7 +644,7 @@ function taskItemBlocks(
 
   const blocks: Block[] = [];
   let glyphPending = true;
-  for (const child of childrenOf(node).slice(0, NOTE_DOCUMENT_LIMITS.maxChildren)) {
+  for (const child of childrenOf(node).slice(0, MAX_RENDER_CHILDREN)) {
     if (isRecord(child) && child.type === "paragraph" && glyphPending) {
       glyphPending = false;
       blocks.push(

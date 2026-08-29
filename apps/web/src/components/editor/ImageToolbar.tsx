@@ -8,7 +8,11 @@ import {
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-import { IMAGE_EXTENSION_NAME, updateSelectedImage } from "./extensions/CustomImage";
+import {
+  IMAGE_EXTENSION_NAME,
+  IMAGE_TOOLBAR_REQUEST_EVENT,
+  updateSelectedImage,
+} from "./extensions/CustomImage";
 import { ImageAltTextDialog } from "./ImageAltTextDialog";
 import { useRovingToolbar } from "./useRovingToolbar";
 import { useSelectedNode } from "./useSelectedNode";
@@ -111,6 +115,7 @@ export function ImageToolbar({ editor, editable, portalTarget }: ImageToolbarPro
   const selected = useSelectedNode(editor, IMAGE_EXTENSION_NAME);
   const [dismissed, setDismissed] = useState(false);
   const [altOpen, setAltOpen] = useState(false);
+  const [focusRequest, setFocusRequest] = useState(0);
 
   const position = selected?.pos ?? null;
   // Escape hides the toolbar for the image it was dismissed on; selecting a
@@ -132,6 +137,35 @@ export function ImageToolbar({ editor, editable, portalTarget }: ImageToolbarPro
     [],
   );
   const { toolbarRef, tabIndexFor, onItemFocus, onKeyDown } = useRovingToolbar(itemIds);
+
+  /*
+   * The keyboard route in.
+   *
+   * Focus is NOT moved when an image is merely selected — clicking or arrowing
+   * onto one would yank focus out of the document mid-typing. It is moved only
+   * when the user asks, with `Mod-Alt-o`, which `CustomImage`'s keymap turns
+   * into this event.
+   *
+   * A counter rather than a boolean because the same request can be made twice
+   * in a row, and because the toolbar may still be dismissed when it arrives:
+   * both state updates batch, the toolbar renders, and only then does the
+   * effect below find a `toolbarRef` to focus into.
+   */
+  useEffect(() => {
+    if (editor === null) return;
+    const dom = editor.view.dom;
+    const onRequest = (): void => {
+      setDismissed(false);
+      setFocusRequest((current) => current + 1);
+    };
+    dom.addEventListener(IMAGE_TOOLBAR_REQUEST_EVENT, onRequest);
+    return () => dom.removeEventListener(IMAGE_TOOLBAR_REQUEST_EVENT, onRequest);
+  }, [editor]);
+
+  useEffect(() => {
+    if (focusRequest === 0) return;
+    toolbarRef.current?.querySelector<HTMLElement>("[data-toolbar-item]")?.focus();
+  }, [focusRequest, toolbarRef]);
 
   const attrs = selected === null ? null : noteDocumentImageAttrs(selected.node.attrs);
   if (

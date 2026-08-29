@@ -22,7 +22,7 @@
 // idempotent one; when it was, the room closes with its content projected and a
 // durable checkpoint written.
 
-import { Injectable, type OnApplicationShutdown } from "@nestjs/common";
+import { Injectable, type BeforeApplicationShutdown } from "@nestjs/common";
 
 import { StructuredLogger } from "../../common/logging/structured-logger.service";
 import { TenantError } from "../../tenant/tenant-errors";
@@ -42,7 +42,7 @@ interface PendingProjection {
 }
 
 @Injectable()
-export class NoteCollaborationProjectionService implements OnApplicationShutdown {
+export class NoteCollaborationProjectionService implements BeforeApplicationShutdown {
   private readonly pending = new Map<string, PendingProjection>();
 
   constructor(
@@ -84,26 +84,48 @@ export class NoteCollaborationProjectionService implements OnApplicationShutdown
   }
 
   /**
-   * ponytail: a projection still inside its debounce window when the process
-   * stops is DROPPED, not flushed. Nothing durable is lost — the Yjs log is in
-   * PostgreSQL and the next `sync` on that note re-derives everything — but
-   * `notes.content` is what search, export, print and REST read, so a note that
-   * nobody reopens keeps a stale projection indefinitely rather than for the
-   * debounce window. Recovery trigger is the next open followed by a leave,
-   * which schedules a forced boundary.
+   * ADR 0004: "A pending projection is flushed on graceful shutdown rather than
+   * discarded, because a note nobody reopens would otherwise keep a stale
+   * projection indefinitely."
    *
-   * Flushing here does NOT work and must not be reintroduced at this hook:
-   * Nest runs `onModuleDestroy` — where the database pool closes — before
-   * `onApplicationShutdown`, so the awaited projections only produce
-   * `collaboration.projection.failed` against a dead pool. Closing this properly
-   * means a shutdown-ordering guarantee between the two modules, which is a
-   * larger change than the staleness justifies.
+   * This used to clear the timers and drop the work, with a comment explaining
+   * that flushing could not work because the pool closed first. The premise was
+   * inverted. Nest's real order (`@nestjs/core`'s `nest-application-context.js`,
+   * `close()`) is:
+   *
+   *     onModuleDestroy -> beforeApplicationShutdown -> dispose -> onApplicationShutdown
+   *
+   * so `beforeApplicationShutdown` runs AFTER `onModuleDestroy`, and moving the
+   * flush here alone would have fixed nothing. The fix is the pair: this hook
+   * flushes, and `DatabaseService` now closes its pool in
+   * `onApplicationShutdown` instead. The guarantee is then cross-PHASE, ordered
+   * by Nest's own `await` sequence, rather than resting on module-distance
+   * ordering between two modules — which Nest does not document as a contract.
+   *
+   * `dispose()` closes the Socket.IO server AFTER this hook, so `rooms.emit`
+   * inside `project()` still reaches live clients during the flush.
+   *
+   * If someone later reverts the pool hook, `run()` catches and logs
+   * `collaboration.projection.failed` — i.e. it degrades to exactly the old
+   * behaviour. No new failure mode, and nothing durable is at risk either way:
+   * the Yjs log is in PostgreSQL and the projection is re-derivable.
+   *
+   * ponytail: the flush is unbounded, so a large `pending` map delays
+   * `app.close()` and could in principle exceed a SIGTERM grace period. Accepted
+   * because `pending` holds one entry per note being actively edited ON THIS
+   * INSTANCE and each run is two short transactions. Upgrade path if a
+   * deployment starts getting SIGKILLed: race the flush against a deadline
+   * derived from the container's stop timeout.
    */
-  onApplicationShutdown(): void {
-    for (const entry of this.pending.values()) {
+  async beforeApplicationShutdown(): Promise<void> {
+    const entries = [...this.pending.values()];
+    for (const entry of entries) {
       if (entry.timer !== undefined) clearTimeout(entry.timer);
     }
     this.pending.clear();
+    // `run` already swallows and logs its own failures, so `allSettled` is about
+    // one slow note not stranding the others rather than about error handling.
+    await Promise.allSettled(entries.map((entry) => this.run(entry)));
   }
 
   private async run(entry: PendingProjection): Promise<void> {

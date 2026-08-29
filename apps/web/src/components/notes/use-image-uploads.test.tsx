@@ -247,8 +247,12 @@ describe("useImageUploads", () => {
     });
 
     await waitFor(() => expect(completed).toHaveLength(1));
-    expect(client.getQueryData(noteQueryKeys.attachments(workspaceId, noteId))).toEqual({
+    // The cached page carries the server's truncation quartet alongside the
+    // items; a locally added upload does not change what the server truncated.
+    expect(client.getQueryData(noteQueryKeys.attachments(workspaceId, noteId))).toMatchObject({
       items: [media()],
+      returned: 1,
+      truncated: false,
     });
   });
 

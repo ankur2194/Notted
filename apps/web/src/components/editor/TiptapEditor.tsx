@@ -546,6 +546,20 @@ function EditorSurface({
     // Next.js renders this component on the server first; deferring the first
     // ProseMirror render avoids a hydration mismatch.
     immediatelyRender: false,
+    /*
+     * A React re-render of this whole subtree on EVERY ProseMirror transaction
+     * is `useEditor`'s legacy default, and in a collaborative room most
+     * transactions carry no change this tree can show: a peer's caret move and
+     * an awareness frame each re-render the toolbar and re-run its fifteen
+     * `editor.can()` probes for nothing.
+     *
+     * Nothing here reads editor state during render — `EditorContent` owns the
+     * ProseMirror view, `ImageToolbar` subscribes through `useSelectedNode`, the
+     * slash and mention menus own their plugin state, `AttachmentDialogs` is
+     * event-driven, and `EditorToolbar` now subscribes to exactly the document,
+     * selection and stored marks its controls derive from.
+     */
+    shouldRerenderOnTransaction: false,
     editorProps: {
       attributes: {
         role: "textbox",

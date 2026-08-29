@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { and, eq, inArray } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
@@ -30,16 +30,22 @@ import { INVITATION_EMAIL_JOB_TYPE } from "../src/memberships/memberships.consta
 import { MembershipsService } from "../src/memberships/memberships.service";
 import { TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
+import type { StructuredLogger } from "../src/common/logging/structured-logger.service";
 import type { AuthConfig } from "../src/config/auth.config";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
 const TOKEN_SECRET = "part-28-integration-secret-that-is-long-enough";
 
-function principal(userId: string): AuthenticatedPrincipal {
+/** `DatabaseService` logs only when every retry is exhausted; nothing here does. */
+function testLogger(): StructuredLogger {
+  return { warning: () => undefined } as unknown as StructuredLogger;
+}
+
+function principal(userId: string, isFresh = true): AuthenticatedPrincipal {
   return Object.freeze({
     userId,
     sessionId: `session:${userId}`,
@@ -47,31 +53,17 @@ function principal(userId: string): AuthenticatedPrincipal {
     assurance: "single-factor",
     authenticatedAt: new Date(Date.now() - 1_000).toISOString(),
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
-    isFresh: true,
+    isFresh,
   });
 }
 
-async function reachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
-}
-
-describe.skipIf(!HAS_DATABASE_URL)("Part 28 memberships and invitations (live)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 28 memberships and invitations (live)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
-  let databaseReachable = false;
 
   beforeAll(async () => {
-    databaseReachable = await reachable(DATABASE_URL as string);
-    if (!databaseReachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 8 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -84,7 +76,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 28 memberships and invitations (live)",
   function service(): { memberships: MembershipsService; tokens: InvitationTokenService } {
     if (pool === undefined || db === undefined) throw new Error("database unavailable");
     const tenant = new TenantContextService();
-    const database = new DatabaseService(pool, db);
+    const database = new DatabaseService(pool, db, testLogger());
     const repository = new AuthorizationRepository(database, tenant);
     const entry = new AuthorizationEntryService(
       repository,
@@ -98,7 +90,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 28 memberships and invitations (live)",
   it("covers unregistered/existing users, single use, role boundaries, isolation, resend, and atomic intents", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -197,6 +189,39 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 28 memberships and invitations (live)",
       expect(existingInvite.invitation.email).toBe(existingEmail);
       expect(unregisteredInvite.invitation.email).toBe(unregisteredEmail);
       expect(existingInvite.invitation).not.toHaveProperty("tokenHash");
+
+      /*
+       * STEP-UP ON INVITE. Creating an invitation is as consequential as
+       * `member.update` and `member.remove`, both of which already require a
+       * fresh session — a stolen but stale session could otherwise mint a new
+       * member, and an owner-role invitation is a standing route back in even
+       * after that session is revoked.
+       */
+      const staleOwner = principal(ownerId, false);
+      await expect(
+        memberships.invite({
+          principal: staleOwner,
+          workspaceId: alphaWorkspaceId,
+          email: `stale-${suffix}@example.test`,
+          role: "viewer",
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "RECENT_AUTHENTICATION_REQUIRED" } });
+
+      /*
+       * AND THE HALF THAT PINS WHERE THE CHECK LIVES. `member.invite` also
+       * authorizes `listInvitations` and backs the shell's `canManageMembers`
+       * probe, so putting freshness in `HIGH_RISK_ACTIONS` instead would make
+       * the members section vanish for every session over ten minutes old.
+       * A stale session must still be able to LIST.
+       */
+      await expect(
+        memberships.listInvitations({
+          principal: staleOwner,
+          workspaceId: alphaWorkspaceId,
+          page: 1,
+          limit: 10,
+        }),
+      ).resolves.toBeDefined();
 
       await expect(
         memberships.invite({
@@ -568,7 +593,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 28 memberships and invitations (live)",
   it("remove and leave clear only the departing user's workspace grants so rejoin cannot reactivate them", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -682,7 +707,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 28 memberships and invitations (live)",
         .insert(workspaceMembers)
         .values({ workspaceId: workspaceA, userId: departing, role: "editor" });
       const tenantAfterRejoin = new TenantContextService();
-      const databaseAfterRejoin = new DatabaseService(pool!, db);
+      const databaseAfterRejoin = new DatabaseService(pool!, db, testLogger());
       const authorizationAfterRejoin = new AuthorizationEntryService(
         new AuthorizationRepository(databaseAfterRejoin, tenantAfterRejoin),
         new AuthorizationPolicyService(),
@@ -748,7 +773,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 28 memberships and invitations (live)",
   it("serializes concurrent owner demotion, removal, and leave so each workspace retains an owner", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

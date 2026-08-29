@@ -71,6 +71,7 @@ import * as Y from "yjs";
 
 import type { CommentAnchor } from "@notted/shared-types";
 import type { Editor } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorState } from "@tiptap/pm/state";
 
 /** A live range in the current document. */
@@ -203,6 +204,32 @@ export function createCommentAnchor(
 }
 
 /**
+ * Memoized on document identity, then on anchor identity.
+ *
+ * Four independent passes resolve the same anchors against the same state on a
+ * single keystroke — the comment decorations (every transaction), the orphan
+ * scan in `NoteComments` (every doc change), and the two grammar passes — and
+ * each `yrel:1` resolve is a base64 decode plus a `y-prosemirror` mapping walk.
+ * ProseMirror reuses the `doc` object whenever a transaction changes no content,
+ * so a selection-only transaction hits the same entry as the keystroke before
+ * it, and a doc edit gets a fresh one. Entries die with the document: both maps
+ * are weak, so there is no invalidation, no eviction and no leak.
+ *
+ * Returning the identical range object for a repeat lookup is a second, free
+ * win: callers that memoize on the result keep referential stability.
+ *
+ * ponytail: keyed on `state.doc` alone, not on the Yjs binding. A state whose
+ * doc is unchanged but whose binding appeared would read a stale entry — in
+ * practice `y-prosemirror`'s initial sync replaces the document, which mints a
+ * new `doc` and a new entry, so the case does not arise. Upgrade path if it ever
+ * does: key the outer map on the binding and the inner on the doc.
+ */
+const resolvedAnchors = new WeakMap<
+  ProseMirrorNode,
+  WeakMap<CommentAnchor, CommentAnchorRange | null>
+>();
+
+/**
  * Resolve a stored anchor against an editor state.
  *
  * `null` means "orphaned in this document" and is the signal the comment list
@@ -212,6 +239,20 @@ export function resolveCommentAnchorInState(
   state: EditorState,
   anchor: CommentAnchor,
 ): CommentAnchorRange | null {
+  let perDocument = resolvedAnchors.get(state.doc);
+  if (perDocument === undefined) {
+    perDocument = new WeakMap();
+    resolvedAnchors.set(state.doc, perDocument);
+  }
+  // `undefined` is the miss; `null` is a cached orphan.
+  const cached = perDocument.get(anchor);
+  if (cached !== undefined) return cached;
+  const resolved = computeAnchorRange(state, anchor);
+  perDocument.set(anchor, resolved);
+  return resolved;
+}
+
+function computeAnchorRange(state: EditorState, anchor: CommentAnchor): CommentAnchorRange | null {
   const size = state.doc.content.size;
   const binding = readBinding(state);
 

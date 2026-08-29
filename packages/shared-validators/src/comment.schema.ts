@@ -162,7 +162,9 @@ export const commentSummarySchema = z
   .strict();
 
 export const commentThreadSchema = commentSummarySchema
-  .extend({ replies: z.array(commentSummarySchema) })
+  // `repliesTruncated` is not decoration: replies are capped PER THREAD, and a
+  // truncated list that looks complete is worse than an obviously partial one.
+  .extend({ replies: z.array(commentSummarySchema), repliesTruncated: z.boolean() })
   .strict();
 
 export const commentPageSchema = z

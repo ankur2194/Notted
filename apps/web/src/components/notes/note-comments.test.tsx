@@ -90,7 +90,7 @@ function thread(
   overrides: Partial<CommentThread> & { readonly id: string },
   replies: readonly CommentSummary[] = [],
 ): CommentThread {
-  return { ...comment(overrides), replies };
+  return { ...comment(overrides), replies, repliesTruncated: false };
 }
 
 function page(items: readonly CommentThread[], openCount = items.length) {

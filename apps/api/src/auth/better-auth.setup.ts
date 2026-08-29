@@ -55,11 +55,14 @@ export const RECENT_AUTHENTICATION_PATHS = Object.freeze([
  * and locking on them would let one attacker lock a victim out of their own
  * provider sign-in.
  */
+/** The one identifier path that must stay reachable while an account is locked. */
+export const AUTH_PASSWORD_RESET_PATH = "/notted/request-password-reset";
+
 export const AUTH_IDENTIFIER_PATHS = Object.freeze([
   "/sign-in/email",
   "/sign-up/email",
   "/sign-in/magic-link",
-  "/notted/request-password-reset",
+  AUTH_PASSWORD_RESET_PATH,
 ]);
 
 const SESSION_ROTATION_PATHS = new Set(["/two-factor/verify-totp", "/two-factor/disable"]);
@@ -372,8 +375,26 @@ export async function setupBetterAuth(dependencies: BetterAuthSetupDependencies)
     const identifier = attemptedIdentifier(ctx.path, ctx.body);
     if (identifier !== undefined && dependencies.lockout !== undefined) {
       try {
-        await dependencies.lockout.consumeIdentifierBudget(identifier);
-        await dependencies.lockout.assertNotLocked(identifier);
+        await dependencies.lockout.consumeIdentifierBudget(identifier, ctx.path);
+        /*
+         * PASSWORD RESET IS THE WAY OUT OF A LOCKOUT, so the lockout must not
+         * gate it.
+         *
+         * Only `/sign-in/email` failures call `recordFailure`, and each new lock
+         * runs for `lockoutSeconds` from the moment it is set — so an attacker
+         * who can spend the attempt budget can hold a victim's lock open
+         * indefinitely. If the lock also sealed the reset endpoint, the victim's
+         * only escape hatch would be closed by the attack itself: a permanent,
+         * attacker-sustained denial of service on someone who did nothing.
+         *
+         * The endpoint is not left open — it keeps its own per-identifier budget
+         * above (its real abuse is mail-bombing an inbox, which a per-identifier
+         * budget is exactly the right axis for) plus the per-IP bucket in
+         * `AuthRateLimitMiddleware`.
+         */
+        if (ctx.path !== AUTH_PASSWORD_RESET_PATH) {
+          await dependencies.lockout.assertNotLocked(identifier);
+        }
       } catch (error: unknown) {
         if (error instanceof AuthLockoutError) throwAsApiError(error);
         throw error;

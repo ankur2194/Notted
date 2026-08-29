@@ -17,6 +17,7 @@ import {
 import { AuthorizationDeniedError } from "./authorization.errors";
 import { AuthorizationRepository } from "./authorization.repository";
 
+import type { AuthorizationRunner } from "./authorization.repository";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 
 export interface UserAuthorizationInput {
@@ -25,6 +26,16 @@ export interface UserAuthorizationInput {
   readonly action: AuthorizationAction;
   readonly resource: ResourceLocator;
   readonly requestId?: string | null;
+  /**
+   * An OPEN transaction to read the authorization facts through.
+   *
+   * Pass this — and only this — when authorizing from inside a transaction you
+   * already hold. Omitted, the repository uses the pool exactly as before; the
+   * two callers that need it are the descendant re-checks in
+   * `NotesService.move()` and the delete/restore path, which would otherwise
+   * check out a second connection per note and deadlock a pool of ten.
+   */
+  readonly db?: AuthorizationRunner;
 }
 
 export interface UserJobAuthorizationInput {
@@ -78,6 +89,7 @@ export class AuthorizationEntryService {
       input.action,
       input.resource,
       input.requestId,
+      input.db,
     );
   }
 
@@ -161,8 +173,9 @@ export class AuthorizationEntryService {
     action: AuthorizationAction,
     locator: ResourceLocator,
     requestId?: string | null,
+    db?: AuthorizationRunner,
   ): Promise<AuthorizedOperation> {
-    const membership = await this.repository.findMembership(workspaceId, actor.userId);
+    const membership = await this.repository.findMembership(workspaceId, actor.userId, db);
     if (membership === null) {
       assertAllowed(this.policy, {
         actor,
@@ -176,7 +189,7 @@ export class AuthorizationEntryService {
     const context = createTenantContext({ workspaceId, userId: actor.userId, requestId });
     return this.tenantContext.run(context, async () => {
       const resource =
-        (await this.repository.loadResource(locator, actor.userId)) ?? hiddenResource(locator);
+        (await this.repository.loadResource(locator, actor.userId, db)) ?? hiddenResource(locator);
       const decision = assertAllowed(this.policy, {
         actor,
         action,

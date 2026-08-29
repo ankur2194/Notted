@@ -33,7 +33,7 @@ import { noteListQuerySchema, tagListQuerySchema } from "@notted/shared-validato
 import { and, eq, like } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -46,11 +46,12 @@ import { createApplication } from "../src/main";
 import { NotesService } from "../src/notes/notes.service";
 import { TagsService } from "../src/tags/tags.service";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { ApiKeyScope, AuthenticatedPrincipal } from "@notted/shared-types";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
 
 const ALPHA = SEED_IDS.workspaces.alpha;
@@ -106,18 +107,6 @@ function applyEnvironment(overrides: Readonly<Record<string, string>>): void {
     FEATURE_EMAIL_ENABLED: "false",
     ...overrides,
   });
-}
-
-async function reachable(url: string): Promise<boolean> {
-  const client = new Client({ connectionString: url, connectionTimeoutMillis: 2_000 });
-  try {
-    await client.connect();
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
 }
 
 /** The synthetic principal `ApiKeyAuthService` installs for the key's creator. */
@@ -201,12 +190,11 @@ async function countKeys(db: NodePgDatabase<typeof schema>, workspaceId: string)
   return rows.length;
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () => {
+describe.skipIf(!HAS_DATABASE)("Part 65 public REST API with API keys", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
   let app: NestExpressApplication | undefined;
   let environment: EnvironmentSnapshot;
-  let live = false;
 
   let adminKey: SeededKey;
   let readKey: SeededKey;
@@ -215,8 +203,8 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
 
   beforeAll(async () => {
     environment = snapshotEnvironment();
-    live = await reachable(DATABASE_URL as string);
-    if (!live) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 8 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -271,7 +259,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
   // ------------------------------------------------------------------ //
 
   it("returns the same tag page over REST as TagsService.list does directly", async () => {
-    if (!live) return;
     const response = await request(server())
       .get(`/api/v1/workspaces/${ALPHA}/tags`)
       .set("Authorization", bearer(readKey))
@@ -293,7 +280,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
   });
 
   it("returns the same paginated note page over REST as NotesService.list does directly", async () => {
-    if (!live) return;
     const response = await request(server())
       .get(`/api/v1/workspaces/${ALPHA}/notes`)
       .query({ page: "1", limit: "2" })
@@ -316,7 +302,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
   // ------------------------------------------------------------------ //
 
   it("refuses a write with a read-only key and leaves no row behind", async () => {
-    if (!live) return;
     const before = await countTags(db as NodePgDatabase<typeof schema>, ALPHA);
 
     const response = await request(server())
@@ -340,7 +325,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
    * the route declares, so this is denied twice over.
    */
   it("refuses a delegation grant from a read-only key", async () => {
-    if (!live) return;
     const notes = await request(server())
       .get(`/api/v1/workspaces/${ALPHA}/notes`)
       .query({ page: "1", limit: "1" })
@@ -359,7 +343,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
   });
 
   it("caps a write-scope key at its creator's live workspace role (scope ∩ role)", async () => {
-    if (!live) return;
     const database = db as NodePgDatabase<typeof schema>;
     const membership = and(
       eq(workspaceMembers.workspaceId, ALPHA),
@@ -398,7 +381,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
    * the binding's only proof.
    */
   it("conceals another tenant's workspace as 404 rather than 403", async () => {
-    if (!live) return;
     const response = await request(server())
       .get(`/api/v1/workspaces/${BETA}/tags`)
       .set("Authorization", bearer(readKey));
@@ -418,7 +400,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
   // ------------------------------------------------------------------ //
 
   it("refuses a /api/v1 route that declares no authorization spec", async () => {
-    if (!live) return;
     const response = await request(server()).get("/api/v1").set("Authorization", bearer(readKey));
 
     expect(response.status).toBe(403);
@@ -426,7 +407,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
   });
 
   it("refuses an API key on the first-party tRPC transport", async () => {
-    if (!live) return;
     const response = await request(server())
       .get("/api/v1/trpc/health.ping")
       .set("Authorization", bearer(readKey));
@@ -458,7 +438,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
     ["trailing whitespace", "/api/v1/trpc/health.ping", (raw: string) => `Bearer ${raw} `],
     ["uppercase path", "/api/v1/TRPC/health.ping", (raw: string) => `Bearer ${raw}`],
   ])("refuses an API key on tRPC despite %s", async (_label, path, header) => {
-    if (!live) return;
     const response = await request(server()).get(path).set("Authorization", header(readKey.raw));
 
     expect(response.status).toBe(403);
@@ -466,7 +445,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
   });
 
   it("rejects a malformed bearer credential as 401, never as a 503 outage", async () => {
-    if (!live) return;
     const response = await request(server())
       .get(`/api/v1/workspaces/${ALPHA}/tags`)
       .set("Authorization", "Bearer ntd_pk_00000000000000000000000000000000");
@@ -480,7 +458,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
   // ------------------------------------------------------------------ //
 
   it("stores only a peppered hash and an 8-character display prefix", async () => {
-    if (!live) return;
     const rows = await (db as NodePgDatabase<typeof schema>)
       .select({ keyHash: apiKeys.keyHash, keyPrefix: apiKeys.keyPrefix })
       .from(apiKeys)
@@ -504,7 +481,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
   // ------------------------------------------------------------------ //
 
   it("requires an Idempotency-Key to mint a key", async () => {
-    if (!live) return;
     const response = await request(server())
       .post(`/api/v1/workspaces/${ALPHA}/api-keys`)
       .set("Authorization", bearer(adminKey))
@@ -515,7 +491,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
   });
 
   it("refuses to mint a successor key from an API key, however wide its scope", async () => {
-    if (!live) return;
     const before = await countKeys(db as NodePgDatabase<typeof schema>, ALPHA);
 
     const response = await request(server())
@@ -532,7 +507,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
   });
 
   it("returns the raw secret exactly once and refuses to replay it", async () => {
-    if (!live) return;
     // Minted through the service with a FRESH session principal, because the
     // gate above makes the REST path unavailable to a key. Everything under
     // test here — the secret shape, the projection, the idempotency replay —
@@ -569,7 +543,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
   });
 
   it("never projects the stored hash through the list endpoint", async () => {
-    if (!live) return;
     const response = await request(server())
       .get(`/api/v1/workspaces/${ALPHA}/api-keys`)
       .set("Authorization", bearer(adminKey))
@@ -583,7 +556,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
   });
 
   it("stops a revoked key immediately, with no restart and no cache flush", async () => {
-    if (!live) return;
     const service = (app as NestExpressApplication).get(ApiKeysService);
     const scope = {
       principal: sessionPrincipal(SEED_IDS.users.alphaOwner),
@@ -639,18 +611,17 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
  * `src/common/rate-limit/rate-limit.service.test.ts`, which drains each of the
  * three tiers in turn and asserts the other two still pass.
  */
-describe.skipIf(!HAS_DATABASE_URL)("Part 65 API-key rate-limit tier", () => {
+describe.skipIf(!HAS_DATABASE)("Part 65 API-key rate-limit tier", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
   let app: NestExpressApplication | undefined;
   let environment: EnvironmentSnapshot;
-  let live = false;
   let key: SeededKey;
 
   beforeAll(async () => {
     environment = snapshotEnvironment();
-    live = await reachable(DATABASE_URL as string);
-    if (!live) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 4 });
     db = drizzle(pool, { schema });
     // Idempotent, and it keeps this suite runnable on its own under `-t`.
@@ -678,7 +649,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 API-key rate-limit tier", () => {
   });
 
   it("429s the second API-key request while another tier still succeeds", async () => {
-    if (!live) return;
     const server = (app as NestExpressApplication).getHttpServer();
     const path = `/api/v1/workspaces/${ALPHA}/tags`;
 

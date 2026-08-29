@@ -44,7 +44,7 @@ import { and, eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client as MinioClient } from "minio";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { buildAttachmentObjectKey } from "../src/attachments/attachment-storage-key";
@@ -73,6 +73,7 @@ import {
 import { StorageMaintenanceService } from "../src/maintenance/storage-maintenance.service";
 import { TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
 import { HAS_MINIO, isMinioReachable, testKeyPrefix } from "./minio-test-helpers";
 
 import type { StructuredLogger } from "../src/common/logging/structured-logger.service";
@@ -96,9 +97,7 @@ import type {
 } from "@notted/shared-types";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
 
 const GIB = 1_024 * 1_024 * 1_024;
 const HOUR_MS = 60 * 60 * 1_000;
@@ -191,19 +190,6 @@ function principal(userId: string): AuthenticatedPrincipal {
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     isFresh: true,
   });
-}
-
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
 }
 
 function scopedDatabase(tx: DatabaseTransaction): DatabaseService {
@@ -676,16 +662,15 @@ async function expectObjectsAbsent(
 /* Authorization and tenant scope — PostgreSQL only                            */
 /* ========================================================================== */
 
-describe.skipIf(!HAS_DATABASE_URL)(
+describe.skipIf(!HAS_DATABASE)(
   "Part 45 storage maintenance authorization (live PostgreSQL)",
   () => {
     let pool: Pool | undefined;
     let db: NodePgDatabase<typeof schema> | undefined;
-    let reachable = false;
 
     beforeAll(async () => {
-      reachable = await isDatabaseReachable(DATABASE_URL as string);
-      if (!reachable) return;
+      await requireDatabase();
+
       pool = new Pool({ connectionString: DATABASE_URL as string, max: 4 });
       db = drizzle(pool, { schema });
       await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -706,7 +691,7 @@ describe.skipIf(!HAS_DATABASE_URL)(
     it("lets only owners and admins trigger maintenance, and audits counts only", async ({
       skip,
     }) => {
-      if (!reachable || db === undefined) {
+      if (db === undefined) {
         skip("skipped: no reachable PostgreSQL — run dev compose");
         return;
       }
@@ -828,23 +813,20 @@ describe.skipIf(!HAS_DATABASE_URL)(
 /* The object plane — PostgreSQL + MinIO                                       */
 /* ========================================================================== */
 
-describe.skipIf(!HAS_DATABASE_URL || !HAS_MINIO)(
+describe.skipIf(!HAS_DATABASE || !HAS_MINIO)(
   "Part 45 storage maintenance sweeps (live PostgreSQL + MinIO)",
   () => {
     let pool: Pool | undefined;
     let db: NodePgDatabase<typeof schema> | undefined;
-    let reachable = false;
     let minioReachable = false;
     let storage: ObjectStorageService | undefined;
 
     beforeAll(async () => {
-      reachable = await isDatabaseReachable(DATABASE_URL as string);
+      await requireDatabase();
       minioReachable = await isMinioReachable();
-      if (reachable) {
-        pool = new Pool({ connectionString: DATABASE_URL as string, max: 4 });
-        db = drizzle(pool, { schema });
-        await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
-      }
+      pool = new Pool({ connectionString: DATABASE_URL as string, max: 4 });
+      db = drizzle(pool, { schema });
+      await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
       if (minioReachable) {
         storage = realStorage();
         await storage.ensureBuckets();
@@ -877,7 +859,7 @@ describe.skipIf(!HAS_DATABASE_URL || !HAS_MINIO)(
     });
 
     it("never removes an active file, in either scope, dry-run or live", async ({ skip }) => {
-      if (!reachable || db === undefined || !minioReachable || storage === undefined) {
+      if (db === undefined || !minioReachable || storage === undefined) {
         skip("skipped: no reachable PostgreSQL + MinIO — run dev compose");
         return;
       }
@@ -1015,7 +997,7 @@ describe.skipIf(!HAS_DATABASE_URL || !HAS_MINIO)(
     it("dry-run selects real work and changes nothing; the same run live removes exactly that work", async ({
       skip,
     }) => {
-      if (!reachable || db === undefined || !minioReachable || storage === undefined) {
+      if (db === undefined || !minioReachable || storage === undefined) {
         skip("skipped: no reachable PostgreSQL + MinIO — run dev compose");
         return;
       }
@@ -1187,7 +1169,7 @@ describe.skipIf(!HAS_DATABASE_URL || !HAS_MINIO)(
     it("produces the same safe result when the same sweeps are run twice live", async ({
       skip,
     }) => {
-      if (!reachable || db === undefined || !minioReachable || storage === undefined) {
+      if (db === undefined || !minioReachable || storage === undefined) {
         skip("skipped: no reachable PostgreSQL + MinIO — run dev compose");
         return;
       }
@@ -1311,10 +1293,76 @@ describe.skipIf(!HAS_DATABASE_URL || !HAS_MINIO)(
       ).rejects.toBeInstanceOf(RollbackMaintenanceTest);
     });
 
+    /*
+     * THE EXPORTS-BUCKET GAP. `ExportWorkerService` writes the object and only
+     * then records the key on the row (`markReady` is the sole writer of
+     * `object_key`), so a crash in between leaves bytes nothing points at. Both
+     * export phases select on `isNotNull(objectKey)` and therefore cannot see
+     * them, and the listing-based reconciler was hardcoded to the `attachments`
+     * bucket — so this bucket had no orphan sweep at any layer.
+     */
+    it("reclaims export bytes no row references, and leaves a claimed object alone", async ({
+      skip,
+    }) => {
+      if (db === undefined || !minioReachable || storage === undefined) {
+        skip("skipped: no reachable PostgreSQL + MinIO — run dev compose");
+        return;
+      }
+      const store = storage;
+
+      await expect(
+        db.transaction(async (tx) => {
+          const fixture = await createWorkspaceFixture(tx);
+          const database = scopedDatabase(tx);
+          // Zero-day windows: MinIO owns `lastModified` and a freshly written
+          // object cannot be back-dated.
+          const aggressive = buildMaintenanceService({
+            database,
+            objects: store,
+            storage: AGGRESSIVE_STORAGE,
+            retention: AGGRESSIVE_RETENTION,
+          });
+
+          // A worker that died between `putObject` and `markReady`: canonical
+          // key, no row anywhere.
+          const strandedKey = `${fixture.workspaceId}/${randomUUID()}.zip`;
+          createdExportKeys.push(strandedKey);
+          await store.putObject("exports", strandedKey, PNG, {
+            contentType: "application/zip",
+            contentLength: PNG.byteLength,
+          });
+
+          // And a live export whose row DOES claim its key. Its key uses the
+          // shared test prefix, so it is not in the canonical layout and is
+          // refused as `unparsable_key` — which is itself the safe direction.
+          const claimed = await createExpiredExport(tx, store, {
+            workspaceId: fixture.workspaceId,
+            requestedById: fixture.owner,
+          });
+          await tx
+            .update(exportJobs)
+            .set({ objectExpiresAt: new Date(Date.now() + 86_400_000) })
+            .where(eq(exportJobs.id, claimed.id));
+
+          await aggressive.runSystemSweeps({ dryRun: false });
+
+          // Asserted on THIS fixture's own keys only. A system-scoped run
+          // legitimately sweeps other workspaces' expired exports, so a blanket
+          // count would assert a property of the database rather than of the
+          // code — the same reasoning the dry-run test above records.
+          expect(await store.statObject("exports", strandedKey)).toBeNull();
+          // The claimed object survives: reconciliation reclaims bytes, never rows.
+          expect(await store.statObject("exports", claimed.key)).not.toBeNull();
+
+          throw new RollbackMaintenanceTest();
+        }),
+      ).rejects.toBeInstanceOf(RollbackMaintenanceTest);
+    });
+
     it("removes an object no row owns and MARKS a row whose object vanished, without deleting it", async ({
       skip,
     }) => {
-      if (!reachable || db === undefined || !minioReachable || storage === undefined) {
+      if (db === undefined || !minioReachable || storage === undefined) {
         skip("skipped: no reachable PostgreSQL + MinIO — run dev compose");
         return;
       }
@@ -1449,7 +1497,7 @@ describe.skipIf(!HAS_DATABASE_URL || !HAS_MINIO)(
     it("keeps a row marked failed by reconciliation across the next sweep pass", async ({
       skip,
     }) => {
-      if (!reachable || db === undefined || !minioReachable || storage === undefined) {
+      if (db === undefined || !minioReachable || storage === undefined) {
         skip("skipped: no reachable PostgreSQL + MinIO — run dev compose");
         return;
       }
@@ -1507,7 +1555,7 @@ describe.skipIf(!HAS_DATABASE_URL || !HAS_MINIO)(
     it("confines a workspace-scoped run to its own workspace's rows and objects", async ({
       skip,
     }) => {
-      if (!reachable || db === undefined || !minioReachable || storage === undefined) {
+      if (db === undefined || !minioReachable || storage === undefined) {
         skip("skipped: no reachable PostgreSQL + MinIO — run dev compose");
         return;
       }

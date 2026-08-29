@@ -10,6 +10,8 @@
 //   `.svg`-masquerading-as-`.png` and double extensions such as
 //   `invoice.pdf.exe`.
 
+import { stripUnsafeText } from "@notted/shared-validators";
+
 import type { SniffedImageType } from "./image-signature";
 
 const DISPLAY_EXTENSION_BY_TYPE: Readonly<Record<SniffedImageType, string>> = Object.freeze({
@@ -31,34 +33,19 @@ const RESERVED_DEVICE_NAMES = new Set([
   ...Array.from({ length: 9 }, (_value, index) => `lpt${index + 1}`),
 ]);
 
-/**
- * C0 controls (including NUL), DEL/C1, zero-width characters, and the Unicode
- * bidirectional overrides and isolates. U+202E is the one that makes a stored
- * `photo<RLO>gnp.exe` render to a human as `photoexe.png`.
+/*
+ * The unsafe-character table now lives in `@notted/shared-validators`
+ * (`UNSAFE_TEXT_PATTERN`), because the document contract needs exactly the same
+ * one. It used to live here alone and cover more than the contract's did, which
+ * is how `U+202E` in an ATTACHMENT NAME could be stripped on upload and then
+ * accepted inside a note document. Two copies of a security table drift, and
+ * nothing fails when they do. Per ADR 0001 the shared fact belongs to the
+ * package and this app reads it — never the reverse.
  *
- * Expressed as ranges rather than a regular expression on purpose: a character
- * class containing raw control code points is exactly what `no-control-regex`
- * exists to flag, and a reviewed table beats an escape soup.
+ * `WINDOWS_ILLEGAL` and `RESERVED_DEVICE_NAMES` stay here: those are filesystem
+ * concerns, not text-safety ones, and no shared consumer has them.
  */
-const UNSAFE_CODE_POINT_RANGES: readonly (readonly [number, number])[] = Object.freeze([
-  [0x00, 0x1f],
-  [0x7f, 0x9f],
-  [0x20_0b, 0x20_0f],
-  [0x20_2a, 0x20_2e],
-  [0x20_66, 0x20_69],
-  [0xfe_ff, 0xfe_ff],
-]);
 const WINDOWS_ILLEGAL = /[<>:"/\\|?*]/gu;
-
-function stripUnsafeCharacters(value: string): string {
-  let result = "";
-  for (const character of value) {
-    const code = character.codePointAt(0) ?? 0;
-    if (UNSAFE_CODE_POINT_RANGES.some(([start, end]) => code >= start && code <= end)) continue;
-    result += character;
-  }
-  return result;
-}
 
 /** `varchar(255)` is the column bound; bytes keep `Content-Disposition` sane. */
 const MAX_FILENAME_BYTES = 255;
@@ -89,7 +76,7 @@ export function canonicalDisplayExtension(sniffed: SniffedImageType): string {
  * pseudo-extension simply yields `""`.
  */
 export function declaredFileExtension(raw: string): string {
-  const cleaned = stripUnsafeCharacters(basename(raw).normalize("NFC")).split(/[/\\]/u).pop() ?? "";
+  const cleaned = stripUnsafeText(basename(raw).normalize("NFC")).split(/[/\\]/u).pop() ?? "";
   const match = /\.([A-Za-z0-9]{1,10})$/u.exec(cleaned);
   return match?.[1] === undefined ? "" : `.${match[1].toLowerCase()}`;
 }
@@ -161,7 +148,7 @@ export function sanitizeUploadFilename(
   fallbackStem: string,
 ): SanitizedAttachmentFilename {
   const canonical = canonicalExtension;
-  const cleaned = stripUnsafeCharacters(basename(raw).normalize("NFC"))
+  const cleaned = stripUnsafeText(basename(raw).normalize("NFC"))
     // Re-split after control removal: a stripped control could expose a separator.
     .split(/[/\\]/u)
     .pop()

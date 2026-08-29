@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
@@ -22,12 +22,13 @@ import { NoteEmbeddingProducer } from "../src/search/note-embedding-producer";
 import { NoteSearchIndexProducer } from "../src/search/note-search-index-producer";
 import { createTenantContext, TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { StructuredLogger } from "../src/common/logging/structured-logger.service";
 import type { AuthenticatedPrincipal, NoteDocument } from "@notted/shared-types";
 import type { PgTransactionConfig } from "drizzle-orm/pg-core/session";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
 
 function principal(userId: string): AuthenticatedPrincipal {
@@ -42,26 +43,13 @@ function principal(userId: string): AuthenticatedPrincipal {
   });
 }
 
-async function reachable(url: string): Promise<boolean> {
-  const client = new Client({ connectionString: url, connectionTimeoutMillis: 2_000 });
-  try {
-    await client.connect();
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
-}
-
-describe.skipIf(!HAS_DATABASE_URL)("Part 55 note snapshots and retention (live PostgreSQL)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 55 note snapshots and retention (live PostgreSQL)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
-  let databaseReachable = false;
 
   beforeAll(async () => {
-    databaseReachable = await reachable(DATABASE_URL as string);
-    if (!databaseReachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 8 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -72,7 +60,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 55 note snapshots and retention (live P
   it("atomically stores immutable ordered post-save states and only the concurrent winner", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     await db.transaction(async (tx) => seedDatabase(tx));
     const tenant = new TenantContextService();
     const database = {
@@ -143,7 +131,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 55 note snapshots and retention (live P
   it("restores complex content as immutable N+1 history with convergence intents and tenant-safe authorization", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     await db.transaction(async (tx) => seedDatabase(tx));
     const tenant = new TenantContextService();
     const database = {
@@ -424,7 +412,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 55 note snapshots and retention (live P
   it("preserves earliest/latest/current, skips unlimited plans, is repeat-safe, and isolates tenants", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     class Rollback extends Error {}
     await expect(
       db.transaction(async (tx) => {

@@ -245,7 +245,12 @@ export const attachmentUploadResultSchema = z
   .strict();
 
 export const attachmentListResultSchema = z
-  .object({ items: z.array(attachmentMediaSchema) })
+  .object({
+    items: z.array(attachmentMediaSchema),
+    limit: z.number().int().positive(),
+    returned: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+  })
   .strict();
 
 export const attachmentDeleteResultSchema = z

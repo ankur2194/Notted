@@ -171,6 +171,34 @@ export async function createApplication(): Promise<NestExpressApplication> {
         next();
         return;
       }
+      /*
+       * THE BODY-SIZE LIMIT FOR `/api/auth/**`, and it has to live here.
+       *
+       * `json({ limit })` below is mounted AFTER this handler, and Better Auth
+       * reads the raw stream itself (see the comment above the mount), so it
+       * never saw these requests — `docs/API.md` promised a 413 that the auth
+       * surface did not deliver. Moving `json()` above the mount would work
+       * today only because `better-call` happens to fall back to re-serializing
+       * `req.body` once Express has drained the stream, which is a private
+       * branch of a transitive dependency and not a contract; it would also send
+       * malformed auth JSON to Express's default HTML error page instead of this
+       * envelope, because this mount is raw Express outside the Nest filter.
+       *
+       * AN ABSENT `content-length` IS REFUSED, not waved through. `better-call`
+       * sets `length = Number(content_length)`, so with no header that is `NaN`
+       * and its `size > length` guard is always false — a chunked body would
+       * stream with no cap at all. Counting bytes here instead would put the
+       * stream into flowing mode and steal it from the handler.
+       */
+      const declaredLength = Number(request.headers["content-length"]);
+      if (!Number.isFinite(declaredLength) || declaredLength > config.requestBodyLimitBytes) {
+        response.status(413).json({
+          success: false,
+          error: { code: "PAYLOAD_TOO_LARGE", message: "The request body is too large." },
+          requestId: response.getHeader("X-Request-Id") ?? "unknown",
+        });
+        return;
+      }
       const origin = request.header("origin");
       if (origin !== undefined && isTrustedOrigin(origin)) {
         next();

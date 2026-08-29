@@ -82,6 +82,13 @@ function deletionScope(
   return scope;
 }
 
+/**
+ * One page of tasks. Matches `bulkTaskSchema`'s own 100-id ceiling, which is
+ * why "select all" can never overrun a bulk request: a full page is exactly
+ * what the endpoint accepts.
+ */
+const TASK_PAGE_LIMIT = 100;
+
 const TAG_LIST_QUERY = {
   page: 1,
   limit: 100,
@@ -221,8 +228,18 @@ export function TaskListView({
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
   const [bulkPriority, setBulkPriority] = useState<TaskPriority>("medium");
   const [status, setStatus] = useState("");
+  const [pageNumber, setPageNumber] = useState(1);
   const [now, setNow] = useState(() => new Date());
   const selectAllRef = useRef<HTMLInputElement>(null);
+
+  /*
+   * A selection is a set of ids drawn from the rows in front of the user, and
+   * `bulk()` reports "N of M" against them. Carrying it across a page turn
+   * would act on rows nobody can see, so it is dropped on every change.
+   */
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [pageNumber]);
 
   // Overdue is a comparison against the browser clock, so a page left open has
   // to re-evaluate it. A minute is finer than any due-date the UI can express.
@@ -250,8 +267,8 @@ export function TaskListView({
    */
   const query = useMemo<TaskListQuery>(
     () => ({
-      page: 1,
-      limit: 100,
+      page: pageNumber,
+      limit: TASK_PAGE_LIMIT,
       // Omitted, never sent empty, on the workspace-wide page: the query
       // contract accepts a uuid or nothing at all.
       ...(noteId === null ? {} : { noteId }),
@@ -259,12 +276,14 @@ export function TaskListView({
       sortBy: "sortOrder",
       sortDirection: "asc",
     }),
-    [noteId],
+    [noteId, pageNumber],
   );
 
   const tasksQuery = useQuery({
     queryKey: taskQueryKeys.list(workspaceId, query),
-    initialData: initialTasks ?? undefined,
+    // Only page 1 was server-rendered. Seeding page 2's key with it would
+    // render page 1's rows under page 2's key and never correct itself.
+    initialData: pageNumber === 1 ? (initialTasks ?? undefined) : undefined,
     queryFn: async () => {
       const result = await requestTaskPage(workspaceId, query);
       if (!result.ok) throw new Error(result.kind);
@@ -317,8 +336,19 @@ export function TaskListView({
     });
   }
 
+  /*
+   * Invalidate the whole `tasks` prefix rather than refetching this one key.
+   * The board's custom columns, the calendar and `MyTasksWidget` all read
+   * sibling keys under it — `MyTasksWidget` calls this "the entire cross-view
+   * consistency contract" — and a single-key refetch left every one of them
+   * holding the pre-mutation rows.
+   *
+   * `router.refresh()` stays and is load-bearing: `NoteDetailView` renders a
+   * server-computed progress bar from task state on this same route, and only
+   * an RSC refresh can move it.
+   */
   async function reconcile(): Promise<void> {
-    await tasksQuery.refetch();
+    await queryClient.invalidateQueries({ queryKey: taskQueryKeys.all(workspaceId) });
     router.refresh();
   }
 
@@ -681,11 +711,13 @@ export function TaskListView({
 
       {page.items.length === 0 && view === "list" ? (
         <section className="rounded-xl border border-dashed p-6 text-center">
-          <h3 className="font-semibold">No tasks yet</h3>
+          <h3 className="font-semibold">{page.page === 1 ? "No tasks yet" : "No tasks here"}</h3>
           <p className="mt-2 text-sm text-muted-foreground">
-            {canEdit
-              ? "Add the first task above. The note’s own content is unaffected."
-              : "This task list is empty."}
+            {page.page !== 1
+              ? "This page is empty — tasks may have been completed or deleted since it was opened."
+              : canEdit
+                ? "Add the first task above. The note’s own content is unaffected."
+                : "This task list is empty."}
           </p>
         </section>
       ) : (
@@ -693,7 +725,7 @@ export function TaskListView({
           {canEdit && view !== "calendar" && page.items.length > 0 ? (
             <div className="space-y-2">
               <p className="text-sm">
-                {selectedCount} of {page.items.length} tasks selected
+                {selectedCount} of {page.items.length} tasks on this page selected
               </p>
               <div
                 role="toolbar"
@@ -705,7 +737,7 @@ export function TaskListView({
                     ref={selectAllRef}
                     type="checkbox"
                     className="size-4"
-                    aria-label="Select all tasks"
+                    aria-label="Select all tasks on this page"
                     checked={selectedCount > 0 && selectedCount === page.items.length}
                     disabled={operationPending}
                     onChange={(event) =>
@@ -716,7 +748,7 @@ export function TaskListView({
                       )
                     }
                   />
-                  Select all
+                  Select all on this page
                 </label>
                 <Button
                   type="button"
@@ -862,6 +894,40 @@ export function TaskListView({
           )}
         </>
       )}
+
+      {/*
+       * Offset paging, not "page N of M": `TaskPage` carries `hasMore` and no
+       * total, so a count of pages is not something this view can know. Shown
+       * only once there is somewhere to go.
+       */}
+      {page.hasMore || page.page > 1 ? (
+        <nav className="flex items-center justify-between gap-3" aria-label="Task pages">
+          <p className="text-sm text-muted-foreground">
+            Page {page.page}
+            {page.hasMore ? " — more tasks follow" : ""}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={page.page <= 1 || operationPending}
+              onClick={() => setPageNumber((current) => Math.max(1, current - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!page.hasMore || operationPending}
+              onClick={() => setPageNumber((current) => current + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </nav>
+      ) : null}
     </div>
   );
 }

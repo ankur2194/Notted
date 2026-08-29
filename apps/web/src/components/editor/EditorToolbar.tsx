@@ -1,5 +1,6 @@
 "use client";
 
+import { useEditorState } from "@tiptap/react";
 import { Baseline, Highlighter, Keyboard, Link2, Table2 } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 
@@ -79,6 +80,49 @@ export function EditorToolbar({
   onLinkDialogOpenChange,
   groups = EDITOR_TOOLBAR_GROUPS,
 }: EditorToolbarProps) {
+  /*
+   * The toolbar's own subscription to the editor.
+   *
+   * `useEditor` runs with `shouldRerenderOnTransaction: false`, so this
+   * component no longer re-renders on every transaction — including the peer
+   * caret and awareness frames a shared room produces continuously, none of
+   * which can change a control here. This resubscribes it to exactly what the
+   * controls DO derive from, and the value is deliberately unused: every render
+   * function below reads the live editor, which is correct precisely because a
+   * render now happens only when one of these four changed.
+   *
+   * The key is complete. Every `editor` read in this file and in
+   * `toolbar-commands.ts` is `isActive` / `can()` / `getAttributes` /
+   * `isEditable`, all functions of the document, the selection and the stored
+   * marks; there is no `isFocused` read and no selection read outside the key.
+   *
+   * `equalityFn` is required, not a refinement: `useEditorState` defaults to a
+   * DEEP equality, and deep-comparing a ProseMirror document once per
+   * transaction would cost more than the re-render it saves.
+   */
+  useEditorState({
+    editor,
+    selector: ({ editor: instance }) =>
+      instance === null
+        ? null
+        : {
+            doc: instance.state.doc,
+            from: instance.state.selection.from,
+            to: instance.state.selection.to,
+            storedMarks: instance.state.storedMarks,
+            editable: instance.isEditable,
+          },
+    equalityFn: (a, b) =>
+      a === b ||
+      (a !== null &&
+        b !== null &&
+        a.doc === b.doc &&
+        a.from === b.from &&
+        a.to === b.to &&
+        a.storedMarks === b.storedMarks &&
+        a.editable === b.editable),
+  });
+
   const apple = useMemo(() => isApplePlatform(), []);
   const visibleGroups = useMemo(
     () => (editable ? groups : groups.filter((group) => group.id === "help")),

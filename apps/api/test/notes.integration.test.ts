@@ -27,12 +27,13 @@ import { NOTE_DOMAIN_EVENT_QUEUE } from "../src/notes/notes.constants";
 import { NotesService } from "../src/notes/notes.service";
 import { TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { NoteSearchIndexProducer } from "../src/search/note-search-index-producer";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 import type { PgTransactionConfig } from "drizzle-orm/pg-core/session";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
 
 /** Marks every row the concurrency test commits so a rerun can clear its own leftovers. */
@@ -53,27 +54,160 @@ function principal(userId: string): AuthenticatedPrincipal {
   });
 }
 
-async function reachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: 2_000 });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
+type CreateNoteInput = Parameters<NotesService["create"]>[0];
+
+/** Rolled back at the end of every fixture; never escapes this file. */
+class Rollback extends Error {}
+
+interface NotesFixture {
+  readonly tx: DatabaseTransaction;
+  readonly service: NotesService;
+  readonly shareService: NoteSharesService;
+  readonly owner: AuthenticatedPrincipal;
+  readonly admin: AuthenticatedPrincipal;
+  readonly editor: AuthenticatedPrincipal;
+  readonly viewer: AuthenticatedPrincipal;
+  readonly betaOwner: AuthenticatedPrincipal;
+  /** Unique per fixture, so titles and idempotency keys never collide. */
+  readonly suffix: string;
+  /** The document whose plain text the redaction assertions look for. */
+  readonly doc: CreateNoteInput["content"];
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", () => {
+/**
+ * One seeded, rolled-back transaction with the note services wired to it.
+ *
+ * Part 78 (R33). This file used to be a single 728-line `it` covering creation,
+ * sharing, hierarchy, trash, folders, tenant scoping and redaction at once. A
+ * failure anywhere in it reported as one opaque red test, and every assertion
+ * after the failure never ran.
+ *
+ * The honest cost of the split is that `seedDatabase` runs once per named test
+ * instead of once per file — seven times rather than one, inside a rolled-back
+ * transaction against a local database. That buys independent failure reporting
+ * on roughly 700 lines of security-relevant assertions, which is worth the
+ * seconds.
+ */
+async function withNotes(
+  db: NodePgDatabase<typeof schema>,
+  work: (fixture: NotesFixture) => Promise<void>,
+): Promise<void> {
+  await expect(
+    db.transaction(async (tx) => {
+      await seedDatabase(tx);
+      const tenant = new TenantContextService();
+      const database = {
+        db: tx,
+        transaction: <T>(inner: (scope: DatabaseTransaction) => Promise<T>) =>
+          tx.transaction(inner),
+      } as unknown as DatabaseService;
+      const authorization = new AuthorizationEntryService(
+        new AuthorizationRepository(database, tenant),
+        new AuthorizationPolicyService(),
+        tenant,
+      );
+      const suffix = randomUUID();
+      await work({
+        tx: tx as unknown as DatabaseTransaction,
+        service: new NotesService(
+          database,
+          authorization,
+          tenant,
+          { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
+          new NoteVersionsService(tenant),
+        ),
+        shareService: new NoteSharesService(database, authorization, tenant),
+        owner: principal(SEED_IDS.users.alphaOwner),
+        admin: principal(SEED_IDS.users.alphaAdmin),
+        editor: principal(SEED_IDS.users.alphaEditor),
+        viewer: principal(SEED_IDS.users.alphaViewer),
+        betaOwner: principal(SEED_IDS.users.betaOwner),
+        suffix,
+        doc: {
+          type: "doc",
+          content: [{ type: "paragraph", content: [{ type: "text", text: `Plain ${suffix}` }] }],
+        } as CreateNoteInput["content"],
+      });
+      throw new Rollback();
+    }),
+  ).rejects.toBeInstanceOf(Rollback);
+}
+
+/**
+ * The pinned, tagged root note most cases start from, and the one whose title,
+ * body text and tag the redaction case looks for in the outbox.
+ */
+function rootPayload(fixture: NotesFixture): CreateNoteInput {
+  return {
+    principal: fixture.owner,
+    workspaceId: SEED_IDS.workspaces.alpha,
+    title: `Root ${fixture.suffix}`,
+    projectId: null,
+    folderId: null,
+    parentId: null,
+    type: "document",
+    pageSize: "letter",
+    isTemplate: false,
+    isPinned: true,
+    isArchived: false,
+    tagIds: [SEED_IDS.tags.alphaPlanning],
+    content: fixture.doc,
+    idempotencyKey: `note-live-root-${fixture.suffix}`,
+  } as CreateNoteInput;
+}
+
+function childPayload(fixture: NotesFixture, parentId: string): CreateNoteInput {
+  return {
+    principal: fixture.owner,
+    workspaceId: SEED_IDS.workspaces.alpha,
+    title: `Child ${fixture.suffix}`,
+    projectId: null,
+    folderId: null,
+    parentId,
+    type: "document",
+    pageSize: "a4",
+    isTemplate: false,
+    isPinned: false,
+    isArchived: false,
+    tagIds: [],
+    idempotencyKey: `note-live-child-${fixture.suffix}`,
+  } as CreateNoteInput;
+}
+
+/** Archived task-list template inside the seeded Launch project. */
+function projectTaskPayload(fixture: NotesFixture): CreateNoteInput {
+  return {
+    principal: fixture.owner,
+    workspaceId: SEED_IDS.workspaces.alpha,
+    title: `Task template ${fixture.suffix}`,
+    projectId: SEED_IDS.projects.alphaLaunch,
+    folderId: SEED_IDS.folders.alphaHandbook,
+    parentId: null,
+    type: "task-list",
+    pageSize: "a4",
+    isTemplate: true,
+    isPinned: false,
+    isArchived: true,
+    tagIds: [],
+    idempotencyKey: `note-live-task-${fixture.suffix}`,
+  } as CreateNoteInput;
+}
+
+/** Restricts the seeded Operations project; several cases depend on it. */
+async function restrictOperations(tx: DatabaseTransaction): Promise<void> {
+  await tx
+    .update(projects)
+    .set({ isRestricted: true })
+    .where(eq(projects.id, SEED_IDS.projects.alphaOperations));
+}
+
+describe.skipIf(!HAS_DATABASE)("Part 31 core note APIs (live PostgreSQL)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
-  let databaseReachable = false;
 
   beforeAll(async () => {
-    databaseReachable = await reachable(DATABASE_URL as string);
-    if (!databaseReachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 8 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -83,335 +217,320 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
     await pool?.end().catch(() => undefined);
   });
 
-  it("covers tenant-scoped creation, hierarchy, ordering, concurrency, trash, folders, access, and redaction", async ({
+  it("creates a tenant-scoped note and replays one idempotency key to the same row", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) {
+    if (db === undefined) {
       skip("no reachable disposable PostgreSQL");
       return;
     }
+    await withNotes(db, async (fixture) => {
+      const { service } = fixture;
+      const root = await service.create(rootPayload(fixture));
+      expect(root.note).toMatchObject({
+        type: "document",
+        pageSize: "letter",
+        isPinned: true,
+        contentPlain: `Plain ${fixture.suffix}`,
+        sortOrder: expect.any(Number),
+      });
+      const replay = await service.create(rootPayload(fixture));
+      expect(replay.note.id).toBe(root.note.id);
+    });
+  });
 
-    class Rollback extends Error {}
-    await expect(
-      db.transaction(async (tx) => {
-        await seedDatabase(tx);
-        const tenant = new TenantContextService();
-        const database = {
-          db: tx,
-          transaction: <T>(work: (scope: DatabaseTransaction) => Promise<T>) =>
-            tx.transaction(work),
-        } as unknown as DatabaseService;
-        const authorization = new AuthorizationEntryService(
-          new AuthorizationRepository(database, tenant),
-          new AuthorizationPolicyService(),
-          tenant,
-        );
-        const service = new NotesService(
-          database,
-          authorization,
-          tenant,
-          { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
-          new NoteVersionsService(tenant),
-        );
-        const shareService = new NoteSharesService(database, authorization, tenant);
-        const owner = principal(SEED_IDS.users.alphaOwner);
-        const admin = principal(SEED_IDS.users.alphaAdmin);
-        const editor = principal(SEED_IDS.users.alphaEditor);
-        const viewer = principal(SEED_IDS.users.alphaViewer);
-        const betaOwner = principal(SEED_IDS.users.betaOwner);
-        const suffix = randomUUID();
-        await tx
-          .update(projects)
-          .set({ isRestricted: true })
-          .where(eq(projects.id, SEED_IDS.projects.alphaOperations));
-        const doc = {
-          type: "doc" as const,
-          content: [{ type: "paragraph", content: [{ type: "text", text: `Plain ${suffix}` }] }],
-        };
+  it("enforces the note-share permission matrix, including self, cross-tenant and restricted grants", async ({
+    skip,
+  }) => {
+    if (db === undefined) {
+      skip("no reachable disposable PostgreSQL");
+      return;
+    }
+    await withNotes(db, async (fixture) => {
+      const { tx, service, shareService, owner, admin, editor, viewer, suffix } = fixture;
+      await restrictOperations(tx);
+      const shared = await service.create({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        title: `Shared ${suffix}`,
+        projectId: null,
+        folderId: null,
+        parentId: null,
+        type: "document",
+        pageSize: "a4",
+        isTemplate: false,
+        isPinned: false,
+        isArchived: false,
+        tagIds: [],
+        idempotencyKey: `note-live-share-${suffix}`,
+      });
 
-        const root = await service.create({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          title: `Root ${suffix}`,
-          projectId: null,
-          folderId: null,
-          parentId: null,
-          type: "document",
-          pageSize: "letter",
-          isTemplate: false,
-          isPinned: true,
-          isArchived: false,
-          tagIds: [SEED_IDS.tags.alphaPlanning],
-          content: doc,
-          idempotencyKey: `note-live-root-${suffix}`,
-        });
-        expect(root.note).toMatchObject({
-          type: "document",
-          pageSize: "letter",
-          isPinned: true,
-          contentPlain: `Plain ${suffix}`,
-          sortOrder: expect.any(Number),
-        });
-        const replay = await service.create({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          title: `Root ${suffix}`,
-          projectId: null,
-          folderId: null,
-          parentId: null,
-          type: "document",
-          pageSize: "letter",
-          isTemplate: false,
-          isPinned: true,
-          isArchived: false,
-          tagIds: [SEED_IDS.tags.alphaPlanning],
-          content: doc,
-          idempotencyKey: `note-live-root-${suffix}`,
-        });
-        expect(replay.note.id).toBe(root.note.id);
-
-        const shared = await service.create({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          title: `Shared ${suffix}`,
-          projectId: null,
-          folderId: null,
-          parentId: null,
-          type: "document",
-          pageSize: "a4",
-          isTemplate: false,
-          isPinned: false,
-          isArchived: false,
-          tagIds: [],
-          idempotencyKey: `note-live-share-${suffix}`,
-        });
-
-        const viewGrant = await shareService.upsert({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          noteId: shared.note.id,
-          userId: SEED_IDS.users.alphaEditor,
-          permission: "view",
-        });
-        expect(viewGrant.share.permission).toBe("view");
-        await expect(
-          service.update({
-            principal: editor,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: shared.note.id,
-            expectedVersion: shared.note.version,
-            title: `Denied editor update ${suffix}`,
-          }),
-        ).rejects.toMatchObject({ decision: { allowed: false } });
-        await expect(
-          shareService.upsert({
-            principal: editor,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: shared.note.id,
-            userId: SEED_IDS.users.alphaViewer,
-            permission: "view",
-          }),
-        ).rejects.toMatchObject({ decision: { allowed: false } });
-        await shareService.upsert({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          noteId: shared.note.id,
-          userId: SEED_IDS.users.alphaEditor,
-          permission: "edit",
-        });
-        await expect(
-          shareService.upsert({
-            principal: editor,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: shared.note.id,
-            userId: SEED_IDS.users.alphaViewer,
-            permission: "view",
-          }),
-        ).resolves.toMatchObject({ share: { permission: "view" } });
-        await expect(
-          shareService.upsert({
-            principal: editor,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: shared.note.id,
-            userId: SEED_IDS.users.alphaEditor,
-            permission: "view",
-          }),
-        ).rejects.toMatchObject({ safeResponse: { code: "NOTE_SHARE_SELF_DENIED" } });
-        await expect(
-          shareService.upsert({
-            principal: admin,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: shared.note.id,
-            userId: SEED_IDS.users.alphaViewer,
-            permission: "edit",
-          }),
-        ).resolves.toMatchObject({ share: { permission: "edit" } });
-        await expect(
-          shareService.upsert({
-            principal: viewer,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: shared.note.id,
-            userId: SEED_IDS.users.alphaEditor,
-            permission: "view",
-          }),
-        ).rejects.toMatchObject({ decision: { allowed: false } });
-        await expect(
-          shareService.upsert({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: shared.note.id,
-            userId: randomUUID(),
-            permission: "view",
-          }),
-        ).rejects.toMatchObject({ decision: { allowed: false } });
-        const editorUpdate = await service.update({
+      const viewGrant = await shareService.upsert({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: shared.note.id,
+        userId: SEED_IDS.users.alphaEditor,
+        permission: "view",
+      });
+      expect(viewGrant.share.permission).toBe("view");
+      await expect(
+        service.update({
           principal: editor,
           workspaceId: SEED_IDS.workspaces.alpha,
           noteId: shared.note.id,
           expectedVersion: shared.note.version,
-          title: `Authorized editor update ${suffix}`,
-        });
-        await shareService.upsert({
-          principal: owner,
+          title: `Denied editor update ${suffix}`,
+        }),
+      ).rejects.toMatchObject({ decision: { allowed: false } });
+      await expect(
+        shareService.upsert({
+          principal: editor,
+          workspaceId: SEED_IDS.workspaces.alpha,
+          noteId: shared.note.id,
+          userId: SEED_IDS.users.alphaViewer,
+          permission: "view",
+        }),
+      ).rejects.toMatchObject({ decision: { allowed: false } });
+      await shareService.upsert({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: shared.note.id,
+        userId: SEED_IDS.users.alphaEditor,
+        permission: "edit",
+      });
+      await expect(
+        shareService.upsert({
+          principal: editor,
+          workspaceId: SEED_IDS.workspaces.alpha,
+          noteId: shared.note.id,
+          userId: SEED_IDS.users.alphaViewer,
+          permission: "view",
+        }),
+      ).resolves.toMatchObject({ share: { permission: "view" } });
+      await expect(
+        shareService.upsert({
+          principal: editor,
           workspaceId: SEED_IDS.workspaces.alpha,
           noteId: shared.note.id,
           userId: SEED_IDS.users.alphaEditor,
           permission: "view",
-        });
-        await expect(
-          service.update({
-            principal: editor,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: shared.note.id,
-            expectedVersion: editorUpdate.note.version,
-            title: `Downgraded editor update ${suffix}`,
-          }),
-        ).rejects.toMatchObject({ decision: { allowed: false } });
-        await shareService.upsert({
-          principal: owner,
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "NOTE_SHARE_SELF_DENIED" } });
+      await expect(
+        shareService.upsert({
+          principal: admin,
           workspaceId: SEED_IDS.workspaces.alpha,
           noteId: shared.note.id,
-          userId: SEED_IDS.users.alphaEditor,
+          userId: SEED_IDS.users.alphaViewer,
           permission: "edit",
-        });
-        await shareService.revoke({
-          principal: owner,
+        }),
+      ).resolves.toMatchObject({ share: { permission: "edit" } });
+      await expect(
+        shareService.upsert({
+          principal: viewer,
           workspaceId: SEED_IDS.workspaces.alpha,
           noteId: shared.note.id,
           userId: SEED_IDS.users.alphaEditor,
-        });
-        await expect(
-          service.update({
-            principal: editor,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: shared.note.id,
-            expectedVersion: editorUpdate.note.version,
-            title: `Revoked editor update ${suffix}`,
-          }),
-        ).rejects.toMatchObject({ decision: { allowed: false } });
-        await expect(
-          shareService.upsert({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: shared.note.id,
-            userId: SEED_IDS.users.betaOwner,
-            permission: "view",
-          }),
-        ).rejects.toMatchObject({ decision: { allowed: false } });
-        await expect(
-          shareService.upsert({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: SEED_IDS.notes.alphaTaskNote,
-            userId: SEED_IDS.users.alphaViewer,
-            permission: "view",
-          }),
-        ).rejects.toMatchObject({ decision: { allowed: false } });
-
-        await expect(
-          service.create({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            title: "Cross tenant tag",
-            projectId: null,
-            folderId: null,
-            parentId: null,
-            type: "document",
-            pageSize: "a4",
-            isTemplate: false,
-            isPinned: false,
-            isArchived: false,
-            tagIds: [SEED_IDS.tags.betaResearch],
-            idempotencyKey: `note-live-cross-tag-${suffix}`,
-          }),
-        ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
-
-        const projectTask = await service.create({
+          permission: "view",
+        }),
+      ).rejects.toMatchObject({ decision: { allowed: false } });
+      await expect(
+        shareService.upsert({
           principal: owner,
           workspaceId: SEED_IDS.workspaces.alpha,
-          title: `Task template ${suffix}`,
-          projectId: SEED_IDS.projects.alphaLaunch,
-          folderId: SEED_IDS.folders.alphaHandbook,
-          parentId: null,
-          type: "task-list",
-          pageSize: "a4",
-          isTemplate: true,
-          isPinned: false,
-          isArchived: true,
-          tagIds: [],
-          idempotencyKey: `note-live-task-${suffix}`,
-        });
-        expect(projectTask.note).toMatchObject({
-          type: "task-list",
-          isTemplate: true,
-          isArchived: true,
-        });
-        const filteredTaskTemplates = await service.list({
+          noteId: shared.note.id,
+          userId: randomUUID(),
+          permission: "view",
+        }),
+      ).rejects.toMatchObject({ decision: { allowed: false } });
+      const editorUpdate = await service.update({
+        principal: editor,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: shared.note.id,
+        expectedVersion: shared.note.version,
+        title: `Authorized editor update ${suffix}`,
+      });
+      await shareService.upsert({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: shared.note.id,
+        userId: SEED_IDS.users.alphaEditor,
+        permission: "view",
+      });
+      await expect(
+        service.update({
+          principal: editor,
+          workspaceId: SEED_IDS.workspaces.alpha,
+          noteId: shared.note.id,
+          expectedVersion: editorUpdate.note.version,
+          title: `Downgraded editor update ${suffix}`,
+        }),
+      ).rejects.toMatchObject({ decision: { allowed: false } });
+      await shareService.upsert({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: shared.note.id,
+        userId: SEED_IDS.users.alphaEditor,
+        permission: "edit",
+      });
+      await shareService.revoke({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: shared.note.id,
+        userId: SEED_IDS.users.alphaEditor,
+      });
+      await expect(
+        service.update({
+          principal: editor,
+          workspaceId: SEED_IDS.workspaces.alpha,
+          noteId: shared.note.id,
+          expectedVersion: editorUpdate.note.version,
+          title: `Revoked editor update ${suffix}`,
+        }),
+      ).rejects.toMatchObject({ decision: { allowed: false } });
+      await expect(
+        shareService.upsert({
           principal: owner,
           workspaceId: SEED_IDS.workspaces.alpha,
-          page: 1,
-          limit: 10,
-          scope: "project",
-          projectId: SEED_IDS.projects.alphaLaunch,
-          type: "task-list",
-          view: "templates",
-          isArchived: true,
-          sortBy: "sortOrder",
-          sortDirection: "asc",
-        });
-        expect(filteredTaskTemplates.items.map((item) => item.id)).toContain(projectTask.note.id);
-        const navigation = await service.navigation({
+          noteId: shared.note.id,
+          userId: SEED_IDS.users.betaOwner,
+          permission: "view",
+        }),
+      ).rejects.toMatchObject({ decision: { allowed: false } });
+      await expect(
+        shareService.upsert({
           principal: owner,
           workspaceId: SEED_IDS.workspaces.alpha,
-          limit: 1,
-          includeArchived: true,
-        });
-        expect(navigation).toMatchObject({ returned: 1, truncated: true });
-        expect(navigation.items[0]).not.toHaveProperty("content");
+          noteId: SEED_IDS.notes.alphaTaskNote,
+          userId: SEED_IDS.users.alphaViewer,
+          permission: "view",
+        }),
+      ).rejects.toMatchObject({ decision: { allowed: false } });
+    });
+  });
 
-        await expect(
-          service.create({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            title: "Cross tenant folder",
-            projectId: null,
-            folderId: SEED_IDS.folders.betaLibrary,
-            parentId: null,
-            type: "document",
-            pageSize: "a4",
-            isTemplate: false,
-            isPinned: false,
-            isArchived: false,
-            tagIds: [],
-            idempotencyKey: `note-live-cross-folder-${suffix}`,
-          }),
-        ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
-
-        const child = await service.create({
+  it("refuses containers from another tenant and scopes listing and navigation", async ({
+    skip,
+  }) => {
+    if (db === undefined) {
+      skip("no reachable disposable PostgreSQL");
+      return;
+    }
+    await withNotes(db, async (fixture) => {
+      const { service, owner, suffix } = fixture;
+      await expect(
+        service.create({
           principal: owner,
           workspaceId: SEED_IDS.workspaces.alpha,
-          title: `Child ${suffix}`,
+          title: "Cross tenant tag",
           projectId: null,
+          folderId: null,
+          parentId: null,
+          type: "document",
+          pageSize: "a4",
+          isTemplate: false,
+          isPinned: false,
+          isArchived: false,
+          tagIds: [SEED_IDS.tags.betaResearch],
+          idempotencyKey: `note-live-cross-tag-${suffix}`,
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
+
+      const projectTask = await service.create({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        title: `Task template ${suffix}`,
+        projectId: SEED_IDS.projects.alphaLaunch,
+        folderId: SEED_IDS.folders.alphaHandbook,
+        parentId: null,
+        type: "task-list",
+        pageSize: "a4",
+        isTemplate: true,
+        isPinned: false,
+        isArchived: true,
+        tagIds: [],
+        idempotencyKey: `note-live-task-${suffix}`,
+      });
+      expect(projectTask.note).toMatchObject({
+        type: "task-list",
+        isTemplate: true,
+        isArchived: true,
+      });
+      const filteredTaskTemplates = await service.list({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        page: 1,
+        limit: 10,
+        scope: "project",
+        projectId: SEED_IDS.projects.alphaLaunch,
+        type: "task-list",
+        view: "templates",
+        isArchived: true,
+        sortBy: "sortOrder",
+        sortDirection: "asc",
+      });
+      expect(filteredTaskTemplates.items.map((item) => item.id)).toContain(projectTask.note.id);
+      const navigation = await service.navigation({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        limit: 1,
+        includeArchived: true,
+      });
+      expect(navigation).toMatchObject({ returned: 1, truncated: true });
+      expect(navigation.items[0]).not.toHaveProperty("content");
+
+      await expect(
+        service.create({
+          principal: owner,
+          workspaceId: SEED_IDS.workspaces.alpha,
+          title: "Cross tenant folder",
+          projectId: null,
+          folderId: SEED_IDS.folders.betaLibrary,
+          parentId: null,
+          type: "document",
+          pageSize: "a4",
+          isTemplate: false,
+          isPinned: false,
+          isArchived: false,
+          tagIds: [],
+          idempotencyKey: `note-live-cross-folder-${suffix}`,
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
+    });
+  });
+
+  it("keeps the hierarchy acyclic, versions updates, and renormalises sibling order on move", async ({
+    skip,
+  }) => {
+    if (db === undefined) {
+      skip("no reachable disposable PostgreSQL");
+      return;
+    }
+    await withNotes(db, async (fixture) => {
+      const { tx, service, owner, suffix, doc } = fixture;
+      const root = await service.create(rootPayload(fixture));
+      const projectTask = await service.create(projectTaskPayload(fixture));
+      const child = await service.create({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        title: `Child ${suffix}`,
+        projectId: null,
+        folderId: null,
+        parentId: root.note.id,
+        type: "document",
+        pageSize: "a4",
+        isTemplate: false,
+        isPinned: false,
+        isArchived: false,
+        tagIds: [],
+        idempotencyKey: `note-live-child-${suffix}`,
+      });
+      await expect(
+        service.create({
+          principal: owner,
+          workspaceId: SEED_IDS.workspaces.alpha,
+          title: "Container mismatch",
+          projectId: SEED_IDS.projects.alphaLaunch,
           folderId: null,
           parentId: root.note.id,
           type: "document",
@@ -420,401 +539,470 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
           isPinned: false,
           isArchived: false,
           tagIds: [],
-          idempotencyKey: `note-live-child-${suffix}`,
-        });
-        await expect(
-          service.create({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            title: "Container mismatch",
-            projectId: SEED_IDS.projects.alphaLaunch,
-            folderId: null,
-            parentId: root.note.id,
-            type: "document",
-            pageSize: "a4",
-            isTemplate: false,
-            isPinned: false,
-            isArchived: false,
-            tagIds: [],
-            idempotencyKey: `note-live-mismatch-${suffix}`,
-          }),
-        ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
-        await expect(
-          service.move({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: root.note.id,
-            expectedVersion: root.note.version,
-            projectId: null,
-            folderId: null,
-            parentId: child.note.id,
-          }),
-        ).rejects.toMatchObject({ safeResponse: { code: "NOTE_HIERARCHY_INVALID" } });
-
-        const updated = await service.update({
+          idempotencyKey: `note-live-mismatch-${suffix}`,
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
+      await expect(
+        service.move({
           principal: owner,
           workspaceId: SEED_IDS.workspaces.alpha,
           noteId: root.note.id,
           expectedVersion: root.note.version,
-          title: `Updated ${suffix}`,
-          type: "task-list",
-          content: doc,
-        });
-        expect(updated.note.version).toBe(root.note.version + 1);
-        expect(updated.note.type).toBe("task-list");
-        await expect(
-          service.update({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: root.note.id,
-            expectedVersion: root.note.version,
-            title: "Stale",
-          }),
-        ).rejects.toMatchObject({ safeResponse: { code: "VERSION_CONFLICT" } });
-
-        await tx
-          .update(notes)
-          .set({ sortOrder: 9 })
-          .where(inArray(notes.id, [SEED_IDS.notes.alphaPinnedRoot, SEED_IDS.notes.alphaDeleted]));
-        const renormalized = await service.move({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          noteId: root.note.id,
-          expectedVersion: updated.note.version,
           projectId: null,
           folderId: null,
-          parentId: null,
-          beforeNoteId: SEED_IDS.notes.alphaPinnedRoot,
-        });
-        const rootOrders = await tx
-          .select({ sortOrder: notes.sortOrder })
-          .from(notes)
-          .where(and(eq(notes.workspaceId, SEED_IDS.workspaces.alpha), isNull(notes.projectId)));
-        expect(rootOrders.every((row) => Number.isFinite(row.sortOrder))).toBe(true);
+          parentId: child.note.id,
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "NOTE_HIERARCHY_INVALID" } });
 
-        const moved = await service.move({
+      const updated = await service.update({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: root.note.id,
+        expectedVersion: root.note.version,
+        title: `Updated ${suffix}`,
+        type: "task-list",
+        content: doc,
+      });
+      expect(updated.note.version).toBe(root.note.version + 1);
+      expect(updated.note.type).toBe("task-list");
+      await expect(
+        service.update({
           principal: owner,
           workspaceId: SEED_IDS.workspaces.alpha,
           noteId: root.note.id,
-          expectedVersion: renormalized.note.version,
-          projectId: SEED_IDS.projects.alphaLaunch,
-          folderId: null,
-          parentId: null,
-          beforeNoteId: SEED_IDS.notes.alphaProjectOverview,
-        });
-        expect(moved.note.projectId).toBe(SEED_IDS.projects.alphaLaunch);
-        const movedChild = await tx
-          .select({ projectId: notes.projectId })
-          .from(notes)
-          .where(eq(notes.id, child.note.id));
-        expect(movedChild).toEqual([{ projectId: SEED_IDS.projects.alphaLaunch }]);
-        await expect(
-          service.move({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: projectTask.note.id,
-            expectedVersion: projectTask.note.version,
-            projectId: SEED_IDS.projects.alphaLaunch,
-            folderId: SEED_IDS.folders.alphaHandbook,
-            parentId: null,
-            beforeNoteId: root.note.id,
-          }),
-        ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
+          expectedVersion: root.note.version,
+          title: "Stale",
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "VERSION_CONFLICT" } });
 
-        const childBeforeDelete = await service.read({
+      await tx
+        .update(notes)
+        .set({ sortOrder: 9 })
+        .where(inArray(notes.id, [SEED_IDS.notes.alphaPinnedRoot, SEED_IDS.notes.alphaDeleted]));
+      const renormalized = await service.move({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: root.note.id,
+        expectedVersion: updated.note.version,
+        projectId: null,
+        folderId: null,
+        parentId: null,
+        beforeNoteId: SEED_IDS.notes.alphaPinnedRoot,
+      });
+      const rootOrders = await tx
+        .select({ sortOrder: notes.sortOrder })
+        .from(notes)
+        .where(and(eq(notes.workspaceId, SEED_IDS.workspaces.alpha), isNull(notes.projectId)));
+      expect(rootOrders.every((row) => Number.isFinite(row.sortOrder))).toBe(true);
+
+      const moved = await service.move({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: root.note.id,
+        expectedVersion: renormalized.note.version,
+        projectId: SEED_IDS.projects.alphaLaunch,
+        folderId: null,
+        parentId: null,
+        beforeNoteId: SEED_IDS.notes.alphaProjectOverview,
+      });
+      expect(moved.note.projectId).toBe(SEED_IDS.projects.alphaLaunch);
+      const movedChild = await tx
+        .select({ projectId: notes.projectId })
+        .from(notes)
+        .where(eq(notes.id, child.note.id));
+      expect(movedChild).toEqual([{ projectId: SEED_IDS.projects.alphaLaunch }]);
+      await expect(
+        service.move({
           principal: owner,
           workspaceId: SEED_IDS.workspaces.alpha,
-          noteId: child.note.id,
-        });
-        const independentlyDeletedChild = await service.softDelete({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          noteId: child.note.id,
-          expectedVersion: childBeforeDelete.version,
-        });
-        const [independentBatch] = await tx
-          .select({ deletionBatchId: notes.deletionBatchId })
-          .from(notes)
-          .where(eq(notes.id, child.note.id));
-        expect(independentBatch?.deletionBatchId).toEqual(expect.any(String));
-        const deleted = await service.softDelete({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          noteId: root.note.id,
-          expectedVersion: moved.note.version,
-        });
-        expect(deleted.affected).toBe(1);
-        const batches = await tx
-          .select({ id: notes.id, deletionBatchId: notes.deletionBatchId })
-          .from(notes)
-          .where(inArray(notes.id, [root.note.id, child.note.id]));
-        expect(new Set(batches.map((row) => row.deletionBatchId)).size).toBe(2);
-        await expect(
-          service.restore({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: child.note.id,
-            expectedVersion: independentlyDeletedChild.version,
-          }),
-        ).rejects.toMatchObject({ safeResponse: { code: "NOTE_ANCESTOR_DELETED" } });
-        await expect(
-          service.create({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            title: "Child of deleted note",
-            projectId: SEED_IDS.projects.alphaLaunch,
-            folderId: null,
-            parentId: root.note.id,
-            type: "document",
-            pageSize: "a4",
-            isTemplate: false,
-            isPinned: false,
-            isArchived: false,
-            tagIds: [],
-            idempotencyKey: `note-live-deleted-parent-${suffix}`,
-          }),
-        ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
-        const trash = await service.list({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          page: 1,
-          limit: 100,
-          scope: "project",
+          noteId: projectTask.note.id,
+          expectedVersion: projectTask.note.version,
           projectId: SEED_IDS.projects.alphaLaunch,
-          view: "trash",
-          sortBy: "updatedAt",
-          sortDirection: "desc",
-        });
-        expect(trash.items.map((item) => item.id)).toEqual(
-          expect.arrayContaining([root.note.id, child.note.id]),
-        );
-        const restored = await service.restore({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          noteId: root.note.id,
-          expectedVersion: deleted.version,
-        });
-        expect(restored.affected).toBe(1);
-        expect(
-          await tx
-            .select({ isDeleted: notes.isDeleted })
-            .from(notes)
-            .where(eq(notes.id, child.note.id)),
-        ).toEqual([{ isDeleted: true }]);
-        const childRestored = await service.restore({
+          folderId: SEED_IDS.folders.alphaHandbook,
+          parentId: null,
+          beforeNoteId: root.note.id,
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
+    });
+  });
+
+  it("trashes and restores a subtree in independent deletion batches", async ({ skip }) => {
+    if (db === undefined) {
+      skip("no reachable disposable PostgreSQL");
+      return;
+    }
+    await withNotes(db, async (fixture) => {
+      const { tx, service, owner, suffix } = fixture;
+      const root = await service.create(rootPayload(fixture));
+      const child = await service.create(childPayload(fixture, root.note.id));
+      const moved = await service.move({
+        principal: fixture.owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: root.note.id,
+        expectedVersion: root.note.version,
+        projectId: SEED_IDS.projects.alphaLaunch,
+        folderId: null,
+        parentId: null,
+      });
+      const childBeforeDelete = await service.read({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: child.note.id,
+      });
+      const independentlyDeletedChild = await service.softDelete({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: child.note.id,
+        expectedVersion: childBeforeDelete.version,
+      });
+      const [independentBatch] = await tx
+        .select({ deletionBatchId: notes.deletionBatchId })
+        .from(notes)
+        .where(eq(notes.id, child.note.id));
+      expect(independentBatch?.deletionBatchId).toEqual(expect.any(String));
+      const deleted = await service.softDelete({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: root.note.id,
+        expectedVersion: moved.note.version,
+      });
+      expect(deleted.affected).toBe(1);
+      const batches = await tx
+        .select({ id: notes.id, deletionBatchId: notes.deletionBatchId })
+        .from(notes)
+        .where(inArray(notes.id, [root.note.id, child.note.id]));
+      expect(new Set(batches.map((row) => row.deletionBatchId)).size).toBe(2);
+      await expect(
+        service.restore({
           principal: owner,
           workspaceId: SEED_IDS.workspaces.alpha,
           noteId: child.note.id,
           expectedVersion: independentlyDeletedChild.version,
-        });
-        expect(childRestored.affected).toBe(1);
-
-        const level1 = await service.createFolder({
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "NOTE_ANCESTOR_DELETED" } });
+      await expect(
+        service.create({
           principal: owner,
           workspaceId: SEED_IDS.workspaces.alpha,
-          name: `L1 ${suffix}`,
-          parentId: null,
-        });
-        const level2 = await service.createFolder({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          name: `L2 ${suffix}`,
-          parentId: level1.folder.id,
-        });
-        const level3 = await service.createFolder({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          name: `L3 ${suffix}`,
-          parentId: level2.folder.id,
-        });
-        await expect(
-          service.createFolder({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            name: "L4",
-            parentId: level3.folder.id,
-          }),
-        ).rejects.toMatchObject({ safeResponse: { code: "FOLDER_DEPTH_EXCEEDED" } });
-        await expect(
-          service.updateFolder({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            folderId: level1.folder.id,
-            parentId: level3.folder.id,
-          }),
-        ).rejects.toMatchObject({ safeResponse: { code: "FOLDER_HIERARCHY_INVALID" } });
-
-        const filed = await service.create({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          title: `Filed ${suffix}`,
-          projectId: null,
-          folderId: level3.folder.id,
-          parentId: null,
+          title: "Child of deleted note",
+          projectId: SEED_IDS.projects.alphaLaunch,
+          folderId: null,
+          parentId: root.note.id,
           type: "document",
           pageSize: "a4",
           isTemplate: false,
           isPinned: false,
           isArchived: false,
           tagIds: [],
-          idempotencyKey: `note-live-filed-${suffix}`,
-        });
-        const folderDeletion = await service.deleteFolder({
+          idempotencyKey: `note-live-deleted-parent-${suffix}`,
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
+      const trash = await service.list({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        page: 1,
+        limit: 100,
+        scope: "project",
+        projectId: SEED_IDS.projects.alphaLaunch,
+        view: "trash",
+        sortBy: "updatedAt",
+        sortDirection: "desc",
+      });
+      expect(trash.items.map((item) => item.id)).toEqual(
+        expect.arrayContaining([root.note.id, child.note.id]),
+      );
+      const restored = await service.restore({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: root.note.id,
+        expectedVersion: deleted.version,
+      });
+      expect(restored.affected).toBe(1);
+      expect(
+        await tx
+          .select({ isDeleted: notes.isDeleted })
+          .from(notes)
+          .where(eq(notes.id, child.note.id)),
+      ).toEqual([{ isDeleted: true }]);
+      const childRestored = await service.restore({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: child.note.id,
+        expectedVersion: independentlyDeletedChild.version,
+      });
+      expect(childRestored.affected).toBe(1);
+    });
+  });
+
+  it("bounds folder depth, refuses folder cycles, and unfiles notes when a tree is deleted", async ({
+    skip,
+  }) => {
+    if (db === undefined) {
+      skip("no reachable disposable PostgreSQL");
+      return;
+    }
+    await withNotes(db, async (fixture) => {
+      const { tx, service, owner, suffix } = fixture;
+      const level1 = await service.createFolder({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        name: `L1 ${suffix}`,
+        parentId: null,
+      });
+      const level2 = await service.createFolder({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        name: `L2 ${suffix}`,
+        parentId: level1.folder.id,
+      });
+      const level3 = await service.createFolder({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        name: `L3 ${suffix}`,
+        parentId: level2.folder.id,
+      });
+      await expect(
+        service.createFolder({
+          principal: owner,
+          workspaceId: SEED_IDS.workspaces.alpha,
+          name: "L4",
+          parentId: level3.folder.id,
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "FOLDER_DEPTH_EXCEEDED" } });
+      await expect(
+        service.updateFolder({
           principal: owner,
           workspaceId: SEED_IDS.workspaces.alpha,
           folderId: level1.folder.id,
-        });
-        expect(folderDeletion).toMatchObject({ removedFolders: 3, unfiledNotes: 1 });
-        expect(
-          await tx
-            .select({ folderId: notes.folderId })
-            .from(notes)
-            .where(eq(notes.id, filed.note.id)),
-        ).toEqual([{ folderId: null }]);
+          parentId: level3.folder.id,
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "FOLDER_HIERARCHY_INVALID" } });
 
+      const filed = await service.create({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        title: `Filed ${suffix}`,
+        projectId: null,
+        folderId: level3.folder.id,
+        parentId: null,
+        type: "document",
+        pageSize: "a4",
+        isTemplate: false,
+        isPinned: false,
+        isArchived: false,
+        tagIds: [],
+        idempotencyKey: `note-live-filed-${suffix}`,
+      });
+      const folderDeletion = await service.deleteFolder({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        folderId: level1.folder.id,
+      });
+      expect(folderDeletion).toMatchObject({ removedFolders: 3, unfiledNotes: 1 });
+      expect(
         await tx
-          .update(projects)
-          .set({ isRestricted: true })
-          .where(eq(projects.id, SEED_IDS.projects.alphaOperations));
-        await tx.insert(projectAccess).values({
-          projectId: SEED_IDS.projects.alphaOperations,
-          userId: SEED_IDS.users.alphaEditor,
-          role: "editor",
-          createdById: SEED_IDS.users.alphaOwner,
-        });
-        const viewerNavigation = await service.navigation({
-          principal: viewer,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          limit: 100,
-          includeArchived: true,
-        });
-        expect(viewerNavigation.items.map((item) => item.id)).not.toContain(
-          SEED_IDS.notes.alphaTaskNote,
-        );
-        const viewerPage = await service.list({
+          .select({ folderId: notes.folderId })
+          .from(notes)
+          .where(eq(notes.id, filed.note.id)),
+      ).toEqual([{ folderId: null }]);
+    });
+  });
+
+  it("hides a restricted project from a viewer and conceals another tenant's note as 404", async ({
+    skip,
+  }) => {
+    if (db === undefined) {
+      skip("no reachable disposable PostgreSQL");
+      return;
+    }
+    await withNotes(db, async (fixture) => {
+      const { tx, service, viewer, betaOwner } = fixture;
+      const root = await service.create(rootPayload(fixture));
+      await tx
+        .update(projects)
+        .set({ isRestricted: true })
+        .where(eq(projects.id, SEED_IDS.projects.alphaOperations));
+      await tx.insert(projectAccess).values({
+        projectId: SEED_IDS.projects.alphaOperations,
+        userId: SEED_IDS.users.alphaEditor,
+        role: "editor",
+        createdById: SEED_IDS.users.alphaOwner,
+      });
+      const viewerNavigation = await service.navigation({
+        principal: viewer,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        limit: 100,
+        includeArchived: true,
+      });
+      expect(viewerNavigation.items.map((item) => item.id)).not.toContain(
+        SEED_IDS.notes.alphaTaskNote,
+      );
+      const viewerPage = await service.list({
+        principal: viewer,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        page: 1,
+        limit: 100,
+        scope: "project",
+        projectId: SEED_IDS.projects.alphaLaunch,
+        view: "normal",
+        sortBy: "updatedAt",
+        sortDirection: "desc",
+      });
+      expect(
+        viewerPage.items.every((item) => item.projectId === SEED_IDS.projects.alphaLaunch),
+      ).toBe(true);
+      await expect(
+        service.list({
           principal: viewer,
           workspaceId: SEED_IDS.workspaces.alpha,
           page: 1,
-          limit: 100,
+          limit: 1,
           scope: "project",
-          projectId: SEED_IDS.projects.alphaLaunch,
+          projectId: SEED_IDS.projects.alphaOperations,
           view: "normal",
           sortBy: "updatedAt",
           sortDirection: "desc",
-        });
-        expect(
-          viewerPage.items.every((item) => item.projectId === SEED_IDS.projects.alphaLaunch),
-        ).toBe(true);
-        await expect(
-          service.list({
-            principal: viewer,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            page: 1,
-            limit: 1,
-            scope: "project",
-            projectId: SEED_IDS.projects.alphaOperations,
-            view: "normal",
-            sortBy: "updatedAt",
-            sortDirection: "desc",
-          }),
-        ).rejects.toMatchObject({ decision: { allowed: false } });
-        await expect(
-          service.read({
-            principal: betaOwner,
-            workspaceId: SEED_IDS.workspaces.beta,
-            noteId: root.note.id,
-          }),
-        ).rejects.toMatchObject({ decision: { allowed: false, httpStatus: 404 } });
+        }),
+      ).rejects.toMatchObject({ decision: { allowed: false } });
+      await expect(
+        service.read({
+          principal: betaOwner,
+          workspaceId: SEED_IDS.workspaces.beta,
+          noteId: root.note.id,
+        }),
+      ).rejects.toMatchObject({ decision: { allowed: false, httpStatus: 404 } });
+    });
+  });
 
-        const rootAfterRestore = await service.read({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          noteId: root.note.id,
-        });
-        const deletedAgain = await service.softDelete({
-          principal: owner,
-          workspaceId: SEED_IDS.workspaces.alpha,
-          noteId: root.note.id,
-          expectedVersion: rootAfterRestore.version,
-        });
-        await tx
-          .update(notes)
-          .set({ isDeleted: false, deletedAt: null, deletionBatchId: null })
-          .where(eq(notes.id, child.note.id));
-        await expect(
-          service.permanentDelete({
-            principal: owner,
-            workspaceId: SEED_IDS.workspaces.alpha,
-            noteId: root.note.id,
-            expectedVersion: deletedAgain.version,
-            expectedTitle: rootAfterRestore.title,
-          }),
-        ).rejects.toMatchObject({ safeResponse: { code: "NOTE_SUBTREE_ACTIVE" } });
-        await tx
-          .update(notes)
-          .set({ isDeleted: true, deletedAt: new Date(), deletionBatchId: randomUUID() })
-          .where(eq(notes.id, child.note.id));
-        await service.permanentDelete({
+  it("refuses to permanently delete a note whose subtree is still active", async ({ skip }) => {
+    if (db === undefined) {
+      skip("no reachable disposable PostgreSQL");
+      return;
+    }
+    await withNotes(db, async (fixture) => {
+      const { tx, service, owner } = fixture;
+      const root = await service.create(rootPayload(fixture));
+      const child = await service.create(childPayload(fixture, root.note.id));
+      const rootAfterRestore = await service.read({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: root.note.id,
+      });
+      const deletedAgain = await service.softDelete({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: root.note.id,
+        expectedVersion: rootAfterRestore.version,
+      });
+      await tx
+        .update(notes)
+        .set({ isDeleted: false, deletedAt: null, deletionBatchId: null })
+        .where(eq(notes.id, child.note.id));
+      await expect(
+        service.permanentDelete({
           principal: owner,
           workspaceId: SEED_IDS.workspaces.alpha,
           noteId: root.note.id,
           expectedVersion: deletedAgain.version,
           expectedTitle: rootAfterRestore.title,
-        });
-        expect(
-          await tx
-            .select({ id: notes.id })
-            .from(notes)
-            .where(inArray(notes.id, [root.note.id, child.note.id])),
-        ).toEqual([]);
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "NOTE_SUBTREE_ACTIVE" } });
+      await tx
+        .update(notes)
+        .set({ isDeleted: true, deletedAt: new Date(), deletionBatchId: randomUUID() })
+        .where(eq(notes.id, child.note.id));
+      await service.permanentDelete({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: root.note.id,
+        expectedVersion: deletedAgain.version,
+        expectedTitle: rootAfterRestore.title,
+      });
+      expect(
+        await tx
+          .select({ id: notes.id })
+          .from(notes)
+          .where(inArray(notes.id, [root.note.id, child.note.id])),
+      ).toEqual([]);
+    });
+  });
 
-        const intents = await tx
-          .select({ payload: jobOutbox.payload })
-          .from(jobOutbox)
-          .where(eq(jobOutbox.queueName, NOTE_DOMAIN_EVENT_QUEUE));
-        const audits = await tx
-          .select({ metadata: auditLogs.metadata })
-          .from(auditLogs)
-          .where(
-            and(
-              eq(auditLogs.workspaceId, SEED_IDS.workspaces.alpha),
-              inArray(auditLogs.entityType, ["note", "folder"]),
-            ),
-          );
-        const serialized = JSON.stringify({ intents, audits });
-        expect(serialized).not.toContain(`Updated ${suffix}`);
-        expect(serialized).not.toContain(`Plain ${suffix}`);
-        expect(serialized).not.toContain(SEED_IDS.tags.alphaPlanning);
-        expect(
-          intents.every((intent) =>
-            Object.keys(intent.payload).every((key) =>
-              ["action", "intentId", "workspaceId", "resourceIds", "actorId"].includes(key),
-            ),
+  it("keeps note titles, body text and tags out of durable intents and audit metadata", async ({
+    skip,
+  }) => {
+    if (db === undefined) {
+      skip("no reachable disposable PostgreSQL");
+      return;
+    }
+    await withNotes(db, async (fixture) => {
+      const { tx, service, shareService, owner, suffix, doc } = fixture;
+      const root = await service.create(rootPayload(fixture));
+      await service.update({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: root.note.id,
+        expectedVersion: root.note.version,
+        title: `Updated ${suffix}`,
+        content: doc,
+      });
+      // Share and revoke so `note.share.*` intents exist to inspect.
+      await shareService.upsert({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: root.note.id,
+        userId: SEED_IDS.users.alphaEditor,
+        permission: "edit",
+      });
+      await shareService.revoke({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        noteId: root.note.id,
+        userId: SEED_IDS.users.alphaEditor,
+      });
+      const intents = await tx
+        .select({ payload: jobOutbox.payload })
+        .from(jobOutbox)
+        .where(eq(jobOutbox.queueName, NOTE_DOMAIN_EVENT_QUEUE));
+      const audits = await tx
+        .select({ metadata: auditLogs.metadata })
+        .from(auditLogs)
+        .where(
+          and(
+            eq(auditLogs.workspaceId, SEED_IDS.workspaces.alpha),
+            inArray(auditLogs.entityType, ["note", "folder"]),
           ),
-        ).toBe(true);
-        const shareIntents = intents.filter((intent) =>
-          intent.payload.action.startsWith("note.share."),
         );
-        for (const intent of shareIntents) {
-          const payload = intent.payload as unknown as Record<string, unknown>;
-          // actorId legitimately identifies the actor who performed the share
-          // upsert, so exclude it when proving no other share field references
-          // the editor that was removed from the workspace.
-          const rest = Object.fromEntries(
-            Object.entries(payload).filter(([key]) => key !== "actorId"),
-          );
-          expect(JSON.stringify(rest)).not.toContain(SEED_IDS.users.alphaEditor);
-        }
-
-        throw new Rollback();
-      }),
-    ).rejects.toBeInstanceOf(Rollback);
+      const serialized = JSON.stringify({ intents, audits });
+      expect(serialized).not.toContain(`Updated ${suffix}`);
+      expect(serialized).not.toContain(`Plain ${suffix}`);
+      expect(serialized).not.toContain(SEED_IDS.tags.alphaPlanning);
+      expect(
+        intents.every((intent) =>
+          Object.keys(intent.payload).every((key) =>
+            ["action", "intentId", "workspaceId", "resourceIds", "actorId"].includes(key),
+          ),
+        ),
+      ).toBe(true);
+      const shareIntents = intents.filter((intent) =>
+        intent.payload.action.startsWith("note.share."),
+      );
+      for (const intent of shareIntents) {
+        const payload = intent.payload as unknown as Record<string, unknown>;
+        // actorId legitimately identifies the actor who performed the share
+        // upsert, so exclude it when proving no other share field references
+        // the editor that was removed from the workspace.
+        const rest = Object.fromEntries(
+          Object.entries(payload).filter(([key]) => key !== "actorId"),
+        );
+        expect(JSON.stringify(rest)).not.toContain(SEED_IDS.users.alphaEditor);
+      }
+    });
   });
 
   it("denies tenant SQL when an authorization adapter fails to establish TenantContext", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) {
+    if (db === undefined) {
       skip("no reachable disposable PostgreSQL");
       return;
     }
@@ -847,7 +1035,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
   it("uses independent pool transactions for concurrent updates and reorder races", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) {
+    if (db === undefined) {
       skip("no reachable disposable PostgreSQL");
       return;
     }
@@ -1068,7 +1256,16 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
       .update(notes)
       .set({ sortOrder: 1 })
       .where(inArray(notes.id, [first.note.id, second.note.id]));
-    const versionsBeforeRenormalize = new Map(ordered.map((row) => [row.id, row.version]));
+    // Read fresh, not from the earlier `ordered` snapshot: several moves have
+    // happened since, so a stale baseline would compare against the wrong number.
+    const versionsBeforeRenormalize = new Map(
+      (
+        await db
+          .select({ id: notes.id, version: notes.version })
+          .from(notes)
+          .where(inArray(notes.id, [first.note.id, second.note.id, third.note.id]))
+      ).map((row) => [row.id, row.version]),
+    );
     const thirdLatest = await setup.read({
       principal: owner,
       workspaceId: SEED_IDS.workspaces.alpha,
@@ -1094,12 +1291,32 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
       .from(notes)
       .where(inArray(notes.id, [first.note.id, second.note.id, third.note.id]));
     expect(new Set(afterRenormalize.map((row) => row.sortOrder)).size).toBe(3);
-    expect(
-      afterRenormalize
-        .filter((row) => row.id !== third.note.id)
-        .every((row) => row.version > (versionsBeforeRenormalize.get(row.id) ?? 0)),
-    ).toBe(true);
-    expect(afterRenormalize.every((row) => row.updatedById === owner.userId)).toBe(true);
+    /*
+     * INVERTED, and deliberately so — this assertion used to require the
+     * opposite.
+     *
+     * Renumbering a sibling is bookkeeping forced on it by someone else's
+     * insert, not an edit, so it must not bump `version`. Bumping it made
+     * `useNoteAutosave` (which holds `note.version`) raise a spurious
+     * "the note changed" conflict on a note the user never touched, and made
+     * `note-collaboration.service.ts` answer `version_mismatch` and force an
+     * epoch rebuild of a live collaborative document. `TasksService.renormalize`
+     * already refused to do this and says why in its own comment.
+     *
+     * It also removes an accidental dependency on run history: whether a given
+     * sibling got renumbered at all depends on how many notes the shared seeded
+     * workspace happens to hold, so "its version went up" was only reliably true
+     * on a clean database.
+     */
+    const untouched = afterRenormalize.filter((row) => row.id !== third.note.id);
+    expect(untouched).not.toHaveLength(0);
+    expect(untouched.every((row) => row.version === versionsBeforeRenormalize.get(row.id))).toBe(
+      true,
+    );
+    // The note actually being moved is a real edit and still carries the actor.
+    expect(afterRenormalize.find((row) => row.id === third.note.id)?.updatedById).toBe(
+      owner.userId,
+    );
 
     const raceTarget = await setup.read({
       principal: owner,
@@ -1138,6 +1355,55 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
     expect(finalRows.find((row) => row.id === second.note.id)?.version).toBe(
       raceTarget.version + 1,
     );
+
+    /*
+     * TWO MOVES INTO EACH OTHER MUST NOT BOTH COMMIT.
+     *
+     * `move(A under B)` and `move(B under A)` racing produced a parent loop:
+     * both walked the ancestor chain with unlocked reads, both saw no cycle, and
+     * both committed. The result is two notes pointing at each other — absent
+     * from every listing (neither is reachable from a root) and undeletable (the
+     * subtree walk never terminates). No repair path exists through the API.
+     *
+     * The advisory lock already made these two collide; what was missing is that
+     * `assertNoNoteCycle` ran BEFORE it and so re-evaluated nothing. It now runs
+     * after, and `read committed` gives that re-read a fresh statement snapshot
+     * carrying the winner's commit.
+     */
+    const loopA = await create("LoopA");
+    const loopB = await create("LoopB");
+    const loopBarrier = new Barrier();
+    const [moveA, moveB] = concurrentServices(loopBarrier);
+    const base = {
+      principal: owner,
+      workspaceId: SEED_IDS.workspaces.alpha,
+      projectId: null,
+      folderId: null,
+      beforeNoteId: null,
+    };
+    const loop = await Promise.allSettled([
+      moveA.move({
+        ...base,
+        noteId: loopA.note.id,
+        expectedVersion: loopA.note.version,
+        parentId: loopB.note.id,
+      }),
+      moveB.move({
+        ...base,
+        noteId: loopB.note.id,
+        expectedVersion: loopB.note.version,
+        parentId: loopA.note.id,
+      }),
+    ]);
+    expect(loop.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+
+    const loopRows = await db
+      .select({ id: notes.id, parentId: notes.parentId })
+      .from(notes)
+      .where(inArray(notes.id, [loopA.note.id, loopB.note.id]));
+    // Exactly one of the pair was re-parented; the other is still a root. Two
+    // non-null parents here IS the loop.
+    expect(loopRows.filter((row) => row.parentId !== null)).toHaveLength(1);
   });
 
   /*
@@ -1151,7 +1417,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
   it("locks only the subtree it is deleting, and refuses a corrupted hierarchy", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) {
+    if (db === undefined) {
       skip("no reachable disposable PostgreSQL");
       return;
     }

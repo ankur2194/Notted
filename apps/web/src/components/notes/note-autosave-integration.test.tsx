@@ -82,10 +82,24 @@ function plainText(document: NoteDocument): string {
  * called. Without a rejection signal autosave would simply go quiet while the
  * writer kept typing.
  */
+/**
+ * Produce a document the contract genuinely refuses.
+ *
+ * This used to insert 260 TOP-LEVEL paragraphs, which worked only because the
+ * per-node `maxChildren: 200` was also being applied to the document root — the
+ * defect that made a four-page note unsaveable and unopenable. With the root
+ * budget separated out, 260 blocks is an ordinary note, so the helper has to
+ * violate something that is still invalid by design: fan-out under ONE node,
+ * which the per-node cap exists for and keeps.
+ */
 function rejectDocument(editor: Editor): void {
-  editor.commands.insertContent(
-    Array.from({ length: 260 }, () => ({ type: "paragraph" as const })),
-  );
+  editor.commands.insertContent({
+    type: "blockquote",
+    content: Array.from({ length: 260 }, () => ({
+      type: "paragraph" as const,
+      content: [{ type: "text" as const, text: "x" }],
+    })),
+  });
 }
 
 describe("note autosave through the real editor", () => {

@@ -53,6 +53,15 @@ export interface CommentSummary {
 /** One top-level comment with its replies, oldest first. */
 export interface CommentThread extends CommentSummary {
   readonly replies: readonly CommentSummary[];
+  /**
+   * `true` when this thread has more replies than the server returns.
+   *
+   * Replies are capped PER THREAD rather than across the page, so one very long
+   * argument cannot starve the other threads — and the cap is reported instead
+   * of applied silently, because a truncated list that looks complete is worse
+   * than an obviously partial one.
+   */
+  readonly repliesTruncated: boolean;
 }
 
 export interface CommentPage {

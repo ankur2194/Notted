@@ -18,11 +18,12 @@
 // because rendering a hostname we cannot currently confirm is the failure mode
 // this whole part exists to avoid.
 //
-// A host the API DEFINITIVELY refused is remembered for 60 s in a bounded map,
-// so a flood of bogus `Host` headers does not buy a round trip per request. A
-// host the API merely failed to answer for is NOT remembered — see
-// `ResolveOutcome` below. The `next: { revalidate }` hint is left on the fetch
-// for the day the proxy runtime honours it; today it does not.
+// A host the API DEFINITIVELY answered for — refused OR resolved — is remembered
+// for 60 s in a bounded map, so neither a flood of bogus `Host` headers nor a
+// busy tenant buys a round trip per request. A host the API merely failed to
+// answer for is NOT remembered — see `ResolveOutcome` below. The
+// `next: { revalidate }` hint is left on the fetch for the day the proxy runtime
+// honours it; today it does not.
 
 import { DOMAIN_API_PATHS } from "@notted/shared-types";
 import { NextResponse, type NextRequest } from "next/server";
@@ -43,38 +44,52 @@ const RESOLVE_CACHE_SECONDS = 60;
 type ResolveOutcome = ResolvedCustomHost | "unknown" | "unavailable";
 
 /**
+ * The two outcomes the API answered definitively, and therefore the two that
+ * are safe to remember. `"unavailable"` is deliberately absent from the union.
+ */
+type MemoizedOutcome = ResolvedCustomHost | "unknown";
+
+/**
  * ponytail: a bounded per-process Map, not a shared cache.
  *
  * `next: { revalidate }` does nothing in the proxy runtime — the Next data
- * cache is not available here — so without this every request on an unknown
- * hostname is its own `resolve` round trip, which is what makes a bogus-Host
- * flood cheap for the sender and expensive for us. 500 entries at ~60 bytes
- * each is negligible, and eviction is oldest-first because a `Map` already
- * keeps insertion order and an LRU would need a second structure.
+ * cache is not available here — so without this EVERY request on a non-primary
+ * hostname is its own `resolve` round trip: one per bogus `Host` header, and
+ * one per page view on a real tenant domain. 500 entries at ~120 bytes each is
+ * negligible, and eviction is oldest-first because a `Map` already keeps
+ * insertion order and an LRU would need a second structure.
  *
- * The ceiling: it is per process, so N instances each pay their own first miss,
- * and a hostname verified during the window still 404s for up to 60 s on the
- * instances that saw it before. Upgrade path is the same as the API's
+ * Only the resolve OUTCOME is memoized, never the decision — that also depends
+ * on the request path and the selection cookie, so it is recomputed every time.
+ *
+ * The ceiling: it is per process, so N instances each pay their own first miss;
+ * a hostname verified during the window still 404s for up to 60 s on instances
+ * that saw it before; and a domain transferred between workspaces serves the
+ * previous workspace's SHELL for up to 60 s — every API route still
+ * re-authorizes, `VerifiedHostsService` still refuses at the data layer, and the
+ * selection cookie is host-only, so it is incoherence for less than a minute,
+ * not a data leak, and shorter than the DNS and certificate latency a real
+ * transfer needs anyway. Upgrade path is the same as the API's
  * `VerifiedHostsService`: a Redis pub/sub invalidation on `domain.verified`.
  */
-const UNKNOWN_HOST_MEMO_MS = 60_000;
-const UNKNOWN_HOST_MEMO_MAX = 500;
-const unknownHosts = new Map<string, number>();
+const HOST_MEMO_MS = 60_000;
+const HOST_MEMO_MAX = 500;
+const hostMemo = new Map<string, { readonly until: number; readonly outcome: MemoizedOutcome }>();
 
-function isKnownUnknown(host: string): boolean {
-  const until = unknownHosts.get(host);
-  if (until === undefined) return false;
-  if (until > Date.now()) return true;
-  unknownHosts.delete(host);
-  return false;
+function readMemo(host: string): MemoizedOutcome | undefined {
+  const entry = hostMemo.get(host);
+  if (entry === undefined) return undefined;
+  if (entry.until > Date.now()) return entry.outcome;
+  hostMemo.delete(host);
+  return undefined;
 }
 
-function rememberUnknown(host: string): void {
-  if (unknownHosts.size >= UNKNOWN_HOST_MEMO_MAX) {
-    const oldest = unknownHosts.keys().next().value;
-    if (oldest !== undefined) unknownHosts.delete(oldest);
+function rememberOutcome(host: string, outcome: MemoizedOutcome): void {
+  if (hostMemo.size >= HOST_MEMO_MAX) {
+    const oldest = hostMemo.keys().next().value;
+    if (oldest !== undefined) hostMemo.delete(oldest);
   }
-  unknownHosts.set(host, Date.now() + UNKNOWN_HOST_MEMO_MS);
+  hostMemo.set(host, { until: Date.now() + HOST_MEMO_MS, outcome });
 }
 
 async function resolveHost(host: string): Promise<ResolveOutcome> {
@@ -127,18 +142,17 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return NextResponse.next();
   }
 
-  // A host the API already refused inside the memo window costs no round trip.
-  if (isKnownUnknown(host)) return notFound();
-
   // THERE IS NO SEPARATE WEB-SIDE FEATURE FLAG. The API's `CUSTOM_DOMAINS_ENABLED`
   // is the one switch: with it off, `resolve` answers 404 for every host, so this
   // call already refuses every non-primary hostname. A second flag here could
   // only ever disagree with the first.
-  const outcome = await resolveHost(host);
-  if (outcome === "unknown") {
-    rememberUnknown(host);
-    return notFound();
-  }
+  //
+  // A host the API already answered for inside the memo window costs no round
+  // trip, in either direction.
+  const memoized = readMemo(host);
+  const outcome = memoized ?? (await resolveHost(host));
+  if (memoized === undefined && outcome !== "unavailable") rememberOutcome(host, outcome);
+  if (outcome === "unknown") return notFound();
 
   const decision = decideCustomHostRoute({
     ...shared,

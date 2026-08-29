@@ -4,15 +4,14 @@ import { resolve } from "node:path";
 import { sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
 const MIGRATION_0007 = resolve(MIGRATIONS_FOLDER, "0007_early_bloodaxe.sql");
-
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 
 describe("migration 0007 data safety (unit)", () => {
   it("copies verification timestamps before the explicit timestamp-to-boolean conversion", async () => {
@@ -51,34 +50,15 @@ describe("migration 0007 data safety (unit)", () => {
   });
 });
 
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => {
-      /* connection cleanup is best-effort during the reachability probe */
-    });
-  }
-}
-
 // The whole suite is skipped when DATABASE_URL is not exported (e.g. CI). When
 // the variable is set, the suite still skips each test if PostgreSQL is not
 // reachable, so a developer without dev compose running gets a clear skip.
-describe.skipIf(!HAS_DATABASE_URL)("database migration (live)", () => {
+describe.skipIf(!HAS_DATABASE)("database migration (live)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase | undefined;
-  let reachable = false;
 
   beforeAll(async () => {
-    reachable = await isDatabaseReachable(DATABASE_URL as string);
-    if (!reachable) {
-      return;
-    }
+    await requireDatabase();
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 1 });
     db = drizzle(pool);
   });
@@ -94,7 +74,7 @@ describe.skipIf(!HAS_DATABASE_URL)("database migration (live)", () => {
   it("applies migrations without losing pre-existing seeded data and runs a trivial query", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -128,7 +108,7 @@ describe.skipIf(!HAS_DATABASE_URL)("database migration (live)", () => {
   it("preserves old verification timestamps under migration 0007's PostgreSQL conversion", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -195,7 +175,7 @@ describe.skipIf(!HAS_DATABASE_URL)("database migration (live)", () => {
   });
 
   it("has enabled the uuid-ossp and vector extensions", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

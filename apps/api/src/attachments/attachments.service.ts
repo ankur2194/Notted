@@ -90,6 +90,9 @@ import type {
 import type { Readable } from "node:stream";
 
 const ATTACHMENTS_BUCKET = "attachments" as const;
+
+/** Attachments returned for one note. Reported via `truncated`, never silent. */
+const MAX_NOTE_ATTACHMENTS_RETURNED = 200;
 /** Keys are random and immutable, so a rendition can be cached indefinitely. */
 const CONTENT_CACHE_CONTROL = "private, max-age=31536000, immutable";
 
@@ -612,8 +615,18 @@ export class AttachmentsService {
             whereWorkspace(attachments, this.tenantContext),
           ),
         )
-        .orderBy(asc(attachments.createdAt), asc(attachments.id));
-      return Object.freeze({ items: Object.freeze(rows.map((row) => this.toMedia(row))) });
+        .orderBy(asc(attachments.createdAt), asc(attachments.id))
+        // `limit + 1` then slice — the same shape `NoteSharesService.list` uses —
+        // so truncation is observed rather than inferred. This list previously
+        // had no bound at all.
+        .limit(MAX_NOTE_ATTACHMENTS_RETURNED + 1);
+      const visible = rows.slice(0, MAX_NOTE_ATTACHMENTS_RETURNED);
+      return Object.freeze({
+        items: Object.freeze(visible.map((row) => this.toMedia(row))),
+        limit: MAX_NOTE_ATTACHMENTS_RETURNED,
+        returned: visible.length,
+        truncated: rows.length > MAX_NOTE_ATTACHMENTS_RETURNED,
+      });
     });
   }
 

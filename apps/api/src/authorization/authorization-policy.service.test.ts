@@ -529,6 +529,34 @@ describe("AuthorizationPolicyService", () => {
     ).toBe(true);
   });
 
+  /*
+   * The load-bearing negative for the invite step-up.
+   *
+   * Freshness for `invite` is enforced in `MembershipsService.invite`, NOT by
+   * adding `member.invite` to `HIGH_RISK_ACTIONS` — because that one action also
+   * authorizes `listInvitations`, `resend`, `revoke`, the invitation-email
+   * worker, and `ShellService`'s `canManageMembers` capability probe. Gating it
+   * at the policy layer would evaluate freshness on all of them, so with
+   * `AUTH_RECENT_AUTH_SECONDS` at 600 the members section would disappear from
+   * the shell of every session more than ten minutes old.
+   *
+   * If someone later "simplifies" the service check into the policy set, this
+   * is the test that says why not.
+   */
+  it("keeps member.invite out of the step-up set so the shell probe survives a stale session", () => {
+    const stale: UserAuthorizationActor = { ...actor, isFresh: false };
+    expect(
+      policy.decide(evaluation("owner", "member.invite", resourceFor("member.invite"), stale), NOW)
+        .allowed,
+    ).toBe(true);
+    // Its neighbours genuinely are step-up gated, and stay that way.
+    for (const action of ["member.update", "member.remove"] as const) {
+      expect(
+        policy.decide(evaluation("owner", action, resourceFor(action), stale), NOW),
+      ).toMatchObject({ allowed: false, code: "authorization.recent_authentication_required" });
+    }
+  });
+
   it("allows only owner/admin to read and export the audit trail", () => {
     expect(policy.decide(evaluation("owner", "audit.read"), NOW).allowed).toBe(true);
     expect(policy.decide(evaluation("owner", "audit.export"), NOW).allowed).toBe(true);

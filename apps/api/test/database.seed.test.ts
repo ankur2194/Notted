@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { and, asc, count, eq, inArray, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { type Database, type DatabaseTransaction } from "../src/database/database.service";
@@ -36,28 +36,13 @@ import {
   seedDatabase,
 } from "../src/database/seed";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 const DATABASE_URL = process.env.DATABASE_URL;
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 class RollbackSeedTest extends Error {}
-
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => {
-      /* connection cleanup is best-effort during the reachability probe */
-    });
-  }
-}
 
 function allSeedIds(value: unknown): string[] {
   if (typeof value === "string") {
@@ -258,16 +243,12 @@ describe("Part 20 deterministic seed fixtures (unit)", () => {
   });
 });
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 20 deterministic seed (live)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 20 deterministic seed (live)", () => {
   let pool: Pool | undefined;
   let db: Database | undefined;
-  let reachable = false;
 
   beforeAll(async () => {
-    reachable = await isDatabaseReachable(DATABASE_URL as string);
-    if (!reachable) {
-      return;
-    }
+    await requireDatabase();
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 1 });
     const database = drizzle(pool, { schema });
     db = database;
@@ -285,7 +266,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 20 deterministic seed (live)", () => {
   it("reseeds atomically without duplicates and keeps both scenarios browsable and isolated", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

@@ -608,6 +608,7 @@ export function PageContainer({
             canRestore={canUpdate}
             saveStatus={autosave.status}
             hasUnsavedWork={autosave.hasUnsavedWork}
+            hasUnacknowledgedWork={autosave.hasUnacknowledgedWork}
           />
         </div>
       </div>

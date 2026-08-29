@@ -120,7 +120,10 @@ describe("AuthorizationAdaptersService contracts", () => {
       correlationId: "job-1",
     });
     expect(operation.actor).toMatchObject({ source: "user-job", sessionId: null, isFresh: false });
-    expect(repository.findMembership).toHaveBeenCalledWith(WORKSPACE_ID, USER_ID);
+    // The third argument is the optional transaction runner, which only the two
+    // note callers that authorize inside an open transaction ever supply — a
+    // job path passes nothing and the repository falls back to the pool.
+    expect(repository.findMembership).toHaveBeenCalledWith(WORKSPACE_ID, USER_ID, undefined);
     expect(repository.loadResource).toHaveBeenCalledOnce();
     expect(decide).toHaveBeenCalledOnce();
   });

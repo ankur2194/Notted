@@ -1,6 +1,11 @@
-import { Inject, Injectable, type OnModuleDestroy } from "@nestjs/common";
+import { setTimeout } from "node:timers/promises";
+
+import { Inject, Injectable, type OnApplicationShutdown } from "@nestjs/common";
+
+import { StructuredLogger } from "../common/logging/structured-logger.service";
 
 import { DATABASE, DATABASE_POOL } from "./database.tokens";
+import { isRetryableTransactionError } from "./postgres-error-code";
 
 import type { Schema } from "./schema";
 import type { ExtractTablesWithRelations } from "drizzle-orm";
@@ -25,6 +30,11 @@ export type DatabaseTransaction = PgTransaction<
   ExtractTablesWithRelations<Schema>
 >;
 
+/** Three tries total: one optimistic, two retries. */
+const TRANSACTION_ATTEMPTS = 3;
+const RETRY_BASE_MS = 25;
+const RETRY_CAP_MS = 200;
+
 /**
  * Thin application wrapper around the Drizzle `db` handle and its `pg.Pool`.
  *
@@ -35,17 +45,63 @@ export type DatabaseTransaction = PgTransaction<
  * `AGENTS.md` for multi-table invariants.
  */
 @Injectable()
-export class DatabaseService implements OnModuleDestroy {
+export class DatabaseService implements OnApplicationShutdown {
   constructor(
     @Inject(DATABASE_POOL) private readonly pool: Pool,
     @Inject(DATABASE) readonly db: Database,
+    private readonly logger: StructuredLogger,
   ) {}
 
-  transaction<T>(
+  /**
+   * Runs `work` in a transaction, retrying a serialisation failure or a deadlock.
+   *
+   * PostgreSQL's contract for `serializable` is explicitly "the client retries
+   * on 40001", and eighteen call sites in this codebase ask for that isolation
+   * level. Nothing implemented the other half: two people creating a folder in
+   * the same workspace at the same moment produced a 500 for whichever one lost,
+   * for a conflict neither of them caused and both would win on a second try.
+   *
+   * DEFAULT-ON RATHER THAN OPT-IN. An opt-in flag fixes none of the ~90 call
+   * sites until each is edited, and the sites that most need it are the ones
+   * nobody is looking at. Retrying a whole transaction is safe here because
+   * nothing has committed — and that was checked call site by call site, not
+   * assumed: every object-storage write and every queue/socket fan-out already
+   * happens OUTSIDE the transaction (ADR 0006 holds in fact, not only on paper),
+   * and identifiers minted inside a callback are only ever persisted within that
+   * same transaction, so a rollback erases them and the retry re-mints
+   * consistently.
+   *
+   * Logged once on exhaustion, never per attempt: a silent retry layer is an
+   * operational blind spot, and a line per attempt is noise.
+   *
+   * ponytail: three attempts, full jitter, no retry counter — a caller that
+   * needs a longer budget gets neither. Bounded on purpose, so genuine hot-row
+   * contention surfaces as an error rather than as pool exhaustion. Upgrade
+   * path: per-call `{ attempts }`, and a `db_transaction_retry_total` counter
+   * beside `poolStats()`.
+   */
+  async transaction<T>(
     work: (tx: DatabaseTransaction) => Promise<T>,
     config?: PgTransactionConfig,
   ): Promise<T> {
-    return this.db.transaction(work, config);
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.db.transaction(work, config);
+      } catch (error: unknown) {
+        if (!isRetryableTransactionError(error) || attempt >= TRANSACTION_ATTEMPTS) {
+          if (isRetryableTransactionError(error)) {
+            this.logger.warning(
+              { component: "database", outcome: "serialization_retry_exhausted", attempt },
+              "Transaction still conflicting after every retry",
+            );
+          }
+          throw error;
+        }
+        // Full jitter: two transactions that just collided must not agree on
+        // when to try again, or they collide identically.
+        await setTimeout(Math.random() * Math.min(RETRY_CAP_MS, RETRY_BASE_MS * 2 ** attempt));
+      }
+    }
   }
 
   /**
@@ -70,7 +126,23 @@ export class DatabaseService implements OnModuleDestroy {
     };
   }
 
-  async onModuleDestroy(): Promise<void> {
+  /**
+   * The pool closes in `onApplicationShutdown`, NOT `onModuleDestroy`.
+   *
+   * Nest's order is `onModuleDestroy` -> `beforeApplicationShutdown` ->
+   * `dispose()` -> `onApplicationShutdown` (`@nestjs/core`'s
+   * `nest-application-context.js`), so closing at `onModuleDestroy` shut the
+   * database before any other hook had run. That is what made
+   * `NoteCollaborationProjectionService` unable to honour ADR 0004's
+   * "a pending projection is flushed on graceful shutdown" — its flush could
+   * only ever have produced errors against a dead pool.
+   *
+   * Closing later is strictly safer, and it also makes this consistent with
+   * every other infrastructure owner in the codebase — `RedisService`,
+   * `MinioService`, `MeilisearchService` and `QueueLifecycleService` all already
+   * close here. `DatabaseService` was the outlier.
+   */
+  async onApplicationShutdown(): Promise<void> {
     await this.pool.end();
   }
 }

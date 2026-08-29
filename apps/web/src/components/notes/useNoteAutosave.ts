@@ -59,6 +59,12 @@ export interface NoteAutosaveHandle {
   readonly documentRejected: boolean;
   readonly hasUnsavedWork: boolean;
   /**
+   * Whether anything is unacknowledged at the moment of the call, including a
+   * collaborative session's unsent Yjs updates. Read at the point of action;
+   * `hasUnsavedWork` is the render-time half and cannot see the probe.
+   */
+  readonly hasUnacknowledgedWork: () => boolean;
+  /**
    * Register a source of unacknowledged work this machine cannot see — the
    * collaborative session's unsent Yjs updates. Pulled synchronously inside
    * `beforeunload`; returns its own withdrawal.
@@ -109,6 +115,24 @@ export function useNoteAutosave({
   const dispatchRef = useRef<(event: AutosaveEvent) => void>(() => undefined);
   /** Set by `registerUnsavedWorkProbe`; read only by the unload handler. */
   const unsavedWorkProbe = useRef<(() => boolean) | null>(null);
+
+  /**
+   * Is this tab holding work the server has not acknowledged, right now?
+   *
+   * `hasUnsavedWork` covers the PATCH this machine owns; the probe covers a
+   * collaborative session's unsent Yjs updates, which this machine cannot see at
+   * all — in collaborative mode it never receives a `document-changed`, so it
+   * would report "nothing pending" while the tab holds edits the status line
+   * promised would sync.
+   *
+   * A function, not a boolean, because both callers need the answer at the
+   * instant they act — `beforeunload`, where no render can intervene, and the
+   * Restore guard, where a stale render-time value would let a click through.
+   */
+  const hasUnacknowledgedWork = useCallback(
+    (): boolean => hasUnsavedWork(stateRef.current) || unsavedWorkProbe.current?.() === true,
+    [],
+  );
 
   const performSave = useCallback(
     async (effect: Extract<AutosaveEffect, { kind: "save" }>): Promise<void> => {
@@ -233,12 +257,10 @@ export function useNoteAutosave({
      * being discarded.
      */
     function handleBeforeUnload(event: BeforeUnloadEvent): void {
-      // Two writers, one prompt. `hasUnsavedWork` covers the PATCH this machine
-      // owns; the probe covers a collaborative session's unsent Yjs updates,
-      // which this machine cannot see at all — in collaborative mode it never
-      // receives a `document-changed`, so it would report "nothing pending"
-      // while the tab holds edits the status line promised would sync.
-      if (!hasUnsavedWork(stateRef.current) && unsavedWorkProbe.current?.() !== true) return;
+      // Two writers, one prompt — and now one expression, shared with the
+      // Restore guard so the two can never disagree about whether this tab is
+      // holding work.
+      if (!hasUnacknowledgedWork()) return;
       event.preventDefault();
       event.returnValue = "";
     }
@@ -328,6 +350,7 @@ export function useNoteAutosave({
     savedDocument: snapshot.savedDocument,
     documentRejected: snapshot.documentRejected,
     hasUnsavedWork: hasUnsavedWork(snapshot),
+    hasUnacknowledgedWork,
     registerUnsavedWorkProbe,
     onDocumentChange,
     onDocumentBaseline,

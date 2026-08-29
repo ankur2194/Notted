@@ -236,3 +236,34 @@ describe("Part 31 note validators with the Part 33 document contract", () => {
     ).toBe(true);
   });
 });
+
+describe("title and folder-name character safety", () => {
+  const RLO = "\u202E";
+  const ZWSP = "\u200B";
+
+  /*
+   * A title STRIPS rather than rejects. `photo<RLO>gnp.exe` reads to a human as
+   * `photoexe.png`, and the author cannot see the character that would be
+   * blocking their save — so refusing here is a support ticket with no
+   * diagnosis, and unlike a document node a stored title has no migration path
+   * to salvage it later.
+   */
+  it("strips bidirectional overrides and zero-width characters from a title", () => {
+    const parsed = createNoteSchema.parse({ title: `Report${RLO}fdp.exe` });
+    expect(parsed.title).toBe("Reportfdp.exe");
+    expect(parsed.title).not.toContain(RLO);
+
+    expect(createNoteSchema.parse({ title: `Plan${ZWSP}ning` }).title).toBe("Planning");
+    // Ordinary text is untouched.
+    expect(createNoteSchema.parse({ title: "Café résumé 🎉" }).title).toBe("Café résumé 🎉");
+  });
+
+  /*
+   * The strip runs BEFORE the length check, so a title made only of invisible
+   * characters fails rather than passing on the strength of characters that
+   * were about to be removed.
+   */
+  it("refuses a title that is nothing but invisible characters", () => {
+    expect(() => createNoteSchema.parse({ title: `${ZWSP}${RLO}${ZWSP}` })).toThrow();
+  });
+});

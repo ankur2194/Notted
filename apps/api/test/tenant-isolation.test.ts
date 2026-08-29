@@ -32,7 +32,7 @@ import { resolve } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
@@ -87,7 +87,7 @@ import {
   type TenantContext,
 } from "../src/tenant";
 
-import { expectPostgresErrorCode } from "./database-test-helpers";
+import { expectPostgresErrorCode, HAS_DATABASE, requireDatabase } from "./database-test-helpers";
 
 import type { DatabaseService, DatabaseTransaction } from "../src/database/database.service";
 import type { NoteSearchIndexProducer } from "../src/search/note-search-index-producer";
@@ -96,9 +96,6 @@ import type { PgTransactionConfig } from "drizzle-orm/pg-core/session";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
-
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 
 /** PostgreSQL foreign-key-violation SQLSTATE (composite-FK cross-tenant write). */
 const PG_FOREIGN_KEY_VIOLATION = "23503";
@@ -294,21 +291,6 @@ describe("workspace-scope (unit)", () => {
 // LIVE: DATABASE_URL-gated cross-tenant denial.
 // ----------------------------------------------------------------------------
 
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => {
-      /* connection cleanup is best-effort during the reachability probe */
-    });
-  }
-}
-
 /** Row shape returned by Drizzle's typed `.returning()` for an `id` column. */
 type IdRow = { id: string };
 
@@ -366,16 +348,12 @@ async function cleanupTenants(
   }
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("tenant isolation (live)", () => {
+describe.skipIf(!HAS_DATABASE)("tenant isolation (live)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
-  let reachable = false;
 
   beforeAll(async () => {
-    reachable = await isDatabaseReachable(DATABASE_URL as string);
-    if (!reachable) {
-      return;
-    }
+    await requireDatabase();
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 1 });
     const database = drizzle(pool, { schema });
     db = database;
@@ -397,7 +375,7 @@ describe.skipIf(!HAS_DATABASE_URL)("tenant isolation (live)", () => {
   it("rejects a cross-tenant note referencing another workspace's project (notes_workspace_project_fk)", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -429,7 +407,7 @@ describe.skipIf(!HAS_DATABASE_URL)("tenant isolation (live)", () => {
   it("rejects a cross-tenant note referencing another workspace's folder (notes_workspace_folder_fk)", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -461,7 +439,7 @@ describe.skipIf(!HAS_DATABASE_URL)("tenant isolation (live)", () => {
   it("rejects a cross-tenant task referencing another workspace's project (tasks_workspace_project_fk)", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -499,7 +477,7 @@ describe.skipIf(!HAS_DATABASE_URL)("tenant isolation (live)", () => {
   it("scopes every major tenant-owned entity to the active workspace (no cross-tenant reads)", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -1286,7 +1264,7 @@ describe.skipIf(!HAS_DATABASE_URL)("tenant isolation (live)", () => {
   it("refuses another workspace's task, status and tag through the real services", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

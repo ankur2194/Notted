@@ -58,7 +58,19 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   timeout: 120_000,
-  forbidOnly: Boolean(process.env.CI),
+  /*
+   * Unconditional, because `CI` is set nowhere in this repository.
+   *
+   * As `Boolean(process.env.CI)` this was permanently false, so one stray
+   * `test.only` silently reduced a 7-13 minute browser suite to a single test
+   * and printed green — the same fail-open shape as the `forbidOnly`-adjacent
+   * bug this config already guards against fail-CLOSED thirty lines above.
+   * The documented way to narrow a run is `--grep`, which needs no `.only`.
+   *
+   * `retries` is deliberately left alone: `retries: 0` locally is correct, and
+   * `docs/standards/testing.md` forbids a bare retry as a diagnosis.
+   */
+  forbidOnly: true,
   retries: process.env.CI ? 2 : 0,
   reporter: diagnostics.htmlReport
     ? [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]]

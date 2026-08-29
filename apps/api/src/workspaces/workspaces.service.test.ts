@@ -3,9 +3,10 @@ import { resolve } from "node:path";
 import { eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { HAS_DATABASE, requireDatabase } from "../../test/database-test-helpers";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { AuthorizationPolicyService } from "../authorization/authorization-policy.service";
 import { AuthorizationRepository } from "../authorization/authorization.repository";
@@ -34,9 +35,7 @@ import type { AuthenticatedPrincipal } from "@notted/shared-types";
 // --------------------------------------------------------------------------- //
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
 
 const USER_ID = "20000000-0000-4000-8000-000000000001";
 const WORKSPACE_ID = "20000000-0000-4000-8100-000000000099";
@@ -517,27 +516,13 @@ describe("WorkspacesService accent colour (unit)", () => {
 
 class RollbackWorkspacesTest extends Error {}
 
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
-}
-
-describe.skipIf(!HAS_DATABASE_URL)("Part 26 workspace lifecycle (live)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 26 workspace lifecycle (live)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
-  let reachable = false;
 
   beforeAll(async () => {
-    reachable = await isDatabaseReachable(DATABASE_URL as string);
-    if (!reachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 1 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -550,7 +535,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 26 workspace lifecycle (live)", () => {
   it("creates with owner membership, resolves slug collisions, authorizes reads, and deletes with a cleanup intent", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

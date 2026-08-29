@@ -120,6 +120,32 @@ describe("resolveCommentAnchor after edits", () => {
   });
 });
 
+describe("resolution memo", () => {
+  it("resolves an anchor once per document and re-resolves after an edit", async () => {
+    const editor = await collaborativeEditor();
+    const anchor = requireAnchor(createCommentAnchor(editor, BRAVE_FROM, BRAVE_TO));
+
+    const first = resolveCommentAnchor(editor, anchor);
+    const second = resolveCommentAnchor(editor, anchor);
+
+    // Identity, not equality: a second base64 decode plus mapping walk would
+    // build a new object. Four passes resolve the same anchors per keystroke.
+    expect(second).toBe(first);
+
+    // A selection-only transaction reuses the same `doc`, so it is still a hit.
+    editor.commands.setTextSelection({ from: 1, to: 2 });
+    expect(resolveCommentAnchor(editor, anchor)).toBe(first);
+
+    // A document edit mints a new `doc`, so the memo cannot serve a stale range.
+    editor.commands.insertContentAt(1, "oh ");
+    await waitFor(() => {
+      const moved = resolveCommentAnchor(editor, anchor);
+      expect(moved).not.toBe(first);
+      expect(moved).toEqual({ from: BRAVE_FROM + 3, to: BRAVE_TO + 3 });
+    });
+  });
+});
+
 describe("solo mode", () => {
   it("falls back to absolute positions the contract accepts", async () => {
     // No `collaboration` prop, so there is no binding and no relative position

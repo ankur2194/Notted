@@ -4,7 +4,7 @@ import { isTable, sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -23,13 +23,10 @@ import {
   verification,
 } from "../src/database/schema";
 
-import { primaryKeyColumns } from "./database-test-helpers";
+import { primaryKeyColumns, HAS_DATABASE, requireDatabase } from "./database-test-helpers";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
-
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 
 /** True when `value` looks like a Drizzle `Relations` object (config + table). */
 function isRelationsObject(value: unknown): boolean {
@@ -273,31 +270,12 @@ describe("identity and authentication schema (unit)", () => {
 // skips cleanly when the dev compose stack is not running.
 // ----------------------------------------------------------------------------
 
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => {
-      /* connection cleanup is best-effort during the reachability probe */
-    });
-  }
-}
-
-describe.skipIf(!HAS_DATABASE_URL)("identity schema (live)", () => {
+describe.skipIf(!HAS_DATABASE)("identity schema (live)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase | undefined;
-  let reachable = false;
 
   beforeAll(async () => {
-    reachable = await isDatabaseReachable(DATABASE_URL as string);
-    if (!reachable) {
-      return;
-    }
+    await requireDatabase();
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 1 });
     db = drizzle(pool);
   });
@@ -311,7 +289,7 @@ describe.skipIf(!HAS_DATABASE_URL)("identity schema (live)", () => {
   });
 
   it("applies the identity migration and creates the Better Auth tables", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -339,7 +317,7 @@ describe.skipIf(!HAS_DATABASE_URL)("identity schema (live)", () => {
   });
 
   it("declares key columns with the types Better Auth and Notted expect", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -406,7 +384,7 @@ describe.skipIf(!HAS_DATABASE_URL)("identity schema (live)", () => {
   });
 
   it("creates the unique and lookup indexes the schema requires", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -450,7 +428,7 @@ describe.skipIf(!HAS_DATABASE_URL)("identity schema (live)", () => {
   });
 
   it("cascades user deletion across the auth tables", async ({ skip }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

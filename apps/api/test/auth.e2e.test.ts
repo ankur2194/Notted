@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { request as httpRequest } from "node:http";
 
 import { and, eq } from "drizzle-orm";
 import request from "supertest";
@@ -244,6 +245,89 @@ describe.skipIf(!runLive)("Better Auth backend with Mailpit", () => {
     for (const response of [first, second, third, fourth]) {
       expect(JSON.stringify(response.body)).not.toMatch(/exist|not found|unknown user/iu);
     }
+
+    /*
+     * PASSWORD RESET IS THE WAY OUT, so the lock must not seal it.
+     *
+     * Only `/sign-in/email` failures record a failure, and each lock runs for
+     * `lockoutSeconds` from the moment it is set — so an attacker who can spend
+     * the attempt budget holds the lock open indefinitely. If the lock also
+     * gated this endpoint the victim's only escape hatch would be closed by the
+     * attack itself. It used to, because `assertNotLocked` ran on every path in
+     * `AUTH_IDENTIFIER_PATHS`.
+     *
+     * `202` either way, which is the same enumeration-safe answer this endpoint
+     * gives for an address that does not exist.
+     */
+    const resetWhileLocked = await request(server)
+      .post("/api/auth/notted/request-password-reset")
+      .set("Origin", appOrigin)
+      .send({ email });
+    expect(resetWhileLocked.status).not.toBe(423);
+    expect(JSON.stringify(resetWhileLocked.body)).not.toContain("ACCOUNT_LOCKED");
+
+    // And sign-in is still locked: the exemption is scoped to the reset path.
+    expect((await attempt()).status).toBe(423);
+  });
+
+  it("refuses an oversized or undeclared auth body with the documented 413", async () => {
+    const server = app.getHttpServer();
+    /*
+     * `docs/API.md` promises `413 PAYLOAD_TOO_LARGE` past
+     * `REQUEST_BODY_LIMIT_BYTES`. It did not hold on `/api/auth/**`: Better Auth
+     * is mounted BEFORE `json({ limit })` and reads the raw stream itself, so
+     * the limiter never saw these requests.
+     */
+    const oversized = await request(server)
+      .post("/api/auth/sign-in/email")
+      .set("Origin", appOrigin)
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ email: "a@example.test", password: "x".repeat(2 * 1_024 * 1_024) }));
+    expect(oversized.status).toBe(413);
+    expect(oversized.body).toMatchObject({ error: { code: "PAYLOAD_TOO_LARGE" } });
+
+    /*
+     * And a body with NO declared length. `better-call` computes
+     * `length = Number(content_length)`, which is `NaN` without the header, and
+     * its `size > length` guard is then always false — so a chunked body would
+     * stream with no cap whatsoever. Absent must be refused, not trusted.
+     *
+     * Raw `node:http`, not supertest: superagent always sets `content-length`,
+     * and setting `transfer-encoding` on top makes Node's parser refuse the
+     * request outright (400) as smuggling-shaped. Only a hand-built chunked
+     * request actually reaches the middleware.
+     */
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const address = server.address() as { port: number };
+    const undeclaredStatus = await new Promise<number>((resolve, reject) => {
+      const chunked = httpRequest(
+        {
+          host: "127.0.0.1",
+          port: address.port,
+          method: "POST",
+          path: "/api/auth/sign-in/email",
+          headers: {
+            origin: appOrigin,
+            "content-type": "application/json",
+            "transfer-encoding": "chunked",
+          },
+        },
+        (response) => {
+          response.resume();
+          resolve(response.statusCode ?? 0);
+        },
+      );
+      chunked.on("error", reject);
+      chunked.end(JSON.stringify({ email: "a@example.test", password: "Wrong1!Password" }));
+    });
+    expect(undeclaredStatus).toBe(413);
+
+    // An ordinary request is unaffected.
+    const ordinary = await request(server)
+      .post("/api/auth/sign-in/email")
+      .set("Origin", appOrigin)
+      .send({ email: `absent-${randomUUID()}@example.test`, password: "Wrong1!Password" });
+    expect(ordinary.status).not.toBe(413);
   });
 
   // Reads one verification email — see the timeout note above.

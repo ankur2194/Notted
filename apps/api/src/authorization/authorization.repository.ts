@@ -31,7 +31,7 @@ import type {
   ResourceLocator,
   WorkspaceRole,
 } from "./authorization.contracts";
-import type { Database } from "../database/database.service";
+import type { Database, DatabaseTransaction } from "../database/database.service";
 
 export interface LoadedMembership {
   readonly role: WorkspaceRole;
@@ -50,6 +50,24 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+/**
+ * A pool handle or an OPEN transaction.
+ *
+ * Threading this matters for one reason: `NotesService.move()` and the
+ * delete/restore path both re-authorize each descendant note INSIDE an already
+ * open transaction. Every method here used `this.database.db` directly, so each
+ * of those checks checked out a SECOND connection while the first was still
+ * held — and at the default pool size of 10 (`DATABASE_POOL_MAX_CONNECTIONS`),
+ * ten concurrent moves take all ten connections, then each waits for a
+ * connection that only another waiter could release. The pool deadlocks and
+ * every request fails.
+ *
+ * Only the `note` locator path takes the parameter, because only those two call
+ * sites authorize inside a transaction. Everything else keeps its default and
+ * is unchanged.
+ */
+export type AuthorizationRunner = Database | DatabaseTransaction;
+
 @Injectable()
 export class AuthorizationRepository implements AuthorizationFactsReader {
   constructor(
@@ -62,8 +80,12 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
    * facts and never establishes tenant authority by itself. The entry service
    * creates TenantContext only after this exact pair is proven.
    */
-  async findMembership(workspaceId: string, userId: string): Promise<LoadedMembership | null> {
-    const [row] = await this.database.db
+  async findMembership(
+    workspaceId: string,
+    userId: string,
+    db: AuthorizationRunner = this.database.db,
+  ): Promise<LoadedMembership | null> {
+    const [row] = await db
       .select({ role: workspaceMembers.role })
       .from(workspaceMembers)
       .where(
@@ -76,6 +98,7 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
   async loadResource(
     locator: ResourceLocator,
     actorUserId: string | null,
+    db: AuthorizationRunner = this.database.db,
   ): Promise<AuthorizationResourceFacts | null> {
     // Every tenant loader below calls get() here and again through a canonical
     // whereWorkspace/whereWorkspaceId predicate. A locator is only a selector.
@@ -94,7 +117,7 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       case "project":
         return this.loadProject(locator.id, actorUserId, locator.delegation);
       case "note":
-        return this.loadNote(locator.id, actorUserId, locator.delegation, locator.tagId);
+        return this.loadNote(locator.id, actorUserId, locator.delegation, locator.tagId, db);
       case "comment":
         return this.loadComment(locator.id, actorUserId);
       case "export":
@@ -164,7 +187,7 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
   private async projectFacts(
     projectId: string,
     actorUserId: string | null,
-    db: Database = this.database.db,
+    db: AuthorizationRunner = this.database.db,
   ): Promise<ProjectAuthorizationFacts> {
     const [project] = await db
       .select({ isRestricted: projects.isRestricted })
@@ -218,8 +241,9 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
     actorUserId: string | null,
     delegation?: DelegationRequest,
     tagId?: string,
+    db: AuthorizationRunner = this.database.db,
   ): Promise<AuthorizationResourceFacts | null> {
-    const [row] = await this.database.db
+    const [row] = await db
       .select({
         id: notes.id,
         workspaceId: notes.workspaceId,
@@ -231,27 +255,30 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       .where(and(eq(notes.id, id), whereWorkspace(notes, this.tenantContext)))
       .limit(1);
     if (row === undefined) return null;
-    const sharePermission = await this.loadNoteShare(row.id, actorUserId);
-    const parentValid = row.parentId === null || (await this.hasScopedDirect(notes, row.parentId));
+    const sharePermission = await this.loadNoteShare(row.id, actorUserId, db);
+    const parentValid =
+      row.parentId === null || (await this.hasScopedDirect(notes, row.parentId, db));
     return Object.freeze({
       kind: "note",
       id: row.id,
       workspaceId: row.workspaceId,
       creatorId: row.creatorId,
-      project: row.projectId === null ? null : await this.projectFacts(row.projectId, actorUserId),
+      project:
+        row.projectId === null ? null : await this.projectFacts(row.projectId, actorUserId, db),
       sharePermission,
-      delegation: await this.loadDelegationFacts(delegation, row.projectId),
+      delegation: await this.loadDelegationFacts(delegation, row.projectId, db),
       loadedAt: nowIso(),
-      relationsValid: parentValid && (tagId === undefined || (await this.hasActiveTag(tagId))),
+      relationsValid: parentValid && (tagId === undefined || (await this.hasActiveTag(tagId, db))),
     });
   }
 
   private async loadNoteShare(
     noteId: string,
     actorUserId: string | null,
+    db: AuthorizationRunner = this.database.db,
   ): Promise<NoteSharePermission | null> {
     if (actorUserId === null) return null;
-    const [share] = await this.database.db
+    const [share] = await db
       .select({ permission: noteShares.permission })
       .from(noteShares)
       .where(and(eq(noteShares.noteId, noteId), eq(noteShares.userId, actorUserId)))
@@ -262,9 +289,10 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
   private async loadDelegationFacts(
     request: DelegationRequest | undefined,
     projectId: string | null,
+    db: AuthorizationRunner = this.database.db,
   ): Promise<DelegationAuthorizationFacts | null> {
     if (request === undefined) return null;
-    const [membership] = await this.database.db
+    const [membership] = await db
       .select({ userId: workspaceMembers.userId })
       .from(workspaceMembers)
       .where(
@@ -276,7 +304,7 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       .limit(1);
     let targetProjectAccess: ProjectAccessRole | null = null;
     if (projectId !== null && membership !== undefined) {
-      const [grant] = await this.database.db
+      const [grant] = await db
         .select({ role: projectAccess.role })
         .from(projectAccess)
         .where(
@@ -544,9 +572,10 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
   private async hasScopedDirect(
     table: typeof notes | typeof folders | typeof tasks,
     id: string,
+    db: AuthorizationRunner = this.database.db,
   ): Promise<boolean> {
     if (table === notes) {
-      const [row] = await this.database.db
+      const [row] = await db
         .select({ id: notes.id })
         .from(notes)
         .where(and(eq(notes.id, id), whereWorkspace(notes, this.tenantContext)))
@@ -554,14 +583,14 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       return row !== undefined;
     }
     if (table === folders) {
-      const [row] = await this.database.db
+      const [row] = await db
         .select({ id: folders.id })
         .from(folders)
         .where(and(eq(folders.id, id), whereWorkspace(folders, this.tenantContext)))
         .limit(1);
       return row !== undefined;
     }
-    const [row] = await this.database.db
+    const [row] = await db
       .select({ id: tasks.id })
       .from(tasks)
       .where(and(eq(tasks.id, id), whereWorkspace(tasks, this.tenantContext)))
@@ -595,8 +624,11 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
     return row !== undefined;
   }
 
-  private async hasActiveTag(tagId: string): Promise<boolean> {
-    const [row] = await this.database.db
+  private async hasActiveTag(
+    tagId: string,
+    db: AuthorizationRunner = this.database.db,
+  ): Promise<boolean> {
+    const [row] = await db
       .select({ id: tags.id })
       .from(tags)
       .where(and(eq(tags.id, tagId), whereWorkspace(tags, this.tenantContext)))

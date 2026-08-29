@@ -6802,10 +6802,26 @@
             "items": {
               "$ref": "#/components/schemas/AttachmentMedia"
             }
+          },
+          "limit": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "returned": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "truncated": {
+            "type": "boolean"
           }
         },
         "required": [
-          "items"
+          "items",
+          "limit",
+          "returned",
+          "truncated"
         ],
         "additionalProperties": false
       },
@@ -7553,6 +7569,9 @@
             "items": {
               "$ref": "#/components/schemas/CommentSummary"
             }
+          },
+          "repliesTruncated": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -7567,7 +7586,8 @@
           "anchor",
           "createdAt",
           "updatedAt",
-          "replies"
+          "replies",
+          "repliesTruncated"
         ],
         "additionalProperties": false
       },
@@ -9780,6 +9800,9 @@
               "$ref": "#/components/schemas/ProjectMember"
             }
           },
+          "membersTruncated": {
+            "type": "boolean"
+          },
           "taskProgress": {
             "$ref": "#/components/schemas/ProjectTaskProgress"
           }
@@ -9800,6 +9823,7 @@
           "createdById",
           "lastActivityAt",
           "members",
+          "membersTruncated",
           "taskProgress"
         ],
         "additionalProperties": false

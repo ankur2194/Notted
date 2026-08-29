@@ -55,7 +55,7 @@ import { webhookCreateSchema } from "@notted/shared-validators";
 import { eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -67,11 +67,12 @@ import { SEED_IDS, seedDatabase } from "../src/database/seed";
 import { createApplication } from "../src/main";
 import { WebhooksService } from "../src/webhooks/webhooks.service";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { ApiKeyScope, AuthenticatedPrincipal } from "@notted/shared-types";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
 
 const ALPHA = SEED_IDS.workspaces.alpha;
@@ -136,18 +137,6 @@ function applyEnvironment(overrides: Readonly<Record<string, string>>): void {
     WEBHOOK_REQUEST_TIMEOUT_MS: "2000",
     ...overrides,
   });
-}
-
-async function reachable(url: string): Promise<boolean> {
-  const client = new Client({ connectionString: url, connectionTimeoutMillis: 2_000 });
-  try {
-    await client.connect();
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
 }
 
 /** A fresh session principal — `webhook.create` and `webhook.update` demand one. */
@@ -237,12 +226,11 @@ async function closeServer(server: Server): Promise<void> {
   });
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
+describe.skipIf(!HAS_DATABASE)("Part 66 webhook REST surface", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
   let app: NestExpressApplication | undefined;
   let environment: EnvironmentSnapshot;
-  let live = false;
 
   let adminKey: SeededKey;
   let readKey: SeededKey;
@@ -252,8 +240,8 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
 
   beforeAll(async () => {
     environment = snapshotEnvironment();
-    live = await reachable(DATABASE_URL as string);
-    if (!live) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 8 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -295,7 +283,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
 
   afterEach(async () => {
     for (const server of servers.splice(0)) await closeServer(server);
-    if (!live || db === undefined) return;
+    if (db === undefined) return;
     // Every test starts from an empty endpoint list, which is what makes the
     // endpoint-cap case meaningful rather than order-dependent.
     const rows = await db
@@ -314,7 +302,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
   });
 
   afterAll(async () => {
-    if (live && db !== undefined) {
+    if (db !== undefined) {
       for (const key of [adminKey, readKey, editorKey, viewerKey, betaKey]) {
         if (key !== undefined) await db.delete(apiKeys).where(eq(apiKeys.id, key.id));
       }
@@ -412,7 +400,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
   // ------------------------------------------------------------------ //
 
   it("denies an editor and a viewer on every route, admin scope notwithstanding", async () => {
-    if (!live) return;
     const { webhook } = await registerEndpoint();
     const routes = allRoutes(ALPHA, webhook.id, randomUUID());
     expect(routes).toHaveLength(8);
@@ -446,7 +433,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
   // ------------------------------------------------------------------ //
 
   it("conceals another tenant's webhook as 404 on every route, including deliveries and retry", async () => {
-    if (!live) return;
     const { webhook } = await registerEndpoint();
 
     for (const route of allRoutes(ALPHA, webhook.id, randomUUID())) {
@@ -473,7 +459,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
   // ------------------------------------------------------------------ //
 
   it("returns the raw secret only from create and rotate, never from a read path", async () => {
-    if (!live) return;
     const created = await registerEndpoint();
     expect(created.secret.startsWith(WEBHOOK_SECRET_PREFIX)).toBe(true);
     expect(created.secret).toMatch(/^whsec_[A-Za-z0-9_-]{43}$/u);
@@ -536,7 +521,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
   // ------------------------------------------------------------------ //
 
   it("refuses to enable an unverified endpoint", async () => {
-    if (!live) return;
     const { webhook } = await registerEndpoint();
     expect(webhook.isVerified).toBe(false);
     expect(webhook.isEnabled).toBe(false);
@@ -553,7 +537,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
   });
 
   it("resets verification and enablement when the destination URL changes", async () => {
-    if (!live) return;
     const database = db as NodePgDatabase<typeof schema>;
     const { webhook } = await registerEndpoint();
     await database
@@ -580,7 +563,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
   });
 
   it("caps a workspace at ten endpoints", async () => {
-    if (!live) return;
     const database = db as NodePgDatabase<typeof schema>;
     for (let index = 0; index < WEBHOOK_ENDPOINT_LIMIT; index += 1) {
       await registerEndpoint(LOOPBACK(`cap-${index}`));
@@ -607,7 +589,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
   // ------------------------------------------------------------------ //
 
   it("rejects a malformed URL, an empty event list and an unknown event before any write", async () => {
-    if (!live) return;
     const database = db as NodePgDatabase<typeof schema>;
     const before = await database
       .select({ id: webhooks.id })
@@ -638,7 +619,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
   });
 
   it("answers 400 VALIDATION_ERROR for an out-of-range page size and an unknown status filter", async () => {
-    if (!live) return;
     const { webhook } = await registerEndpoint();
 
     const overLimit = await request(server())
@@ -662,7 +642,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
   // ------------------------------------------------------------------ //
 
   it("lets an admin-scoped key read the endpoint list and the delivery log", async () => {
-    if (!live) return;
     const { webhook } = await registerEndpoint();
 
     const list = await request(server())
@@ -689,7 +668,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
   });
 
   it("denies a read-scoped key on the admin-only webhook surface", async () => {
-    if (!live) return;
     const { webhook } = await registerEndpoint();
 
     for (const path of [
@@ -710,7 +688,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook REST surface", () => {
    * to change it has to change here first.
    */
   it("closes every webhook mutation to API keys because a machine credential is never fresh", async () => {
-    if (!live) return;
     const { webhook } = await registerEndpoint();
     const mutations = allRoutes(ALPHA, webhook.id, randomUUID()).filter((route) =>
       [

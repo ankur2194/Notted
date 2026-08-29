@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { and, eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
@@ -30,13 +30,13 @@ import {
 import { ProjectsService } from "../src/projects/projects.service";
 import { TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { NoteSearchIndexProducer } from "../src/search/note-search-index-producer";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
 
 class RollbackProjectsTest extends Error {}
 
@@ -52,27 +52,13 @@ function principal(userId: string): AuthenticatedPrincipal {
   });
 }
 
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
-}
-
-describe.skipIf(!HAS_DATABASE_URL)("Part 29 project CRUD (live)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 29 project CRUD (live)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
-  let reachable = false;
 
   beforeAll(async () => {
-    reachable = await isDatabaseReachable(DATABASE_URL as string);
-    if (!reachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 1 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -85,7 +71,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 29 project CRUD (live)", () => {
   it("covers CRUD, authorized pagination, statuses, tenant denial, retention, delete nullification, and durable intents", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -204,6 +190,10 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 29 project CRUD (live)", () => {
           projectId: created.project.id,
         });
         expect(detail.dueAt).toBe("2026-08-10T06:30:00.000Z");
+        // `members` is a nested projection with no pager of its own, and it had
+        // no bound — so the detail response scaled with the tenant's seat count.
+        expect(detail.membersTruncated).toBe(false);
+        expect(detail.members.length).toBeLessThanOrEqual(200);
 
         const updated = await service.update({
           principal: owner,
@@ -489,6 +479,63 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 29 project CRUD (live)", () => {
             .from(tasks)
             .where(eq(tasks.id, deleteTaskId)),
         ).toEqual([{ id: deleteTaskId, projectId: null }]);
+
+        /*
+         * THE DEFECT THIS BLOCK EXISTS FOR. Nulling `project_id` puts a note in
+         * the workspace-root state, and `projectVisibility` — correctly —
+         * treats a null project as visible to EVERY member. So deleting a
+         * RESTRICTED project published its confidential notes and tasks to the
+         * whole workspace, with no prompt and nothing in the audit trail.
+         *
+         * Unrestricted deletion above is unchanged: that content was already
+         * workspace-visible, so nulling it widens nothing.
+         */
+        const secretProject = await service.create({
+          principal: owner,
+          workspaceId: SEED_IDS.workspaces.alpha,
+          name: "Restricted, holds content",
+        });
+        await tx
+          .update(projects)
+          .set({ isRestricted: true })
+          .where(eq(projects.id, secretProject.project.id));
+        const secretNoteId = randomUUID();
+        await tx.insert(notes).values({
+          id: secretNoteId,
+          workspaceId: SEED_IDS.workspaces.alpha,
+          projectId: secretProject.project.id,
+          title: "Confidential note",
+          createdById: SEED_IDS.users.alphaOwner,
+        });
+
+        await expect(
+          service.delete({
+            principal: owner,
+            workspaceId: SEED_IDS.workspaces.alpha,
+            projectId: secretProject.project.id,
+          }),
+        ).rejects.toMatchObject({
+          safeResponse: { code: "PROJECT_HAS_RESTRICTED_CONTENT" },
+        });
+        // Refused means refused: the project and its link are both intact.
+        expect(
+          await tx
+            .select({ projectId: notes.projectId })
+            .from(notes)
+            .where(eq(notes.id, secretNoteId)),
+        ).toEqual([{ projectId: secretProject.project.id }]);
+
+        // Empty it, and the delete is allowed again — the block is about
+        // content, not about restriction.
+        await tx.delete(notes).where(eq(notes.id, secretNoteId));
+        await expect(
+          service.delete({
+            principal: owner,
+            workspaceId: SEED_IDS.workspaces.alpha,
+            projectId: secretProject.project.id,
+          }),
+        ).resolves.toBeDefined();
+
         expect(
           await tx
             .select({ projectId: tasks.projectId })
@@ -583,7 +630,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 29 project CRUD (live)", () => {
   it("reads lastActivityAt as a real Date for a project that has notes and tasks", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -690,7 +737,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 29 project CRUD (live)", () => {
   it("rolls back project and audit rows when the transactional outbox insert fails", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

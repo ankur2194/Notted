@@ -215,7 +215,7 @@ function orphanCandidate(overrides: Partial<OrphanObjectCandidate> = {}): Orphan
   return {
     key: CLAIMED_KEY,
     lastModified: ago(30 * DAY),
-    parsed: { workspaceId: WORKSPACE_A, attachmentId: ATTACHMENT_A, variant: "original" },
+    parsed: { workspaceId: WORKSPACE_A, ownerId: ATTACHMENT_A },
     owner: { id: ATTACHMENT_A, workspaceId: WORKSPACE_A, ownedKeys: [CLAIMED_KEY] },
     ...overrides,
   };
@@ -278,7 +278,7 @@ describe("decideOrphanObject", () => {
       decideOrphanObject(
         orphanCandidate({
           key: STALE_KEY,
-          parsed: { workspaceId: WORKSPACE_A, attachmentId: ATTACHMENT_A, variant: "thumbnail" },
+          parsed: { workspaceId: WORKSPACE_A, ownerId: ATTACHMENT_A },
           owner: { id: ATTACHMENT_A, workspaceId: WORKSPACE_B, ownedKeys: [] },
         }),
         windows,
@@ -291,7 +291,7 @@ describe("decideOrphanObject", () => {
       decideOrphanObject(
         orphanCandidate({
           key: STALE_KEY,
-          parsed: { workspaceId: WORKSPACE_A, attachmentId: ATTACHMENT_A, variant: "thumbnail" },
+          parsed: { workspaceId: WORKSPACE_A, ownerId: ATTACHMENT_A },
           owner: { id: ATTACHMENT_A, workspaceId: WORKSPACE_A, ownedKeys: [CLAIMED_KEY] },
         }),
         windows,
@@ -305,7 +305,7 @@ describe("decideOrphanObject", () => {
       orphanCandidate({ owner: null }),
       orphanCandidate({
         key: STALE_KEY,
-        parsed: { workspaceId: WORKSPACE_A, attachmentId: ATTACHMENT_A, variant: "thumbnail" },
+        parsed: { workspaceId: WORKSPACE_A, ownerId: ATTACHMENT_A },
         owner: { id: ATTACHMENT_A, workspaceId: WORKSPACE_A, ownedKeys: [CLAIMED_KEY] },
       }),
       orphanCandidate({ key: "test/island/object.bin", parsed: null, owner: null }),

@@ -307,8 +307,11 @@ export {
   parseNoteDocument,
   renderDocumentHtml,
   resolveNoteImageWrap,
+  formatNoteDocumentErrors,
   safeParseNoteDocument,
   sanitizeDocumentUrl,
+  stripUnsafeText,
+  UNSAFE_TEXT_PATTERN,
 } from "./document.schema";
 export {
   copyNoteSchema,

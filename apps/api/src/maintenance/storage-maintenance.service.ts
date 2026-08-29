@@ -39,6 +39,7 @@ import { RETENTION_CONFIG, type RetentionConfig } from "../config/retention.conf
 import { STORAGE_CONFIG, type StorageConfig } from "../config/storage.config";
 import { DatabaseService } from "../database/database.service";
 import { attachments, exportJobs, notes, workspaces } from "../database/schema";
+import { parseExportObjectKey } from "../export/export-object-key";
 import {
   ObjectStorageService,
   type ObjectStore,
@@ -352,7 +353,14 @@ export class StorageMaintenanceService {
         {
           key: object.key,
           lastModified: object.lastModified,
-          parsed: parsedByKey.get(object.key) ?? null,
+          // Mapped to the generic `{ workspaceId, ownerId }` shape the decision
+          // function shares with the exports bucket.
+          parsed: (() => {
+            const parsed = parsedByKey.get(object.key);
+            return parsed == null
+              ? null
+              : { workspaceId: parsed.workspaceId, ownerId: parsed.attachmentId };
+          })(),
           owner: owners.get(parsedByKey.get(object.key)?.attachmentId ?? "") ?? null,
         },
         context.windows,
@@ -672,7 +680,130 @@ export class StorageMaintenanceService {
         .returning({ id: exportJobs.id });
       accumulator.rowsMarked += cleared.length;
     }
+
+    await this.reconcileExportObjects(context, accumulator);
     return accumulator.finish();
+  }
+
+  /**
+   * Phase 3: bytes in the `exports` bucket that no row references at all.
+   *
+   * THE GAP THIS CLOSES. `ExportWorkerService` writes the object and only then
+   * records the key on the row (`markReady` is the sole writer of
+   * `object_key`). A crash in between leaves bytes nothing points at — and
+   * phases 1 and 2 above select on `isNotNull(objectKey)`, so they structurally
+   * cannot see them. `sweepOrphanedObjects` is the listing-based reconciler,
+   * but it was hardcoded to the `attachments` bucket, so the `exports` bucket
+   * had no orphan sweep at any layer.
+   *
+   * PREFIXES ARE ENUMERATED, not omitted. `listObjects` requires a non-empty
+   * prefix on purpose, and export keys are `<workspace>/<export>.<ext>` with no
+   * shared root the way attachments have `w/` — so a system-scoped run walks
+   * the distinct workspaces that have export rows, one listing each.
+   *
+   * ponytail: a workspace whose export ROWS are already gone is never scanned,
+   * and that is reachable today — `WORKSPACE_DELETED_JOB_DEFINITION` routes to a
+   * `workspace-cleanup` queue with no registered handler, so deleting a
+   * workspace purges no bytes from either bucket. Upgrade path: register that
+   * handler (the real fix), or re-key exports under a shared root so one
+   * listing covers the bucket.
+   */
+  private async reconcileExportObjects(
+    context: SweepContext,
+    accumulator: SweepAccumulator,
+  ): Promise<void> {
+    const workspaceIds =
+      context.scope.kind === "workspace"
+        ? [context.scope.workspaceId]
+        : (
+            await this.database.db
+              .selectDistinct({ workspaceId: exportJobs.workspaceId })
+              .from(exportJobs)
+              .limit(this.storage.maintenanceBatchLimit)
+          ).map((row) => row.workspaceId);
+
+    for (const workspaceId of workspaceIds) {
+      const listing = await this.objects.listObjects("exports", {
+        prefix: `${workspaceId}/`,
+        limit: this.storage.maintenanceObjectScanLimit,
+      });
+      if (listing.truncated) {
+        accumulator.truncated = true;
+        accumulator.note(STORAGE_MAINTENANCE_NOTES.objectScanTruncated);
+      }
+      accumulator.examined += listing.objects.length;
+      if (listing.objects.length === 0) continue;
+
+      const parsedByKey = new Map<string, ReturnType<typeof parseExportObjectKey>>();
+      const exportIds = new Set<string>();
+      for (const object of listing.objects) {
+        const parsed = parseExportObjectKey(object.key);
+        parsedByKey.set(object.key, parsed);
+        if (parsed !== null) exportIds.add(parsed.exportId);
+      }
+
+      const owners = new Map<string, ObjectOwnerFacts>();
+      if (exportIds.size > 0) {
+        const rows = await this.database.db
+          .select({
+            id: exportJobs.id,
+            workspaceId: exportJobs.workspaceId,
+            objectKey: exportJobs.objectKey,
+          })
+          .from(exportJobs)
+          .where(
+            and(
+              inArray(exportJobs.id, [...exportIds]),
+              this.workspacePredicate(exportJobs, context.scope),
+            ),
+          );
+        for (const row of rows) {
+          owners.set(row.id, {
+            id: row.id,
+            workspaceId: row.workspaceId,
+            // A row claims at most one key — exports are deterministic in
+            // (workspace, export), so a retry overwrites rather than orphans.
+            ownedKeys: row.objectKey === null ? [] : [row.objectKey],
+          });
+        }
+      }
+
+      const removable: string[] = [];
+      for (const object of listing.objects) {
+        const parsed = parsedByKey.get(object.key) ?? null;
+        const decision = decideOrphanObject(
+          {
+            key: object.key,
+            lastModified: object.lastModified,
+            parsed:
+              parsed === null
+                ? null
+                : { workspaceId: parsed.workspaceId, ownerId: parsed.exportId },
+            owner: owners.get(parsed?.exportId ?? "") ?? null,
+          },
+          context.windows,
+        );
+        if (!decision.sweep) {
+          if (decision.reason === "unparsable_key") {
+            accumulator.note(STORAGE_MAINTENANCE_NOTES.unparsableKeysSkipped);
+          }
+          if (decision.reason === "workspace_mismatch") {
+            accumulator.note(STORAGE_MAINTENANCE_NOTES.workspaceMismatchSkipped);
+          }
+          continue;
+        }
+        if (removable.length >= this.storage.maintenanceBatchLimit) {
+          accumulator.truncated = true;
+          break;
+        }
+        accumulator.selected += 1;
+        // The export id, never the key: keys stay out of logs (ADR 0005).
+        if (parsed !== null) accumulator.sample(parsed.exportId);
+        removable.push(object.key);
+      }
+      if (context.dryRun || removable.length === 0) continue;
+      accumulator.objectsRemoved += await this.removeObjects("exports", removable);
+    }
   }
 
   /* ---------------------------------------------------------------------- */

@@ -28,7 +28,7 @@ import { Readable } from "node:stream";
 import { eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
@@ -58,6 +58,8 @@ import { EXPORT_GENERATE_JOB_DEFINITION } from "../src/queue/job-registry";
 import { NoteSearchIndexProducer } from "../src/search/note-search-index-producer";
 import { createTenantContext, TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { StructuredLogger } from "../src/common/logging/structured-logger.service";
 import type { PdfExportService } from "../src/export/pdf-export.service";
 import type {
@@ -70,7 +72,6 @@ import type { AuthenticatedPrincipal, ExportFormat } from "@notted/shared-types"
 import type { PgTransactionConfig } from "drizzle-orm/pg-core/session";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
 
 function principal(userId: string): AuthenticatedPrincipal {
@@ -83,18 +84,6 @@ function principal(userId: string): AuthenticatedPrincipal {
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     isFresh: true,
   });
-}
-
-async function reachable(url: string): Promise<boolean> {
-  const client = new Client({ connectionString: url, connectionTimeoutMillis: 2_000 });
-  try {
-    await client.connect();
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
 }
 
 /** In-memory `ObjectStore`. Records every key it is asked to write. */
@@ -197,14 +186,13 @@ function build(db: NodePgDatabase<typeof schema>) {
   };
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 62 export job lifecycle (live PostgreSQL)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 62 export job lifecycle (live PostgreSQL)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
-  let databaseReachable = false;
 
   beforeAll(async () => {
-    databaseReachable = await reachable(DATABASE_URL as string);
-    if (!databaseReachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 8 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -294,7 +282,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 62 export job lifecycle (live PostgreSQ
   it("carries a note from create through ready, download and both announcements", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     const owner = principal(SEED_IDS.users.alphaOwner);
     const { job } = await queueExport(
@@ -371,7 +359,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 62 export job lifecycle (live PostgreSQ
   });
 
   it("refuses a ready export whose download grant has elapsed", async ({ skip }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     const owner = principal(SEED_IDS.users.alphaOwner);
     const { job } = await queueExport(harness, owner, SEED_IDS.workspaces.alpha, "Expiring soon.");
@@ -411,7 +399,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 62 export job lifecycle (live PostgreSQ
   it("denies a non-requester member in the same workspace, admits an admin, and conceals a foreign tenant's export", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     const owner = principal(SEED_IDS.users.alphaOwner);
     const { job } = await queueExport(harness, owner, SEED_IDS.workspaces.alpha, "Private bytes.");
@@ -516,7 +504,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 62 export job lifecycle (live PostgreSQ
   it("is replay-safe: draining the same intent twice produces one artefact and one announcement", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     const owner = principal(SEED_IDS.users.alphaOwner);
     const { job } = await queueExport(harness, owner, SEED_IDS.workspaces.alpha, "Exactly once.");
@@ -541,7 +529,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 62 export job lifecycle (live PostgreSQ
   });
 
   it("fails cleanly when the source note is deleted before the job runs", async ({ skip }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     const owner = principal(SEED_IDS.users.alphaOwner);
     const { noteId, noteVersion, job } = await queueExport(
@@ -577,7 +565,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 62 export job lifecycle (live PostgreSQ
   });
 
   it("refuses an unsupported format before writing anything", async ({ skip }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     const owner = principal(SEED_IDS.users.alphaOwner);
     const before = await db.select().from(exportJobs);

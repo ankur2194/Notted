@@ -62,6 +62,9 @@ type CommentQueryRunner = Database | DatabaseTransaction;
 /** `resolved_by_id` needs its own `users` join alongside `created_by_id`. */
 const resolvers = alias(users, "comment_resolvers");
 
+/** Replies returned per root thread. See `readReplies` for why it is per-thread. */
+const MAX_REPLIES_PER_THREAD = 100;
+
 export interface CommentScopedInput {
   readonly principal: AuthenticatedPrincipal;
   readonly workspaceId: string;
@@ -186,9 +189,15 @@ export class CommentsService {
       // live Y.Doc derives it while drawing the decoration.
       const items: CommentThread[] = visible.map((row) => {
         const own = replies.filter((reply) => reply.parentId === row.id);
+        // `readReplies` fetched one past the cap precisely so this is a fact
+        // rather than a guess; a silent truncation would read as "no more".
+        const repliesTruncated = own.length > MAX_REPLIES_PER_THREAD;
         return Object.freeze({
           ...this.toSummary(row),
-          replies: Object.freeze(own.map((reply) => this.toSummary(reply))),
+          replies: Object.freeze(
+            own.slice(0, MAX_REPLIES_PER_THREAD).map((reply) => this.toSummary(reply)),
+          ),
+          repliesTruncated,
         });
       });
       return Object.freeze({
@@ -285,6 +294,20 @@ export class CommentsService {
           .update(comments)
           .set({ content: input.content, updatedAt: new Date() })
           .where(and(eq(comments.id, input.commentId), eq(comments.noteId, input.noteId)));
+        // `update` was the only mutator in this file that wrote no audit row —
+        // create, delete and resolve all do — so a comment could be silently
+        // rewritten after the fact with nothing in the trail to say who or when.
+        // Identifiers only, never `input.content`: audit rows are exportable to
+        // every workspace admin, and no sibling writer stores comment bodies.
+        await recordAudit(tx, {
+          workspaceId: activeWorkspaceId(this.tenantContext),
+          userId: input.principal.userId,
+          action: "comment.update",
+          entityType: "comment",
+          entityId: input.commentId,
+          metadata: { noteId: input.noteId },
+          requestId: input.requestId ?? null,
+        });
         return this.readRow(tx, input.noteId, input.commentId);
       });
       this.broadcast(input, row, "updated");
@@ -456,12 +479,44 @@ export class CommentsService {
     );
   }
 
+  /**
+   * Replies for the visible root threads, bounded PER THREAD.
+   *
+   * This had no limit at all: one note with a long-running argument on a single
+   * comment returned every reply on it, in the same response as the paginated
+   * roots. A flat `.limit()` would be worse than none — one hot thread would
+   * consume the whole budget and silently truncate every other thread on the
+   * page — so the cap is per `parent_id`, which needs a window function and
+   * therefore raw SQL. `+ 1` is fetched so truncation can be reported rather
+   * than guessed.
+   *
+   * ponytail: a hard per-thread cap, not pagination. A reader past
+   * `MAX_REPLIES_PER_THREAD` sees `repliesTruncated` and cannot reach the rest.
+   * Upgrade path when a real tenant hits it: cursor pagination on replies, which
+   * is a contract change across REST, tRPC, OpenAPI and the web client.
+   */
   private async readReplies(rootIds: readonly string[]): Promise<CommentRow[]> {
     if (rootIds.length === 0) return [];
+    const ranked = await this.database.db.execute<{ id: string }>(sql`
+      select id from (
+        select c.id,
+               row_number() over (
+                 partition by c.parent_id order by c.created_at asc, c.id asc
+               ) as rank
+        from comments c
+        join notes n on n.id = c.note_id
+        where c.parent_id in (${sql.join(
+          rootIds.map((id) => sql`${id}::uuid`),
+          sql`, `,
+        )})
+          and n.workspace_id = ${activeWorkspaceId(this.tenantContext)}
+      ) ranked
+      where ranked.rank <= ${MAX_REPLIES_PER_THREAD + 1}
+    `);
+    const ids = ranked.rows.map((row) => row.id);
+    if (ids.length === 0) return [];
     return this.selectComments(this.database.db)
-      .where(
-        and(inArray(comments.parentId, [...rootIds]), whereWorkspace(notes, this.tenantContext)),
-      )
+      .where(and(inArray(comments.id, ids), whereWorkspace(notes, this.tenantContext)))
       .orderBy(asc(comments.createdAt), asc(comments.id));
   }
 

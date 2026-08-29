@@ -179,7 +179,16 @@ export function useImageUploads({
         (previous: AttachmentListResult | undefined): AttachmentListResult => {
           const items = previous?.items ?? [];
           const without = items.filter((item) => item.id !== attachment.id);
-          return { items: [...without, attachment] };
+          const next = [...without, attachment];
+          return {
+            ...previous,
+            items: next,
+            // A locally added upload does not change what the SERVER truncated,
+            // so the flag is carried forward rather than recomputed here.
+            limit: previous?.limit ?? next.length,
+            returned: next.length,
+            truncated: previous?.truncated ?? false,
+          };
         },
       );
     },

@@ -9,12 +9,14 @@ import type { NoteDocument } from "@notted/shared-types";
 import type { ComponentProps } from "react";
 
 const refresh = vi.fn();
+const requestNoteDetail = vi.fn();
 const requestNoteVersions = vi.fn();
 const requestNoteVersion = vi.fn();
 const restoreNoteVersion = vi.fn();
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/notes/requests", () => ({
+  requestNoteDetail: (...args: unknown[]) => requestNoteDetail(...args),
   requestNoteVersions: (...args: unknown[]) => requestNoteVersions(...args),
   requestNoteVersion: (...args: unknown[]) => requestNoteVersion(...args),
   restoreNoteVersion: (...args: unknown[]) => restoreNoteVersion(...args),
@@ -80,6 +82,9 @@ describe("VersionHistory", () => {
       data: { items: [summary], hasMore: false, nextCursor: null },
     });
     requestNoteVersion.mockResolvedValue({ ok: true, data: historical });
+    // The server is the owner of `notes.content`; by default it agrees with the
+    // prop so every other test reads exactly as it did before.
+    requestNoteDetail.mockResolvedValue({ ok: true, data: { content: currentDocument } });
     restoreNoteVersion.mockResolvedValue({ ok: false, kind: "conflict" });
     vi.stubGlobal(
       "confirm",
@@ -145,6 +150,44 @@ describe("VersionHistory", () => {
       expect(screen.getByText(/Finish or resolve autosave/u)).toBeVisible();
     },
   );
+
+  it("diffs against the server's current content, not the document this tab last saved", async () => {
+    // A peer edited the note after this page loaded. In a collaborative session
+    // the server's Yjs projection owns `notes.content`, so `currentDocument` —
+    // whatever THIS tab last saved — describes a document nobody has.
+    requestNoteDetail.mockResolvedValue({
+      ok: true,
+      data: {
+        content: {
+          type: "doc",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "Peer text" }] }],
+        },
+      },
+    });
+    renderHistory();
+    await userEvent.click(screen.getByRole("button", { name: "Version history" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Version 1/u }));
+
+    // Segments carry an sr-only kind prefix, so the assertion is on those.
+    const after = await screen.findByLabelText("After — current version");
+    await waitFor(() => expect(after).toHaveTextContent(/Added: Peer/u));
+    expect(after).not.toHaveTextContent(/Added: After/u);
+  });
+
+  it("refuses restore while the collaborative session still holds unsent updates", async () => {
+    // Unsent Yjs updates never reach React state, so `saveStatus` is "idle" and
+    // the button renders enabled. The guard has to be re-asked on the click.
+    renderHistory({ saveStatus: "idle", hasUnacknowledgedWork: () => true });
+    await userEvent.click(screen.getByRole("button", { name: "Version history" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Version 1/u }));
+
+    const restore = await screen.findByRole("button", { name: "Restore this version" });
+    expect(restore).toBeEnabled();
+    await userEvent.click(restore);
+
+    expect(restoreNoteVersion).not.toHaveBeenCalled();
+    expect(screen.getByText(/have not been saved/u)).toBeInTheDocument();
+  });
 
   it("announces conflicts without refreshing, then refreshes caches/router after success", async () => {
     const { invalidate } = renderHistory();

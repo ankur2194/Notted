@@ -17,7 +17,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { noteQueryKeys } from "@/lib/notes/query-keys";
-import { requestNoteVersion, requestNoteVersions, restoreNoteVersion } from "@/lib/notes/requests";
+import {
+  requestNoteDetail,
+  requestNoteVersion,
+  requestNoteVersions,
+  restoreNoteVersion,
+} from "@/lib/notes/requests";
 import { diffVersionDocuments, type VersionDiffSegment } from "@/lib/notes/version-diff";
 
 function failureCopy(kind: string): string {
@@ -75,6 +80,7 @@ export function VersionHistory({
   canRestore,
   saveStatus = "idle",
   hasUnsavedWork = false,
+  hasUnacknowledgedWork,
 }: {
   readonly workspaceId: string;
   readonly noteId: string;
@@ -84,6 +90,13 @@ export function VersionHistory({
   readonly saveStatus?:
     "idle" | "dirty" | "saving" | "saved" | "retrying" | "error" | "conflict" | "offline";
   readonly hasUnsavedWork?: boolean;
+  /**
+   * The click-time truth, including a collaborative session's unsent Yjs
+   * updates. `hasUnsavedWork` is the render-time half and cannot see them, so
+   * without this the Restore button would look enabled while the tab still
+   * holds work — the same disagreement the unload prompt used to have.
+   */
+  readonly hasUnacknowledgedWork?: () => boolean;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -114,17 +127,45 @@ export function VersionHistory({
     },
     enabled: open && selectedId !== null,
   });
+  /*
+   * The other side of the diff, read from the server rather than from the
+   * autosave machine's private state.
+   *
+   * `currentDocument` is whatever this tab last saved (or the page-load
+   * document). In a collaborative session the server's Yjs projection owns
+   * `notes.content`, so every peer edit since this page loaded is invisible to
+   * it and the diff quietly compares against a document nobody has. Asking the
+   * server is the root-cause fix; the prop stays as the pre-load fallback so the
+   * dialog renders something the instant it opens.
+   */
+  const current = useQuery({
+    queryKey: noteQueryKeys.detail(workspaceId, noteId),
+    queryFn: async () => {
+      const result = await requestNoteDetail(workspaceId, noteId);
+      if (!result.ok) throw new Error(result.kind);
+      return result.data;
+    },
+    enabled: open,
+  });
+  const baseline = current.data?.content ?? currentDocument;
   const diff = useMemo(
     () =>
-      selected.data === undefined
-        ? null
-        : diffVersionDocuments(selected.data.content, currentDocument),
-    [selected.data, currentDocument],
+      selected.data === undefined ? null : diffVersionDocuments(selected.data.content, baseline),
+    [selected.data, baseline],
   );
   const blocked =
     hasUnsavedWork || ["dirty", "saving", "retrying", "offline", "conflict"].includes(saveStatus);
 
   async function restoreVersion(version: NoteVersionSummary): Promise<void> {
+    // Re-asked at the moment of the click, not read from the last render: a
+    // collaborative session's unsent updates never reach React state, so the
+    // rendered `blocked` cannot see them.
+    if (hasUnacknowledgedWork?.() === true) {
+      setAnnouncement(
+        "This note still has changes that have not been saved. Restore is unavailable until they are.",
+      );
+      return;
+    }
     if (
       !canRestore ||
       blocked ||

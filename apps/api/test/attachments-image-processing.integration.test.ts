@@ -29,7 +29,7 @@ import { eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client as MinioClient } from "minio";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ATTACHMENT_AUDIT_ACTIONS } from "../src/attachments/attachments.constants";
@@ -48,6 +48,7 @@ import { ObjectStorageService } from "../src/infrastructure/minio/object-storage
 import { StorageQuotaService } from "../src/storage/storage-quota.service";
 import { TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
 import { HEIC_FIXTURE_ENV, heicFixtureFromEnvironment, jpegFixture } from "./image-fixtures";
 import {
   HAS_MINIO,
@@ -73,9 +74,7 @@ import type { AuthenticatedPrincipal } from "@notted/shared-types";
 import type { Readable } from "node:stream";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
 
 /** Every variant the image pipeline is contracted to materialize, in write order. */
 const MATERIALIZED = ["original", "full", "medium", "thumbnail"] as const;
@@ -106,19 +105,6 @@ function principal(userId: string): AuthenticatedPrincipal {
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     isFresh: true,
   });
-}
-
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
 }
 
 /**
@@ -276,23 +262,17 @@ function requireVariant(
   return object;
 }
 
-describe.skipIf(!HAS_DATABASE_URL || !HAS_MINIO)(
+describe.skipIf(!HAS_DATABASE || !HAS_MINIO)(
   "Part 41 image ingestion (live PostgreSQL + live MinIO)",
   () => {
     let pool: Pool | undefined;
     let db: NodePgDatabase<typeof schema> | undefined;
-    let databaseReachable = false;
     let minioReachable = false;
     let prefix = "";
 
     beforeAll(async () => {
-      const [database, minio] = await Promise.all([
-        isDatabaseReachable(DATABASE_URL as string),
-        isMinioReachable(),
-      ]);
-      databaseReachable = database;
+      const [, minio] = await Promise.all([requireDatabase(), isMinioReachable()]);
       minioReachable = minio;
-      if (!databaseReachable) return;
       pool = new Pool({ connectionString: DATABASE_URL as string, max: 4 });
       db = drizzle(pool, { schema });
       await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -311,7 +291,7 @@ describe.skipIf(!HAS_DATABASE_URL || !HAS_MINIO)(
     it(
       "writes every variant to the real bucket at its recorded key and byte length, and deletion removes them all",
       async ({ skip }) => {
-        if (!databaseReachable || !minioReachable || db === undefined) {
+        if (!minioReachable || db === undefined) {
           skip("skipped: needs a reachable PostgreSQL AND MinIO — run dev compose");
           return;
         }
@@ -433,7 +413,7 @@ describe.skipIf(!HAS_DATABASE_URL || !HAS_MINIO)(
     it(
       "commits the failed row first, then removes only the objects already written",
       async ({ skip }) => {
-        if (!databaseReachable || !minioReachable || db === undefined) {
+        if (!minioReachable || db === undefined) {
           skip("skipped: needs a reachable PostgreSQL AND MinIO — run dev compose");
           return;
         }
@@ -514,7 +494,7 @@ describe.skipIf(!HAS_DATABASE_URL || !HAS_MINIO)(
     it(
       "round-trips a real HEIC file end to end when an operator supplies one",
       async ({ skip }) => {
-        if (!databaseReachable || !minioReachable || db === undefined) {
+        if (!minioReachable || db === undefined) {
           skip("skipped: needs a reachable PostgreSQL AND MinIO — run dev compose");
           return;
         }

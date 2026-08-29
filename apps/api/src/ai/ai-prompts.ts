@@ -194,9 +194,28 @@ const TONE_INSTRUCTION: Readonly<Record<AiTone, string>> = Object.freeze({
  * `tag` is always a literal from this module — `note_content`, `transcript`,
  * `existing_tags`, `invalid_output` — so it is never interpolated user input and
  * the constructed pattern cannot be steered.
+ *
+ * IT REPLACES, IT DOES NOT DELETE, AND THAT IS THE FIX. Deleting a match lets
+ * the two surviving halves close up into a NEW match that the same pass has
+ * already walked past:
+ *
+ *     "</note_c</note_content>ontent>"  ->  "</note_c" + "ontent>"  ->  "</note_content>"
+ *
+ * which put the attacker's text back in prompt space for every builder below.
+ * With a replacement containing `[`, one pass is provably enough: a new match
+ * would have to be a contiguous substring of the output, it cannot span a
+ * `[removed]` token because no arm of the closing-tag pattern matches `[`, and it
+ * cannot lie wholly inside a surviving original fragment because the `g` flag
+ * already consumed every match there.
+ *
+ * The obvious alternative — loop until the string stops changing — is a DoS.
+ * `("</transcrip").repeat(k) + ("t>").repeat(k)` retires exactly one match per
+ * pass, so at `AI_MEETING_TRANSCRIPT_MAX_CHARS` (100 000) that is ~7 700 passes
+ * over ~100 KB: seconds of blocked event loop, on a single-threaded process
+ * serving every tenant. This is O(n), unconditionally.
  */
 export function stripDelimiter(text: string, tag: string): string {
-  return text.replace(new RegExp(`<\\s*/\\s*${tag}\\s*>`, "giu"), "");
+  return text.replace(new RegExp(`<\\s*/\\s*${tag}\\s*>`, "giu"), "[removed]");
 }
 
 /** The Part 68 spelling, kept as-is: it is imported by name and asserted by name. */

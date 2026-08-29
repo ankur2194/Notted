@@ -178,6 +178,7 @@ export const projectDetailSchema = projectMutationProjectSchema
   .safeExtend({
     lastActivityAt: isoTimestampSchema,
     members: z.array(projectMemberSchema).readonly(),
+    membersTruncated: z.boolean(),
     taskProgress: projectTaskProgressSchema,
   })
   .strict();

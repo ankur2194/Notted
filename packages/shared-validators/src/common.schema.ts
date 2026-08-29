@@ -63,7 +63,7 @@ export type SortInput = z.input<typeof sortSchema>;
  */
 export const paginationQuerySchema = z
   .object({
-    page: integerQueryValue.pipe(z.number().int().min(1)).default(1),
+    page: integerQueryValue.pipe(z.number().int().min(1).max(10_000)).default(1),
     limit: integerQueryValue.pipe(z.number().int().min(1).max(100)).default(25),
   })
   .strict();

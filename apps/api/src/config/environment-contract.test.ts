@@ -287,6 +287,9 @@ describe("server environment contract", () => {
       APP_URL: "https://app.example.test",
       API_URL: "https://api.example.test",
       WS_URL: "wss://api.example.test",
+      // Required in production since the TRUST_PROXY_HOPS check below; carried
+      // here so this test still measures the metrics token and nothing else.
+      TRUST_PROXY_HOPS: "1",
     } as const;
 
     expect(() => parseAppConfig({ ...production, METRICS_TOKEN: "short-token" })).toThrow(
@@ -319,6 +322,36 @@ describe("server environment contract", () => {
         CUSTOM_DOMAIN_CNAME_TARGET: "localhost",
       }),
     ).toThrow("CUSTOM_DOMAIN_CNAME_TARGET must be a public hostname in production");
+  });
+
+  it("refuses TRUST_PROXY_HOPS=0 in production, where there is always a proxy", () => {
+    const production = {
+      NODE_ENV: "production",
+      API_HOST: "0.0.0.0",
+      APP_URL: "https://app.example.test",
+      API_URL: "https://api.example.test",
+      WS_URL: "wss://api.example.test",
+    } as const;
+
+    /*
+     * Zero is the default, and in production it is always wrong: APP_URL/API_URL
+     * are required to be https/wss while this process serves plain HTTP, so TLS
+     * is terminated in front of it and there is at least one hop. At zero,
+     * `main.ts` disables `trust proxy` and every rate-limit tier collapses into
+     * one bucket keyed by the proxy's address, every audit row records the
+     * proxy, and `X-Forwarded-Host` is ignored so custom domains answer 421.
+     *
+     * The check is "not zero" rather than "must be set" on purpose:
+     * `apps/api/.env.example` ships TRUST_PROXY_HOPS=0, so a
+     * presence-only check would be satisfied by the value that is wrong.
+     */
+    expect(() => parseAppConfig(production)).toThrow(
+      "TRUST_PROXY_HOPS must be at least 1 in production",
+    );
+    expect(parseAppConfig({ ...production, TRUST_PROXY_HOPS: "1" }).trustProxyHops).toBe(1);
+    expect(parseAppConfig({ ...production, TRUST_PROXY_HOPS: "2" }).trustProxyHops).toBe(2);
+    // Outside production, zero is the correct default: no proxy is in front.
+    expect(parseAppConfig({}).trustProxyHops).toBe(0);
   });
 
   // Part 74 — authentication rate-limit and account-lockout defaults.

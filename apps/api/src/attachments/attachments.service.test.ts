@@ -186,7 +186,15 @@ function fakeDatabase(options: {
         const chain = {
           where: () => chain,
           limit: () => chain,
-          orderBy: () => Promise.resolve(rows.map((row) => ({ ...row }))),
+          // `orderBy` resolves the rows AND stays chainable, because
+          // `listForNote` now appends `.limit(cap + 1)` after ordering to
+          // observe truncation rather than infer it.
+          orderBy: () => {
+            const ordered = rows.map((row) => ({ ...row }));
+            return Object.assign(Promise.resolve(ordered), {
+              limit: () => Promise.resolve(ordered),
+            });
+          },
           for: () => chain,
           then: (resolve: (value: unknown) => unknown) => resolve(result(table, projection)),
         };

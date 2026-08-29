@@ -41,7 +41,11 @@
 // owns what happens to a projection that fails the contract (reject the update,
 // keep the last good projection) and this module must not decide that.
 
-import { safeParseNoteDocument, type NoteDocumentJson } from "@notted/shared-validators";
+import {
+  formatNoteDocumentErrors,
+  safeParseNoteDocument,
+  type NoteDocumentJson,
+} from "@notted/shared-validators";
 import * as Y from "yjs";
 
 /**
@@ -170,7 +174,9 @@ function createChildren(content: readonly unknown[]): (Y.XmlElement | Y.XmlText)
 export function noteDocumentToYDoc(document: unknown): Y.Doc {
   const parsed = safeParseNoteDocument(document);
   if (!parsed.success) {
-    throw new NoteYjsConversionError(`Invalid note document: ${parsed.errors.join("; ")}`);
+    throw new NoteYjsConversionError(
+      `Invalid note document: ${formatNoteDocumentErrors(parsed.errors)}`,
+    );
   }
 
   const doc = new Y.Doc();

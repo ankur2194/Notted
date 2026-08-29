@@ -475,7 +475,7 @@ test.describe.serial("Part 76 accessibility", () => {
      * reaches them in reading order.
      */
     const search = page.getByRole("button", { name: "Open command menu and search" });
-    const userMenu = page.getByRole("button", { name: "Open user menu" });
+    const userMenu = page.getByRole("button", { name: "User menu" });
     await tabUntilFocused(page, search);
     const toUserMenu = await tabUntilFocused(page, userMenu);
     // Continuing from the search trigger, so a small number proves the user menu
@@ -595,19 +595,106 @@ test.describe.serial("Part 76 accessibility", () => {
     });
   }
 
-  test("exposes the user menu as a real menu with menu items", async ({ page }) => {
+  /*
+   * Restored coverage, not new coverage.
+   *
+   * `dashboard-shell.spec.ts` was deleted in the Part 78 cleanup after its
+   * assertions were reported as ported. Five of its six were; this one was not,
+   * and nothing anywhere in `e2e/` replaced it: no browser-level proof that the
+   * workspace selector offers exactly your memberships, that the choice is
+   * validated by the server rather than by the client, or that it survives a
+   * reload. (Its logout half is covered at `auth.spec.ts:51`.)
+   *
+   * Its own account, provisioned in-test: the shared account owns exactly one
+   * workspace and the switcher is deliberately disabled at one, and adding a
+   * second membership to it would change which workspace every other test in
+   * this file opens into.
+   */
+  test("server-validates workspace switching and never exposes an invented option", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const switcher = identity("A11y Switcher");
+    await registerAndSignIn(page, switcher);
+    const first = await createWorkspace(page, `Switch A ${randomUUID().slice(0, 8)}`);
+    const second = await createWorkspace(page, `Switch B ${randomUUID().slice(0, 8)}`);
+
+    await page.goto(`/workspaces/${first}`);
+    const select = page.locator("#workspace-switcher");
+    await expect(select).toBeVisible({ timeout: ROUTE_COMPILE_MS });
+
+    // Asserted by set equality, which is what makes "never exposes an invented
+    // option" checkable at all: a foreign or fabricated id cannot hide in a set
+    // compared exactly against the two memberships this account holds.
+    await expect
+      .poll(async () =>
+        (
+          await select
+            .locator("option")
+            .evaluateAll((options) => options.map((option) => option.getAttribute("value") ?? ""))
+        ).sort(),
+      )
+      .toEqual([first, second].sort());
+
+    // The switch goes through the server and the choice survives a reload.
+    await select.selectOption(second);
+    await page.waitForURL(/[?&]workspace=/u);
+    await page.reload();
+    await expect(page.locator("#workspace-switcher")).toHaveValue(second);
+
+    // And an id this account holds no membership for is refused by the server,
+    // not merely absent from the list — the client is not the authority here.
+    const invented = await page.request.post(`${APP_URL}/api/shell/workspace`, {
+      headers: { Origin: APP_URL },
+      data: { workspaceId: randomUUID() },
+    });
+    expect(invented.status(), "an invented workspace id was accepted").toBe(404);
+    await page.reload();
+    await expect(page.locator("#workspace-switcher")).toHaveValue(second);
+  });
+
+  /*
+   * This test previously asserted the bug.
+   *
+   * It required `aria-haspopup="menu"`, a `role="menu"` panel and a
+   * `role="menuitem"` link — none of which `TopBar` backed with the APG menu
+   * keyboard model, and the axe scan never caught it because the panel is closed
+   * during every scan. The panel is now a Disclosure, so what is pinned here is
+   * the disclosure contract: a stable name, `aria-expanded` carrying the state,
+   * `aria-controls` pointing at what opens, no menu roles claimed, and the two
+   * ways out that a hand-rolled popup usually forgets.
+   */
+  test("exposes the user menu as a disclosure with a working close", async ({ page }) => {
     await signIn(page);
     await page.goto(`/workspaces/${workspaceId}`);
-    const trigger = page.getByRole("button", { name: "Open user menu" });
+    const trigger = page.getByRole("button", { name: "User menu" });
     await expect(trigger).toBeVisible({ timeout: ROUTE_COMPILE_MS });
-    await expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    // A menu role promises arrow-key navigation. Nothing here implements it, so
+    // nothing here may claim it.
+    await expect(trigger).not.toHaveAttribute("aria-haspopup", /.*/u);
+
     await trigger.click();
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
-    // The repository's only `menuitem` assertion. `TopBar` builds this popup by
-    // hand rather than from a Shadcn primitive, so nothing else proves the
-    // promise its `aria-haspopup="menu"` makes is kept by what opens.
-    await expect(page.getByRole("menu")).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "Security settings" })).toBeVisible();
+    const controls = await trigger.getAttribute("aria-controls");
+    expect(controls, "the trigger does not point at what it opens").toBeTruthy();
+    const panel = page.locator(`#${controls}`);
+    await expect(panel).toBeVisible();
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(page.getByRole("menuitem")).toHaveCount(0);
+    await expect(panel.getByRole("link", { name: "Security settings" })).toBeVisible();
+
+    // Escape closes and returns focus to the trigger.
+    await page.keyboard.press("Escape");
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await expect(trigger).toBeFocused();
+
+    // A click outside closes it too — the half a hand-rolled popup forgets.
+    await trigger.click();
+    await expect(panel).toBeVisible();
+    await page.locator("main").click({ position: { x: 5, y: 5 } });
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await expect(panel).toBeHidden();
   });
 
   test("surfaces a notification failure as an alert with a retry and no payload leak", async ({

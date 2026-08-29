@@ -8,6 +8,8 @@ import { TaskListView } from "./TaskListView";
 import type { TaskViewer } from "./TaskListView";
 import type { TaskPage, TaskSummary } from "@notted/shared-types";
 
+import { taskQueryKeys } from "@/lib/notes/query-keys";
+
 const mocks = vi.hoisted(() => ({
   requestTaskPage: vi.fn(),
   createTask: vi.fn(),
@@ -94,18 +96,21 @@ function view(initial: TaskPage = page, canEdit = true, viewer: TaskViewer | nul
     // racing the optimistic writes each test is asserting on.
     defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
   });
-  return render(
-    <QueryClientProvider client={client}>
-      <TaskListView
-        workspaceId={workspaceId}
-        noteId={noteId}
-        projectId={null}
-        initialTasks={initial}
-        canEdit={canEdit}
-        viewer={viewer}
-      />
-    </QueryClientProvider>,
-  );
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>
+        <TaskListView
+          workspaceId={workspaceId}
+          noteId={noteId}
+          projectId={null}
+          initialTasks={initial}
+          canEdit={canEdit}
+          viewer={viewer}
+        />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 describe("TaskListView", () => {
@@ -176,8 +181,8 @@ describe("TaskListView", () => {
     );
     view();
 
-    await user.click(screen.getByRole("checkbox", { name: "Select all tasks" }));
-    expect(screen.getByText("3 of 3 tasks selected")).toBeVisible();
+    await user.click(screen.getByRole("checkbox", { name: "Select all tasks on this page" }));
+    expect(screen.getByText("3 of 3 tasks on this page selected")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Mark complete" }));
     expect(mocks.bulkUpdateTasks).toHaveBeenCalledTimes(1);
@@ -215,7 +220,7 @@ describe("TaskListView", () => {
     });
     view({ items: [alpha, beta], page: 1, limit: 100, hasMore: false });
 
-    await user.click(screen.getByRole("checkbox", { name: "Select all tasks" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select all tasks on this page" }));
     await user.click(screen.getByRole("button", { name: "Mark complete" }));
 
     expect(
@@ -234,7 +239,7 @@ describe("TaskListView", () => {
     });
     view({ items: [alpha, beta], page: 1, limit: 100, hasMore: false });
 
-    await user.click(screen.getByRole("checkbox", { name: "Select all tasks" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select all tasks on this page" }));
     await user.click(screen.getByRole("button", { name: "Mark complete" }));
 
     // dnd-kit mounts its own `role="status"` live region, so the assertion
@@ -286,6 +291,59 @@ describe("TaskListView", () => {
       expect.any(String),
     );
     expect(await screen.findByText(/3 rows removed including subtasks/iu)).toBeVisible();
+  });
+
+  it("invalidates every task query after a mutation, not only the page in view", async () => {
+    const user = userEvent.setup();
+    mocks.updateTask.mockResolvedValue({
+      ok: true,
+      data: { task: { ...alpha, status: "done" }, spawned: null },
+    });
+    const { client } = view();
+    // A sibling key under the same `tasks` prefix: the board's status columns.
+    // `MyTasksWidget` and the calendar read siblings like it, and a single-key
+    // refetch left every one of them holding the pre-mutation rows.
+    const sibling = taskQueryKeys.statuses(workspaceId, null);
+    client.setQueryData(sibling, { items: [] });
+
+    await user.click(screen.getByRole("checkbox", { name: "Complete Alpha" }));
+
+    await waitFor(() => expect(client.getQueryState(sibling)?.isInvalidated).toBe(true));
+    // `router.refresh()` is load-bearing alongside it: `NoteDetailView` renders
+    // a server-computed progress bar from task state on this same route.
+    expect(mocks.refresh).toHaveBeenCalled();
+  });
+
+  it("pages forward without reusing the server-rendered first page, and drops the selection", async () => {
+    const user = userEvent.setup();
+    const delta = task("40000000-0000-4000-8000-00000000000d", "Delta", { sortOrder: 4 });
+    const second: TaskPage = { items: [delta], page: 2, limit: 100, hasMore: false };
+    mocks.requestTaskPage.mockResolvedValue({ ok: true, data: second });
+    view({ items: [alpha, beta, gamma], page: 1, limit: 100, hasMore: true });
+
+    await user.click(screen.getByRole("checkbox", { name: "Select all tasks on this page" }));
+    expect(screen.getByText("3 of 3 tasks on this page selected")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    // Page 2 is fetched, not seeded from the server-rendered page 1.
+    await waitFor(() => expect(screen.getByDisplayValue("Delta")).toBeVisible());
+    expect(screen.queryByDisplayValue("Alpha")).not.toBeInTheDocument();
+    expect(mocks.requestTaskPage).toHaveBeenCalledWith(
+      workspaceId,
+      expect.objectContaining({ page: 2, limit: 100 }),
+    );
+    // The selection named rows nobody can see any more, so it is gone.
+    expect(screen.getByText("0 of 1 tasks on this page selected")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Previous" }));
+    await waitFor(() => expect(screen.getByDisplayValue("Alpha")).toBeVisible());
+  });
+
+  it("offers no pager at all when one page holds everything", () => {
+    view();
+    expect(screen.queryByRole("navigation", { name: "Task pages" })).not.toBeInTheDocument();
   });
 
   it("offers no editing affordances without permission", () => {

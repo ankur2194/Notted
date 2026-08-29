@@ -67,7 +67,7 @@ describe("protected dashboard layout", () => {
     vi.mocked(getServerShell).mockResolvedValue({ status: "ready", data: shell });
     render(await DashboardLayout({ children: <p>Protected</p> }));
     expect(screen.getByText("Protected")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open user menu" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "User menu" })).toBeInTheDocument();
   });
 
   it("fails closed when memberships and notification count cannot be loaded", async () => {

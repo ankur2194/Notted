@@ -208,6 +208,40 @@ describe("image toolbar", () => {
     expect(safeParseNoteDocument(editor.getJSON()).success).toBe(true);
   });
 
+  it("moves focus into the toolbar on the keyboard shortcut, and never before it", async () => {
+    const { editor, pressBinding, toolbar } = await openToolbar();
+    const first = within(toolbar).getByRole("button", { name: "Align image left" });
+    const before = JSON.stringify(editor.getJSON());
+
+    // Selecting an image must NOT steal focus: clicking or arrowing onto one
+    // while typing would yank the caret out of the document.
+    expect(first).not.toHaveFocus();
+
+    act(() => pressBinding("Mod-Alt-o"));
+
+    // The toolbar is portalled to `document.body`, so without this the only
+    // route to alt text is an arbitrarily long tab journey — SC 2.4.3.
+    await waitFor(() => expect(first).toHaveFocus());
+    // Reaching chrome is a view action, never an edit.
+    expect(JSON.stringify(editor.getJSON())).toBe(before);
+  });
+
+  it("brings a dismissed toolbar back on the shortcut", async () => {
+    const { user, pressBinding, toolbar } = await openToolbar();
+    within(toolbar).getByRole("button", { name: "Align image left" }).focus();
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByRole("toolbar", { name: IMAGE_TOOLBAR_LABEL })).not.toBeInTheDocument(),
+    );
+
+    act(() => pressBinding("Mod-Alt-o"));
+
+    const reopened = await screen.findByRole("toolbar", { name: IMAGE_TOOLBAR_LABEL });
+    await waitFor(() =>
+      expect(within(reopened).getByRole("button", { name: "Align image left" })).toHaveFocus(),
+    );
+  });
+
   it("hides itself on Escape without changing the document", async () => {
     const { editor, user, toolbar } = await openToolbar();
     within(toolbar).getByRole("button", { name: "Align image left" }).focus();

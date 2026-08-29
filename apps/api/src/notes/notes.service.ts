@@ -62,6 +62,7 @@ import {
   type NoteMutation,
 } from "./notes.constants";
 
+import type { AuthorizationRunner } from "../authorization/authorization.repository";
 import type {
   AuthenticatedPrincipal,
   FolderCreateResult,
@@ -742,7 +743,6 @@ export class NotesService {
           if (input.parentId === input.noteId || input.beforeNoteId === input.noteId)
             this.invalidMove();
           await this.validateContainer(tx, input, input.noteId);
-          await this.assertNoNoteCycle(tx, input.noteId, input.parentId);
           const subtreeIds = await this.noteSubtreeIds(tx, input.noteId);
           await this.lockSiblingGroups(tx, [
             source,
@@ -753,6 +753,35 @@ export class NotesService {
               parentId,
             })),
           ]);
+          /*
+           * THE CYCLE CHECK RUNS AFTER THE LOCK, AND THAT ORDERING IS THE FIX.
+           *
+           * It used to run before `lockSiblingGroups`, walking the ancestor
+           * chain with unlocked reads — so `move(A under B)` and
+           * `move(B under A)` could both decide "no cycle" and both commit,
+           * leaving two notes pointing at each other: invisible in every
+           * listing (neither is reachable from a root) and undeletable (the
+           * subtree walk never terminates at one).
+           *
+           * The two moves DO already collide on a lock: `subtreeIds` always
+           * contains the moved note itself, and `validateContainer` forces the
+           * other move's destination into the same project/folder, so both
+           * compute the byte-identical advisory key for the shared note. The
+           * loser blocks. What was missing is that it then re-evaluated nothing.
+           *
+           * `read committed` gives each STATEMENT a fresh snapshot, so the
+           * `readRow` walk inside `assertNoNoteCycle` now sees the winner's
+           * committed re-parent and refuses. Raising the isolation level would
+           * NOT do this — at `serializable` the re-read still sees the old
+           * snapshot, and correctness would rest entirely on SSI aborting, which
+           * needs a retry that does not exist yet on the hottest write path.
+           *
+           * ponytail: a note re-parented INTO this subtree between
+           * `noteSubtreeIds` and the lock is still missed — stale `subtreeIds`,
+           * not a cycle. Upgrade path if that ever bites: re-read the subtree
+           * after the locks are held.
+           */
+          await this.assertNoNoteCycle(tx, input.noteId, input.parentId);
           const containerChanges =
             source.projectId !== input.projectId || source.folderId !== input.folderId;
           if (containerChanges) {
@@ -765,6 +794,7 @@ export class NotesService {
                   requestId: input.requestId,
                 },
                 "note.update",
+                tx,
               );
             }
           }
@@ -1292,6 +1322,7 @@ export class NotesService {
                   requestId: input.requestId,
                 },
                 "note.update",
+                tx,
               );
             }
           }
@@ -1358,9 +1389,18 @@ export class NotesService {
     });
   }
 
+  /**
+   * `db` is passed ONLY by the two callers that authorize from inside a
+   * transaction they already hold — the descendant re-checks in `move()` and in
+   * the delete/restore path. Without it those reads take a SECOND pool
+   * connection while the first is still open, so at the default pool size of 10
+   * ten concurrent moves hold all ten and then each waits for a connection only
+   * another waiter could release. Every other caller omits it and is unchanged.
+   */
   private authorizeNote(
     input: NoteSelector,
     action: "note.read" | "note.update" | "note.delete" | "note.tag" | "export.create",
+    db?: AuthorizationRunner,
   ) {
     return this.authorizationEntry.authorizeUser({
       principal: input.principal,
@@ -1368,6 +1408,7 @@ export class NotesService {
       action,
       resource: { kind: "note", id: input.noteId },
       requestId: input.requestId,
+      db,
     });
   }
 
@@ -1676,14 +1717,29 @@ export class NotesService {
     for (const [index, row] of rows.entries()) {
       const sortOrder = index + 1;
       if (row.sortOrder !== sortOrder) {
+        /*
+         * `sortOrder` ONLY — no version bump, no timestamp, no actor.
+         *
+         * Renumbering is bookkeeping forced on a sibling by someone ELSE's
+         * insert, not an edit to it. `TasksService.renormalize` already refuses
+         * to touch `updatedAt` for exactly that reason; notes additionally bumped
+         * `version`, which is the optimistic-concurrency token, and that was
+         * actively harmful in two places:
+         *
+         *   - `useNoteAutosave` holds `note.version`, so renumbering a note the
+         *     user never opened turned their next save into a spurious
+         *     "the note changed" conflict.
+         *   - `note-collaboration.service.ts` compares `projectedNoteVersion`
+         *     against `note.version` and answers `version_mismatch`, forcing an
+         *     EPOCH REBUILD of a live collaborative document because an
+         *     unrelated sibling ran out of sort-order gaps.
+         *
+         * Nothing reads `version` to detect a reorder — order is read from
+         * `sortOrder` directly — so the bump had no consumer at all.
+         */
         await tx
           .update(notes)
-          .set({
-            sortOrder,
-            version: sql`${notes.version} + 1`,
-            updatedAt: new Date(),
-            updatedById: this.requireActorId(),
-          })
+          .set({ sortOrder })
           .where(and(eq(notes.id, row.id), whereWorkspace(notes, this.tenantContext)));
       }
       normalized.push({ id: row.id, sortOrder, isDeleted: row.isDeleted });
@@ -1780,11 +1836,16 @@ export class NotesService {
       //
       // ponytail: the lock is now subtree-scoped, so it no longer accidentally
       // serializes unrelated note mutations across the workspace. Nothing
-      // depended on that: `move()` runs at `read committed` and re-evaluates
-      // after acquiring its own locks, so a note re-parented into this subtree
-      // was never actually serialized by the wide lock either. Upgrade path if
-      // that race ever needs closing: raise `move()` to `serializable`, or have
-      // it lock the destination parent row.
+      // depended on that: `move()` re-evaluates after acquiring its own locks.
+      //
+      // The stated upgrade path here USED to be "raise `move()` to
+      // `serializable`, or lock the destination parent row". Both are the wrong
+      // answer and neither is needed: the concurrent-cycle race turned out to be
+      // a statement-ORDERING bug, closed by running `assertNoNoteCycle` after
+      // `lockSiblingGroups` rather than before it. See the comment there — it
+      // also explains why raising the isolation level would not have worked.
+      // What remains unprotected is a note re-parented INTO this subtree between
+      // `noteSubtreeIds` and the lock, which is stale membership, not a cycle.
       await tx
         .select({ id: notes.id })
         .from(notes)
@@ -2332,17 +2393,6 @@ export class NotesService {
       if (error instanceof AuthorizationDeniedError) return false;
       throw error;
     }
-  }
-
-  private requireActorId(): string {
-    const actorId = this.tenantContext.get().userId;
-    if (actorId === null) {
-      throw new ApiHttpException(HttpStatus.FORBIDDEN, {
-        code: "FORBIDDEN",
-        message: "A user actor is required for note ordering changes.",
-      });
-    }
-    return actorId;
   }
 
   private invalidMove(): never {

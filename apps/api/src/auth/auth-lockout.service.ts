@@ -65,10 +65,25 @@ export class AuthLockoutService {
     private readonly logger: StructuredLogger,
   ) {}
 
-  /** Fixed 60-second window per identifier, independent of the per-IP bucket. */
-  async consumeIdentifierBudget(identifier: string): Promise<void> {
+  /**
+   * Fixed 60-second window per identifier PER ENDPOINT, independent of the
+   * per-IP bucket.
+   *
+   * `scope` is what stops one endpoint spending another's budget. The key used
+   * to be `auth:budget:<hash>` alone, shared by every path in
+   * `AUTH_IDENTIFIER_PATHS` — so an attacker with only a victim's email address
+   * could drain it through `/notted/request-password-reset`, which needs no
+   * password and no session, and the victim's real sign-in attempts then
+   * answered 429. Scoping by the raw path needs no classification table and
+   * makes the cross-endpoint spend structurally impossible rather than merely
+   * unlikely.
+   */
+  async consumeIdentifierBudget(identifier: string, scope: string): Promise<void> {
     const hash = identifierHash(identifier);
-    const used = await this.redis.incrementWithTtl(`auth:budget:${hash}`, BUDGET_WINDOW_MS);
+    const used = await this.redis.incrementWithTtl(
+      `auth:budget:${scope}:${hash}`,
+      BUDGET_WINDOW_MS,
+    );
     if (used > this.appConfig.authRateLimitPerMinute) {
       throw new AuthLockoutError(429, "RATE_LIMITED", BUDGET_WINDOW_MS / 1_000);
     }

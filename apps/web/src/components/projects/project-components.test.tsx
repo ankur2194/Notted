@@ -33,6 +33,7 @@ const project = {
   createdAt: "2026-08-01T00:00:00.000Z",
   updatedAt: "2026-08-02T00:00:00.000Z",
   lastActivityAt: "2026-08-03T00:00:00.000Z",
+  membersTruncated: false,
   members: [],
   taskProgress: { coverage: "tasks-and-checklists", completed: 1, total: 2 },
 } satisfies ProjectDetail;

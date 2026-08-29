@@ -79,6 +79,28 @@ export default defineConfig({
         // number to lower.
         "src/authorization/**": { branches: 85, functions: 85, lines: 85, statements: 85 },
         "src/auth/**": { branches: 75, functions: 75, lines: 75, statements: 75 },
+        // `src/realtime/**` is the newest floor, and it exists because ~650
+        // lines covering presence forgery, cross-instance room concealment,
+        // distributed connection caps and session revocation live behind
+        // `REALTIME_INTEGRATION` — which nothing in the repository set until
+        // `compose.yaml` did. The suite could be skipped with the whole run
+        // still green, and no gate said otherwise.
+        //
+        // MEASURED WITH THE FLAG ON, which is the only measurement that means
+        // anything here: `src/realtime/` already has six unit test files
+        // including a 23 KB gateway test, so a floor read from a run WITHOUT the
+        // integration suite would be satisfiable by the unit layer alone and
+        // would prove nothing at all.
+        //
+        //   REALTIME_INTEGRATION=true  ->  89.70 / 87.52 / 91.95 / 78.78
+        //   flag absent                ->  79.97 / 77.30 / 75.17 / 67.32
+        //
+        // Lowest with the flag is branches at 78.78; rounded down to the nearest
+        // 5 that is 75. Skipping the suite lands branches at 67.32 — below the
+        // floor, so the run goes red instead of green, which is the entire
+        // reason this entry exists. Both directions were verified before it was
+        // written down.
+        "src/realtime/**": { branches: 75, functions: 75, lines: 75, statements: 75 },
         "src/tenant/**": { branches: 95, functions: 95, lines: 95, statements: 95 },
         "src/common/idempotency/**": { branches: 95, functions: 95, lines: 95, statements: 95 },
       },

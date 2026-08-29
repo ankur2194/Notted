@@ -110,7 +110,9 @@ describe("attachmentEntry", () => {
   });
 
   it("maps a whole listing", () => {
-    expect(attachmentEntries({ items: [media()] })).toHaveLength(1);
+    expect(
+      attachmentEntries({ items: [media()], limit: 200, returned: 1, truncated: false }),
+    ).toHaveLength(1);
   });
 });
 
@@ -124,14 +126,18 @@ describe("attachment requests", () => {
 
   it("lists a note's attachments with credentials", async () => {
     fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ items: [media()] }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
+      new Response(
+        JSON.stringify({ items: [media()], limit: 200, returned: 1, truncated: false }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
     );
     const result = await requestNoteAttachments(workspaceId, noteId);
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data.items).toHaveLength(1);
+    if (result.ok) {
+      expect(result.data.items).toHaveLength(1);
+      // The endpoint is now bounded, and says so rather than truncating silently.
+      expect(result.data.truncated).toBe(false);
+    }
 
     const init = fetchMock.mock.calls[0]?.[1];
     expect(init?.credentials).toBe("include");

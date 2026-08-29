@@ -37,6 +37,11 @@ export type ApiErrorCode =
   | "FOLDER_HIERARCHY_INVALID"
   | "FOLDER_DEPTH_EXCEEDED"
   | "NOTE_SHARE_SELF_DENIED"
+  // 409. Deleting a project nulls its notes' and tasks' `project_id`, and a null
+  // project is visible to the whole workspace — so deleting a RESTRICTED project
+  // that still holds content would silently publish it. The caller moves or
+  // deletes the content first, which makes the widening a deliberate choice.
+  | "PROJECT_HAS_RESTRICTED_CONTENT"
   // Part 62 — export lifecycle. All three map to 409/422 so `request-json.ts`
   // surfaces them through its `conflict` / `invalid` failure kinds rather than
   // the opaque `unavailable` bucket.

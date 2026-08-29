@@ -62,6 +62,7 @@ const project = {
   createdAt: "2026-08-01T00:00:00.000Z",
   updatedAt: "2026-08-02T00:00:00.000Z",
   lastActivityAt: "2026-08-03T00:00:00.000Z",
+  membersTruncated: false,
   members: [
     {
       userId: "30000000-0000-4000-8000-000000000003",

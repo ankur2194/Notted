@@ -5,7 +5,11 @@
 // packed XML proves the bytes a reader opens are the bytes we meant.
 
 import { clampMargins, pageDimensionsMm } from "@notted/shared-types";
-import { NOTE_DOCUMENT_NODE_TYPES, formatBinaryBytes } from "@notted/shared-validators";
+import {
+  NOTE_DOCUMENT_LIMITS,
+  NOTE_DOCUMENT_NODE_TYPES,
+  formatBinaryBytes,
+} from "@notted/shared-validators";
 import { convertMillimetersToTwip } from "docx";
 import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
@@ -671,5 +675,32 @@ describe("renderDocx hostile input", () => {
 
     expect(xml).toContain("@Ada  Lovelace");
     expect(xml).not.toContain("\u001b");
+  });
+});
+
+/*
+ * The companion to the root-block-budget fix in `@notted/shared-validators`.
+ *
+ * The renderer sliced every container at `maxChildren` (200), including the
+ * document root. Raising the contract's root budget without raising this would
+ * have exported the first 200 blocks of a longer note and reported success —
+ * a silent truncation, which is worse than the rejection it replaced.
+ */
+describe("root block budget", () => {
+  it("renders every top-level block of a note past the per-node child cap", async () => {
+    const blocks = NOTE_DOCUMENT_LIMITS.maxChildren + 50;
+    const document = {
+      type: "doc",
+      content: Array.from({ length: blocks }, (_value, index) => ({
+        type: "paragraph",
+        content: [{ type: "text", text: `BLOCK-${index}` }],
+      })),
+    };
+
+    const xml = await bodyXml(document);
+    expect(xml).toContain("BLOCK-0");
+    expect(xml).toContain(`BLOCK-${NOTE_DOCUMENT_LIMITS.maxChildren - 1}`);
+    // The one that used to fall off the end.
+    expect(xml).toContain(`BLOCK-${blocks - 1}`);
   });
 });

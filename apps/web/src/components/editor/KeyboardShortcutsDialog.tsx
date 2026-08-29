@@ -48,6 +48,9 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
   useEffect(() => {
     const bindings = globalShortcuts();
     const handleKeyDown = (event: KeyboardEvent): void => {
+      // See `PageContainer`: a document-level listener never acts on a
+      // keystroke a binding closer to the target already claimed.
+      if (event.defaultPrevented) return;
       for (const shortcut of bindings) {
         // A bare key such as `?` must never steal a keystroke from a field the
         // user is typing in, including the editor's contenteditable surface.

@@ -36,7 +36,7 @@ import { resolve } from "node:path";
 import { eq } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { allowAuditDelete } from "../src/audit/audit-record";
@@ -69,6 +69,8 @@ import {
 } from "../src/webhooks/webhooks.constants";
 import { WebhooksService } from "../src/webhooks/webhooks.service";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { StructuredLogger } from "../src/common/logging/structured-logger.service";
 import type { AppConfig } from "../src/config/app.config";
 import type { QueueHandlerRegistry } from "../src/queue/queue-handler-registry.service";
@@ -77,7 +79,6 @@ import type { AuthenticatedPrincipal, WebhookEvent } from "@notted/shared-types"
 import type { PgTransactionConfig } from "drizzle-orm/pg-core/session";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
 
 const ALPHA = SEED_IDS.workspaces.alpha;
@@ -117,18 +118,6 @@ function principal(userId: string): AuthenticatedPrincipal {
     // principal would be denied before any webhook logic ran.
     isFresh: true,
   });
-}
-
-async function reachable(url: string): Promise<boolean> {
-  const client = new Client({ connectionString: url, connectionTimeoutMillis: 2_000 });
-  try {
-    await client.connect();
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
 }
 
 /**
@@ -358,18 +347,17 @@ const header = (request: ReceivedRequest, name: string): string => {
   return typeof value === "string" ? value : "";
 };
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook delivery pipeline (live PostgreSQL)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 66 webhook delivery pipeline (live PostgreSQL)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
-  let databaseReachable = false;
 
   // Everything this file commits, so each test leaves the tenant as it found it.
   const createdWebhookIds: string[] = [];
   const createdNoteIds: string[] = [];
 
   beforeAll(async () => {
-    databaseReachable = await reachable(DATABASE_URL as string);
-    if (!databaseReachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 8 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -470,7 +458,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook delivery pipeline (live Post
   it("commits the note while a silent receiver is still holding the delivery open", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     // Accepts the connection, reads the body, and NEVER answers.
     const receiver = await startReceiver(() => undefined);
@@ -519,7 +507,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook delivery pipeline (live Post
   it("retries one event under one stable event id, one outbox intent and two delivery ids", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     const receiver = await startReceiver((_request, response, attempt) => {
       response.writeHead(attempt === 1 ? 500 : 200, { "content-type": "text/plain" });
@@ -563,7 +551,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook delivery pipeline (live Post
   it("replays a failed delivery under the same event id with a fresh intent and attempt 1", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     // 404 is terminal: retrying it would just re-receive the same 404.
     const receiver = await startReceiver((_request, response) => {
@@ -619,7 +607,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook delivery pipeline (live Post
   it("refuses private, link-local and metadata destinations while accepting loopback", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     expect(SECURITY.webhookAllowInsecureUrls).toBe(true);
 
@@ -660,7 +648,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook delivery pipeline (live Post
   // ------------------------------------------------------------------ //
 
   it("never follows a redirect and records the 302 as a permanent failure", async ({ skip }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     const secondary = await startReceiver((_request, response) => {
       response.writeHead(200, { "content-type": "text/plain" });
@@ -697,7 +685,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook delivery pipeline (live Post
   it("caps a chatty receiver's stored snippet and stores none for a binary body", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     // No `content-length`, so this streams: the cap has to hold on the wire,
     // not just on a declared header.
@@ -741,7 +729,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook delivery pipeline (live Post
   // ------------------------------------------------------------------ //
 
   it("verifies an endpoint that echoes the challenge and records the attempt", async ({ skip }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     const receiver = await startReceiver((request, response) => {
       const challenge = (JSON.parse(request.body) as { data: { challenge: string } }).data
@@ -782,7 +770,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook delivery pipeline (live Post
   it("fails verification on a 2xx without the challenge and still writes the attempt", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     const receiver = await startReceiver((_request, response) => {
       response.writeHead(200, { "content-type": "text/plain" });
@@ -824,7 +812,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook delivery pipeline (live Post
   it("never contacts the receiver when the endpoint's creator cannot read the note", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     const receiver = await startReceiver((_request, response) => {
       response.writeHead(200, { "content-type": "text/plain" });
@@ -872,7 +860,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 66 webhook delivery pipeline (live Post
   it("keeps the endpoint URL, the signature header and the secret out of rows and logs", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const harness = build(db);
     const receiver = await startReceiver((_request, response) => {
       response.writeHead(200, { "content-type": "text/plain" });

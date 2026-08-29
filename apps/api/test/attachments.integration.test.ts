@@ -6,7 +6,7 @@ import { and, eq, like, sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client as MinioClient } from "minio";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
@@ -39,6 +39,7 @@ import { ObjectStorageService } from "../src/infrastructure/minio/object-storage
 import { StorageQuotaService } from "../src/storage/storage-quota.service";
 import { TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
 import {
   HAS_MINIO,
   isMinioReachable,
@@ -59,9 +60,7 @@ import type { AuthenticatedPrincipal } from "@notted/shared-types";
 import type { PgTransactionConfig } from "drizzle-orm/pg-core/session";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
-const CONNECTION_TIMEOUT_MS = 2_000;
 
 /** Marks every row the concurrency test COMMITS so a rerun clears its own leftovers. */
 const QUOTA_FIXTURE = "quota-concurrency-fixture";
@@ -247,19 +246,6 @@ function principal(userId: string): AuthenticatedPrincipal {
   });
 }
 
-async function isDatabaseReachable(connectionString: string): Promise<boolean> {
-  const client = new Client({ connectionString, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS });
-  try {
-    await client.connect();
-    await client.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
-}
-
 /**
  * In-memory object store. MinIO cannot join the PostgreSQL rollback
  * transaction, so the tenant-isolation suite substitutes it and asserts that
@@ -391,14 +377,13 @@ function buildService(
   );
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 40 secure object storage (live PostgreSQL)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 40 secure object storage (live PostgreSQL)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
-  let reachable = false;
 
   beforeAll(async () => {
-    reachable = await isDatabaseReachable(DATABASE_URL as string);
-    if (!reachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 8 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -411,7 +396,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 40 secure object storage (live PostgreS
   it("enforces tenant isolation, key non-authority, permission loss, cleanup, and durable intents", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -576,6 +561,16 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 40 secure object storage (live PostgreS
         const listed = await service.listForNote({ principal: owner, workspaceId: alpha, noteId });
         expect(listed.items.map((item) => item.id)).toContain(attachmentId);
         expect(JSON.stringify(listed)).not.toContain('"key"');
+        /*
+         * This endpoint had no `.limit()` at all, so a note used as a dumping
+         * ground returned every row on every read. The bound is reported the
+         * same way `NoteShareList` reports its own — a truncated list that looks
+         * complete is worse than an obviously partial one.
+         */
+        expect(listed.truncated).toBe(false);
+        expect(listed.returned).toBe(listed.items.length);
+        expect(listed.limit).toBeGreaterThan(0);
+        expect(listed.items.length).toBeLessThanOrEqual(listed.limit);
 
         // --- Partial failure: row failed, written objects removed afterwards. ---
         const failingStore = new MemoryObjectStore();
@@ -661,7 +656,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 40 secure object storage (live PostgreS
   it("serializes concurrent uploads on the workspace row so quota cannot be double-spent", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }
@@ -776,7 +771,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 40 secure object storage (live PostgreS
   it("uploads, downloads, and deletes every documented file category with isolation intact", async ({
     skip,
   }) => {
-    if (!reachable || db === undefined) {
+    if (db === undefined) {
       skip("skipped: no reachable PostgreSQL — run dev compose");
       return;
     }

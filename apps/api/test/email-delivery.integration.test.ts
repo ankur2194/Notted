@@ -24,7 +24,7 @@ import { resolve } from "node:path";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
@@ -51,6 +51,8 @@ import { PermanentQueueJobError } from "../src/queue/queue-errors";
 import { QueueHandlerRegistry } from "../src/queue/queue-handler-registry.service";
 import { createTenantContext, TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { StructuredLogger } from "../src/common/logging/structured-logger.service";
 import type { AppConfig } from "../src/config/app.config";
 import type { FeaturesConfig } from "../src/config/features.config";
@@ -61,22 +63,9 @@ import type {
 import type { PgTransactionConfig } from "drizzle-orm/pg-core/session";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
 
 const PROVIDER_MESSAGE_ID = "<integration-provider-message-id@notted.test>";
-
-async function reachable(url: string): Promise<boolean> {
-  const client = new Client({ connectionString: url, connectionTimeoutMillis: 2_000 });
-  try {
-    await client.connect();
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
-}
 
 /** Records what the renderer handed the transport; never asserted as content. */
 function fakeSmtp(): { readonly sent: SmtpMessage[]; readonly service: SmtpService } {
@@ -141,10 +130,9 @@ function jobContext(
   };
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 61 email delivery (live PostgreSQL)", () => {
+describe.skipIf(!HAS_DATABASE)("Part 61 email delivery (live PostgreSQL)", () => {
   let pool: Pool | undefined;
   let db: NodePgDatabase<typeof schema> | undefined;
-  let databaseReachable = false;
 
   const userId = randomUUID();
   const workspaceAId = randomUUID();
@@ -177,8 +165,8 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 61 email delivery (live PostgreSQL)", (
   }
 
   beforeAll(async () => {
-    databaseReachable = await reachable(DATABASE_URL as string);
-    if (!databaseReachable) return;
+    await requireDatabase();
+
     pool = new Pool({ connectionString: DATABASE_URL as string, max: 8 });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -230,7 +218,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 61 email delivery (live PostgreSQL)", (
   });
 
   it("carries a queued intent through the renderer to a sent delivery", async ({ skip }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const { handler, producer, smtp } = build(db);
     const address = recipient("welcome");
     const input: QueueWorkspaceEmailInput = {
@@ -284,7 +272,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 61 email delivery (live PostgreSQL)", (
   });
 
   it("collapses a replayed business event to exactly one delivery", async ({ skip }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const { producer } = build(db);
     const address = recipient("duplicate");
     const input: QueueWorkspaceEmailInput = {
@@ -320,7 +308,7 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 61 email delivery (live PostgreSQL)", (
   it("refuses a foreign workspace id and leaves the owning workspace's row untouched", async ({
     skip,
   }) => {
-    if (!databaseReachable || db === undefined) return skip("no reachable disposable PostgreSQL");
+    if (db === undefined) return skip("no reachable disposable PostgreSQL");
     const { handler, producer, smtp, tenant } = build(db);
     const address = recipient("mention");
     const input: QueueWorkspaceEmailInput = {

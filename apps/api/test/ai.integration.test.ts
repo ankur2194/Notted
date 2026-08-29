@@ -28,7 +28,7 @@ import { resolve } from "node:path";
 import { eq, inArray } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { AiCredentialService } from "../src/ai/ai-credential.service";
@@ -46,6 +46,8 @@ import { aiProviderConfig, aiUsage, auditLogs, schema } from "../src/database/sc
 import { SEED_IDS, seedDatabase } from "../src/database/seed";
 import { TenantContextService } from "../src/tenant";
 
+import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
+
 import type { StructuredLogger } from "../src/common/logging/structured-logger.service";
 import type { AiConfig } from "../src/config/ai.config";
 import type { AiProviderRateLimiterService } from "../src/queue/ai-provider-rate-limiter.service";
@@ -54,7 +56,6 @@ import type { PgTransactionConfig } from "drizzle-orm/pg-core/session";
 import type Redis from "ioredis";
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const HAS_DATABASE_URL = typeof DATABASE_URL === "string" && DATABASE_URL.trim() !== "";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
 
 const ALPHA = SEED_IDS.workspaces.alpha;
@@ -87,18 +88,6 @@ function principal(userId: string): AuthenticatedPrincipal {
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     isFresh: true,
   });
-}
-
-async function reachable(url: string): Promise<boolean> {
-  const client = new Client({ connectionString: url, connectionTimeoutMillis: 2_000 });
-  try {
-    await client.connect();
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => undefined);
-  }
 }
 
 interface HarnessOptions {
@@ -197,15 +186,12 @@ async function refusal(promise: Promise<unknown>): Promise<ApiHttpException> {
   throw new Error("expected the call to be refused");
 }
 
-describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", () => {
+describe.skipIf(!HAS_DATABASE)("Part 67 AI configuration and governance", () => {
   let pool: Pool;
   let db: NodePgDatabase<typeof schema>;
-  let available = false;
 
   beforeAll(async () => {
-    if (!HAS_DATABASE_URL) return;
-    available = await reachable(DATABASE_URL);
-    if (!available) return;
+    await requireDatabase();
     pool = new Pool({ connectionString: DATABASE_URL });
     db = drizzle(pool, { schema });
     await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -217,7 +203,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
   });
 
   beforeEach(async () => {
-    if (!available) return;
     // Both tables, both workspaces: an AI configuration left behind by one case
     // would silently become the "already configured" precondition of the next.
     await db.delete(aiUsage).where(inArray(aiUsage.workspaceId, [ALPHA, BETA]));
@@ -225,7 +210,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
   });
 
   it("stores the credential encrypted and never returns it", async () => {
-    if (!available) return;
     const { service, credentials } = build(db);
     const view = await service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY }));
 
@@ -271,7 +255,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
   });
 
   it("records the write without any key material", async () => {
-    if (!available) return;
     const { service } = build(db);
     await service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY, requestId: "req-ai-1" }));
 
@@ -289,7 +272,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
   });
 
   it("keeps the stored key when none is supplied", async () => {
-    if (!available) return;
     const { service } = build(db);
     await service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY }));
     const [before] = await db
@@ -308,7 +290,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
   });
 
   it("refuses a provider switch that carries no new key", async () => {
-    if (!available) return;
     const { service } = build(db);
     await service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY }));
 
@@ -328,7 +309,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
   });
 
   it("clears the credential when AI is disabled", async () => {
-    if (!available) return;
     const { service } = build(db);
     await service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY }));
     const view = await service.updateConfig(
@@ -348,7 +328,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
   });
 
   it("keeps a pre-rotation row readable and migrates it on the next save", async () => {
-    if (!available) return;
     // Written while version 1 was the only key.
     const before = build(db);
     await before.service.updateConfig(
@@ -387,7 +366,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
   });
 
   it("denies ai.configure to an editor", async () => {
-    if (!available) return;
     const { service } = build(db);
     await expect(
       service.updateConfig(
@@ -407,7 +385,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
   });
 
   it("denies ai.use to a viewer but allows it for an editor", async () => {
-    if (!available) return;
     const { service } = build(db);
     await service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY }));
 
@@ -432,7 +409,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
   });
 
   it("never lets one workspace read another's usage", async () => {
-    if (!available) return;
     const { service } = build(db);
     await service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY }));
     await service.updateConfig(
@@ -516,7 +492,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
       });
 
     it("refuses when the deployment kill-switch is off", async () => {
-      if (!available) return;
       const configured = build(db);
       await configured.service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY }));
 
@@ -527,13 +502,11 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
     });
 
     it("refuses a workspace that was never configured", async () => {
-      if (!available) return;
       const { governance } = build(db);
       expect((await refusal(acquire(governance))).safeResponse.code).toBe("AI_NOT_CONFIGURED");
     });
 
     it("refuses when consent was never given", async () => {
-      if (!available) return;
       const { service, governance } = build(db);
       await service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY }));
       // Consent revoked directly in the column, which is the case the write-time
@@ -549,7 +522,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
     });
 
     it("refuses once the daily token quota is spent", async () => {
-      if (!available) return;
       const { service, governance } = build(db);
       await service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY, dailyTokenQuota: 100 }));
       await db.insert(aiUsage).values({
@@ -572,7 +544,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
     });
 
     it("denies rather than falls open when Redis is gone", async () => {
-      if (!available) return;
       const configured = build(db);
       await configured.service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY }));
 
@@ -582,7 +553,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
     });
 
     it("refuses past the workspace's own burst limit", async () => {
-      if (!available) return;
       const { service } = build(db);
       await service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY, rateLimitPerMinute: 2 }));
 
@@ -591,7 +561,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
     });
 
     it("refuses when the deployment's provider allowance is saturated", async () => {
-      if (!available) return;
       const { service } = build(db);
       await service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY }));
 
@@ -600,7 +569,6 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 67 AI configuration and governance", ()
     });
 
     it("grants the decrypted key and charges the request exactly once", async () => {
-      if (!available) return;
       const { service, governance } = build(db);
       await service.updateConfig(configure(ALPHA, { apiKey: OPENAI_KEY }));
 

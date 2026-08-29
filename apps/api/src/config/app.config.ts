@@ -142,6 +142,30 @@ export function parseAppConfig(environment: Environment): AppConfig {
       throw new Error("CUSTOM_DOMAIN_CNAME_TARGET must be a public hostname in production");
     }
 
+    const trustProxyHops = readInteger(environment, "TRUST_PROXY_HOPS", 0, 0, 16);
+    // Production terminates TLS at a reverse proxy — APP_URL/API_URL/WS_URL are
+    // already required to be https/wss above while this process serves plain
+    // HTTP — so there is always at least one hop. Zero means `main.ts` calls
+    // `express.set("trust proxy", false)`, and then three things break at once,
+    // none of them loudly:
+    //
+    //   - `request.ip` is the proxy for every caller, so the auth, unauthenticated
+    //     and sensitive rate-limit tiers all key on one string. The first noisy
+    //     client locks out the internet, and an attacker is never limited
+    //     relative to anyone else. `realtime-socket.adapter.ts` short-circuits to
+    //     `socket.remoteAddress` at 0 and shares the same single bucket.
+    //   - Every audit row and structured log records the proxy's address, which
+    //     is exactly the field an incident needs.
+    //   - `X-Forwarded-Host` is ignored, so every tenant custom-domain request
+    //     answers 421 UNTRUSTED_HOST (docs/custom-domains.md).
+    //
+    // Checked as "not zero" rather than "must be set": `apps/api/.env.example`
+    // already ships TRUST_PROXY_HOPS=0, so an explicit-set requirement would be
+    // satisfied by the exact value that is wrong.
+    if (nodeEnv === "production" && trustProxyHops === 0) {
+      throw new Error("TRUST_PROXY_HOPS must be at least 1 in production");
+    }
+
     return Object.freeze({
       nodeEnv,
       apiHost,
@@ -151,7 +175,7 @@ export function parseAppConfig(environment: Environment): AppConfig {
       websocketUrl,
       logLevel: readEnum(environment, "LOG_LEVEL", LOG_LEVELS, "info"),
       metricsToken,
-      trustProxyHops: readInteger(environment, "TRUST_PROXY_HOPS", 0, 0, 16),
+      trustProxyHops,
       requestBodyLimitBytes: readInteger(
         environment,
         "REQUEST_BODY_LIMIT_BYTES",
