@@ -345,7 +345,7 @@ export class StorageMaintenanceService {
       parsedByKey.set(object.key, parsed);
       if (parsed !== null) attachmentIds.add(parsed.attachmentId);
     }
-    const owners = await this.loadObjectOwners([...attachmentIds], context.scope);
+    const owners = await this.loadObjectOwners([...attachmentIds]);
 
     const removable: string[] = [];
     for (const object of listing.objects) {
@@ -393,13 +393,22 @@ export class StorageMaintenanceService {
    * Load the rows that could own the listed objects, with the exact key set each
    * one currently claims.
    *
-   * A scoped run adds `whereWorkspace`, so a key naming another workspace's id
-   * resolves to no owner and is refused by the `workspace_mismatch` /
-   * `no_owning_row` branches rather than being attributed across tenants.
+   * DELIBERATELY UNSCOPED, and the previous comment here documented the bug as
+   * if it were the design. Scoping this read does not deny anything — it turns a
+   * corruption signal into a deletion. A key naming workspace A whose row lives
+   * in workspace B is exactly what `decideOrphanObject`'s `workspace_mismatch`
+   * arm exists to refuse and report; but that arm needs `owner.workspaceId`, and
+   * a scoped lookup returns no owner at all, so the object falls into
+   * `no_owning_row` and the sweep deletes bytes a live row still claims.
+   *
+   * The lookup is a pure attribution — the key is never an authorization input
+   * (ADR 0005, restated in `selection.ts`), and this method returns facts to a
+   * decision function, not resources to a caller. Every *mutating* statement in
+   * this service keeps its `workspacePredicate`, which is where tenant scope
+   * belongs.
    */
   private async loadObjectOwners(
     attachmentIds: readonly string[],
-    scope: MaintenanceScope,
   ): Promise<Map<string, ObjectOwnerFacts>> {
     const owners = new Map<string, ObjectOwnerFacts>();
     if (attachmentIds.length === 0) return owners;
@@ -411,12 +420,7 @@ export class StorageMaintenanceService {
         variants: attachments.variants,
       })
       .from(attachments)
-      .where(
-        and(
-          inArray(attachments.id, [...attachmentIds]),
-          this.workspacePredicate(attachments, scope),
-        ),
-      );
+      .where(inArray(attachments.id, [...attachmentIds]));
     for (const row of rows) {
       owners.set(
         row.id,
@@ -751,12 +755,10 @@ export class StorageMaintenanceService {
             objectKey: exportJobs.objectKey,
           })
           .from(exportJobs)
-          .where(
-            and(
-              inArray(exportJobs.id, [...exportIds]),
-              this.workspacePredicate(exportJobs, context.scope),
-            ),
-          );
+          // Unscoped for the reason `loadObjectOwners` documents: the scoped
+          // predicate turns a `workspace_mismatch` refusal into a
+          // `no_owning_row` deletion. Same defect, second bucket.
+          .where(inArray(exportJobs.id, [...exportIds]));
         for (const row of rows) {
           owners.set(row.id, {
             id: row.id,

@@ -14,6 +14,7 @@
 // as an ordering fact rather than inferred from a passing test.
 
 import { storageMaintenanceReportSchema } from "@notted/shared-validators";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
 
 import { parseRetentionConfig } from "../config/retention.config";
@@ -40,6 +41,7 @@ import type {
   StorageMaintenanceSweepName,
   StorageMaintenanceSweepReport,
 } from "@notted/shared-types";
+import type { SQL } from "drizzle-orm";
 import type { Readable } from "node:stream";
 
 const DAY = 24 * 60 * 60 * 1_000;
@@ -118,7 +120,7 @@ const SELECT_NAMES: Readonly<Record<string, string>> = {
 
 interface SelectChain {
   innerJoin(): SelectChain;
-  where(): SelectChain;
+  where(condition?: SQL): SelectChain;
   orderBy(): SelectChain;
   limit(): SelectChain;
   then(resolve: (value: readonly Row[]) => unknown): unknown;
@@ -144,6 +146,10 @@ function tableName(table: unknown): string {
 
 function fakeMaintenanceDatabase(options: MaintenanceDatabaseOptions = {}, log: string[] = []) {
   const mutations: MutationRecord[] = [];
+  // First `where` per named select, so a test can render the predicate a query
+  // actually built. The double never APPLIES a `where`, so this is the only
+  // thing that can detect a scoping change.
+  const wheres = new Map<string, SQL | undefined>();
   const queues = new Map<string, (readonly Row[])[]>();
   for (const [name, results] of Object.entries(options.selects ?? {})) {
     queues.set(`select:${name}`, [...results]);
@@ -156,10 +162,13 @@ function fakeMaintenanceDatabase(options: MaintenanceDatabaseOptions = {}, log: 
     return queues.get(key)?.shift() ?? [];
   }
 
-  function chain(rows: readonly Row[]): SelectChain {
+  function chain(name: string, rows: readonly Row[]): SelectChain {
     const value: SelectChain = {
       innerJoin: () => value,
-      where: () => value,
+      where: (condition) => {
+        if (!wheres.has(name)) wheres.set(name, condition);
+        return value;
+      },
       orderBy: () => value,
       limit: () => value,
       then: (resolve) => resolve(rows),
@@ -180,7 +189,7 @@ function fakeMaintenanceDatabase(options: MaintenanceDatabaseOptions = {}, log: 
         const signature = `${tableName(table)}:${Object.keys(projection).sort().join(",")}`;
         const name = SELECT_NAMES[signature] ?? signature;
         log.push(`select:${name}`);
-        return chain(next(`select:${name}`));
+        return chain(name, next(`select:${name}`));
       },
     }),
     /*
@@ -223,7 +232,7 @@ function fakeMaintenanceDatabase(options: MaintenanceDatabaseOptions = {}, log: 
     transaction: <T>(work: (tx: typeof builder) => Promise<T>) => work(builder),
   } as unknown as DatabaseService;
 
-  return { database, mutations, log };
+  return { database, mutations, log, wheres };
 }
 
 /** In-memory `ObjectStore` that records its calls into the shared log. */
@@ -610,6 +619,54 @@ describe("StorageMaintenanceService orphan reconciliation", () => {
     // The database-only work still ran, so a storage outage does not stall the
     // row-side sweeps.
     expect(sweep(report, "abandonedUploads").rowsRemoved).toBe(1);
+  });
+
+  it("looks owners up unscoped so a foreign row is a mismatch, not an orphan", async () => {
+    /*
+     * The scoped predicate did not deny anything -- it turned a corruption
+     * signal into a deletion. `decideOrphanObject` refuses a key whose
+     * partition disagrees with its row (`workspace_mismatch`), but that arm
+     * needs `owner.workspaceId`; a workspace-scoped lookup returns NO owner for
+     * a row that lives elsewhere, so the object fell through to
+     * `no_owning_row` and the sweep deleted bytes a live row still claims.
+     *
+     * The rendered SQL is the assertion that bites. The double ignores `where`,
+     * so the behavioural expectations below pass either way and exist to pin
+     * intent.
+     */
+    const exportKey = `${workspaceId}/${exportId}.zip`;
+    const context = build({
+      database: {
+        selects: {
+          objectOwners: [[]],
+          "exportJobs:id,objectKey,workspaceId": [[]],
+        },
+      },
+    });
+    context.store.listing = Object.freeze({
+      objects: Object.freeze([
+        { key: ORIGINAL_KEY, size: 1, lastModified: ago(365 * DAY) },
+        { key: exportKey, size: 1, lastModified: ago(365 * DAY) },
+      ]),
+      truncated: false,
+    });
+
+    await context.service.runForWorkspace({
+      principal: principal(),
+      workspaceId,
+      dryRun: true,
+    });
+
+    const dialect = new PgDialect();
+    const rendered = (name: string): string => {
+      const condition = context.wheres.get(name);
+      if (condition === undefined) throw new Error(`${name} issued no where clause`);
+      return dialect.sqlToQuery(condition).sql;
+    };
+    expect(rendered("objectOwners")).not.toContain("workspace_id");
+    // The same defect, second bucket: the audit named only the attachments
+    // site, and `reconcileExportObjects` repeated it verbatim.
+    expect(rendered("exportJobs:id,objectKey,workspaceId")).not.toContain("workspace_id");
   });
 
   it("refuses unparsable keys and workspace mismatches, noting both", async () => {
