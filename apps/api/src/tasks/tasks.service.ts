@@ -29,6 +29,11 @@ import {
   lockApiIdempotency,
   storeApiIdempotency,
 } from "../common/idempotency/api-idempotency";
+import {
+  calculatePosition,
+  gapExhausted,
+  requiresRenormalization,
+} from "../common/ordering/fractional-order";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import {
   jobOutbox,
@@ -1039,15 +1044,15 @@ export class TasksService {
     excludedTaskId: string | null,
   ): Promise<number> {
     let siblings = await this.loadSiblings(tx, group, excludedTaskId);
-    if (this.requiresRenormalization(siblings)) siblings = await this.renormalize(tx, siblings);
-    let position = this.calculatePosition(siblings, beforeTaskId);
+    if (requiresRenormalization(siblings)) siblings = await this.renormalize(tx, siblings);
+    let position = calculatePosition(siblings, beforeTaskId, this.anchorPolicy);
     if (
       !Number.isFinite(position) ||
       Math.abs(position) > Number.MAX_SAFE_INTEGER / 4 ||
-      this.gapExhausted(siblings, beforeTaskId, position)
+      gapExhausted(siblings, beforeTaskId, position)
     ) {
       siblings = await this.renormalize(tx, siblings);
-      position = this.calculatePosition(siblings, beforeTaskId);
+      position = calculatePosition(siblings, beforeTaskId, this.anchorPolicy);
     }
     if (!Number.isFinite(position)) this.orderConflict();
     return position;
@@ -1066,40 +1071,17 @@ export class TasksService {
     return excludedTaskId === null ? rows : rows.filter((row) => row.id !== excludedTaskId);
   }
 
-  private calculatePosition(siblings: readonly Sibling[], beforeTaskId: string | null): number {
-    if (beforeTaskId !== null) {
-      const index = siblings.findIndex((row) => row.id === beforeTaskId);
-      // The anchor is gone from this group — moved, deleted, or never here.
-      // That is a concurrent-edit conflict the client should retry, and it
-      // answers identically for a foreign identifier, so it leaks nothing.
-      if (index < 0) this.orderConflict();
-      if (index === 0) return siblings[0]!.sortOrder - 1;
-      return (siblings[index - 1]!.sortOrder + siblings[index]!.sortOrder) / 2;
-    }
-    if (siblings.length === 0) return 1;
-    return siblings[siblings.length - 1]!.sortOrder + 1;
-  }
-
-  private gapExhausted(
-    siblings: readonly Sibling[],
-    beforeTaskId: string | null,
-    position: number,
-  ): boolean {
-    if (beforeTaskId === null || siblings.length === 0)
-      return position === siblings.at(-1)?.sortOrder;
-    const index = siblings.findIndex((row) => row.id === beforeTaskId);
-    if (index <= 0) return position === siblings[0]?.sortOrder;
-    return position === siblings[index - 1]?.sortOrder || position === siblings[index]?.sortOrder;
-  }
-
-  private requiresRenormalization(rows: readonly Sibling[]): boolean {
-    const values = new Set<number>();
-    for (const row of rows) {
-      if (!Number.isFinite(row.sortOrder) || values.has(row.sortOrder)) return true;
-      values.add(row.sortOrder);
-    }
-    return false;
-  }
+  /**
+   * Tasks answer 409 for a missing anchor, not 404: an anchor that has left the
+   * group is an ordinary concurrent edit the client should retry, and the same
+   * answer for a foreign identifier leaks nothing. There is no soft-delete here,
+   * so nothing is ever rejected — stated rather than omitted.
+   */
+  private readonly anchorPolicy = {
+    onMissingAnchor: (): never => this.orderConflict(),
+    rejectAnchor: (): boolean => false,
+    onRejectedAnchor: (): never => this.orderConflict(),
+  };
 
   private async renormalize(tx: DatabaseTransaction, rows: readonly Sibling[]): Promise<Sibling[]> {
     const normalized: Sibling[] = [];

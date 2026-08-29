@@ -19,6 +19,11 @@ import {
   lockApiIdempotency,
   storeApiIdempotency,
 } from "../common/idempotency/api-idempotency";
+import {
+  calculatePosition,
+  gapExhausted,
+  requiresRenormalization,
+} from "../common/ordering/fractional-order";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import {
   notes,
@@ -1492,17 +1497,17 @@ export class NotesService {
     excludedNoteId: string | null,
   ): Promise<number> {
     let siblings = await this.loadSiblings(tx, container, excludedNoteId);
-    if (this.requiresRenormalization(siblings)) {
+    if (requiresRenormalization(siblings)) {
       siblings = await this.renormalize(tx, siblings);
     }
-    let position = this.calculatePosition(siblings, beforeNoteId);
+    let position = calculatePosition(siblings, beforeNoteId, this.anchorPolicy);
     if (
       !Number.isFinite(position) ||
       Math.abs(position) > Number.MAX_SAFE_INTEGER / 4 ||
-      this.gapExhausted(siblings, beforeNoteId, position)
+      gapExhausted(siblings, beforeNoteId, position)
     ) {
       siblings = await this.renormalize(tx, siblings);
-      position = this.calculatePosition(siblings, beforeNoteId);
+      position = calculatePosition(siblings, beforeNoteId, this.anchorPolicy);
     }
     if (!Number.isFinite(position))
       throw new ApiHttpException(HttpStatus.CONFLICT, {
@@ -1529,41 +1534,16 @@ export class NotesService {
     return excludedNoteId === null ? rows : rows.filter((row) => row.id !== excludedNoteId);
   }
 
-  private calculatePosition(
-    siblings: readonly { id: string; sortOrder: number; isDeleted: boolean }[],
-    beforeNoteId: string | null,
-  ): number {
-    if (beforeNoteId !== null) {
-      const index = siblings.findIndex((row) => row.id === beforeNoteId);
-      if (index < 0) this.notFound();
-      if (siblings[index]!.isDeleted) this.notFound();
-      if (index === 0) return siblings[0]!.sortOrder - 1;
-      return (siblings[index - 1]!.sortOrder + siblings[index]!.sortOrder) / 2;
-    }
-    if (siblings.length === 0) return 1;
-    return siblings[siblings.length - 1]!.sortOrder + 1;
-  }
-
-  private gapExhausted(
-    siblings: readonly { id: string; sortOrder: number; isDeleted: boolean }[],
-    beforeNoteId: string | null,
-    position: number,
-  ): boolean {
-    if (beforeNoteId === null || siblings.length === 0)
-      return position === siblings.at(-1)?.sortOrder;
-    const index = siblings.findIndex((row) => row.id === beforeNoteId);
-    if (index <= 0) return position === siblings[0]?.sortOrder;
-    return position === siblings[index - 1]?.sortOrder || position === siblings[index]?.sortOrder;
-  }
-
-  private requiresRenormalization(rows: readonly { sortOrder: number }[]): boolean {
-    const values = new Set<number>();
-    for (const row of rows) {
-      if (!Number.isFinite(row.sortOrder) || values.has(row.sortOrder)) return true;
-      values.add(row.sortOrder);
-    }
-    return false;
-  }
+  /**
+   * The two notes-only rules the shared arithmetic takes as parameters: a
+   * missing anchor is a 404 (a note id is a resource the caller may not be
+   * entitled to know exists), and a soft-deleted anchor is refused outright.
+   */
+  private readonly anchorPolicy = {
+    onMissingAnchor: (): never => this.notFound(),
+    rejectAnchor: (row: { readonly isDeleted: boolean }): boolean => row.isDeleted,
+    onRejectedAnchor: (): never => this.notFound(),
+  };
 
   private async renormalize(
     tx: DatabaseTransaction,
