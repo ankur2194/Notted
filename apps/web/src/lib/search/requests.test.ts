@@ -146,11 +146,9 @@ describe("search requests", () => {
       fetchMock.mockResolvedValue(jsonResponse(page));
 
       const result = await requestSearchPage(workspaceId, { query: "release" });
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.data.items).toHaveLength(1);
-        expect(result.data.availability.mode).toBe("full-text");
-      }
+      if (!result.ok) throw new Error(`expected success, got ${result.kind}`);
+      expect(result.data.items).toHaveLength(1);
+      expect(result.data.availability.mode).toBe("full-text");
     });
 
     it.each([
@@ -185,8 +183,8 @@ describe("search requests", () => {
       fetchMock.mockResolvedValue(jsonResponse(suggestions));
 
       const result = await requestSearchSuggestions(workspaceId, "rel");
-      expect(result.ok).toBe(true);
-      if (result.ok) expect(result.data).toHaveLength(1);
+      if (!result.ok) throw new Error(`expected success, got ${result.kind}`);
+      expect(result.data).toHaveLength(1);
 
       const url = new URL(String(fetchMock.mock.calls[0]![0]));
       expect(url.pathname).toBe(`/api/v1/workspaces/${workspaceId}/search/suggestions`);

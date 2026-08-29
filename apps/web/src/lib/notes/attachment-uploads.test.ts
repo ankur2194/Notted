@@ -89,11 +89,9 @@ describe("checkAttachmentFile", () => {
     const over = checkAttachmentFile(
       sizedFile("big.zip", "application/zip", MAX_ATTACHMENT_UPLOAD_BYTES + 1),
     );
-    expect(over.ok).toBe(false);
-    if (!over.ok) {
-      expect(over.reason).toBe("size");
-      expect(over.message).toContain("50 MB");
-    }
+    if (over.ok) throw new Error("expected the oversized attachment to be refused");
+    expect(over.reason).toBe("size");
+    expect(over.message).toContain("50 MB");
   });
 
   it("uses the generic-file ceiling, which is far above the image one", () => {

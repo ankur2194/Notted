@@ -114,11 +114,11 @@ describe("sniffImageMediaType", () => {
       "application/octet-stream",
     ];
     for (const [bytes, expected] of actual) {
-      for (const claimed of declared) {
-        // The declared header is never consulted; only the bytes decide.
-        const sniffed = sniffImageMediaType(bytes);
-        expect(sniffed).toBe(expected);
-        if (claimed !== expected) expect(sniffed).not.toBe(claimed);
+      // The declared header is never consulted; only the bytes decide.
+      const sniffed = sniffImageMediaType(bytes);
+      expect(sniffed).toBe(expected);
+      for (const claimed of declared.filter((value) => value !== expected)) {
+        expect(sniffed).not.toBe(claimed);
       }
     }
   });

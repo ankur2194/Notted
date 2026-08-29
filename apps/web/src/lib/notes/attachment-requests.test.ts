@@ -132,12 +132,10 @@ describe("attachment requests", () => {
       ),
     );
     const result = await requestNoteAttachments(workspaceId, noteId);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data.items).toHaveLength(1);
-      // The endpoint is now bounded, and says so rather than truncating silently.
-      expect(result.data.truncated).toBe(false);
-    }
+    if (!result.ok) throw new Error(`expected success, got ${result.kind}`);
+    expect(result.data.items).toHaveLength(1);
+    // The endpoint is now bounded, and says so rather than truncating silently.
+    expect(result.data.truncated).toBe(false);
 
     const init = fetchMock.mock.calls[0]?.[1];
     expect(init?.credentials).toBe("include");
@@ -166,8 +164,8 @@ describe("attachment requests", () => {
   it("treats a transport failure as retryable", async () => {
     fetchMock.mockRejectedValue(new Error("offline"));
     const result = await requestNoteAttachments(workspaceId, noteId);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.retryable).toBe(true);
+    if (result.ok) throw new Error("expected a transport failure");
+    expect(result.retryable).toBe(true);
   });
 
   it("validates identifiers before issuing a request", async () => {

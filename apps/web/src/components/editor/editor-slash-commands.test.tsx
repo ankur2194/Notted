@@ -107,6 +107,7 @@ describe("slash menu trigger positions", () => {
   it("opens at the start of a paragraph that already has trailing text", async () => {
     const { editor } = await renderEditor({ initialDocument: paragraphs("existing text") });
     await openSlashMenu(editor, 1);
+    expect(menuOptions()).toHaveLength(SLASH_COMMANDS.length);
   });
 
   it("does not open mid-word", async () => {
@@ -143,6 +144,7 @@ describe("slash menu trigger positions", () => {
     editor.commands.insertTable({ rows: 2, cols: 2, withHeaderRow: true });
     const cell = editor.state.doc.resolve(editor.state.selection.from);
     await openSlashMenu(editor, cell.pos);
+    expect(menuOptions()).toHaveLength(SLASH_COMMANDS.length);
   });
 
   it("closes again once the caret leaves the trigger", async () => {

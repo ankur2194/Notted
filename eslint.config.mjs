@@ -21,9 +21,11 @@ import { fileURLToPath, URL } from "node:url";
 import nestjs from "@darraghor/eslint-plugin-nestjs-typed";
 import js from "@eslint/js";
 import nextPlugin from "@next/eslint-plugin-next";
+import vitest from "@vitest/eslint-plugin";
 import prettierConfig from "eslint-config-prettier";
 import importX from "eslint-plugin-import-x";
 import jsxA11y from "eslint-plugin-jsx-a11y";
+import playwright from "eslint-plugin-playwright";
 import tseslint from "typescript-eslint";
 
 // This plugin resolves its project scan glob from process.cwd(), while Notted
@@ -204,6 +206,73 @@ export default tseslint.config(
       // Notted uses the App Router; probing for a legacy pages directory emits
       // a false diagnostic before the Part 4 scaffold exists.
       "@next/next/no-html-link-for-pages": "off",
+    },
+  },
+
+  /*
+   * Lint the failure modes this project is otherwise most careful about.
+   *
+   * Nothing enforced `expect-expect` (a test that asserts nothing and passes),
+   * `valid-expect` (a missing `await` on `.resolves`/`.rejects` silently
+   * passes), `no-conditional-expect`, or `missing-playwright-await`. A grep
+   * found zero current violations, so this is prevention rather than a live
+   * defect — but the whole audit this closes turned on gates that reported
+   * green while proving less than they claimed, and these are exactly that
+   * class.
+   *
+   * `no-only-tests` matters most. Vitest's `allowOnly` defaults to `!isCI` and
+   * this repository sets `CI` nowhere, so a stray `.only` was PERMITTED in
+   * every vitest suite and would silently reduce a file to one test. The four
+   * `vitest.config.ts` files now set `allowOnly: false` for the runner half;
+   * this is the lint half, and it catches the `.only` before it is ever run.
+   */
+  {
+    files: ["**/*.{test,spec}.{ts,tsx,mts,cts}"],
+    ignores: ["apps/web/e2e/**"],
+    plugins: { vitest },
+    rules: {
+      // `expectTypeOf` IS an assertion — a compile-time one, checked by
+      // `pnpm type-check` rather than by the runner. Without it named here the
+      // rule reads the type-parity suites as tests that assert nothing, which
+      // is the opposite of true.
+      "vitest/expect-expect": [
+        "error",
+        { assertFunctionNames: ["expect", "expect.soft", "expectTypeOf", "expect*"] },
+      ],
+      // Vitest's `expect(actual, message)` takes a second argument the rule
+      // defaults to rejecting. The message is load-bearing where these suites
+      // use it — inside a loop it names WHICH value failed.
+      "vitest/valid-expect": ["error", { maxArgs: 2 }],
+      "vitest/no-conditional-expect": "error",
+      "vitest/no-focused-tests": ["error", { fixable: false }],
+    },
+  },
+
+  // The browser suite is Playwright, not vitest: different `expect`, different
+  // `.only`, and its own missing-await footgun. `forbidOnly: true` in
+  // playwright.config.ts is the runner half of the same guard.
+  //
+  // Deliberately NOT the plugin's `flat/recommended` set. That adds
+  // `no-skipped-test` and `no-conditional-in-test`, and this suite uses both on
+  // purpose: capability gates (`test.skip(browserName !== "chromium", …)`) and
+  // branches on what a fixture actually rendered. Turning those on would mean
+  // 52 edits that make real specs worse to satisfy a rule nobody asked for.
+  {
+    files: ["apps/web/e2e/**/*.{ts,tsx}"],
+    plugins: { playwright },
+    rules: {
+      "playwright/missing-playwright-await": "error",
+      // `role-denial.spec.ts` asserts through `expectStatus`/`expectNoLeak`,
+      // which is the point of that spec — the status check and the
+      // no-existence-leak rule live in one helper each so ~40 probes cannot
+      // drift apart. Named here rather than disabled in the file, so a test
+      // that calls NEITHER helper still fails the rule. (The plugin matches
+      // exact names; `expect*` is not a glob it understands.)
+      "playwright/expect-expect": [
+        "error",
+        { assertFunctionNames: ["expect", "expectStatus", "expectNoLeak"] },
+      ],
+      "playwright/no-focused-test": "error",
     },
   },
 

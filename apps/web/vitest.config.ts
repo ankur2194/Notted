@@ -9,6 +9,13 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // Unconditional, because `CI` is set nowhere in this repository. Vitest's
+    // default is `allowOnly: !isCI`, so a stray `.only` was PERMITTED here and
+    // would silently reduce this file to one test while printing green — the
+    // same fail-open-on-an-unset-`CI` shape as the Playwright `forbidOnly` and
+    // integration-gate bugs this audit already closed. `vitest/no-focused-tests`
+    // in `eslint.config.mjs` catches it before the run; this catches it during.
+    allowOnly: false,
     globals: true,
     css: true,
     // WSL/CI environments can time out while over-provisioning fork workers.

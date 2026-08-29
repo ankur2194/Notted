@@ -93,21 +93,25 @@ describe("parsePublicEnvironment", () => {
   });
 
   it("reports every missing production variable in one safe error", () => {
-    expect.assertions(5);
-
+    // Hoisted out of the `catch` rather than asserted inside it: an assertion in
+    // a branch is one that can silently not run, and `expect.assertions(5)` is a
+    // weaker guard than simply not having the branch.
+    let caught: unknown;
     try {
       parsePublicEnvironment({}, "production");
     } catch (error: unknown) {
-      expect(error).toBeInstanceOf(PublicEnvironmentValidationError);
-      expect(error).toHaveProperty("issues", [
-        "NEXT_PUBLIC_APP_URL is required in production",
-        "NEXT_PUBLIC_API_URL is required in production",
-        "NEXT_PUBLIC_WS_URL is required in production",
-      ]);
-      expect(String(error)).toContain("NEXT_PUBLIC_APP_URL");
-      expect(String(error)).toContain("NEXT_PUBLIC_API_URL");
-      expect(String(error)).toContain("NEXT_PUBLIC_WS_URL");
+      caught = error;
     }
+
+    expect(caught).toBeInstanceOf(PublicEnvironmentValidationError);
+    expect(caught).toHaveProperty("issues", [
+      "NEXT_PUBLIC_APP_URL is required in production",
+      "NEXT_PUBLIC_API_URL is required in production",
+      "NEXT_PUBLIC_WS_URL is required in production",
+    ]);
+    expect(String(caught)).toContain("NEXT_PUBLIC_APP_URL");
+    expect(String(caught)).toContain("NEXT_PUBLIC_API_URL");
+    expect(String(caught)).toContain("NEXT_PUBLIC_WS_URL");
   });
 
   it.each(PUBLIC_KEYS)("rejects an empty or whitespace-padded %s", (key) => {
@@ -146,6 +150,7 @@ describe("parsePublicEnvironment", () => {
       ),
     ).toThrow(PublicEnvironmentValidationError);
 
+    let caught: unknown;
     try {
       parsePublicEnvironment(
         {
@@ -155,8 +160,11 @@ describe("parsePublicEnvironment", () => {
         "production",
       );
     } catch (error: unknown) {
-      expect(String(error)).not.toContain(rejectedValue);
+      caught = error;
     }
+
+    expect(caught).toBeInstanceOf(PublicEnvironmentValidationError);
+    expect(String(caught)).not.toContain(rejectedValue);
   });
 
   it("returns a runtime-frozen, typed snapshot", () => {

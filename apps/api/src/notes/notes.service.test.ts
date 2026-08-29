@@ -376,12 +376,16 @@ describe("NotesService policy and safe behavior", () => {
       () => service["invalidMove"](),
       () => service["invalidFolder"](),
     ]) {
+      let caught: unknown;
       try {
         invoke();
       } catch (error: unknown) {
-        expect(JSON.stringify(error)).not.toContain(noteId);
-        expect(JSON.stringify(error)).not.toContain("document body");
+        caught = error;
       }
+
+      expect(caught).toBeDefined();
+      expect(JSON.stringify(caught)).not.toContain(noteId);
+      expect(JSON.stringify(caught)).not.toContain("document body");
     }
   });
 });

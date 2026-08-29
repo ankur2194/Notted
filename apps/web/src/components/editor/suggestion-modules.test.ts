@@ -301,7 +301,11 @@ describe("debounced mention search", () => {
     );
     const debounced = createDebouncedSearch(search, 100);
     // The rejection handler is attached before the timer fires, so the failure
-    // is observed rather than surfacing as an unhandled rejection.
+    // is observed rather than surfacing as an unhandled rejection. That is why
+    // the assertion is stored and awaited three lines down instead of inline —
+    // `valid-expect` cannot see the deferred `await settled`, and awaiting here
+    // would leave the rejection unhandled while the timers advance.
+    // eslint-disable-next-line vitest/valid-expect -- awaited below, deliberately deferred
     const settled = expect(debounced("ada")).rejects.toThrow("unavailable");
     await vi.advanceTimersByTimeAsync(150);
     await settled;

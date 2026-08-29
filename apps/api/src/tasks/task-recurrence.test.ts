@@ -126,15 +126,20 @@ describe("cron validation", () => {
   it.each(["not a cron", "61 * * * *", "0 0 30 2 *", "* * * *  bogus"])(
     "rejects %s with a 422 the client can act on",
     (expression) => {
+      // Hoisted out of the `catch`: asserting inside it meant the "it did not
+      // throw at all" case was caught by this same block and only failed by
+      // accident, on the instanceof check against the sentinel Error.
+      let caught: unknown;
       try {
         assertCron(expression);
-        throw new Error("expected the call to reject");
       } catch (error: unknown) {
-        expect(error).toBeInstanceOf(ApiHttpException);
-        const api = error as ApiHttpException;
-        expect(api.getStatus()).toBe(422);
-        expect(api.safeResponse.code).toBe("TASK_RECURRENCE_INVALID");
+        caught = error;
       }
+
+      expect(caught).toBeInstanceOf(ApiHttpException);
+      const api = caught as ApiHttpException;
+      expect(api.getStatus()).toBe(422);
+      expect(api.safeResponse.code).toBe("TASK_RECURRENCE_INVALID");
     },
   );
 

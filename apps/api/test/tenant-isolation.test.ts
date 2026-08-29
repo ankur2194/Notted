@@ -110,11 +110,14 @@ describe("TenantContextService (unit)", () => {
   it("get() throws a TenantError when no context is set (deny by default)", () => {
     expect(() => service.get()).toThrowError(TenantError);
     expect(() => service.get()).toThrow(/No active tenant context/);
+
+    let caught: unknown;
     try {
       service.get();
     } catch (error: unknown) {
-      expect(error).toMatchObject({ code: "tenant.no_active_context" });
+      caught = error;
     }
+    expect(caught).toMatchObject({ code: "tenant.no_active_context" });
   });
 
   it("tryGet() returns null when no context is set", () => {

@@ -77,11 +77,9 @@ describe("client pre-flight", () => {
     expect(checkImageFile(imageFile("doc.pdf", "application/pdf")).ok).toBe(false);
     expect(checkImageFile(imageFile("empty.png", "image/png", 0)).ok).toBe(false);
     const tooBig = checkImageFile(imageFile("big.png", "image/png", MAX_IMAGE_UPLOAD_BYTES + 1));
-    expect(tooBig.ok).toBe(false);
-    if (!tooBig.ok) {
-      expect(tooBig.reason).toBe("size");
-      expect(tooBig.message).toContain("15 MB");
-    }
+    if (tooBig.ok) throw new Error("expected the oversized image to be refused");
+    expect(tooBig.reason).toBe("size");
+    expect(tooBig.message).toContain("15 MB");
   });
 });
 

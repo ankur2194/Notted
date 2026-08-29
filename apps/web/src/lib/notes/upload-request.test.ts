@@ -154,8 +154,8 @@ describe("uploadNoteImage", () => {
 
     xhr.respond(201, JSON.stringify(attachmentPayload()));
     const result = await promise;
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data.id).toBe(attachmentId);
+    if (!result.ok) throw new Error(`expected success, got ${result.kind}`);
+    expect(result.data.id).toBe(attachmentId);
   });
 
   it("reports upload progress, which is the entire reason this is not fetch", async () => {
@@ -227,8 +227,8 @@ describe("uploadNoteImage", () => {
     const promise = upload();
     latest().fire(event);
     const result = await promise;
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.retryable).toBe(true);
+    if (result.ok) throw new Error(`expected ${event} to fail the upload`);
+    expect(result.retryable).toBe(true);
   });
 
   it("rejects a body the shared schema does not accept, rather than trusting it", async () => {
@@ -245,8 +245,8 @@ describe("uploadNoteImage", () => {
     controller.abort();
     expect(xhr.aborted).toBe(true);
     const result = await promise;
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.retryable).toBe(false);
+    if (result.ok) throw new Error("expected an aborted upload to fail");
+    expect(result.retryable).toBe(false);
   });
 
   it("never opens a request for an already-aborted signal or an invalid target", async () => {

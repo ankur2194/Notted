@@ -243,6 +243,20 @@ describe("tRPC and REST share one set of Zod contracts", () => {
     expect(probe._def.output, "@trpc/server no longer exposes _def.output").toBeDefined();
   });
 
+  /*
+   * `no-conditional-expect` is disabled for this one table-driven test, with a
+   * reason rather than out of convenience.
+   *
+   * The rule exists to catch an assertion that can silently not run. Here the
+   * `switch` is exhaustive over `entry.payload` — a closed union — and every arm
+   * asserts, so no entry can pass having proven nothing. The one early return is
+   * a TypeScript narrowing guard for a case `it.each` has already filtered out
+   * (`entry.route !== null`), not a skip. Restructuring this into four separate
+   * `it.each` tables to satisfy the rule would split one parity contract across
+   * four places and make a missing arm invisible, which is the opposite of what
+   * the rule is protecting.
+   */
+  /* eslint-disable vitest/no-conditional-expect -- exhaustive switch over a closed union; every arm asserts */
   it.each(entries.filter(([, entry]) => entry.route !== null))(
     "%s reuses its REST route's schemas",
     (path, entry) => {
@@ -287,6 +301,7 @@ describe("tRPC and REST share one set of Zod contracts", () => {
       }
     },
   );
+  /* eslint-enable vitest/no-conditional-expect */
 
   it.each(entries.filter(([, entry]) => entry.route !== null))(
     "%s returns its REST route's response schema",

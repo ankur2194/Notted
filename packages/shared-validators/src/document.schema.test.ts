@@ -1330,10 +1330,8 @@ describe("Part 42 image contract", () => {
         content: [imageNode({ [attribute]: "data:image/webp;base64,AAAA" })],
       };
       const blobResult = safeParseNoteDocument(blob);
-      expect(blobResult.success).toBe(false);
-      if (!blobResult.success) {
-        expect(blobResult.errors.join("; ")).toContain(`not allowed on image: ${attribute}`);
-      }
+      if (blobResult.success) throw new Error(`expected ${attribute} to be rejected on image`);
+      expect(blobResult.errors.join("; ")).toContain(`not allowed on image: ${attribute}`);
       expect(safeParseNoteDocument(base64).success).toBe(false);
     },
   );
@@ -1373,8 +1371,8 @@ describe("Part 42 image contract", () => {
     };
     expect(safeParseNoteDocument(atLimit).success).toBe(true);
     const rejected = safeParseNoteDocument(overLimit);
-    expect(rejected.success).toBe(false);
-    if (!rejected.success) expect(rejected.errors).toContain("Document has too many images");
+    if (rejected.success) throw new Error("expected the over-limit document to be rejected");
+    expect(rejected.errors).toContain("Document has too many images");
   });
 
   it("renders a figure with the contract classes and no src of any kind", () => {
@@ -1607,10 +1605,8 @@ describe("Part 43 image manipulation contract", () => {
     expect(safeParseNoteDocument(imageDoc({ caption: atLimit })).success).toBe(true);
 
     const overLimit = safeParseNoteDocument(imageDoc({ caption: `${atLimit}c` }));
-    expect(overLimit.success).toBe(false);
-    if (!overLimit.success) {
-      expect(overLimit.errors.join("; ")).toContain("caption attribute must be 0-1000");
-    }
+    if (overLimit.success) throw new Error("expected the over-long caption to be rejected");
+    expect(overLimit.errors.join("; ")).toContain("caption attribute must be 0-1000");
   });
 
   /**
@@ -1636,8 +1632,8 @@ describe("Part 43 image manipulation contract", () => {
       // which silently and permanently stops autosave for that session.
       const conflicting = imageDoc({ fullWidth: true, wrap: "inline" });
       const parsed = safeParseNoteDocument(conflicting);
-      expect(parsed.success).toBe(true);
-      if (parsed.success) expect(parsed.doc).toEqual(conflicting);
+      if (!parsed.success) throw new Error(`expected acceptance, got: ${parsed.errors.join("; ")}`);
+      expect(parsed.doc).toEqual(conflicting);
     });
 
     it("resolves the conflict deterministically in favour of fullWidth", () => {
@@ -1880,10 +1876,8 @@ describe("Part 44 generic attachment contract", () => {
         type: "doc",
         content: [attachmentNode({ [attribute]: "https://storage.example/secret.pdf" })],
       });
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.errors.join("; ")).toContain(`not allowed on attachment: ${attribute}`);
-      }
+      if (result.success) throw new Error(`expected ${attribute} to be rejected on attachment`);
+      expect(result.errors.join("; ")).toContain(`not allowed on attachment: ${attribute}`);
       // Temporary sources are refused by the same rule, so the saved document
       // can never depend on a URL that dies with the tab.
       for (const value of ["blob:https://app.example/1", "data:application/pdf;base64,AAAA"]) {
