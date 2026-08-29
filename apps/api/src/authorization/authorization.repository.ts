@@ -155,6 +155,7 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
           kind,
           id: row.id,
           workspaceId: row.id,
+          project: null,
           loadedAt: nowIso(),
           relationsValid: true,
         });
@@ -179,6 +180,7 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
           workspaceId: row.workspaceId,
           targetUserId: row.userId,
           targetRole: row.role,
+          project: null,
           loadedAt: nowIso(),
           relationsValid: true,
         });
@@ -194,6 +196,26 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       .from(projects)
       .where(and(eq(projects.id, projectId), whereWorkspace(projects, this.tenantContext)))
       .limit(1);
+    /*
+     * A workspace-scoped miss is a DENY, not "no project".
+     *
+     * `restricted: project?.isRestricted ?? true` below is fail-closed, but the
+     * grant lookup that follows was not scoped at all, so a miss still produced
+     * `{ restricted: true, actorAccess: "viewer" }` from the OTHER workspace's
+     * grant — and `projectCanRead` ORs those two, returning true.
+     *
+     * Not reachable today: the composite FKs `notes_workspace_project_fk` and
+     * `tasks_workspace_project_fk` make a cross-workspace `project_id`
+     * impossible to store, and all three callers derive the id from a
+     * workspace-scoped row. This is the deny-by-default form ADR 0009 requires
+     * of this layer, so a future caller that passes a client-supplied project id
+     * does not inherit a silent cross-tenant read.
+     *
+     * Returning here also makes the grant query below transitively scoped:
+     * `project_access.project_id` now references a row already proven to be in
+     * the active workspace, so it needs no join of its own.
+     */
+    if (project === undefined) return Object.freeze({ restricted: true, actorAccess: null });
     let actorAccess: ProjectAccessRole | null = null;
     if (actorUserId !== null) {
       const [actorGrant] = await db
@@ -204,7 +226,7 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       actorAccess = actorGrant?.role ?? null;
     }
     return Object.freeze({
-      restricted: project?.isRestricted ?? true,
+      restricted: project.isRestricted,
       actorAccess,
     });
   }
@@ -255,20 +277,39 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       .where(and(eq(notes.id, id), whereWorkspace(notes, this.tenantContext)))
       .limit(1);
     if (row === undefined) return null;
-    const sharePermission = await this.loadNoteShare(row.id, actorUserId, db);
-    const parentValid =
-      row.parentId === null || (await this.hasScopedDirect(notes, row.parentId, db));
+    /*
+     * Five independent reads, issued together.
+     *
+     * These were awaited one at a time -- share, then parent, then project,
+     * then the project grant, then the tag -- so a single authorized note read
+     * cost six serial round trips before any data was returned, and
+     * `loadComment` nests a whole `loadNote` inside itself on top of that. None
+     * of the five depends on another's result.
+     *
+     * On a `DatabaseTransaction` (the `NotesService.move()` path documented at
+     * the top of this file) node-postgres queues these on the one connection,
+     * so they serialize -- correct, just no faster there. The win is on the
+     * pool path, which is every other caller.
+     */
+    const [sharePermission, parentValid, project, delegationFacts, tagValid] = await Promise.all([
+      this.loadNoteShare(row.id, actorUserId, db),
+      row.parentId === null ? Promise.resolve(true) : this.hasScopedDirect(notes, row.parentId, db),
+      row.projectId === null
+        ? Promise.resolve(null)
+        : this.projectFacts(row.projectId, actorUserId, db),
+      this.loadDelegationFacts(delegation, row.projectId, db),
+      tagId === undefined ? Promise.resolve(true) : this.hasActiveTag(tagId, db),
+    ]);
     return Object.freeze({
       kind: "note",
       id: row.id,
       workspaceId: row.workspaceId,
       creatorId: row.creatorId,
-      project:
-        row.projectId === null ? null : await this.projectFacts(row.projectId, actorUserId, db),
+      project,
       sharePermission,
-      delegation: await this.loadDelegationFacts(delegation, row.projectId, db),
+      delegation: delegationFacts,
       loadedAt: nowIso(),
-      relationsValid: parentValid && (tagId === undefined || (await this.hasActiveTag(tagId, db))),
+      relationsValid: parentValid && tagValid,
     });
   }
 
@@ -278,10 +319,21 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
     db: AuthorizationRunner = this.database.db,
   ): Promise<NoteSharePermission | null> {
     if (actorUserId === null) return null;
+    // `note_shares` has no `workspace_id`, so `workspace-scope.ts` requires the
+    // parent-join form -- the same shape `loadComment` and `loadFile` already
+    // use. Correct today because `noteId` arrives from a workspace-scoped row;
+    // stated here so it stays correct when a caller changes.
     const [share] = await db
       .select({ permission: noteShares.permission })
       .from(noteShares)
-      .where(and(eq(noteShares.noteId, noteId), eq(noteShares.userId, actorUserId)))
+      .innerJoin(notes, eq(noteShares.noteId, notes.id))
+      .where(
+        and(
+          eq(noteShares.noteId, noteId),
+          eq(noteShares.userId, actorUserId),
+          whereWorkspace(notes, this.tenantContext),
+        ),
+      )
       .limit(1);
     return share?.permission ?? null;
   }
@@ -304,13 +356,18 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       .limit(1);
     let targetProjectAccess: ProjectAccessRole | null = null;
     if (projectId !== null && membership !== undefined) {
+      // Joined to `projects` and scoped there: this is the one of the three
+      // parent-join omissions with a live consequence, because `projectId`
+      // arrives from `loadNote` unproven by this function.
       const [grant] = await db
         .select({ role: projectAccess.role })
         .from(projectAccess)
+        .innerJoin(projects, eq(projectAccess.projectId, projects.id))
         .where(
           and(
             eq(projectAccess.projectId, projectId),
             eq(projectAccess.userId, request.targetUserId),
+            whereWorkspace(projects, this.tenantContext),
           ),
         )
         .limit(1);
@@ -339,16 +396,23 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       .where(and(eq(comments.id, id), whereWorkspace(notes, this.tenantContext)))
       .limit(1);
     if (row === undefined) return null;
-    const note = await this.loadNote(row.noteId, actorUserId);
-    const parentValid =
-      row.parentId === null ||
-      (
-        await this.database.db
-          .select({ noteId: comments.noteId })
-          .from(comments)
-          .where(eq(comments.id, row.parentId))
-          .limit(1)
-      )[0]?.noteId === row.noteId;
+    // The nested note load and the parent-comment probe are independent, and
+    // `loadNote` alone is six queries deep -- see the note there.
+    const [note, parentValid] = await Promise.all([
+      this.loadNote(row.noteId, actorUserId),
+      row.parentId === null
+        ? Promise.resolve(true)
+        : this.database.db
+            .select({ noteId: comments.noteId })
+            .from(comments)
+            // Scoped through the parent note rather than read and discarded:
+            // the comparison below already fails closed, but this stops a
+            // foreign-tenant row from being read at all.
+            .innerJoin(notes, eq(comments.noteId, notes.id))
+            .where(and(eq(comments.id, row.parentId), whereWorkspace(notes, this.tenantContext)))
+            .limit(1)
+            .then((rows) => rows[0]?.noteId === row.noteId),
+    ]);
     return note === null
       ? null
       : Object.freeze({
@@ -357,6 +421,7 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
           workspaceId: note.workspaceId,
           creatorId: row.creatorId,
           note,
+          project: null,
           loadedAt: nowIso(),
           relationsValid: parentValid && note.workspaceId === this.tenantContext.get().workspaceId,
         });
@@ -395,6 +460,7 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       source,
       sourceReadable: source !== null,
       status: row.status,
+      project: null,
       loadedAt: nowIso(),
       relationsValid: source !== null && source.workspaceId === row.workspaceId,
     });
@@ -438,6 +504,7 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
           id: row.id,
           workspaceId: row.workspaceId,
           creatorId: row.creatorId,
+          project: null,
           loadedAt: nowIso(),
           relationsValid: true,
         });
@@ -475,6 +542,7 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
           workspaceId: row.workspaceId,
           creatorId: row.creatorId,
           note,
+          project: null,
           loadedAt: nowIso(),
           relationsValid:
             row.workspaceId === row.noteWorkspaceId &&
@@ -499,6 +567,7 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       id: row.id,
       workspaceId: row.workspaceId,
       creatorId: row.creatorId,
+      project: null,
       loadedAt: nowIso(),
       relationsValid: row.parentId === null || (await this.hasScopedDirect(folders, row.parentId)),
     });
@@ -522,6 +591,7 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       workspaceId: row.workspaceId,
       creatorId: null,
       relationsValid: true,
+      project: null,
       loadedAt: nowIso(),
     });
   }
@@ -546,26 +616,31 @@ export class AuthorizationRepository implements AuthorizationFactsReader {
       .where(and(eq(tasks.id, id), whereWorkspace(tasks, this.tenantContext)))
       .limit(1);
     if (row === undefined) return null;
-    const targetMemberActive =
-      targetUserId === undefined ? undefined : await this.hasActiveMember(targetUserId);
-    const noteValid = row.noteId === null || (await this.hasScopedDirect(notes, row.noteId));
-    const parentValid = row.parentId === null || (await this.hasScopedDirect(tasks, row.parentId));
-    const statusValid =
-      row.customStatusId === null ||
-      (await this.hasValidTaskStatus(row.customStatusId, row.projectId));
+    // Six independent reads, issued together -- see the note in `loadNote`.
+    const [targetMemberActive, noteValid, parentValid, statusValid, project, tagValid] =
+      await Promise.all([
+        targetUserId === undefined
+          ? Promise.resolve(undefined)
+          : this.hasActiveMember(targetUserId),
+        row.noteId === null ? Promise.resolve(true) : this.hasScopedDirect(notes, row.noteId),
+        row.parentId === null ? Promise.resolve(true) : this.hasScopedDirect(tasks, row.parentId),
+        row.customStatusId === null
+          ? Promise.resolve(true)
+          : this.hasValidTaskStatus(row.customStatusId, row.projectId),
+        row.projectId === null
+          ? Promise.resolve(null)
+          : this.projectFacts(row.projectId, actorUserId),
+        tagId === undefined ? Promise.resolve(true) : this.hasActiveTag(tagId),
+      ]);
     return Object.freeze({
       kind: "task",
       id: row.id,
       workspaceId: row.workspaceId,
       creatorId: row.creatorId,
-      project: row.projectId === null ? null : await this.projectFacts(row.projectId, actorUserId),
+      project,
       targetMemberActive,
       loadedAt: nowIso(),
-      relationsValid:
-        noteValid &&
-        parentValid &&
-        statusValid &&
-        (tagId === undefined || (await this.hasActiveTag(tagId))),
+      relationsValid: noteValid && parentValid && statusValid && tagValid,
     });
   }
 
