@@ -27,6 +27,19 @@ export interface WebhookUrlGuardOptions {
   readonly allowInsecureUrls: boolean;
   /** Hostnames of APP_URL / API_URL, lowercased, so an endpoint cannot target us. */
   readonly selfHostnames: readonly string[];
+  /**
+   * The hostnames `selfHostnames` cannot enumerate: verified custom domains.
+   *
+   * With `CUSTOM_DOMAINS_ENABLED` every verified `workspace_domains.hostname`
+   * also terminates on this deployment, so an admin of workspace A could point
+   * a webhook at workspace B's verified host and have the API make
+   * authenticated-looking requests to its own front door — the confused-deputy
+   * case `selfHostnames` exists to close, one hostname over. That set lives in
+   * the database and changes while the process runs, so it is asked, not
+   * listed. Optional: a caller with no verified-host source keeps the static
+   * behaviour.
+   */
+  readonly isSelfHost?: (hostname: string) => Promise<boolean>;
 }
 
 export type WebhookUrlVerdict =
@@ -211,6 +224,15 @@ export async function resolveWebhookHost(
   options: WebhookUrlGuardOptions,
   lookup: WebhookDnsLookup = defaultLookup,
 ): Promise<"ok" | "dns_blocked"> {
+  // Asked BEFORE the DNS probe: it is the cheaper question (a cached lookup
+  // against one indexed row), and there is no reason to resolve a name this
+  // deployment already knows is its own. The verdict reuses `dns_blocked`
+  // rather than naming a new reason, for the same reason the caller's message
+  // is non-specific: which layer refused is a private-network oracle.
+  if (options.isSelfHost !== undefined && (await options.isSelfHost(hostname))) {
+    return "dns_blocked";
+  }
+
   let addresses: readonly { address: string; family: number }[];
   try {
     addresses = await lookup(hostname);

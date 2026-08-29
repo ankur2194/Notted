@@ -45,6 +45,7 @@ import { WebhooksService } from "./webhooks.service";
 import type { WebhookDeliveryProducer } from "./webhook-delivery.producer";
 import type { WebhookSecretService } from "./webhook-secret.service";
 import type { AuthorizationEntryService } from "../authorization/authorization-entry.service";
+import type { VerifiedHostsService } from "../common/verified-hosts.service";
 import type { AppConfig } from "../config/app.config";
 import type { SecurityConfig } from "../config/security.config";
 import type { DatabaseService } from "../database/database.service";
@@ -71,6 +72,8 @@ const INTENT_ID = "60000000-0000-4000-8500-000000000001";
 const NOTE_ID = "60000000-0000-4000-8600-000000000001";
 
 const SECRET = "whsec_0123456789012345678901234567890123456789012";
+/** A verified custom domain of another workspace, served by this deployment. */
+const TENANT_HOST = "b.customer-domain.example";
 const CIPHERTEXT = "Y2lwaGVydGV4dC1ibG9i";
 const ACTIVE_KEY_VERSION = 3;
 
@@ -343,6 +346,11 @@ function serviceWith(options: HarnessOptions = {}) {
     decrypt,
   } as unknown as WebhookSecretService;
 
+  // A verified custom domain of ANOTHER workspace, served by this same
+  // deployment: the confused-deputy hostname `selfHostnames` cannot enumerate.
+  const isVerifiedTenantHost = vi.fn((host: string) => Promise.resolve(host === TENANT_HOST));
+  const verifiedHosts = { isVerifiedTenantHost } as unknown as VerifiedHostsService;
+
   const scheduleWebhookReplay = vi.fn().mockResolvedValue(true);
   const producer = { scheduleWebhookReplay } as unknown as WebhookDeliveryProducer;
 
@@ -357,6 +365,7 @@ function serviceWith(options: HarnessOptions = {}) {
       apiUrl: new URL("https://api.notted.test"),
     } as AppConfig,
     { webhookAllowInsecureUrls: false } as SecurityConfig,
+    verifiedHosts,
   );
 
   return {
@@ -455,6 +464,7 @@ describe("WebhooksService authorization", () => {
         apiUrl: new URL("https://api.notted.test"),
       } as AppConfig,
       { webhookAllowInsecureUrls: false } as SecurityConfig,
+      { isVerifiedTenantHost: () => Promise.resolve(false) } as unknown as VerifiedHostsService,
     );
     await expect(invoke(service)).rejects.toBe(denial);
     expect(authorizeUser).toHaveBeenCalledWith(
@@ -610,6 +620,18 @@ describe("WebhooksService.create", () => {
     );
     expect(error.safeResponse.code).toBe("WEBHOOK_URL_REJECTED");
     expect(resolveHost).not.toHaveBeenCalled();
+  });
+
+  it("hands the guard a live verified-host question, not just the configured pair", async () => {
+    // The static pair is only what is known at boot. Without this wiring the
+    // guard's `isSelfHost` branch is dead code and a verified custom domain of
+    // another workspace remains a legal webhook destination.
+    const { service } = serviceWith();
+    await service.create({ ...input, url: `https://${TENANT_HOST}/hook` });
+
+    const options = resolveHost.mock.calls.at(-1)?.[1];
+    await expect(options?.isSelfHost?.(TENANT_HOST)).resolves.toBe(true);
+    await expect(options?.isSelfHost?.("receiver.example.test")).resolves.toBe(false);
   });
 
   it("refuses an endpoint pointing back at our own API", async () => {

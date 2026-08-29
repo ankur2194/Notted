@@ -122,6 +122,23 @@ export class VerifiedHostsService {
     const hostname = canonicalHost(host);
     if (hostname === "") return false;
     if (this.staticHostSet.has(hostname)) return true;
+    return this.isVerifiedTenantHost(hostname);
+  }
+
+  /**
+   * A VERIFIED TENANT host specifically — the same cached lookup
+   * `isTrustedHost` uses, without the static shortcut.
+   *
+   * Separate because one caller needs the narrower question. The webhook
+   * destination guard asks "would this URL come back to this deployment?", and
+   * for it a static host and a tenant host are the same answer — but the static
+   * set deliberately carries loopback outside production, and a webhook to
+   * `127.0.0.1` is exactly what a developer sets up with
+   * `WEBHOOK_ALLOW_INSECURE_URLS`. Asking the whole question would refuse that.
+   */
+  async isVerifiedTenantHost(host: string): Promise<boolean> {
+    const hostname = canonicalHost(host);
+    if (hostname === "") return false;
     if (!this.config.customDomainsEnabled) return false;
 
     const cached = this.cache.get(hostname);

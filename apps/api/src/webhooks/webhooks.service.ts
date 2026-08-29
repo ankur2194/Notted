@@ -45,6 +45,7 @@ import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
+import { VerifiedHostsService } from "../common/verified-hosts.service";
 import { APP_CONFIG, type AppConfig } from "../config/app.config";
 import { SECURITY_CONFIG, type SecurityConfig } from "../config/security.config";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
@@ -85,12 +86,17 @@ import type { WebhookUrlGuardOptions } from "./webhook-url-guard";
 export function webhookGuardOptions(
   appConfig: AppConfig,
   securityConfig: SecurityConfig,
+  verifiedHosts: Pick<VerifiedHostsService, "isVerifiedTenantHost">,
 ): WebhookUrlGuardOptions {
   return {
     allowInsecureUrls: securityConfig.webhookAllowInsecureUrls,
     selfHostnames: [appConfig.appUrl.hostname, appConfig.apiUrl.hostname].map((host) =>
       host.toLowerCase(),
     ),
+    // The configured pair is only the hosts known at boot. Every verified custom
+    // domain terminates on this same deployment, and that set changes while the
+    // process runs, so it is asked per URL rather than listed here.
+    isSelfHost: (hostname) => verifiedHosts.isVerifiedTenantHost(hostname),
   };
 }
 
@@ -175,6 +181,9 @@ export class WebhooksService {
     private readonly producer: WebhookDeliveryProducer,
     @Inject(APP_CONFIG) private readonly appConfig: AppConfig,
     @Inject(SECURITY_CONFIG) private readonly securityConfig: SecurityConfig,
+    // Appended, never inserted: both this service and the delivery worker are
+    // constructed positionally in their unit suites.
+    private readonly verifiedHosts: VerifiedHostsService,
   ) {}
 
   async list(input: ListWebhooksServiceInput): Promise<WebhookEndpointPage> {
@@ -472,7 +481,7 @@ export class WebhooksService {
         // Its own tighter budget, and NO retry: this is the only outbound call
         // in the product that happens on a request thread.
         timeoutMs: WEBHOOK_VERIFY_TIMEOUT_MS,
-        guard: webhookGuardOptions(this.appConfig, this.securityConfig),
+        guard: webhookGuardOptions(this.appConfig, this.securityConfig, this.verifiedHosts),
       });
 
       // The snippet the sender captured is the bounded, sanitized prefix of the
@@ -659,7 +668,7 @@ export class WebhooksService {
    * not link-local, not the metadata address, and not us.
    */
   private async assertDeliverableUrl(url: string): Promise<void> {
-    const options = webhookGuardOptions(this.appConfig, this.securityConfig);
+    const options = webhookGuardOptions(this.appConfig, this.securityConfig, this.verifiedHosts);
     const inspected = inspectWebhookUrl(url, options);
     if (!inspected.ok || (await resolveWebhookHost(inspected.url.hostname, options)) !== "ok") {
       throw new ApiHttpException(HttpStatus.UNPROCESSABLE_ENTITY, {

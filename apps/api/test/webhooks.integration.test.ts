@@ -43,6 +43,7 @@ import { allowAuditDelete } from "../src/audit/audit-record";
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
 import { AuthorizationPolicyService } from "../src/authorization/authorization-policy.service";
 import { AuthorizationRepository } from "../src/authorization/authorization.repository";
+import { VerifiedHostsService } from "../src/common/verified-hosts.service";
 import { parseSecurityConfig } from "../src/config/security.config";
 import { DatabaseService, type DatabaseTransaction } from "../src/database/database.service";
 import {
@@ -224,6 +225,10 @@ function build(db: NodePgDatabase<typeof schema>) {
     new AuthorizationPolicyService(),
     tenant,
   );
+  // Custom domains are off in this fixture, so no hostname is a tenant host.
+  const NO_VERIFIED_HOSTS = {
+    isVerifiedTenantHost: () => Promise.resolve(false),
+  } as unknown as VerifiedHostsService;
   const secrets = new WebhookSecretService(SECURITY);
   const producer = new WebhookDeliveryProducer(tenant);
   return {
@@ -237,6 +242,7 @@ function build(db: NodePgDatabase<typeof schema>) {
       producer,
       APP,
       SECURITY,
+      NO_VERIFIED_HOSTS,
     ),
     notesService: new NotesService(
       database,
@@ -260,6 +266,7 @@ function build(db: NodePgDatabase<typeof schema>) {
       logger,
       APP,
       SECURITY,
+      NO_VERIFIED_HOSTS,
     ),
   };
 }

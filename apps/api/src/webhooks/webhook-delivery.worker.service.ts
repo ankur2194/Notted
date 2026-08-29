@@ -51,6 +51,7 @@ import { and, eq } from "drizzle-orm";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { AuthorizationDeniedError } from "../authorization/authorization.errors";
 import { StructuredLogger } from "../common/logging/structured-logger.service";
+import { VerifiedHostsService } from "../common/verified-hosts.service";
 import { APP_CONFIG, type AppConfig } from "../config/app.config";
 import { SECURITY_CONFIG, type SecurityConfig } from "../config/security.config";
 import { DatabaseService } from "../database/database.service";
@@ -151,6 +152,7 @@ export class WebhookDeliveryWorkerService implements OnModuleInit, OnModuleDestr
     private readonly logger: StructuredLogger,
     @Inject(APP_CONFIG) private readonly appConfig: AppConfig,
     @Inject(SECURITY_CONFIG) private readonly securityConfig: SecurityConfig,
+    private readonly verifiedHosts: VerifiedHostsService,
   ) {}
 
   onModuleInit(): void {
@@ -283,7 +285,7 @@ export class WebhookDeliveryWorkerService implements OnModuleInit, OnModuleDestr
         "x-notted-signature": signatureHeader(secret, timestampSeconds, body),
       },
       timeoutMs: this.securityConfig.webhookRequestTimeoutMs,
-      guard: webhookGuardOptions(this.appConfig, this.securityConfig),
+      guard: webhookGuardOptions(this.appConfig, this.securityConfig, this.verifiedHosts),
       signal: context.signal,
     });
 

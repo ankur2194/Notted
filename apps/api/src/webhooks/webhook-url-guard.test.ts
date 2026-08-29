@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   guardedLookup,
@@ -151,6 +151,31 @@ describe("resolveWebhookHost — L5 pre-flight resolution", () => {
     await expect(
       resolveWebhookHost("ok.example", STRICT, stub([PUBLIC_ADDRESS, { ...PUBLIC_ADDRESS }])),
     ).resolves.toBe("ok");
+  });
+
+  it("refuses a verified custom domain of this deployment, before any DNS", async () => {
+    /*
+     * `selfHostnames` can only list the hosts known at boot. With custom
+     * domains on, every verified `workspace_domains.hostname` also terminates
+     * here, so workspace A's admin could register a webhook at workspace B's
+     * verified host: L1-L6 all pass (it is a public address), and the
+     * deployment posts to its own front door on a tenant's instruction.
+     */
+    const lookup = vi.fn(() => Promise.resolve([PUBLIC_ADDRESS]));
+    const options: WebhookUrlGuardOptions = {
+      ...STRICT,
+      isSelfHost: (hostname) => Promise.resolve(hostname === "b.customer-domain.example"),
+    };
+
+    await expect(resolveWebhookHost("b.customer-domain.example", options, lookup)).resolves.toBe(
+      "dns_blocked",
+    );
+    // Asked before the resolver: it is the cheaper question, and there is no
+    // reason to resolve a name this deployment already knows is its own.
+    expect(lookup).not.toHaveBeenCalled();
+
+    await expect(resolveWebhookHost("receiver.example", options, lookup)).resolves.toBe("ok");
+    expect(lookup).toHaveBeenCalledOnce();
   });
 
   it("treats a resolver failure as blocked", async () => {

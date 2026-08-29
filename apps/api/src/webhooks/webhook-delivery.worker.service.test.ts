@@ -11,6 +11,7 @@ import { verifyWebhookSignature } from "./webhook-signature";
 import type { WebhookSecretService } from "./webhook-secret.service";
 import type { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import type { StructuredLogger } from "../common/logging/structured-logger.service";
+import type { VerifiedHostsService } from "../common/verified-hosts.service";
 import type { AppConfig } from "../config/app.config";
 import type { SecurityConfig } from "../config/security.config";
 import type { DatabaseService } from "../database/database.service";
@@ -127,6 +128,7 @@ function harness(
       apiUrl: new URL("https://api.notted.test"),
     } as AppConfig,
     { webhookRequestTimeoutMs: 10_000, webhookAllowInsecureUrls: false } as SecurityConfig,
+    { isVerifiedTenantHost: () => Promise.resolve(false) } as unknown as VerifiedHostsService,
   );
   return { worker, inserts, authorizeUserJob };
 }
