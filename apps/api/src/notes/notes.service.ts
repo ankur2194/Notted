@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import { HttpStatus, Injectable, Optional } from "@nestjs/common";
 import {
@@ -9,7 +9,6 @@ import {
 } from "@notted/shared-validators";
 import { and, asc, desc, eq, exists, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 
-import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { AuthorizationDeniedError } from "../authorization/authorization.errors";
 import { ApiHttpException } from "../common/errors/api-http.exception";
@@ -22,9 +21,6 @@ import {
 } from "../common/idempotency/api-idempotency";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import {
-  folders,
-  jobOutbox,
-  type JobOutboxPayload,
   notes,
   noteVersions,
   noteTags,
@@ -49,18 +45,10 @@ import {
 } from "../tenant";
 import { WebhookDeliveryProducer } from "../webhooks/webhook-delivery.producer";
 
+import { FoldersService } from "./folders.service";
+import { recordNoteMutation } from "./note-mutation-record";
 import { NoteVersionsService } from "./note-versions.service";
-import {
-  FOLDER_AUDIT_ENTITY_TYPE,
-  FOLDER_MAX_DEPTH,
-  NOTE_AUDIT_ENTITY_TYPE,
-  NOTE_DEFAULT_DOCUMENT,
-  NOTE_DOMAIN_EVENT_IDEMPOTENCY_PREFIX,
-  NOTE_DOMAIN_EVENT_PAYLOAD_VERSION,
-  NOTE_DOMAIN_EVENT_QUEUE,
-  NOTE_DOMAIN_EVENTS,
-  type NoteMutation,
-} from "./notes.constants";
+import { NOTE_DEFAULT_DOCUMENT, NOTE_DOMAIN_EVENTS, type NoteMutation } from "./notes.constants";
 
 import type { AuthorizationRunner } from "../authorization/authorization.repository";
 import type {
@@ -68,7 +56,6 @@ import type {
   FolderCreateResult,
   FolderDeleteResult,
   FolderPage,
-  FolderSummary,
   FolderUpdateResult,
   NoteCreateResult,
   NoteDeleteResult,
@@ -95,7 +82,7 @@ import type {
 /** A note with no task rows attached. Shared so the zero is written once. */
 const NO_PROGRESS: Progress = Object.freeze({ done: 0, total: 0 });
 
-interface ScopedInput {
+export interface ScopedInput {
   readonly principal: AuthenticatedPrincipal;
   readonly workspaceId: string;
   readonly requestId?: string | null;
@@ -134,15 +121,6 @@ interface NoteRow extends Container {
   readonly sortOrder: number;
   readonly createdById: string;
   readonly updatedById: string | null;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
-}
-
-interface FolderRow {
-  readonly id: string;
-  readonly workspaceId: string;
-  readonly parentId: string | null;
-  readonly name: string;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -311,6 +289,12 @@ export class NotesService {
     // application, and the producer itself filters the events nobody can
     // subscribe to, so this stays one unconditional call.
     @Optional() private readonly webhookProducer?: WebhookDeliveryProducer,
+    // Part 15/16 — the folder use cases, split into their own service. APPENDED,
+    // never inserted: eighteen unit-test constructions pass five or six
+    // positional arguments, and inserting this earlier would silently shift
+    // three existing dependencies in every one of them. `@Optional()` for the
+    // same reason — none of those tests exercises a folder path.
+    @Optional() private readonly foldersService?: FoldersService,
   ) {}
 
   async create(input: CreateNoteServiceInput): Promise<NoteCreateResult> {
@@ -1105,172 +1089,6 @@ export class NotesService {
     });
   }
 
-  async listFolders(input: ListFoldersServiceInput): Promise<FolderPage> {
-    const operation = await this.authorizeWorkspaceRead(input);
-    return this.authorizationEntry.run(operation, async () => {
-      const conditions: SQL[] = [whereWorkspace(folders, this.tenantContext)];
-      if (input.parentId !== undefined) conditions.push(eq(folders.parentId, input.parentId));
-      if (input.root === true) conditions.push(isNull(folders.parentId));
-      const rows = await this.database.db
-        .select(this.folderSelection())
-        .from(folders)
-        .where(and(...conditions))
-        .orderBy(asc(folders.name), asc(folders.id))
-        .limit(input.limit + 1)
-        .offset((input.page - 1) * input.limit);
-      return Object.freeze({
-        items: Object.freeze(rows.slice(0, input.limit).map((row) => this.toFolder(row))),
-        page: input.page,
-        limit: input.limit,
-        hasMore: rows.length > input.limit,
-      });
-    });
-  }
-
-  async createFolder(input: CreateFolderServiceInput): Promise<FolderCreateResult> {
-    const operation = await this.authorizationEntry.authorizeUser({
-      principal: input.principal,
-      workspaceId: input.workspaceId,
-      action: "folder.create",
-      resource:
-        input.parentId === undefined || input.parentId === null
-          ? { kind: "workspace" }
-          : { kind: "folder", id: input.parentId },
-      requestId: input.requestId,
-    });
-    return this.authorizationEntry.run(operation, async () => {
-      const folderId = randomUUID();
-      const row = await this.database.transaction(
-        async (tx) => {
-          await this.assertFolderPlacement(tx, null, input.parentId ?? null);
-          await tx.insert(folders).values(
-            assertWorkspaceInsertValues(
-              {
-                id: folderId,
-                workspaceId: activeWorkspaceId(this.tenantContext),
-                parentId: input.parentId ?? null,
-                name: input.name,
-                createdById: input.principal.userId,
-              },
-              this.tenantContext,
-              "folder.create",
-            ),
-          );
-          await this.recordMutation(tx, "folderCreate", folderId, input);
-          return this.readFolder(tx, folderId);
-        },
-        { isolationLevel: "serializable" },
-      );
-      return Object.freeze({ folder: Object.freeze(this.toFolder(row)) });
-    });
-  }
-
-  async updateFolder(input: UpdateFolderServiceInput): Promise<FolderUpdateResult> {
-    const operation = await this.authorizationEntry.authorizeUser({
-      principal: input.principal,
-      workspaceId: input.workspaceId,
-      action: "folder.update",
-      resource: { kind: "folder", id: input.folderId },
-      requestId: input.requestId,
-    });
-    return this.authorizationEntry.run(operation, async () => {
-      const row = await this.database.transaction(
-        async (tx) => {
-          await this.readFolder(tx, input.folderId);
-          if (input.parentId !== undefined) {
-            await this.assertFolderPlacement(tx, input.folderId, input.parentId);
-            const tree = await this.loadFolderTree(tx);
-            for (const descendantId of this.folderSubtreeIds(tree, input.folderId).filter(
-              (id) => id !== input.folderId,
-            )) {
-              await this.authorizationEntry.authorizeUser({
-                principal: input.principal,
-                workspaceId: input.workspaceId,
-                action: "folder.update",
-                resource: { kind: "folder", id: descendantId },
-                requestId: input.requestId,
-              });
-            }
-          }
-          const changes = {
-            updatedAt: new Date(),
-            ...(input.name === undefined ? {} : { name: input.name }),
-            ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
-          };
-          const [updated] = await tx
-            .update(folders)
-            .set(changes)
-            .where(and(eq(folders.id, input.folderId), whereWorkspace(folders, this.tenantContext)))
-            .returning(this.folderSelection());
-          if (updated === undefined) this.notFound();
-          await this.recordMutation(tx, "folderUpdate", input.folderId, input);
-          return updated;
-        },
-        { isolationLevel: "serializable" },
-      );
-      return Object.freeze({ folder: Object.freeze(this.toFolder(row)) });
-    });
-  }
-
-  async deleteFolder(input: DeleteFolderServiceInput): Promise<FolderDeleteResult> {
-    const operation = await this.authorizationEntry.authorizeUser({
-      principal: input.principal,
-      workspaceId: input.workspaceId,
-      action: "folder.delete",
-      resource: { kind: "folder", id: input.folderId },
-      requestId: input.requestId,
-    });
-    return this.authorizationEntry.run(operation, async () => {
-      const result = await this.database.transaction(
-        async (tx) => {
-          await this.readFolder(tx, input.folderId);
-          const tree = await this.loadFolderTree(tx);
-          const ids = this.folderSubtreeIds(tree, input.folderId);
-          const unfiled = await tx
-            .update(notes)
-            .set({
-              folderId: null,
-              version: sql`${notes.version} + 1`,
-              updatedAt: new Date(),
-              updatedById: input.principal.userId,
-            })
-            .where(and(inArray(notes.folderId, ids), whereWorkspace(notes, this.tenantContext)))
-            .returning({ id: notes.id });
-          await this.recordMutation(tx, "folderDelete", input.folderId, input);
-          // Part 51.3: folder deletion unfiles notes. The index observes
-          // `folderId` (and `updatedAt`) so each affected note must re-sync.
-          // The `.returning()` call captured every affected ID; the rows
-          // still exist (only `folderId` was nulled), so the IDs are valid.
-          if (unfiled.length > 0) {
-            await this.searchIndexProducer.scheduleSearchSync(
-              tx,
-              input.workspaceId,
-              unfiled.map((row) => row.id),
-              {
-                mutation: NOTE_DOMAIN_EVENTS.folderDelete,
-                correlationId: input.requestId,
-                actorId: input.principal.userId,
-              },
-            );
-          }
-          const deleted = await tx
-            .delete(folders)
-            .where(and(eq(folders.id, input.folderId), whereWorkspace(folders, this.tenantContext)))
-            .returning({ id: folders.id });
-          if (deleted.length !== 1) this.notFound();
-          return { removedFolders: ids.length, unfiledNotes: unfiled.length };
-        },
-        { isolationLevel: "serializable" },
-      );
-      return Object.freeze({
-        id: input.folderId,
-        deleted: true as const,
-        removedFolders: result.removedFolders,
-        unfiledNotes: result.unfiledNotes,
-      });
-    });
-  }
-
   private async setSubtreeDeleted(
     input: VersionedNoteServiceInput,
     deleted: true,
@@ -1377,6 +1195,44 @@ export class NotesService {
             version: result.version,
           });
     });
+  }
+
+  /*
+   * FOLDERS LIVE IN `FoldersService`; these four are delegates.
+   *
+   * `FoldersController` is constructed in `notes.controller.test.ts` as
+   * `{ deleteFolder } as unknown as NotesService`, and `notes.trpc.ts` calls all
+   * four on this service. Re-pointing either at `FoldersService` would turn a
+   * file split into a transport change and break a controller test that has
+   * nothing to do with folders.
+   */
+  listFolders(input: ListFoldersServiceInput): Promise<FolderPage> {
+    return this.requireFolders().listFolders(input);
+  }
+
+  createFolder(input: CreateFolderServiceInput): Promise<FolderCreateResult> {
+    return this.requireFolders().createFolder(input);
+  }
+
+  updateFolder(input: UpdateFolderServiceInput): Promise<FolderUpdateResult> {
+    return this.requireFolders().updateFolder(input);
+  }
+
+  deleteFolder(input: DeleteFolderServiceInput): Promise<FolderDeleteResult> {
+    return this.requireFolders().deleteFolder(input);
+  }
+
+  /**
+   * `foldersService` is the TENTH constructor parameter and `@Optional()`, so the
+   * eighteen unit-test constructions that pass five or six arguments keep
+   * working. None of them exercises a folder path — verified — so an absent
+   * collaborator is unreachable rather than merely unlikely, and it says so.
+   */
+  private requireFolders(): FoldersService {
+    if (this.foldersService === undefined) {
+      throw new Error("FoldersService is not wired; folder use cases are unavailable.");
+    }
+    return this.foldersService;
   }
 
   private async authorizeWorkspaceRead(input: ScopedInput) {
@@ -1512,7 +1368,7 @@ export class NotesService {
         .limit(1);
       if (project === undefined || project.status === "archived") this.notFound();
     }
-    if (container.folderId !== null) await this.readFolder(tx, container.folderId);
+    if (container.folderId !== null) await this.requireFolders().readFolder(tx, container.folderId);
     if (container.parentId !== null) {
       if (container.parentId === movingNoteId) this.invalidMove();
       const parent = await this.readRow(tx, container.parentId);
@@ -1884,91 +1740,6 @@ export class NotesService {
     }
   }
 
-  private async assertFolderPlacement(
-    tx: DatabaseTransaction,
-    movingFolderId: string | null,
-    parentId: string | null,
-  ): Promise<void> {
-    if (movingFolderId !== null && parentId === movingFolderId) this.invalidFolder();
-    const tree = await this.loadFolderTree(tx);
-    if (parentId !== null && !tree.some((folder) => folder.id === parentId)) this.notFound();
-    if (movingFolderId !== null && !tree.some((folder) => folder.id === movingFolderId))
-      this.notFound();
-    const parentDepth = parentId === null ? 0 : this.folderDepth(tree, parentId);
-    const subtreeDepth =
-      movingFolderId === null ? 1 : this.folderSubtreeDepth(tree, movingFolderId);
-    if (
-      movingFolderId !== null &&
-      this.folderSubtreeIds(tree, movingFolderId).includes(parentId ?? "")
-    )
-      this.invalidFolder();
-    if (parentDepth + subtreeDepth > FOLDER_MAX_DEPTH) {
-      throw new ApiHttpException(HttpStatus.BAD_REQUEST, {
-        code: "FOLDER_DEPTH_EXCEEDED",
-        message: "Folders may be nested up to three levels.",
-      });
-    }
-  }
-
-  private loadFolderTree(tx: DatabaseTransaction): Promise<FolderRow[]> {
-    return tx
-      .select(this.folderSelection())
-      .from(folders)
-      .where(whereWorkspace(folders, this.tenantContext));
-  }
-
-  private folderDepth(tree: readonly FolderRow[], folderId: string): number {
-    const byId = new Map(tree.map((folder) => [folder.id, folder]));
-    let depth = 0;
-    let cursor: string | null = folderId;
-    const seen = new Set<string>();
-    while (cursor !== null) {
-      if (seen.has(cursor)) this.invalidFolder();
-      seen.add(cursor);
-      const row = byId.get(cursor);
-      if (row === undefined) this.notFound();
-      depth += 1;
-      cursor = row.parentId;
-    }
-    return depth;
-  }
-
-  private folderSubtreeIds(tree: readonly FolderRow[], rootId: string): string[] {
-    const children = new Map<string, string[]>();
-    for (const row of tree) {
-      if (row.parentId === null) continue;
-      const list = children.get(row.parentId) ?? [];
-      list.push(row.id);
-      children.set(row.parentId, list);
-    }
-    const result: string[] = [];
-    const stack = [rootId];
-    const seen = new Set<string>();
-    while (stack.length > 0) {
-      const id = stack.pop()!;
-      if (seen.has(id)) this.invalidFolder();
-      seen.add(id);
-      result.push(id);
-      stack.push(...(children.get(id) ?? []));
-    }
-    return result;
-  }
-
-  private folderSubtreeDepth(tree: readonly FolderRow[], rootId: string): number {
-    const ids = new Set(this.folderSubtreeIds(tree, rootId));
-    let maximum = 1;
-    for (const id of ids) {
-      let depth = 1;
-      let cursor = tree.find((folder) => folder.id === id)?.parentId ?? null;
-      while (cursor !== null && ids.has(cursor)) {
-        depth += 1;
-        cursor = tree.find((folder) => folder.id === cursor)?.parentId ?? null;
-      }
-      maximum = Math.max(maximum, depth);
-    }
-    return maximum;
-  }
-
   private async readDatabaseRow(noteId: string): Promise<NoteRow> {
     const [row] = await this.database.db
       .select(this.noteSelection())
@@ -2001,16 +1772,6 @@ export class NotesService {
       }
       throw error;
     }
-  }
-
-  private async readFolder(tx: DatabaseTransaction, folderId: string): Promise<FolderRow> {
-    const [row] = await tx
-      .select(this.folderSelection())
-      .from(folders)
-      .where(and(eq(folders.id, folderId), whereWorkspace(folders, this.tenantContext)))
-      .limit(1);
-    if (row === undefined) this.notFound();
-    return row;
   }
 
   private async loadTagIds(
@@ -2136,17 +1897,6 @@ export class NotesService {
       }),
       version: row.version,
       deletedAt: row.deletedAt?.toISOString() ?? null,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    };
-  }
-
-  private toFolder(row: FolderRow): FolderSummary {
-    return {
-      id: row.id,
-      workspaceId: row.workspaceId,
-      parentId: row.parentId,
-      name: row.name,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -2284,65 +2034,19 @@ export class NotesService {
     });
   }
 
-  private folderSelection() {
-    return {
-      id: folders.id,
-      workspaceId: folders.workspaceId,
-      parentId: folders.parentId,
-      name: folders.name,
-      createdAt: folders.createdAt,
-      updatedAt: folders.updatedAt,
-    };
-  }
-
-  private async recordMutation(
+  private recordMutation(
     tx: DatabaseTransaction,
     mutation: NoteMutation,
     entityId: string,
     input: ScopedInput,
   ): Promise<void> {
-    const folderMutation = mutation.startsWith("folder");
-    const eventName = NOTE_DOMAIN_EVENTS[mutation];
-    await recordAudit(tx, {
-      workspaceId: activeWorkspaceId(this.tenantContext),
-      userId: input.principal.userId,
-      action: eventName,
-      entityType: folderMutation ? FOLDER_AUDIT_ENTITY_TYPE : NOTE_AUDIT_ENTITY_TYPE,
+    return recordNoteMutation(
+      tx,
+      { tenantContext: this.tenantContext, webhookProducer: this.webhookProducer },
+      mutation,
       entityId,
-      metadata: {},
-      requestId: input.requestId ?? null,
-    });
-    const intentId = randomUUID();
-    const payload: JobOutboxPayload = Object.freeze({
-      action: eventName,
-      intentId,
-      workspaceId: activeWorkspaceId(this.tenantContext),
-      resourceIds: Object.freeze([entityId]),
-      actorId: input.principal.userId,
-    });
-    await tx.insert(jobOutbox).values({
-      id: intentId,
-      workspaceId: activeWorkspaceId(this.tenantContext),
-      queueName: NOTE_DOMAIN_EVENT_QUEUE,
-      jobType: eventName,
-      payloadVersion: NOTE_DOMAIN_EVENT_PAYLOAD_VERSION,
-      payload,
-      payloadHash: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
-      idempotencyKey: `${NOTE_DOMAIN_EVENT_IDEMPOTENCY_PREFIX}${eventName}:${entityId}:${intentId}`,
-      correlationId: input.requestId ?? null,
-    });
-    // Part 66. Same transaction, same commit: a webhook must never announce a
-    // note change a rollback then un-did. `note.created`, `note.updated` and
-    // `note.deleted` are the subscribable subset; the producer drops the rest
-    // (`note.moved`, `folder.*`, …) before it issues any SQL.
-    await this.webhookProducer?.scheduleWebhookDeliveries(tx, {
-      event: eventName,
-      workspaceId: activeWorkspaceId(this.tenantContext),
-      resourceId: entityId,
-      actorId: input.principal.userId,
-      occurredAt: new Date(),
-      correlationId: input.requestId ?? null,
-    });
+      input,
+    );
   }
 
   private async versionConflictOrNotFound(tx: DatabaseTransaction, noteId: string): Promise<never> {
@@ -2399,13 +2103,6 @@ export class NotesService {
     throw new ApiHttpException(HttpStatus.BAD_REQUEST, {
       code: "NOTE_HIERARCHY_INVALID",
       message: "The requested note hierarchy is invalid.",
-    });
-  }
-
-  private invalidFolder(): never {
-    throw new ApiHttpException(HttpStatus.BAD_REQUEST, {
-      code: "FOLDER_HIERARCHY_INVALID",
-      message: "The requested folder hierarchy is invalid.",
     });
   }
 

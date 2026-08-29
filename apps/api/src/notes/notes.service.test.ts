@@ -371,11 +371,7 @@ describe("NotesService policy and safe behavior", () => {
       noOpSearchIndexProducer(),
       noOpNoteVersionsService(),
     );
-    for (const invoke of [
-      () => service["versionConflict"](),
-      () => service["invalidMove"](),
-      () => service["invalidFolder"](),
-    ]) {
+    for (const invoke of [() => service["versionConflict"](), () => service["invalidMove"]()]) {
       let caught: unknown;
       try {
         invoke();

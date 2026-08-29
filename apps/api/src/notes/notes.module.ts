@@ -7,6 +7,7 @@ import { RealtimeModule } from "../realtime/realtime.module";
 import { SearchModule } from "../search/search.module";
 import { WebhooksModule } from "../webhooks/webhooks.module";
 
+import { FoldersService } from "./folders.service";
 import { NoteSharesController } from "./note-shares.controller";
 import { NoteSharesService } from "./note-shares.service";
 import { NoteVersionsService } from "./note-versions.service";
@@ -39,7 +40,13 @@ import { NotesTrpcRouter } from "./notes.trpc";
     WebhooksModule,
   ],
   controllers: [NotesController, FoldersController, NoteSharesController],
-  providers: [NotesService, NoteSharesService, NoteVersionsService, NotesTrpcRouter],
-  exports: [NotesService, NoteSharesService, NoteVersionsService, NotesTrpcRouter],
+  providers: [
+    FoldersService,
+    NotesService,
+    NoteSharesService,
+    NoteVersionsService,
+    NotesTrpcRouter,
+  ],
+  exports: [FoldersService, NotesService, NoteSharesService, NoteVersionsService, NotesTrpcRouter],
 })
 export class NotesModule {}
