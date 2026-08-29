@@ -162,6 +162,18 @@ finish before `pnpm e2e:up`, so the image build is never competing with Playwrig
 keeps a long, silent `apt-get` out of any automated runner's no-output stall watchdog, which
 otherwise kills the run mid-build and leaves the tree in an unknown state.
 
+**The web unit suite is a resource consumer too, and the rules above are not only about Playwright.**
+`pnpm --filter @notted/web test` runs jsdom in `maxWorkers: 4` fork processes
+(`apps/web/vitest.config.ts`), and the heaviest of them — `src/components/editor/**`, which loads
+TipTap, ProseMirror and Yjs per worker — is enough on its own to take a 9 GB VM down while the
+development stack is up. It happened during the Optional-findings pass: the dev stack plus a
+container scan plus one full `src/components/editor/` run exhausted the VM, and every terminal froze,
+not just Docker. Two rules follow. **Bring the stack down first** — `pnpm infra:down`; no jsdom test
+touches a container, so it is pure overhead during a web run. And **watch for the warning sign**: a
+run whose failures shrink on re-run (12 failures, then 1, then 0 in isolation) is not flaky code, it
+is the VM running out of memory, and the next run is the one that hangs the machine. Drop to
+`--maxWorkers=2`, or run the directory in slices, rather than repeating it.
+
 **Playwright stays at one worker.** `apps/web/playwright.config.ts` pins `workers: 1` with
 `fullyParallel: false`, and `playwrightTestArguments` injects `--project=chromium` unless the caller
 names projects. Every additional worker is another browser process inside the runner container, and
