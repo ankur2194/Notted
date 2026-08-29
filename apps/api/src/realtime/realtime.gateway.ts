@@ -418,7 +418,23 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     if (!parsed.success) return ack?.({ ok: false, error: "invalid" });
     const { selector, stateVector } = parsed.data;
     try {
-      await this.authorizeMessage(socket, selector, "note.read");
+      // Deliberately NOT `authorizeMessage`: the memo may extend access a
+      // socket already holds, it may never CREATE access. Every other memo
+      // consumer is fronted by `state.rooms.has(room)` and so can only reach it
+      // from inside a room it was admitted to; the handshake is the one path
+      // that uses a decision to ENTER one. Memoised, `join -> leave -> revoke ->
+      // note:sync` re-entered the room on the stale entry for the rest of the
+      // 25 s revalidation interval. `join`, the other `enterRoom` caller,
+      // already authorizes fresh — this is the same call it makes, and
+      // `authorizeSocketJoin`/`authorizeSocketMessage` are the same function, so
+      // what changes is the bypass, not the policy.
+      const principal = await this.revalidate(socket);
+      await this.authorization.authorizeSocketJoin({
+        principal,
+        workspaceId: selector.workspaceId,
+        action: "note.read",
+        resource: { kind: "note", id: selector.noteId },
+      });
     } catch {
       return ack?.({ ok: false, error: "denied" });
     }

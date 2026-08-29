@@ -116,13 +116,14 @@ function invoke(handler: Handler, input: unknown): Promise<unknown> {
 
 function harness(overrides?: {
   readonly authorizeSocketMessage?: ReturnType<typeof vi.fn>;
+  readonly authorizeSocketJoin?: ReturnType<typeof vi.fn>;
   readonly collaboration?: Record<string, ReturnType<typeof vi.fn>>;
   /** `(tier, key, limit) => boolean`, so a test can starve one tier only. */
   readonly allow?: ReturnType<typeof vi.fn>;
 }) {
   const client = socket();
   const authorizeSocketMessage = overrides?.authorizeSocketMessage ?? vi.fn().mockResolvedValue({});
-  const authorizeSocketJoin = vi.fn().mockResolvedValue({});
+  const authorizeSocketJoin = overrides?.authorizeSocketJoin ?? vi.fn().mockResolvedValue({});
   const allow = overrides?.allow ?? vi.fn().mockResolvedValue(true);
   const collaboration = {
     sync: vi.fn(),
@@ -176,15 +177,22 @@ function harness(overrides?: {
 }
 
 /** Joins a note room the way a collaborative client does, via the handshake. */
-async function joinNote(
+function joinNoteAck(
   test: ReturnType<typeof harness>,
   target: typeof selector | typeof otherSelector,
-): Promise<void> {
-  await invoke(handlerFor(test.client, "realtime:note:sync"), {
+): Promise<unknown> {
+  return invoke(handlerFor(test.client, "realtime:note:sync"), {
     selector: target,
     schemaVersion: 1,
     stateVector: new Uint8Array(),
   });
+}
+
+async function joinNote(
+  test: ReturnType<typeof harness>,
+  target: typeof selector | typeof otherSelector,
+): Promise<void> {
+  await joinNoteAck(test, target);
 }
 
 describe("RealtimeGateway", () => {
@@ -210,6 +218,30 @@ describe("RealtimeGateway", () => {
     // A different action is a different grant and must be checked on its own.
     await test.gateway.authorizeMessage(test.client as never, selector, "note.update");
     expect(test.authorizeSocketMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-authorizes a handshake after a leave rather than reusing the memo", async () => {
+    // join -> leave -> revoke -> re-handshake. The memo survives a leave (only
+    // the revalidation sweep clears it), so a handshake that consulted it
+    // re-entered the room on a decision taken before the revocation.
+    const authorizeSocketJoin = vi.fn().mockResolvedValue({});
+    const authorizeSocketMessage = vi.fn().mockResolvedValue({});
+    const test = harness({ authorizeSocketJoin, authorizeSocketMessage });
+    await test.gateway.handleConnection(test.client as never);
+    await joinNote(test, selector);
+    await invoke(handlerFor(test.client, "realtime:room:leave"), { selector });
+
+    // Both seams refuse, so the assertion is about the memo bypass rather than
+    // about which of the two identical policy calls the handshake makes.
+    authorizeSocketJoin.mockRejectedValue(new Error("revoked"));
+    authorizeSocketMessage.mockRejectedValue(new Error("revoked"));
+    test.client.join.mockClear();
+    test.collaboration.sync.mockClear();
+    const ack = await joinNoteAck(test, selector);
+
+    expect(ack).toEqual({ ok: false, error: "denied" });
+    expect(test.client.join).not.toHaveBeenCalled();
+    expect(test.collaboration.sync).not.toHaveBeenCalled();
   });
 
   it("denies a collaborative update from a socket that never joined the room", async () => {
@@ -243,7 +275,10 @@ describe("RealtimeGateway", () => {
     expect(ack).toBe(result);
     // Ordering is load-bearing: the room is joined BEFORE persisted state is read.
     expect(test.client.join).toHaveBeenCalledOnce();
-    expect(test.authorizeSocketMessage).toHaveBeenCalledOnce();
+    // The handshake enters a room, so it authorizes through the join seam --
+    // unmemoised -- rather than the message seam.
+    expect(test.authorizeSocketJoin).toHaveBeenCalledOnce();
+    expect(test.authorizeSocketMessage).not.toHaveBeenCalled();
   });
 
   it("persists an update before acknowledging it, then relays it", async () => {
