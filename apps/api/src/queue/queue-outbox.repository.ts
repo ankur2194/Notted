@@ -32,6 +32,7 @@ export class QueueOutboxRepository {
    * reclaimed either; the maintenance sweep retires them.
    */
   async claimBatch(batchSize: number, staleClaimMs: number): Promise<readonly OutboxRuntimeRow[]> {
+    const dispatchedStaleMs = this.dispatchedStaleMs(staleClaimMs);
     const result = await this.database.db.execute(sql`
       with candidates as (
         select id
@@ -40,7 +41,7 @@ export class QueueOutboxRepository {
         and (
           (status = 'pending' and available_at <= now())
            or (status = 'dispatching' and locked_at < now() - (${staleClaimMs} * interval '1 millisecond'))
-           or (status = 'dispatched' and updated_at < now() - (${staleClaimMs} * interval '1 millisecond'))
+           or (status = 'dispatched' and updated_at < now() - (${dispatchedStaleMs} * interval '1 millisecond'))
         )
         order by available_at, created_at
         for update skip locked
@@ -58,6 +59,40 @@ export class QueueOutboxRepository {
         intent.correlation_id as "correlationId"
     `);
     return parseRows(result);
+  }
+
+  /**
+   * Upper bound on how long a row may legitimately sit in `dispatched`.
+   *
+   * `staleClaimMs` (30 s by default) is the right window for the `dispatching`
+   * arm: that covers a dispatcher that died between claiming a row and
+   * publishing it, which really is 30 s of work. A `dispatched` row is a
+   * different thing — a worker is *running* it — and the only guarantee that it
+   * leaves that status is `withTimeout` in `queue-worker-processor.service.ts`,
+   * which bounds the handler by its lane's `timeoutMs`. The export lane's
+   * default timeout is 600 s, so a 30 s window reclaimed exports that were still
+   * running.
+   *
+   * The reclaim does not re-run the handler — `claimExecution` sees the
+   * `processing` idempotency row and returns `reconciliation_required` — but
+   * that is worse than it sounds: it flips the key to
+   * `reconciliation_required`, and the original worker's `completeExecution`
+   * then updates `where status = 'processing'` and matches nothing. The export
+   * finishes successfully, `job_outbox` says `completed`, and `job_idempotency`
+   * is left permanently poisoned for that key.
+   *
+   * ponytail: the maximum timeout across every lane, not the row's own lane,
+   * because `job_outbox.queue_name` is the *source* queue and per-lane precision
+   * needs a source -> physical `CASE` built from the job registry. Consequence
+   * at the defaults: a genuinely lost `default` job waits 630 s to be reclaimed
+   * rather than 30 s. Recovering a lost job late is cheap; interrupting a live
+   * one is not.
+   */
+  private dispatchedStaleMs(staleClaimMs: number): number {
+    const slowestWorkerMs = Math.max(
+      ...Object.values(this.config.workers).map((worker) => worker.timeoutMs),
+    );
+    return slowestWorkerMs + staleClaimMs;
   }
 
   async load(id: string): Promise<OutboxRuntimeRow | undefined> {
