@@ -86,6 +86,35 @@ describe("server environment contract", () => {
     );
   });
 
+  /*
+   * The release gate must reject a config the container cannot boot with.
+   *
+   * `parseRealtimeConfig` and `parseExportConfig` were absent from
+   * `validateApiEnvironment`, so `pnpm --filter @notted/api env:validate
+   * --production` reported green for a REALTIME_PING_TIMEOUT_MS below the ping
+   * interval -- a cross-field rule that only fires at DI time, i.e. at boot,
+   * after the gate has already said the config is valid. Only
+   * `parseRetentionConfig`'s omission is deliberate, and it says so in a
+   * comment.
+   *
+   * Asserted through a value each parser alone rejects, rather than by
+   * enumerating the parser list, so the test fails for the reason it names.
+   */
+  it("routes the realtime and export parsers through the release gate", () => {
+    // Development semantics on purpose: this asserts the gate REACHES these two
+    // parsers, and the production-only requirements (API_HOST and friends) would
+    // throw first and hide that.
+    expect(() =>
+      validateApiEnvironment(
+        environmentForValidation({ REALTIME_PING_TIMEOUT_MS: "10000" }, false),
+      ),
+    ).toThrowError(/realtime/iu);
+
+    expect(() =>
+      validateApiEnvironment(environmentForValidation({ EXPORT_RENDER_TIMEOUT_MS: "999" }, false)),
+    ).toThrowError(/export/iu);
+  });
+
   it("accepts a display name in the configured sender mailbox", () => {
     expect(parseSmtpConfig({ EMAIL_FROM: "Notted <noreply@example.com>" }).from).toBe(
       "Notted <noreply@example.com>",
