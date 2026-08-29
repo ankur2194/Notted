@@ -113,6 +113,16 @@
       "outputs": ["coverage/**", "test-results/**"]
     },
     "lint": {
+      // API linting is TYPE-AWARE: `eslint.config.mjs` sets `projectService: true`
+      // for `apps/api/**`, and `apps/api/tsconfig.json` uses `moduleResolution:
+      // "Node10"`, so `@notted/shared-types` and `-validators` resolve through
+      // their built `dist/index.d.ts`. Without this edge two things went wrong.
+      // On a fresh clone (`pnpm install && pnpm lint`) that `dist/` does not
+      // exist yet, so the `@darraghor/nestjs-typed` rules ran against unresolved
+      // contract types and passed having checked less than they claim. And with
+      // no upstream edge at all, editing `packages/shared-types/src` never
+      // invalidated the cached lint result for `apps/api`.
+      "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", "src/**/*", "scripts/**/*", "tsconfig*.json", "package.json"]
     },
     "lint:fix": {
