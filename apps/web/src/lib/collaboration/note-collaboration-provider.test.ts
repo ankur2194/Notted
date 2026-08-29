@@ -374,6 +374,9 @@ describe("NoteCollaborationProvider", () => {
 
     expect(provider.snapshot.status).toBe("reconnecting");
     expect(harness.frames(UPDATE)).toHaveLength(0);
+    // The queue is HELD, not dropped: it is the only evidence the writer has
+    // work the server has never seen, and what arms the unload prompt.
+    expect(provider.hasUnacknowledgedWork).toBe(true);
 
     harness.setConnected(true);
     // The SERVER's readiness, not the client's `connect`: the note handlers are
@@ -402,6 +405,141 @@ describe("NoteCollaborationProvider", () => {
     const mirror = new Y.Doc();
     Y.applyUpdate(mirror, delta as Uint8Array);
     expect(mirror.getText("body").toString()).toBe("written offline");
+
+    harness.ack(UPDATE, { ok: true, epoch: 1, revision: 5 });
+    await flush();
+    // Acknowledged: the tab no longer owes the server anything, so closing it
+    // must stop prompting.
+    expect(provider.hasUnacknowledgedWork).toBe(false);
+
+    provider.destroy();
+  });
+
+  /*
+   * A `stale` update ack rebuilds the document. The re-handshake then runs
+   * against a fresh `Y.Doc`, and a peer committing during that round trip sends
+   * a frame at the NEW epoch — which used to be compared against the OLD epoch
+   * this provider still held, take the `epoch !== this.epoch` discard branch,
+   * and be lost until the reader reloaded the page. The sync ack cannot cover
+   * it either: it carries state as of the server's read, which is before that
+   * commit.
+   */
+  it("applies a peer frame that arrives while a stale re-handshake is reading", async () => {
+    const harness = fakeSocket();
+    const provider = createProvider(harness);
+    const empty = seed("");
+
+    const connected = provider.connect();
+    await completeHandshake(harness, { epoch: 1, ...empty });
+    await connected;
+
+    provider.document.getText("body").insert(0, "local");
+    await vi.advanceTimersByTimeAsync(300);
+    harness.ack(UPDATE, { ok: false, error: "stale" });
+    await flush();
+
+    // Rebuilt, and therefore unsynced: epoch 0 is this file's word for that.
+    expect(provider.snapshot.epoch).toBe(0);
+
+    const peer = seed("peer paragraph");
+    harness.ack(JOIN, { ok: true });
+    await flush();
+    harness.fire(REMOTE, {
+      noteId: NOTE_ID,
+      epoch: 2,
+      revision: 7,
+      update: peer.update,
+    });
+    await flush();
+
+    harness.ack(SYNC, {
+      ok: true,
+      epoch: 2,
+      revision: 7,
+      schemaVersion: 1,
+      update: empty.update,
+      stateVector: empty.stateVector,
+    });
+    await flush();
+
+    expect(provider.document.getText("body").toString()).toContain("peer paragraph");
+
+    provider.destroy();
+  });
+
+  /*
+   * The server declares `epoch` a POSITIVE integer and acks anything else
+   * `invalid`, which `requeue` counts as a strike — five and realtime is dead
+   * for the session. After a reset the editor stays mounted and editable for the
+   * whole re-handshake, so a burst of typing lands in `flushUpdates` at epoch 0.
+   */
+  it("sends no update tagged with an epoch no handshake established", async () => {
+    const harness = fakeSocket();
+    const provider = createProvider(harness);
+    const empty = seed("");
+
+    const connected = provider.connect();
+    await completeHandshake(harness, { epoch: 1, ...empty });
+    await connected;
+
+    const before = harness.frames(UPDATE).length;
+    harness.fire(RESET, { noteId: NOTE_ID, epoch: 5 });
+    await flush();
+    expect(provider.snapshot.epoch).toBe(0);
+
+    provider.document.getText("body").insert(0, "typed during the re-handshake");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(harness.frames(UPDATE)).toHaveLength(before);
+
+    // Once the handshake names an epoch, the held work goes out under it.
+    harness.ack(JOIN, { ok: true });
+    await flush();
+    harness.ack(SYNC, {
+      ok: true,
+      epoch: 5,
+      revision: 9,
+      schemaVersion: 1,
+      update: empty.update,
+      stateVector: empty.stateVector,
+    });
+    await flush();
+    await vi.advanceTimersByTimeAsync(300);
+
+    const sent = harness.frames(UPDATE);
+    expect(sent.length).toBeGreaterThan(before);
+    expect(sent[sent.length - 1]!.payload.epoch).toBe(5);
+
+    provider.destroy();
+  });
+
+  it("reports epoch 0 while the document it adopted has not synced", async () => {
+    const harness = fakeSocket();
+    const provider = createProvider(harness);
+    const empty = seed("");
+
+    const connected = provider.connect();
+    await completeHandshake(harness, { epoch: 2, ...empty });
+    await connected;
+
+    harness.fire(RESET, { noteId: NOTE_ID, epoch: 3 });
+    await flush();
+    expect(provider.snapshot).toEqual({
+      status: "connecting",
+      epoch: 0,
+      generation: 2,
+      errorReason: null,
+    });
+
+    // A refused re-handshake leaves the editor showing a blank document. The
+    // epoch stays 0, which is what tells the surface not to hand the pen to it.
+    harness.ack(JOIN, { ok: false, error: "denied" });
+    await flush();
+    expect(provider.snapshot).toEqual({
+      status: "error",
+      epoch: 0,
+      generation: 2,
+      errorReason: "denied",
+    });
 
     provider.destroy();
   });

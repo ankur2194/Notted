@@ -47,6 +47,13 @@ export interface NoteCollaborationState {
    */
   readonly generation: number;
   readonly status: NoteCollaborationStatus;
+  /**
+   * Whether this tab holds document changes the server has never acknowledged.
+   *
+   * A pull, not a value: it is read synchronously inside `beforeunload` and must
+   * not re-render this tree on every keystroke. Stable per provider.
+   */
+  readonly hasUnacknowledgedWork: () => boolean;
 }
 
 export interface UseNoteCollaborationOptions {
@@ -180,6 +187,12 @@ export function useNoteCollaboration(options: UseNoteCollaborationOptions): Note
     () => DISABLED_SNAPSHOT,
   );
 
+  // Stable per provider, so the surface's registration effect does not churn.
+  const hasUnacknowledgedWork = useCallback(
+    (): boolean => provider?.hasUnacknowledgedWork ?? false,
+    [provider],
+  );
+
   return {
     mode,
     // Only a live, synced provider hands out a binding: an editor bound to a
@@ -189,5 +202,6 @@ export function useNoteCollaboration(options: UseNoteCollaborationOptions): Note
     epoch: snapshot.epoch,
     generation: snapshot.generation,
     status: snapshot.status,
+    hasUnacknowledgedWork,
   };
 }

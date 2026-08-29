@@ -20,6 +20,24 @@
 //
 // No partial unique index on `notifications` is added: it would be a third
 // layer guarding nothing the first two miss, and it would cost a migration.
+//
+// THIS PRODUCER WRITES ONE INTENT, NOT TWO. It used to also queue the mention
+// EMAIL here, and that was a disclosure: the only check it could make in this
+// position is workspace membership, and membership is not what `note.read`
+// means. A member with no grant on a restricted project correctly received no
+// in-app notification — the worker re-authorizes — while the email went out
+// anyway, carrying the note's title and a deep link into a mailbox, where it
+// cannot be recalled.
+//
+// The check cannot simply be added here. `authorizeUserJob` takes no `tx` and
+// `AuthorizationRepository` reads through the pool, so calling it inside
+// `NotesService.update`'s serializable transaction would check out extra
+// connections for up to MENTION_NOTIFY_MAX_RECIPIENTS recipients against a
+// pool of ten, and deadlock the request that is trying to save a note.
+//
+// So the email moved to where the authorization already happens:
+// `MentionNotificationWorkerService`, which runs outside this transaction and
+// already re-checks `note.read` before delivering anything.
 
 import { createHash, randomUUID } from "node:crypto";
 
@@ -28,8 +46,7 @@ import { collectNoteDocumentMentionIds } from "@notted/shared-validators";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { StructuredLogger } from "../common/logging/structured-logger.service";
-import { jobOutbox, users, workspaceMembers, type JobOutboxPayload } from "../database/schema";
-import { WorkspaceEmailProducerService } from "../email/workspace-email-producer.service";
+import { jobOutbox, workspaceMembers, type JobOutboxPayload } from "../database/schema";
 import { DOMAIN_JOB_TYPES } from "../queue/job-identifiers";
 import {
   MENTION_NOTIFY_JOB_DEFINITION,
@@ -91,11 +108,6 @@ export class MentionNotificationProducer {
   constructor(
     private readonly tenantContext: TenantContextService,
     private readonly logger: StructuredLogger,
-    // Part 61 — REQUIRED, deliberately. An optional dependency here would let a
-    // broken `NotificationModule` -> `EmailModule` import silently stop every
-    // mention email while the in-app intent kept working, which is exactly the
-    // regression nobody notices. Nest fails to boot instead.
-    private readonly emailProducer: WorkspaceEmailProducerService,
   ) {}
 
   /**
@@ -124,17 +136,21 @@ export class MentionNotificationProducer {
 
     // Anti-forging gate: exactly one membership lookup. Ids naming a user
     // outside this workspace return zero rows.
+    //
+    // Membership is all this needs. It deliberately does NOT join `users` for
+    // an address any more: the mention EMAIL is queued by
+    // `MentionNotificationWorkerService`, after that worker re-checks
+    // `note.read` for the recipient. See the note on the intent write below.
     const memberRows = await tx
-      .select({ userId: workspaceMembers.userId, email: users.email })
+      .select({ userId: workspaceMembers.userId })
       .from(workspaceMembers)
-      .innerJoin(users, eq(users.id, workspaceMembers.userId))
       .where(
         and(
           eq(workspaceMembers.workspaceId, workspaceId),
           inArray(workspaceMembers.userId, [...added]),
         ),
       );
-    const members = new Map(memberRows.map((row) => [row.userId, row.email]));
+    const members = new Set(memberRows.map((row) => row.userId));
     // Preserve first-seen document order so the capped set is deterministic.
     const recipients = added.filter((id) => members.has(id));
     if (recipients.length === 0) return;
@@ -180,24 +196,6 @@ export class MentionNotificationProducer {
         // The globally unique idempotency index turns a concurrent or retried
         // duplicate into a silent no-op instead of aborting the note update.
         .onConflictDoNothing();
-
-      // Part 61 — a SECOND, independent intent for the email. Two intents, two
-      // handlers, two failure domains: an SMTP outage can never block, retry or
-      // fail the in-app notification above. The producer runs its own
-      // suppression check, so a recipient who muted mention email still gets the
-      // in-app row and simply no email intent.
-      const recipientEmail = members.get(recipientId);
-      if (recipientEmail !== undefined) {
-        await this.emailProducer.queue(tx, {
-          templateKey: "mention",
-          recipient: recipientEmail,
-          workspaceId,
-          relatedEntityType: "note",
-          relatedEntityId: input.noteId,
-          actorId: input.actorId,
-          correlationId: input.correlationId,
-        });
-      }
     }
   }
 }

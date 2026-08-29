@@ -38,6 +38,9 @@ const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
 /** Marks every row the concurrency test commits so a rerun can clear its own leftovers. */
 const CONCURRENCY_FIXTURE = "concurrency-fixture";
 
+/** Same, for the subtree-lock test, which also commits rather than rolling back. */
+const SUBTREE_FIXTURE = "subtree-fixture";
+
 function principal(userId: string): AuthenticatedPrincipal {
   return Object.freeze({
     userId,
@@ -1135,5 +1138,132 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 31 core note APIs (live PostgreSQL)", (
     expect(finalRows.find((row) => row.id === second.note.id)?.version).toBe(
       raceTarget.version + 1,
     );
+  });
+
+  /*
+   * `noteSubtreeRows` used to select EVERY note row in the workspace and walk
+   * the edges in memory — and when the caller asked for a lock it took
+   * `FOR UPDATE` on all of them. Trashing one three-note branch therefore
+   * row-locked the whole tenant until the transaction committed.
+   *
+   * Both cases below are about the subtree walk, so they share a fixture.
+   */
+  it("locks only the subtree it is deleting, and refuses a corrupted hierarchy", async ({
+    skip,
+  }) => {
+    if (!databaseReachable || db === undefined) {
+      skip("no reachable disposable PostgreSQL");
+      return;
+    }
+    await db.delete(notes).where(like(notes.title, `${SUBTREE_FIXTURE}%`));
+    await db.transaction(async (tx) => seedDatabase(tx));
+
+    const owner = principal(SEED_IDS.users.alphaOwner);
+    const suffix = randomUUID();
+    // `lock_timeout` turns "blocked forever" into a deterministic failure, so a
+    // regression fails the test instead of hanging the suite.
+    const guardedPool = new Pool({
+      connectionString: DATABASE_URL as string,
+      max: 4,
+      options: "-c lock_timeout=2000",
+    });
+    const guardedDb = drizzle(guardedPool, { schema });
+    const tenant = new TenantContextService();
+    const guardedDatabase = {
+      db: guardedDb,
+      transaction: <T>(
+        work: (scope: DatabaseTransaction) => Promise<T>,
+        config?: PgTransactionConfig,
+      ) => guardedDb.transaction(work, config),
+    } as unknown as DatabaseService;
+    const service = new NotesService(
+      guardedDatabase,
+      new AuthorizationEntryService(
+        new AuthorizationRepository(guardedDatabase, tenant),
+        new AuthorizationPolicyService(),
+        tenant,
+      ),
+      tenant,
+      { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
+      new NoteVersionsService(tenant),
+    );
+    const create = (title: string, parentId: string | null) =>
+      service.create({
+        principal: owner,
+        workspaceId: SEED_IDS.workspaces.alpha,
+        title: `${SUBTREE_FIXTURE} ${title} ${suffix}`,
+        projectId: null,
+        folderId: null,
+        parentId,
+        type: "document",
+        pageSize: "a4",
+        isTemplate: false,
+        isPinned: false,
+        isArchived: false,
+        tagIds: [],
+        content: undefined,
+        requestId: null,
+        idempotencyKey: randomUUID(),
+      });
+
+    const blocker = new Client({ connectionString: DATABASE_URL as string });
+    try {
+      const target = await create("target root", null);
+      const child = await create("target child", target.note.id);
+      // Belongs to the same workspace and to NO part of the subtree above.
+      const bystander = await create("bystander", null);
+
+      // Hold a row lock on the bystander from an independent connection.
+      await blocker.connect();
+      await blocker.query("begin");
+      await blocker.query("select id from notes where id = $1 for update", [bystander.note.id]);
+
+      // The old workspace-wide `FOR UPDATE` blocked here and died on
+      // `lock_timeout`; a subtree-scoped lock never touches the bystander.
+      await expect(
+        service.softDelete({
+          principal: owner,
+          workspaceId: SEED_IDS.workspaces.alpha,
+          noteId: target.note.id,
+          expectedVersion: target.note.version,
+          requestId: null,
+        }),
+      ).resolves.toBeDefined();
+
+      // The narrowed walk must still find the whole subtree, not just the root.
+      const [childRow] = await db
+        .select({ isDeleted: notes.isDeleted })
+        .from(notes)
+        .where(eq(notes.id, child.note.id));
+      expect(childRow?.isDeleted).toBe(true);
+
+      await blocker.query("rollback");
+
+      // A `parent_id` loop reachable from the root must still be refused, and
+      // must terminate: a bare `union all` would spin forever here and `union`
+      // would swallow it. Corrupt the tree behind the service's back.
+      const loopRoot = await create("loop root", null);
+      const loopChild = await create("loop child", loopRoot.note.id);
+      await db
+        .update(notes)
+        .set({ parentId: loopChild.note.id })
+        .where(eq(notes.id, loopRoot.note.id));
+
+      await expect(
+        service.softDelete({
+          principal: owner,
+          workspaceId: SEED_IDS.workspaces.alpha,
+          noteId: loopRoot.note.id,
+          expectedVersion: loopRoot.note.version,
+          requestId: null,
+        }),
+      ).rejects.toMatchObject({ safeResponse: { code: "NOTE_HIERARCHY_INVALID" } });
+    } finally {
+      await blocker.query("rollback").catch(() => undefined);
+      await blocker.end().catch(() => undefined);
+      await guardedPool.end().catch(() => undefined);
+      // The loop would break any later traversal through this workspace root.
+      await db.delete(notes).where(like(notes.title, `${SUBTREE_FIXTURE}%`));
+    }
   });
 });

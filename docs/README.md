@@ -148,10 +148,11 @@ read/unread, and atomic mark-all-read. Browser storage is not used for membershi
 notification payloads, read state, sessions, or permissions. Only the validated
 expanded/collapsed sidebar preference is stored in `localStorage`.
 
-For the Part 25 Playwright journeys, provision a dedicated non-seed login fixture with two
-workspace memberships and safe notification rows, then set `PLAYWRIGHT_SHELL_EMAIL` and
-`PLAYWRIGHT_SHELL_PASSWORD`. Never commit those values. The suite skips fixture-dependent
-journeys when they are absent; it does not install browser binaries. Search remains an
+The Part 25 shell journeys are covered by `e2e/accessibility.spec.ts`, which provisions its
+own account through `e2e/accounts.ts` and therefore runs unconditionally. They used to live
+in `dashboard-shell.spec.ts` behind `PLAYWRIGHT_SHELL_EMAIL` / `PLAYWRIGHT_SHELL_PASSWORD`,
+which nothing set — and could not have worked anyway, since the seed writes no Better Auth
+credential account to sign in with. That file has been deleted. Search remains an
 accessible placeholder until Parts 50–52, note-tree content until Parts 31–32, workspace
 lifecycle until Part 26, and notification production/mention behavior until Part 60.
 

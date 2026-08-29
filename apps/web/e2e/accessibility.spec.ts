@@ -531,14 +531,15 @@ test.describe.serial("Part 76 accessibility", () => {
   });
 
   /* ------------------------------------------------------------------------ */
-  /* Ported from `dashboard-shell.spec.ts`, which has never executed once       */
+  /* Ported from the former `dashboard-shell.spec.ts`, which never executed     */
   /*                                                                            */
-  /* That file gates on `PLAYWRIGHT_SHELL_EMAIL` / `PLAYWRIGHT_SHELL_PASSWORD`, */
-  /* which nothing in the repository sets, and the seed writes no Better Auth   */
-  /* credential account, so the gate cannot be satisfied even by supplying the  */
-  /* variables. Six of its assertions had no equivalent anywhere in the suite;  */
-  /* they live here now because this spec provisions itself and therefore runs. */
-  /* The original file is deliberately left in place — see the Part 76 record.  */
+  /* That file gated on `PLAYWRIGHT_SHELL_EMAIL` / `PLAYWRIGHT_SHELL_PASSWORD`, */
+  /* which nothing in the repository set, and the seed writes no Better Auth    */
+  /* credential account, so the gate could not be satisfied even by supplying   */
+  /* the variables. Six of its assertions had no equivalent anywhere in the     */
+  /* suite; they live here because this spec provisions itself and therefore    */
+  /* runs. Once they passed, the original was deleted — a test nothing can run  */
+  /* is worse than no test, because it reads as coverage in the skip count.     */
   /* ------------------------------------------------------------------------ */
 
   for (const viewport of [

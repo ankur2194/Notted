@@ -1717,42 +1717,95 @@ export class NotesService {
       deletionBatchId: string | null;
     }>
   > {
-    const query = tx
-      .select({
-        id: notes.id,
-        parentId: notes.parentId,
-        isDeleted: notes.isDeleted,
-        deletionBatchId: notes.deletionBatchId,
-      })
-      .from(notes)
-      .where(whereWorkspace(notes, this.tenantContext));
-    const rows = lock ? await query.for("update") : await query;
-    const children = new Map<string, string[]>();
-    for (const row of rows) {
-      if (row.parentId === null) continue;
-      const list = children.get(row.parentId) ?? [];
-      list.push(row.id);
-      children.set(row.parentId, list);
-    }
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    const result: Array<{
+    const workspaceId = activeWorkspaceId(this.tenantContext);
+    // Recursive descent seeded on the ROOT, not a scan of the whole workspace.
+    //
+    // This used to select every note row in the workspace and walk the edges in
+    // memory — and when `lock` was set it took `FOR UPDATE` on all of them. In a
+    // workspace with tens of thousands of notes, trashing one three-note branch
+    // row-locked the entire tenant until the transaction committed, blocking
+    // every concurrent edit and autosave and, at `serializable`, aborting many
+    // of them outright.
+    //
+    // `cycle id set is_cycle using cycle_path` is PostgreSQL's native cycle
+    // detection. It is what preserves the two behaviours a naive rewrite
+    // destroys: a bare `union all` spins forever on a corrupt `parent_id` loop,
+    // and `union` swallows it silently. Here the row that closes the loop is
+    // emitted once, flagged, and not expanded — so the walk terminates and the
+    // caller still gets 400 NOTE_HIERARCHY_INVALID.
+    //
+    // `whereWorkspace` builds a Drizzle `SQL` for the query builder and does not
+    // compose into a raw template, so the workspace id is bound on BOTH terms
+    // explicitly — the same shape the other raw-SQL sites in this codebase use.
+    const traversal = await tx.execute(sql`
+      with recursive subtree as (
+        select id, parent_id, is_deleted, deletion_batch_id
+        from notes
+        where workspace_id = ${workspaceId} and id = ${rootId}
+        union all
+        select child.id, child.parent_id, child.is_deleted, child.deletion_batch_id
+        from notes child
+        join subtree parent on child.parent_id = parent.id
+        where child.workspace_id = ${workspaceId}
+      ) cycle id set is_cycle using cycle_path
+      select id,
+             parent_id as "parentId",
+             is_deleted as "isDeleted",
+             deletion_batch_id as "deletionBatchId",
+             is_cycle as "isCycle"
+      from subtree
+    `);
+    const traversed = ((traversal as { readonly rows?: readonly unknown[] }).rows ?? []) as Array<{
       id: string;
       parentId: string | null;
       isDeleted: boolean;
       deletionBatchId: string | null;
-    }> = [];
-    const stack = [rootId];
-    const seen = new Set<string>();
-    while (stack.length > 0) {
-      const id = stack.pop()!;
-      if (seen.has(id)) this.invalidMove();
-      seen.add(id);
-      const row = byId.get(id);
-      if (row === undefined) this.notFound();
-      result.push(row);
-      stack.push(...(children.get(id) ?? []));
+      isCycle: boolean;
+    }>;
+    // An empty result means the root itself is not in this workspace. The old
+    // in-memory walk reached the same verdict via `byId.get(rootId) === undefined`.
+    if (traversed.length === 0) this.notFound();
+    if (traversed.some((row) => row.isCycle)) this.invalidMove();
+
+    if (lock) {
+      // A locking clause cannot be applied to a WITH query, so the lock is its
+      // own statement over the ids the traversal found. Both callers that pass
+      // `lock` run at `serializable`, so this statement shares the traversal's
+      // snapshot: a row another transaction changed since raises 40001 exactly
+      // as the previous single-statement `for update` did.
+      //
+      // Ordered by id so two overlapping subtree locks acquire in the same
+      // sequence and cannot deadlock — the same discipline as the sorted
+      // advisory keys in `lockSiblingGroups`.
+      //
+      // ponytail: the lock is now subtree-scoped, so it no longer accidentally
+      // serializes unrelated note mutations across the workspace. Nothing
+      // depended on that: `move()` runs at `read committed` and re-evaluates
+      // after acquiring its own locks, so a note re-parented into this subtree
+      // was never actually serialized by the wide lock either. Upgrade path if
+      // that race ever needs closing: raise `move()` to `serializable`, or have
+      // it lock the destination parent row.
+      await tx
+        .select({ id: notes.id })
+        .from(notes)
+        .where(
+          and(
+            inArray(
+              notes.id,
+              traversed.map((row) => row.id),
+            ),
+            whereWorkspace(notes, this.tenantContext),
+          ),
+        )
+        .orderBy(asc(notes.id))
+        .for("update");
     }
-    return result;
+    return traversed.map(({ id, parentId, isDeleted, deletionBatchId }) => ({
+      id,
+      parentId,
+      isDeleted,
+      deletionBatchId,
+    }));
   }
 
   private async assertNoDeletedAncestor(

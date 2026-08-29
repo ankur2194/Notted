@@ -223,24 +223,34 @@ Two things keep that honest:
 - `turbo.json` declares the full set on both `test` and `test:ci`, wildcards included
   (`MINIO_*`, `MEILISEARCH_*`, `MAILPIT_*`, `BETTER_AUTH_*`, `RATE_LIMIT_*`, `FEATURE_*`).
   **Adding a suite that reads a new variable means adding it there in the same change.**
-- `apps/api/test/integration-gates.test.ts` asserts that when `DATABASE_URL` is set under CI, the
-  other stack variables are set too — turning "thirty suites skipped" into one red test.
+- `apps/api/test/integration-gates.test.ts` asserts that whenever `DATABASE_URL` is set, the other
+  stack variables are set too — turning "thirty suites skipped" into one red test. It fires on any
+  run that configures a database, a developer laptop included. It used to additionally require
+  `CI`, which this repository sets nowhere, so it had never executed once.
 
-Note the name: the application reads `MEILISEARCH_HOST`. `MEILISEARCH_URL` is read only by
-`apps/api/src/search/hybrid-search.integration.test.ts` and is set nowhere in `compose.yaml`, so
-that one suite is permanently skipped by design.
+Note the name: the application reads `MEILISEARCH_HOST`, which `compose.yaml` does set.
+`MEILISEARCH_URL` is a name nothing reads and nothing sets.
 
 ### Two suites that only run in a specific container
 
 - `apps/api/test/search-reindex.integration.test.ts` requires
   `MEILISEARCH_INDEX_PREFIX=notted_e2e_`, which only the `api-e2e` service sets. It refuses to run
-  against the development prefix on purpose: it deletes and rebuilds index documents.
+  against the development prefix on purpose: it deletes and rebuilds index documents. That gate is
+  correct and must not be weakened — what was missing was a way to *satisfy* it, since no script ran
+  API vitest inside a container at all. With the `e2e` profile up (`pnpm e2e:up`):
+
+  ```bash
+  pnpm test:api:e2e-container test/search-reindex.integration.test.ts
+  ```
+
+  The same wrapper serves the other `api-e2e`-only suite, `test/realtime.integration.test.ts`,
+  which the profile now enables via `REALTIME_INTEGRATION`. Use `pnpm test:api:dev-container` for
+  suites that want the ordinary development stack instead.
 - `apps/api/test/export-pdf.integration.test.ts` needs a Chromium binary but no database, so it runs
   in the **development** `api` container, which already carries one, and needs no e2e stack:
 
   ```bash
-  docker compose -p notted-dev exec -T --workdir /workspace/apps/api api \
-    pnpm exec vitest run test/export-pdf.integration.test.ts
+  pnpm test:api:dev-container test/export-pdf.integration.test.ts
   ```
 
   `5 passed` is the pass condition. `skipped` is unproven, not passed.

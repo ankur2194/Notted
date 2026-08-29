@@ -56,6 +56,39 @@ describe("advanced authentication controls", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not be started/i);
   });
 
+  /*
+   * Rescued from `advanced-auth.spec.ts`, which asserted this in a browser test
+   * gated on `AUTH_OAUTH_GOOGLE_CLIENT_ID`/`_SECRET` — variables nothing in the
+   * repository sets, so it had never run. It could not be revived either: the
+   * provider button is rendered from server-supplied capabilities, so without
+   * those variables it is not in the DOM at all, and supplying them would flip
+   * the sibling "provider-disabled" test to skipped. That test does run, and is
+   * real coverage, so the security assertion moved here instead — where it needs
+   * no browser, no stack, and no credentials.
+   *
+   * The property: an attacker-supplied `?redirect=` must never reach the OAuth
+   * provider as a callback. `safeRedirectPath` collapses any non-local value to
+   * "/", and both URLs are built against the app's own origin.
+   */
+  it("never lets a hostile redirect reach the OAuth callback URLs", async () => {
+    const user = userEvent.setup();
+    vi.mocked(signInWithOAuth).mockResolvedValue({ ok: false, kind: "rejected" });
+    render(
+      <AdvancedSignInMethods
+        capabilities={capabilities}
+        redirectTo="https://attacker.invalid/path"
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+
+    expect(signInWithOAuth).toHaveBeenCalledWith(
+      "google",
+      "http://localhost:3000/",
+      "http://localhost:3000/login?oauth=error&redirect=%2F",
+    );
+    expect(JSON.stringify(vi.mocked(signInWithOAuth).mock.calls)).not.toContain("attacker.invalid");
+  });
+
   it("has a clean provider-disabled state without an empty OAuth control", () => {
     render(
       <AdvancedSignInMethods

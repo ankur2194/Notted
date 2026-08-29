@@ -431,6 +431,21 @@ export class NoteCollaborationProvider {
   }
 
   /**
+   * Document changes this tab holds that the server has never acknowledged.
+   *
+   * Nothing here is persisted — see `resetDocument`'s note on `y-indexeddb` — so
+   * this is exactly the work a closed tab destroys, and `CollaborationStatus`
+   * promises the writer it will sync.
+   *
+   * A PULL, deliberately not a snapshot field: a keystroke must not publish, or
+   * every holder of the snapshot would re-render on the hot typing path for a
+   * value only `beforeunload` reads.
+   */
+  get hasUnacknowledgedWork(): boolean {
+    return this.pending.length > 0;
+  }
+
+  /**
    * Resolves `true` only when the room is joined and synced inside the budget.
    *
    * `false` is NOT a verdict on the session: the server's `realtime:ready` runs
@@ -537,7 +552,17 @@ export class NoteCollaborationProvider {
 
     // Last write wins the race with unmount: emitted without waiting for the
     // ack, because there is nothing left alive to handle one.
-    if (this.pending.length > 0 && !this.stopped && this.socket.connected) {
+    //
+    // `epoch !== 0` because epoch 0 is now reachable at unmount (a reset whose
+    // re-handshake never landed), and the server refuses a non-positive epoch as
+    // `invalid` — so that frame would be a wasted round trip carrying work that
+    // is already lost.
+    //
+    // ponytail: an in-app navigation unmounts without `beforeunload`, and this
+    // emit is fire-and-forget only while connected, so a disconnected writer who
+    // navigates away still loses unsent updates. Upgrade path is the same
+    // `y-indexeddb` persistence `resetDocument` names — not a router guard.
+    if (this.pending.length > 0 && this.epoch !== 0 && !this.stopped && this.socket.connected) {
       this.socket.emit(EVENT.noteUpdate, {
         selector: this.selector,
         epoch: this.epoch,
@@ -757,10 +782,23 @@ export class NoteCollaborationProvider {
       return;
     }
 
-    // Nothing to re-queue when the socket is down: the structs are already in
-    // the document, so the next sync's state-vector delta carries them.
+    // Nothing goes on the wire before a handshake has named our epoch. The
+    // server validates `epoch` as a positive integer and acks `invalid`, which
+    // `requeue` counts as a strike — five of those and realtime is declared dead
+    // for the session. The window is real: after a reset the editor stays
+    // mounted and editable for the whole re-handshake, so a burst of typing
+    // lands here at epoch 0. The structs are in the document, and the
+    // handshake's state-vector delta carries them.
+    if (this.epoch === 0) {
+      return;
+    }
+
+    // HELD, not dropped. The structs are already in the document, so the next
+    // sync's state-vector delta would carry them either way — but this queue is
+    // also the only evidence that the writer has work the server has never seen,
+    // and `hasUnacknowledgedWork` is what puts the browser's leave prompt in
+    // front of losing it to a closed tab.
     if (!this.socket.connected) {
-      this.pending = [];
       this.publish(this.isOffline() ? "offline" : "reconnecting", null);
       return;
     }
@@ -1054,9 +1092,13 @@ export class NoteCollaborationProvider {
       return;
     }
 
-    // Adopted before the rebuild so a redelivery of the same frame is caught by
-    // the guard above rather than resetting a second time.
-    this.epoch = epoch;
+    // `adoptDocument` drops the epoch back to 0, so a redelivery of this frame
+    // is caught by the `this.epoch === 0` arm of the guard above rather than by
+    // the `epoch <= this.epoch` arm. Either way it resets exactly once.
+    //
+    // A genuinely NEWER reset frame arriving during the re-handshake is dropped,
+    // and that is deliberate: the handshake already in flight reads the server's
+    // current state, which is at or beyond that frame's epoch.
     void this.resetDocument();
   };
 
@@ -1146,6 +1188,21 @@ export class NoteCollaborationProvider {
 
   private adoptDocument(): void {
     this.generation += 1;
+    /*
+     * A fresh document has synced NOTHING, and epoch 0 is already this file's
+     * word for that (`handleRemoteFrame`, `handleResetFrame`). Carrying the old
+     * epoch across a rebuild broke three things at once:
+     *
+     *   1. The held-frame window never engaged for a re-handshake, so a peer
+     *      frame arriving between the join and the sync ack took the
+     *      `epoch !== this.epoch` discard branch and was lost for good.
+     *   2. `flushUpdates` tagged outbound frames with an epoch the server had
+     *      already retired.
+     *   3. `epoch !== 0` could not be used as "this generation is live", which
+     *      is what stops the Part 39 autosave from adopting an empty,
+     *      never-filled document as its baseline and PATCHing the note blank.
+     */
+    this.epoch = 0;
     // eslint-disable-next-line @typescript-eslint/no-this-alias -- captured for the binding's `user` getter, which must not rebind `this`.
     const provider = this;
 

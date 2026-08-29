@@ -4,15 +4,21 @@ import { describe, expect, it } from "vitest";
  * Part 75: make a silently-skipped integration run fail loudly.
  *
  * Roughly thirty suites are gated with `describe.skipIf(...)` on a piece of
- * infrastructure. That gate is right for a laptop with no stack running, but in
- * CI it is a trap: Turbo filters the environment strictly, so one missing
- * declaration in `turbo.json` makes every gated suite skip while the run still
- * prints green — a full test pyramid reduced to its unit layer with no signal
- * that it happened.
+ * infrastructure. That gate is right for a laptop with no stack running, but it
+ * is a trap the moment a stack IS meant to be up: Turbo filters the environment
+ * strictly, so one missing declaration in `turbo.json` makes every gated suite
+ * skip while the run still prints green — a full test pyramid reduced to its
+ * unit layer with no signal that it happened.
  *
- * This guard closes that hole with one assertion: *if* CI configured a database
+ * This guard closes that hole with one assertion: *if* a database is configured
  * (so the stack is meant to be up), the other infrastructure the suites read
  * must be configured too.
+ *
+ * IT DELIBERATELY DOES NOT ASK WHETHER THIS IS CI. It used to, and this
+ * repository has no CI — so the guard skipped itself on every machine that has
+ * ever run it and never once executed. A developer who starts the stack and
+ * runs the suite is in exactly the situation the guard was written for, so
+ * `DATABASE_URL` alone is the trigger.
  *
  * Every variable checked here is read by real code on the test path:
  *   - `MINIO_ENDPOINT`   — `test/minio-test-helpers.ts` (`HAS_MINIO`).
@@ -25,17 +31,26 @@ import { describe, expect, it } from "vitest";
  *   - `REDIS_URL`        — `src/config/redis.config.ts`, reached by every suite
  *     that boots the application (`test/app.e2e.test.ts` and the queue suites).
  *
- * Deliberately not asserted: `MAILPIT_URL`, `AUTH_E2E`, `REALTIME_INTEGRATION`
- * and `MEILISEARCH_INDEX_PREFIX`. Those select an *optional* suite rather than
+ * Deliberately not asserted: `MAILPIT_URL`, `AUTH_E2E` and
+ * `MEILISEARCH_INDEX_PREFIX`. Those select an *optional* suite rather than
  * describing the stack, and several only apply inside the `api-e2e` container.
+ * `REALTIME_INTEGRATION` is likewise optional, but note that `compose.yaml` now
+ * sets it for `api-e2e` — before that it was set nowhere at all, which made
+ * `test/realtime.integration.test.ts` permanently dead in the same way
+ * `MEILISEARCH_URL` had made the hybrid-search suite dead.
+ *
+ * ponytail: this proves the variable is SET, not that the service ANSWERS. The
+ * ~32 copied `isDatabaseReachable`/`reachable` probes give a live-but-slow
+ * database a 2 000 ms budget and degrade to a green skip when it is exceeded —
+ * which a memory-capped host makes plausible. Upgrade path: one shared probe
+ * helper beside `minio-test-helpers.ts` that THROWS rather than skips when the
+ * variable is set but the service does not answer.
  */
 
-const CI = process.env.CI;
-const RUNNING_IN_CI = typeof CI === "string" && CI !== "" && CI !== "false";
 const DATABASE_CONFIGURED = (process.env.DATABASE_URL ?? "").trim() !== "";
 
-describe.skipIf(!RUNNING_IN_CI || !DATABASE_CONFIGURED)(
-  "CI integration gates (DATABASE_URL is set, so the whole stack must be)",
+describe.skipIf(!DATABASE_CONFIGURED)(
+  "integration gates (DATABASE_URL is set, so the whole stack must be)",
   () => {
     it.each(["MINIO_ENDPOINT", "MEILISEARCH_HOST", "REDIS_URL"])(
       "%s reaches the test process",

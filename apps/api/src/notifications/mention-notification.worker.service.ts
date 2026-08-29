@@ -7,20 +7,28 @@
 // business mutation and the SIDE EFFECT happens after commit — so the note
 // update commits fast and the notification rows are materialised out of band.
 //
-// PART 61 BOUNDARY — DO NOT CROSS: this handler writes the in-app notification
-// row and stops. The mention EMAIL is Part 61's concern and will be its own
-// outbox intent with its own template and its own delivery record. Do not
-// enqueue an email here, do not add an email/delivery column to `notifications`,
-// and do not couple the two handlers: an email-provider outage must never block
-// or retry the in-app notification.
+// PART 61 BOUNDARY — WHAT IT ACTUALLY FORBIDS. This handler writes the in-app
+// notification row AND queues the mention email intent. It must never speak to
+// the email TRANSPORT: `email.deliver` stays its own outbox intent, with its
+// own template, its own delivery record and its own handler, so a provider
+// outage can never block or retry the in-app notification. Do not call SMTP
+// from here, and do not add an email/delivery column to `notifications`.
+//
+// The email intent is queued here rather than in the producer because this is
+// the only place that re-authorizes `note.read` for the recipient. The producer
+// runs inside `NotesService.update`'s transaction and can see workspace
+// membership only — which is not what `note.read` means for a note in a
+// restricted project. See `mention-notification.producer.ts` for the full
+// reasoning and for why the check cannot move the other way.
 
 import { Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { AuthorizationDeniedError } from "../authorization/authorization.errors";
 import { DatabaseService } from "../database/database.service";
 import { notes, users } from "../database/schema";
+import { WorkspaceEmailProducerService } from "../email/workspace-email-producer.service";
 import { defineQueueJobRegistration, type QueueJobContext } from "../queue/job-contracts";
 import { MENTION_NOTIFY_JOB_DEFINITION } from "../queue/job-registry";
 import { PermanentQueueJobError } from "../queue/queue-errors";
@@ -57,6 +65,11 @@ export class MentionNotificationWorkerService implements OnModuleInit, OnModuleD
     private readonly tenantContext: TenantContextService,
     private readonly registry: QueueHandlerRegistry,
     private readonly authorization: AuthorizationEntryService,
+    // REQUIRED, deliberately. An optional dependency here would let a broken
+    // `NotificationModule` -> `EmailModule` import silently stop every mention
+    // email while the in-app intent kept working, which is exactly the
+    // regression nobody notices. Nest fails to boot instead.
+    private readonly emailProducer: WorkspaceEmailProducerService,
   ) {}
 
   onModuleInit(): void {
@@ -118,12 +131,47 @@ export class MentionNotificationWorkerService implements OnModuleInit, OnModuleD
           .limit(1);
         if (note === undefined || note.isDeleted) return;
 
-        const [actor] = await this.database.db
-          .select({ name: users.name })
+        // One lookup for both people. This used to fetch the actor alone; the
+        // recipient's address rides along at no extra query cost.
+        const userRows = await this.database.db
+          .select({ id: users.id, name: users.name, email: users.email })
           .from(users)
-          .where(eq(users.id, actorId))
-          .limit(1);
-        const actorName = actor?.name.trim() ?? "";
+          .where(inArray(users.id, [recipientId, actorId]));
+        const actorName = userRows.find((row) => row.id === actorId)?.name.trim() ?? "";
+        const recipientEmail = userRows.find((row) => row.id === recipientId)?.email;
+
+        // PART 61 BOUNDARY, RESTATED — the reason survives, the location moved.
+        //
+        // The mention EMAIL is queued HERE and nowhere else, because this is the
+        // only place that re-authorizes `note.read` for the recipient. It used
+        // to be queued by `MentionNotificationProducer`, which can only see
+        // workspace membership — so a member with no grant on a restricted
+        // project got no in-app row and an email anyway.
+        //
+        // WHAT THE BOUNDARY PROTECTS IS INTACT: this writes a durable intent
+        // row and never speaks to SMTP. `email.deliver` is still its own job
+        // type, its own queue and its own handler, so a provider outage still
+        // cannot block, retry or fail the in-app notification below. Never call
+        // the transport from here.
+        //
+        // BEFORE `emit`, deliberately. `queue` is idempotent on the business key
+        // and ends in `onConflictDoNothing`; `NotificationService.emit` is a
+        // bare insert with no upsert. `releaseExecution` genuinely re-runs a
+        // job, so the idempotent write has to come first — the other order
+        // turns every retry into a duplicate notification row.
+        if (recipientEmail !== undefined) {
+          await this.database.transaction((tx) =>
+            this.emailProducer.queue(tx, {
+              templateKey: "mention",
+              recipient: recipientEmail,
+              workspaceId,
+              relatedEntityType: "note",
+              relatedEntityId: noteId,
+              actorId,
+              correlationId: context.correlationId,
+            }),
+          );
+        }
 
         await this.notifications.emit({
           workspaceId,

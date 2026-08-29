@@ -435,6 +435,36 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 65 public REST API with API keys", () =
     expect(response.body.error.code).toBe("FORBIDDEN");
   });
 
+  /*
+   * The refusal above used to be a string comparison against the request line —
+   * `startsWith("Bearer ntd_pk_")` on the header, `startsWith(TRPC_PATH)` on
+   * `baseUrl + path` — and BOTH halves could be walked past, because neither
+   * matched what the code downstream actually does.
+   *
+   * `bearerSecret` splits on the first space, lowercases the scheme and trims
+   * the value, so every header below authenticates as an API key. Express
+   * routes case-insensitively by default and nothing sets `case sensitive
+   * routing`, so `/api/v1/TRPC/...` reaches the tRPC handler while a
+   * case-sensitive `startsWith` misses it.
+   *
+   * Landing on tRPC is not a soft failure: it is mounted outside the Nest
+   * pipeline, so `ApiKeyRouteGuard` never runs and the scopes are never read —
+   * a read-only key would execute writes as the key's creator.
+   */
+  it.each([
+    ["lowercase scheme", "/api/v1/trpc/health.ping", (raw: string) => `bearer ${raw}`],
+    ["uppercase scheme", "/api/v1/trpc/health.ping", (raw: string) => `BEARER ${raw}`],
+    ["doubled space", "/api/v1/trpc/health.ping", (raw: string) => `Bearer  ${raw}`],
+    ["trailing whitespace", "/api/v1/trpc/health.ping", (raw: string) => `Bearer ${raw} `],
+    ["uppercase path", "/api/v1/TRPC/health.ping", (raw: string) => `Bearer ${raw}`],
+  ])("refuses an API key on tRPC despite %s", async (_label, path, header) => {
+    if (!live) return;
+    const response = await request(server()).get(path).set("Authorization", header(readKey.raw));
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("FORBIDDEN");
+  });
+
   it("rejects a malformed bearer credential as 401, never as a 503 outage", async () => {
     if (!live) return;
     const response = await request(server())

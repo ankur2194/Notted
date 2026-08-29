@@ -281,7 +281,7 @@ test.describe.serial("Part 76 cross-engine editor primitives", () => {
        * horizontal overflow there. The floor is the stylesheet's deliberate
        * lower bound, not a defect, and it sits below the 320 px the success
        * criterion actually asks for — which is why the never-executed zoom test
-       * in `dashboard-shell.spec.ts` is not simply copied here.
+       * in the former `dashboard-shell.spec.ts` was not simply copied here.
        *
        * "At 200%" is expressed as a 720 px viewport rather than as CSS `zoom`;
        * see the comment at that step for the measurement behind that choice.

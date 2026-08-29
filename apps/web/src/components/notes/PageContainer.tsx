@@ -148,6 +148,7 @@ export function PageContainer({
       applyExternalVersion: autosave.applyExternalVersion,
       status: autosave.status,
       hasUnsavedWork: autosave.hasUnsavedWork,
+      registerUnsavedWorkProbe: autosave.registerUnsavedWorkProbe,
     }),
     [
       autosave.onDocumentChange,
@@ -156,6 +157,7 @@ export function PageContainer({
       autosave.applyExternalVersion,
       autosave.status,
       autosave.hasUnsavedWork,
+      autosave.registerUnsavedWorkProbe,
     ],
   );
 

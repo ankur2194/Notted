@@ -31,6 +31,8 @@
     "test": "turbo run test && node --test scripts/*.test.mjs",
     "test:ci": "turbo run test:ci && node --test scripts/*.test.mjs",
     "test:e2e": "node scripts/dev-tooling.mjs e2e:test",
+    "test:api:dev-container": "docker compose -p notted-dev exec -T --workdir /workspace/apps/api api pnpm exec vitest run",
+    "test:api:e2e-container": "docker compose -p notted-dev --profile e2e exec -T --workdir /workspace/apps/api api-e2e pnpm exec vitest run",
     "e2e:up": "node scripts/dev-tooling.mjs e2e:up",
     "e2e:test": "node scripts/dev-tooling.mjs e2e:test",
     "e2e:down": "node scripts/dev-tooling.mjs e2e:down",

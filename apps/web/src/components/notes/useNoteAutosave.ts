@@ -58,6 +58,12 @@ export interface NoteAutosaveHandle {
   readonly savedDocument: NoteDocument | null;
   readonly documentRejected: boolean;
   readonly hasUnsavedWork: boolean;
+  /**
+   * Register a source of unacknowledged work this machine cannot see — the
+   * collaborative session's unsent Yjs updates. Pulled synchronously inside
+   * `beforeunload`; returns its own withdrawal.
+   */
+  readonly registerUnsavedWorkProbe: (probe: () => boolean) => () => void;
   readonly onDocumentChange: (document: NoteDocument) => void;
   readonly onDocumentBaseline: (document: NoteDocument) => void;
   readonly onDocumentRejected: (rejected: boolean) => void;
@@ -101,6 +107,8 @@ export function useNoteAutosave({
   // Timers and promises need to dispatch, and dispatch schedules timers, so the
   // cycle is broken through a ref rather than by rebuilding either.
   const dispatchRef = useRef<(event: AutosaveEvent) => void>(() => undefined);
+  /** Set by `registerUnsavedWorkProbe`; read only by the unload handler. */
+  const unsavedWorkProbe = useRef<(() => boolean) | null>(null);
 
   const performSave = useCallback(
     async (effect: Extract<AutosaveEffect, { kind: "save" }>): Promise<void> => {
@@ -225,7 +233,12 @@ export function useNoteAutosave({
      * being discarded.
      */
     function handleBeforeUnload(event: BeforeUnloadEvent): void {
-      if (!hasUnsavedWork(stateRef.current)) return;
+      // Two writers, one prompt. `hasUnsavedWork` covers the PATCH this machine
+      // owns; the probe covers a collaborative session's unsent Yjs updates,
+      // which this machine cannot see at all — in collaborative mode it never
+      // receives a `document-changed`, so it would report "nothing pending"
+      // while the tab holds edits the status line promised would sync.
+      if (!hasUnsavedWork(stateRef.current) && unsavedWorkProbe.current?.() !== true) return;
       event.preventDefault();
       event.returnValue = "";
     }
@@ -297,6 +310,15 @@ export function useNoteAutosave({
     router.refresh();
   }, [router]);
 
+  // Not React state: read synchronously inside `beforeunload`, and it must never
+  // cause a render. One slot, because a note has one editor.
+  const registerUnsavedWorkProbe = useCallback((probe: () => boolean): (() => void) => {
+    unsavedWorkProbe.current = probe;
+    return () => {
+      if (unsavedWorkProbe.current === probe) unsavedWorkProbe.current = null;
+    };
+  }, []);
+
   return {
     status: snapshot.status,
     description: describeAutosave(snapshot),
@@ -306,6 +328,7 @@ export function useNoteAutosave({
     savedDocument: snapshot.savedDocument,
     documentRejected: snapshot.documentRejected,
     hasUnsavedWork: hasUnsavedWork(snapshot),
+    registerUnsavedWorkProbe,
     onDocumentChange,
     onDocumentBaseline,
     onDocumentRejected,

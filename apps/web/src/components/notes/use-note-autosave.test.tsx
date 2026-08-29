@@ -199,6 +199,51 @@ describe("useNoteAutosave", () => {
     expect(saved.defaultPrevented).toBe(false);
   });
 
+  /*
+   * In collaborative mode this machine is deliberately unbound: it never
+   * receives a `document-changed`, so it reports "nothing pending" while the tab
+   * holds unsent Yjs updates that exist only in memory — under a status line
+   * telling the writer they will sync. The probe is how the other writer's work
+   * reaches the one `beforeunload` guard the app has.
+   *
+   * The machine stays idle for the whole test, so the probe is provably the only
+   * thing that can arm the prompt.
+   */
+  it("asks for the leave prompt while a collaborative session holds unacknowledged work", () => {
+    const { result } = mount();
+    let unsent = false;
+
+    const before = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(before);
+    expect(before.defaultPrevented).toBe(false);
+
+    let unregister = () => undefined as void;
+    act(() => {
+      unregister = result.current.registerUnsavedWorkProbe(() => unsent);
+    });
+
+    const stillClean = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(stillClean);
+    expect(stillClean.defaultPrevented).toBe(false);
+
+    unsent = true;
+    const holding = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(holding);
+    expect(holding.defaultPrevented).toBe(true);
+
+    unsent = false;
+    const flushed = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(flushed);
+    expect(flushed.defaultPrevented).toBe(false);
+
+    // A withdrawn probe must stop speaking for an editor that has unmounted.
+    unsent = true;
+    act(() => unregister());
+    const withdrawn = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(withdrawn);
+    expect(withdrawn.defaultPrevented).toBe(false);
+  });
+
   it("queues while offline and resumes when the connection returns", async () => {
     const { result } = mount();
     act(() => {

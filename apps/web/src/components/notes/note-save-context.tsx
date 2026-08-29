@@ -32,6 +32,16 @@ export interface NoteSaveHandle {
   readonly status:
     "idle" | "dirty" | "saving" | "saved" | "retrying" | "error" | "conflict" | "offline";
   readonly hasUnsavedWork: boolean;
+  /**
+   * Register a source of unacknowledged work this machine cannot see — the
+   * collaborative session's unsent Yjs updates, which live only in this tab's
+   * memory and die with it while the status line promises they will sync.
+   *
+   * PULLED, never pushed: read once, synchronously, inside `beforeunload`. A
+   * pushed value would re-render this tree on the hot typing path for something
+   * only the unload handler reads. Returns its own withdrawal.
+   */
+  readonly registerUnsavedWorkProbe: (probe: () => boolean) => () => void;
 }
 
 const NO_SAVE_HANDLE: NoteSaveHandle = {
@@ -41,6 +51,7 @@ const NO_SAVE_HANDLE: NoteSaveHandle = {
   applyExternalVersion: () => undefined,
   status: "idle",
   hasUnsavedWork: false,
+  registerUnsavedWorkProbe: () => () => undefined,
 };
 
 const NoteSaveContext = createContext<NoteSaveHandle | null>(null);
@@ -62,6 +73,7 @@ export function NoteSaveProvider({
       applyExternalVersion: value.applyExternalVersion,
       status: value.status,
       hasUnsavedWork: value.hasUnsavedWork,
+      registerUnsavedWorkProbe: value.registerUnsavedWorkProbe,
     }),
     [
       value.onDocumentChange,
@@ -70,6 +82,7 @@ export function NoteSaveProvider({
       value.applyExternalVersion,
       value.status,
       value.hasUnsavedWork,
+      value.registerUnsavedWorkProbe,
     ],
   );
   return <NoteSaveContext.Provider value={handle}>{children}</NoteSaveContext.Provider>;

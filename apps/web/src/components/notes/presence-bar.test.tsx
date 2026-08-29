@@ -107,7 +107,10 @@ describe("PresenceBar connection status", () => {
       ["connecting", "Connecting to live editing"],
       ["synced", "Live editing"],
       ["reconnecting", "Reconnecting"],
-      ["offline", "Offline — changes will sync when you reconnect"],
+      [
+        "offline",
+        "Offline — changes sync when you reconnect, and are lost if you close this tab first",
+      ],
       ["error", "Live editing unavailable — saving normally"],
     ];
 

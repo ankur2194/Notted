@@ -132,7 +132,7 @@ function build(db: NodePgDatabase<typeof schema>) {
       new NoteVersionsService(tenant),
       undefined,
       undefined,
-      new MentionNotificationProducer(tenant, logger, new WorkspaceEmailProducerService(tenant)),
+      new MentionNotificationProducer(tenant, logger),
     ),
     worker: new MentionNotificationWorkerService(
       database,
@@ -140,6 +140,9 @@ function build(db: NodePgDatabase<typeof schema>) {
       tenant,
       { register: () => () => undefined } as unknown as QueueHandlerRegistry,
       authorization,
+      // The mention email intent is queued by the worker now, behind the same
+      // `note.read` re-check that gates the in-app row.
+      new WorkspaceEmailProducerService(tenant),
     ),
   };
 }
@@ -602,79 +605,94 @@ describe.skipIf(!HAS_DATABASE_URL)("Part 60 comments and mentions (live PostgreS
     const { notesService, worker } = build(db);
     const owner = principal(SEED_IDS.users.alphaOwner);
     const note = await createNote(notesService, owner, SEED_IDS.workspaces.alpha, "Mentions");
-    const update = (version: number, mentioned: readonly string[]) =>
-      notesService.update({
-        principal: owner,
-        workspaceId: SEED_IDS.workspaces.alpha,
-        noteId: note.id,
-        expectedVersion: version,
-        content: mentionDocument(mentioned),
-      });
-    const intents = async () =>
-      db!
+    /*
+     * UNCONDITIONAL, because this suite commits rather than rolling back and it
+     * writes into the SEEDED alpha workspace. When these deletes only ran on
+     * success, a single failure here left mention rows behind — and
+     * `shell-notifications.integration.test.ts` asserts a hardcoded
+     * `notificationUnreadCount` of 2 for that same workspace, so one flake in
+     * this file turned into a permanent, unrelated failure in another, on every
+     * subsequent run against the same database.
+     */
+    const cleanup = async (): Promise<void> => {
+      if (db === undefined) return;
+      await db.delete(notifications).where(eq(notifications.targetId, note.id));
+      await db.delete(notes).where(eq(notes.id, note.id));
+    };
+    try {
+      const update = (version: number, mentioned: readonly string[]) =>
+        notesService.update({
+          principal: owner,
+          workspaceId: SEED_IDS.workspaces.alpha,
+          noteId: note.id,
+          expectedVersion: version,
+          content: mentionDocument(mentioned),
+        });
+      const intents = async () =>
+        db!
+          .select()
+          .from(jobOutbox)
+          .where(
+            and(
+              eq(jobOutbox.jobType, DOMAIN_JOB_TYPES.mentionNotify),
+              sql`${jobOutbox.payload}->>'noteId' = ${note.id}`,
+            ),
+          );
+
+      const first = await update(note.version, [SEED_IDS.users.alphaEditor]);
+      expect(await intents()).toHaveLength(1);
+
+      // The same document saved again adds nothing: the producer diffs the
+      // previous content and returns before issuing any SQL.
+      const second = await update(first.note.version, [SEED_IDS.users.alphaEditor]);
+      expect(await intents()).toHaveLength(1);
+
+      // One more recipient => exactly one more intent, not a re-notification of
+      // the member who was already mentioned.
+      const third = await update(second.note.version, [
+        SEED_IDS.users.alphaEditor,
+        SEED_IDS.users.alphaAdmin,
+      ]);
+      expect(await intents()).toHaveLength(2);
+
+      // Anti-forging: `betaEditor` is a real user, but not a member of this
+      // workspace. The membership intersection drops the id with no error.
+      await update(third.note.version, [
+        SEED_IDS.users.alphaEditor,
+        SEED_IDS.users.alphaAdmin,
+        SEED_IDS.users.betaEditor,
+      ]);
+      const scheduled = await intents();
+      expect(scheduled).toHaveLength(2);
+      expect(new Set(scheduled.map((intent) => intent.idempotencyKey)).size).toBe(2);
+
+      // Drive the consumer directly — no Redis, no BullMQ loop (see file header).
+      for (const intent of scheduled) {
+        await worker.handle({
+          outboxIntentId: intent.id,
+          // The processor always supplies these; the handler reads them to tell a
+          // retryable attempt from the final one.
+          attempt: 1,
+          maximumAttempts: 3,
+          jobType: MENTION_NOTIFY_JOB_DEFINITION.jobType,
+          idempotencyKey: intent.idempotencyKey,
+          payload: MENTION_NOTIFY_JOB_DEFINITION.payloadSchema.parse(intent.payload),
+          signal: new AbortController().signal,
+        });
+      }
+
+      const delivered = await db
         .select()
-        .from(jobOutbox)
-        .where(
-          and(
-            eq(jobOutbox.jobType, DOMAIN_JOB_TYPES.mentionNotify),
-            sql`${jobOutbox.payload}->>'noteId' = ${note.id}`,
-          ),
-        );
-
-    const first = await update(note.version, [SEED_IDS.users.alphaEditor]);
-    expect(await intents()).toHaveLength(1);
-
-    // The same document saved again adds nothing: the producer diffs the
-    // previous content and returns before issuing any SQL.
-    const second = await update(first.note.version, [SEED_IDS.users.alphaEditor]);
-    expect(await intents()).toHaveLength(1);
-
-    // One more recipient => exactly one more intent, not a re-notification of
-    // the member who was already mentioned.
-    const third = await update(second.note.version, [
-      SEED_IDS.users.alphaEditor,
-      SEED_IDS.users.alphaAdmin,
-    ]);
-    expect(await intents()).toHaveLength(2);
-
-    // Anti-forging: `betaEditor` is a real user, but not a member of this
-    // workspace. The membership intersection drops the id with no error.
-    await update(third.note.version, [
-      SEED_IDS.users.alphaEditor,
-      SEED_IDS.users.alphaAdmin,
-      SEED_IDS.users.betaEditor,
-    ]);
-    const scheduled = await intents();
-    expect(scheduled).toHaveLength(2);
-    expect(new Set(scheduled.map((intent) => intent.idempotencyKey)).size).toBe(2);
-
-    // Drive the consumer directly — no Redis, no BullMQ loop (see file header).
-    for (const intent of scheduled) {
-      await worker.handle({
-        outboxIntentId: intent.id,
-        // The processor always supplies these; the handler reads them to tell a
-        // retryable attempt from the final one.
-        attempt: 1,
-        maximumAttempts: 3,
-        jobType: MENTION_NOTIFY_JOB_DEFINITION.jobType,
-        idempotencyKey: intent.idempotencyKey,
-        payload: MENTION_NOTIFY_JOB_DEFINITION.payloadSchema.parse(intent.payload),
-        signal: new AbortController().signal,
-      });
+        .from(notifications)
+        .where(eq(notifications.targetId, note.id));
+      expect(delivered).toHaveLength(2);
+      expect(delivered.map((row) => row.recipientUserId).sort()).toEqual(
+        [SEED_IDS.users.alphaEditor, SEED_IDS.users.alphaAdmin].sort(),
+      );
+      expect(delivered.every((row) => row.kind === "mention" && row.readAt === null)).toBe(true);
+      expect(delivered.every((row) => row.actorUserId === SEED_IDS.users.alphaOwner)).toBe(true);
+    } finally {
+      await cleanup();
     }
-
-    const delivered = await db
-      .select()
-      .from(notifications)
-      .where(eq(notifications.targetId, note.id));
-    expect(delivered).toHaveLength(2);
-    expect(delivered.map((row) => row.recipientUserId).sort()).toEqual(
-      [SEED_IDS.users.alphaEditor, SEED_IDS.users.alphaAdmin].sort(),
-    );
-    expect(delivered.every((row) => row.kind === "mention" && row.readAt === null)).toBe(true);
-    expect(delivered.every((row) => row.actorUserId === SEED_IDS.users.alphaOwner)).toBe(true);
-
-    await db.delete(notifications).where(eq(notifications.targetId, note.id));
-    await db.delete(notes).where(eq(notes.id, note.id));
   });
 });

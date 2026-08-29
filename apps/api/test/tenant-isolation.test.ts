@@ -12,47 +12,15 @@
 //    workspace B + owner) and proves:
 //    (a) DB-level composite-FK write denial — notes/tasks referencing the
 //        OTHER tenant's project/folder reject with SQLSTATE 23503.
-//    (b) Repository guard matrices deny READ/INSERT/UPDATE/DELETE before SQL
-//        for every direct and constrained-parent tenant-owned entity.
-//    (c) Read-scope predicates return zero rows from workspace B.
+//    (b) Read-scope predicates return zero rows from workspace B.
+//    (c) Real services, called under tenant A's context with tenant B's ids,
+//        answer 404 — never 403, which would confirm the row exists.
 //
-// Entity coverage table (ADR 0009 / Plan Part 19: "every major entity"):
-//
-//   ┌────────────────────────────┬──────────────────────────────┬─────────────────────────────────────────┐
-//   │ Entity                     │ Scope mechanism              │ Covered in                              │
-//   ├────────────────────────────┼──────────────────────────────┼─────────────────────────────────────────┤
-//   │ workspaces (root)          │ eq(id, ctx.workspaceId)      │ live: "scopes every major..."           │
-//   │ workspace_members          │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ invitations                │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ projects                   │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ folders                    │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ notes                      │ whereWorkspace(table, ctx)   │ live: "scopes every major..." + write   │
-//   │ tags                       │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ attachments                │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ tasks                      │ whereWorkspace(table, ctx)   │ live: "scopes every major..." + write   │
-//   │ task_statuses              │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ audit_logs                 │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ api_keys                   │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ webhooks                   │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ workspace_domains          │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ exports                    │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ ai_provider_config         │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ ai_usage                   │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ email_deliveries (scoped)  │ whereWorkspace(table, ctx)   │ live: "scopes every major..."           │
-//   │ project_access             │ join via projects.workspace  │ live: "scopes every major..."           │
-//   │ note_shares                │ join via notes.workspace_id  │ live: "scopes every major..."           │
-//   │ note_tags                  │ join via notes.workspace_id  │ live: "scopes every major..."           │
-//   │ comments                   │ join via notes.workspace_id  │ live: "scopes every major..."           │
-//   │ note_versions              │ join via notes.workspace_id  │ live: "scopes every major..."           │
-//   │ note_collaboration_states  │ join via notes.workspace_id  │ live: "scopes every major..."           │
-//   │ note_collaboration_updates │ join via notes.workspace_id  │ live: "scopes every major..."           │
-//   │ task_tags                  │ join via tasks.workspace_id  │ live: "scopes every major..."           │
-//   │ note_embeddings            │ join via notes.workspace_id  │ live: "scopes every major..."           │
-//   │ webhook_deliveries         │ join via webhooks.workspace  │ live: "scopes every major..."           │
-//   │ notes→project (composite)  │ DB composite FK 23503        │ live: "rejects cross-tenant note proj"  │
-//   │ notes→folder (composite)   │ DB composite FK 23503        │ live: "rejects cross-tenant note fldr"  │
-//   │ tasks→project (composite)  │ DB composite FK 23503        │ live: "rejects cross-tenant task proj"  │
-//   └────────────────────────────┴──────────────────────────────┴─────────────────────────────────────────┘
+// Coverage is proved by the tests below, not by a table here. A 30-row prose
+// inventory used to sit at this spot claiming which entity was covered where;
+// 27 of its rows pointed at a single DATABASE_URL-gated test, so on a machine
+// with no stack it documented coverage that had not run — and nothing tied a
+// row to a real call site, so it could not go stale loudly.
 //
 // Global tables (users, account, session, verification, two_factor, passkey,
 // job_idempotency) are intentionally NOT workspace-scoped; they are out of
@@ -67,6 +35,9 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
+import { AuthorizationPolicyService } from "../src/authorization/authorization-policy.service";
+import { AuthorizationRepository } from "../src/authorization/authorization.repository";
 import {
   aiProviderConfig,
   aiUsage,
@@ -98,6 +69,9 @@ import {
   workspaces,
   workspaceMembers,
 } from "../src/database/schema";
+import { TagsService } from "../src/tags/tags.service";
+import { TaskStatusesService } from "../src/tasks/task-statuses.service";
+import { TasksService } from "../src/tasks/tasks.service";
 import {
   activeWorkspaceId,
   assertActiveWorkspace,
@@ -114,6 +88,11 @@ import {
 } from "../src/tenant";
 
 import { expectPostgresErrorCode } from "./database-test-helpers";
+
+import type { DatabaseService, DatabaseTransaction } from "../src/database/database.service";
+import type { NoteSearchIndexProducer } from "../src/search/note-search-index-producer";
+import type { AuthenticatedPrincipal } from "@notted/shared-types";
+import type { PgTransactionConfig } from "drizzle-orm/pg-core/session";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
@@ -243,213 +222,71 @@ describe("whereWorkspace (unit)", () => {
   });
 });
 
-type TenantOperation = "READ" | "INSERT" | "UPDATE" | "DELETE";
-
-const TENANT_OPERATIONS = ["READ", "INSERT", "UPDATE", "DELETE"] as const;
-const DIRECT_TENANT_ENTITIES = [
-  "workspaces identity",
-  "workspaceMembers",
-  "invitations",
-  "projects",
-  "folders",
-  "notes",
-  "tags",
-  "attachments",
-  "tasks",
-  "taskStatuses",
-  "auditLogs",
-  "apiKeys",
-  "webhooks",
-  // Part 73. A custom-domain claim is workspace-owned like any other tenant
-  // row, and the hostname is globally unique — a cross-tenant read here would
-  // hand one workspace another's claimed address.
-  "workspaceDomains",
-  "exports",
-  "aiProviderConfig",
-  "aiUsage",
-  "emailDeliveries",
-] as const;
-const INDIRECT_TENANT_ENTITIES = [
-  "projectAccess→project",
-  "noteShares→note",
-  "noteTags→note",
-  "comments→note",
-  "noteVersions→note",
-  "noteEmbeddings→note",
-  // Part 58. Neither collaboration table carries `workspace_id`, so both owe
-  // the SAME read/insert/update/delete deny proof `comments` owes — the live
-  // Yjs log is note content, and a write guard that only exists on the read
-  // path is not a guard.
-  "noteCollaborationStates→note",
-  "noteCollaborationUpdates→note",
-  "taskTags→task",
-  "webhookDeliveries→webhook",
-] as const;
-
-type OperationCallbacks = Readonly<Record<TenantOperation, () => void>>;
-
-function runOperationCallback(operation: TenantOperation, callbacks: OperationCallbacks): void {
-  callbacks[operation]();
-}
-
-/** Simulates a direct repository operation; guarded code is the SQL boundary. */
-function attemptDirectRepositoryOperation(
-  operation: TenantOperation,
-  resourceWorkspaceId: string,
-  tenantContext: TenantContextService,
-  entity: string,
-  sql: OperationCallbacks,
-): void {
-  switch (operation) {
-    case "READ":
-      assertWorkspaceRead(resourceWorkspaceId, tenantContext, entity);
-      break;
-    case "INSERT":
-      assertWorkspaceInsertValues({ workspaceId: resourceWorkspaceId }, tenantContext, entity);
-      break;
-    case "UPDATE":
-      assertWorkspaceUpdate(resourceWorkspaceId, tenantContext, entity);
-      break;
-    case "DELETE":
-      assertWorkspaceDelete(resourceWorkspaceId, tenantContext, entity);
-      break;
-  }
-  runOperationCallback(operation, sql);
-}
-
-/** Simulates parent resolution for a child/junction before any child SQL. */
-function attemptParentScopedRepositoryOperation(
-  operation: TenantOperation,
-  parentWorkspaceId: string,
-  tenantContext: TenantContextService,
-  entity: string,
-  sql: OperationCallbacks,
-): void {
-  switch (operation) {
-    case "READ":
-      assertWorkspaceRead(parentWorkspaceId, tenantContext, entity);
-      break;
-    case "INSERT":
-      assertWorkspaceInsertValues({ workspaceId: parentWorkspaceId }, tenantContext, entity);
-      break;
-    case "UPDATE":
-      assertWorkspaceUpdate(parentWorkspaceId, tenantContext, entity);
-      break;
-    case "DELETE":
-      assertWorkspaceDelete(parentWorkspaceId, tenantContext, entity);
-      break;
-  }
-  runOperationCallback(operation, sql);
-}
-
-describe("tenant repository mutation guards (unit)", () => {
+/*
+ * `workspace-scope.ts` is the module every tenant-owned query routes through, so
+ * it is worth a direct unit test — but a SMALL one.
+ *
+ * What stood here was a 29-entity x 4-operation matrix driving a test-local
+ * helper whose own comment read "Simulates a direct repository operation". The
+ * entity was an inert string label and the "SQL boundary" was a counter object,
+ * so all 116 assertions re-proved the same `if (a !== b) throw` through four
+ * one-line aliases of `assertActiveWorkspace`. It could not fail for any change
+ * to the application, which is exactly the failure it was written to catch: a
+ * service that forgets `whereWorkspace` passed it unchanged.
+ *
+ * The real proof that a service refuses another tenant's rows is a service call
+ * against a live database, asserting 404. Those live below.
+ */
+describe("workspace-scope (unit)", () => {
   const workspaceA = "11111111-1111-4111-8111-111111111111";
   const workspaceB = "22222222-2222-4222-8222-222222222222";
 
-  it("denies READ/INSERT/UPDATE/DELETE for every direct tenant-owned entity before SQL", async () => {
+  function inWorkspaceA<T>(fn: (tenantContext: TenantContextService) => T): T {
     const tenantContext = new TenantContextService();
-    const context = createTenantContext({ workspaceId: workspaceA });
+    return tenantContext.run(createTenantContext({ workspaceId: workspaceA }), () =>
+      fn(tenantContext),
+    );
+  }
 
-    await tenantContext.run(context, () => {
-      for (const entity of DIRECT_TENANT_ENTITIES) {
-        for (const operation of TENANT_OPERATIONS) {
-          const sqlAttempts: Record<TenantOperation, number> = {
-            READ: 0,
-            INSERT: 0,
-            UPDATE: 0,
-            DELETE: 0,
-          };
-          const sql = Object.fromEntries(
-            TENANT_OPERATIONS.map((kind) => [kind, () => (sqlAttempts[kind] += 1)]),
-          ) as unknown as OperationCallbacks;
-          expect(
-            () =>
-              attemptDirectRepositoryOperation(operation, workspaceB, tenantContext, entity, sql),
-            `${operation} ${entity}`,
-          ).toThrowError(TenantError);
-          expect(sqlAttempts, `${operation} ${entity} reached SQL`).toEqual({
-            READ: 0,
-            INSERT: 0,
-            UPDATE: 0,
-            DELETE: 0,
-          });
-        }
-      }
+  it.each([
+    ["read", assertWorkspaceRead],
+    ["update", assertWorkspaceUpdate],
+    ["delete", assertWorkspaceDelete],
+  ])("denies a %s of another workspace's row", (_label, assert) => {
+    inWorkspaceA((tenantContext) => {
+      expect(() => assert(workspaceB, tenantContext, "notes")).toThrowError(TenantError);
+      expect(() => assert(workspaceA, tenantContext, "notes")).not.toThrow();
     });
   });
 
-  it("denies READ/INSERT/UPDATE/DELETE through every indirect owning parent before SQL", async () => {
-    const tenantContext = new TenantContextService();
-    const context = createTenantContext({ workspaceId: workspaceA });
-
-    await tenantContext.run(context, () => {
-      for (const entity of INDIRECT_TENANT_ENTITIES) {
-        for (const operation of TENANT_OPERATIONS) {
-          const sqlAttempts: Record<TenantOperation, number> = {
-            READ: 0,
-            INSERT: 0,
-            UPDATE: 0,
-            DELETE: 0,
-          };
-          const sql = Object.fromEntries(
-            TENANT_OPERATIONS.map((kind) => [kind, () => (sqlAttempts[kind] += 1)]),
-          ) as unknown as OperationCallbacks;
-          expect(
-            () =>
-              attemptParentScopedRepositoryOperation(
-                operation,
-                workspaceB,
-                tenantContext,
-                entity,
-                sql,
-              ),
-            `${operation} ${entity}`,
-          ).toThrowError(TenantError);
-          expect(sqlAttempts, `${operation} ${entity} reached SQL`).toEqual({
-            READ: 0,
-            INSERT: 0,
-            UPDATE: 0,
-            DELETE: 0,
-          });
-        }
-      }
+  it.each([[null], [undefined]])("denies a row whose workspace is %s", (missing) => {
+    inWorkspaceA((tenantContext) => {
+      expect(() => assertWorkspaceRead(missing, tenantContext, "notes")).toThrowError(TenantError);
     });
   });
 
-  it("routes same-tenant operations to distinct repository SQL boundaries", async () => {
-    const tenantContext = new TenantContextService();
-    await tenantContext.run(createTenantContext({ workspaceId: workspaceA }), () => {
-      for (const operation of TENANT_OPERATIONS) {
-        const attempts: Record<TenantOperation, number> = {
-          READ: 0,
-          INSERT: 0,
-          UPDATE: 0,
-          DELETE: 0,
-        };
-        const sql = Object.fromEntries(
-          TENANT_OPERATIONS.map((kind) => [kind, () => (attempts[kind] += 1)]),
-        ) as unknown as OperationCallbacks;
-        attemptDirectRepositoryOperation(operation, workspaceA, tenantContext, "notes", sql);
-        expect(attempts[operation]).toBe(1);
-        expect(Object.values(attempts).reduce((sum, count) => sum + count, 0)).toBe(1);
-      }
-    });
-  });
-
-  it("returns typed mismatch errors and accepts only the active insert workspace", async () => {
-    const tenantContext = new TenantContextService();
-    await tenantContext.run(createTenantContext({ workspaceId: workspaceA }), () => {
-      try {
-        assertActiveWorkspace(workspaceB, tenantContext, "notes");
-        throw new Error("expected tenant mismatch denial");
-      } catch (error: unknown) {
-        expect(error).toBeInstanceOf(TenantError);
-        expect(error).toMatchObject({ code: "tenant.workspace_mismatch" });
-      }
+  it("accepts only the active workspace on insert, and returns the values through", () => {
+    inWorkspaceA((tenantContext) => {
       expect(
         assertWorkspaceInsertValues({ workspaceId: workspaceA, title: "safe" }, tenantContext),
       ).toEqual({ workspaceId: workspaceA, title: "safe" });
+      expect(() =>
+        assertWorkspaceInsertValues({ workspaceId: workspaceB }, tenantContext),
+      ).toThrowError(TenantError);
     });
+  });
+
+  it("reports a mismatch with a stable code", () => {
+    inWorkspaceA((tenantContext) => {
+      expect(() => assertActiveWorkspace(workspaceB, tenantContext, "notes")).toThrowError(
+        expect.objectContaining({ code: "tenant.workspace_mismatch" }),
+      );
+    });
+  });
+
+  it("refuses to build a predicate with no active context (deny by default)", () => {
+    const tenantContext = new TenantContextService();
+    expect(() => assertWorkspaceRead(workspaceA, tenantContext, "notes")).toThrowError(TenantError);
   });
 });
 
@@ -1343,6 +1180,169 @@ describe.skipIf(!HAS_DATABASE_URL)("tenant isolation (live)", () => {
         expect(deliveryRows.map((row) => row.event)).toContain(deliveryAEvent);
         expect(deliveryRows.map((row) => row.event)).not.toContain(deliveryBEvent);
       });
+    } finally {
+      await cleanupTenants(db, [tenantA, tenantB]);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // (c) Real services refuse another tenant's identifiers.
+  //
+  // This is the proof the deleted guard matrix pretended to give. Each case
+  // calls the SAME service the transports call, under tenant A's context, with
+  // an id that belongs to tenant B — and asserts 404, never 403, because
+  // answering "forbidden" would confirm the row exists.
+  //
+  // `tasks`, `task_statuses` and `tags` are here because they were the three
+  // resources with NO service-level cross-tenant test anywhere: tasks had none
+  // at all, and the other two had only mock-based unit tests whose
+  // `authorizeUser` was a `vi.fn()` — which asserts that a predicate is passed,
+  // not that a foreign row is refused.
+  //
+  // Measured while writing this: the refusal is defended THREE times over, and
+  // removing any one of them leaves this test green. It goes red only when all
+  // three are gone —
+  //   1. `AuthorizationRepository.loadTask`'s `whereWorkspace` predicate,
+  //   2. the `workspace_mismatch` -> `authorization.concealed` guard in
+  //      `AuthorizationPolicyService` (the choke point every resource kind
+  //      routes through), and
+  //   3. the service's own scoped `readRow`.
+  // That is the point of asserting through the service rather than at any one
+  // layer: this observes the property a tenant actually depends on, and stays
+  // true however the layers are refactored underneath it.
+  // -------------------------------------------------------------------------
+
+  function servicesFor(database: NodePgDatabase<typeof schema>): {
+    readonly tenant: TenantContextService;
+    readonly tasks: TasksService;
+    readonly statuses: TaskStatusesService;
+    readonly tags: TagsService;
+  } {
+    const tenant = new TenantContextService();
+    const databaseService = {
+      db: database,
+      transaction: <T>(
+        work: (scope: DatabaseTransaction) => Promise<T>,
+        config?: PgTransactionConfig,
+      ) => database.transaction(work, config),
+    } as unknown as DatabaseService;
+    // The REAL policy stack — a stub here would test the stub.
+    const authorization = new AuthorizationEntryService(
+      new AuthorizationRepository(databaseService, tenant),
+      new AuthorizationPolicyService(),
+      tenant,
+    );
+    return {
+      tenant,
+      tasks: new TasksService(databaseService, authorization, tenant),
+      statuses: new TaskStatusesService(databaseService, authorization, tenant),
+      tags: new TagsService(databaseService, authorization, tenant, {
+        scheduleSearchSync: async () => undefined,
+      } as unknown as NoteSearchIndexProducer),
+    };
+  }
+
+  function principalFor(userId: string): AuthenticatedPrincipal {
+    return Object.freeze({
+      userId,
+      sessionId: `p19-session:${userId}`,
+      method: "opaque-session",
+      assurance: "single-factor",
+      authenticatedAt: new Date(Date.now() - 1_000).toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      isFresh: true,
+    });
+  }
+
+  /*
+   * Concealment can be reached two ways and both are correct: the policy layer
+   * refuses with an `AuthorizationDeniedError` carrying a decision, and a
+   * service whose own scoped lookup misses throws `ApiHttpException` NOT_FOUND.
+   * What must hold either way is the security property — 404, never 403, so a
+   * foreign identifier cannot be probed for existence.
+   */
+  function expectConcealed(error: unknown): void {
+    const decision = (error as { decision?: { allowed?: boolean; httpStatus?: number } }).decision;
+    const safeResponse = (error as { safeResponse?: { code?: string } }).safeResponse;
+    const status = decision?.httpStatus ?? (error as { status?: number }).status;
+    if (decision !== undefined) {
+      expect(decision.allowed).toBe(false);
+      expect(decision.httpStatus).toBe(404);
+      return;
+    }
+    expect(safeResponse?.code, `unexpected rejection: ${String(error)}`).toBe("NOT_FOUND");
+    expect(status ?? 404).toBe(404);
+  }
+
+  async function expectRefused(work: Promise<unknown>): Promise<void> {
+    await work.then(
+      () => {
+        throw new Error("expected a cross-tenant refusal, but the call resolved");
+      },
+      (error: unknown) => expectConcealed(error),
+    );
+  }
+
+  it("refuses another workspace's task, status and tag through the real services", async ({
+    skip,
+  }) => {
+    if (!reachable || db === undefined) {
+      skip("skipped: no reachable PostgreSQL — run dev compose");
+      return;
+    }
+
+    const stamp = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+    const tenantA = await bootstrapTenant(db, stamp, "svc-a");
+    const tenantB = await bootstrapTenant(db, stamp, "svc-b");
+
+    try {
+      // Tenant B's rows, written directly so the fixture does not depend on the
+      // very services under test.
+      const taskB = await db.execute(sql`
+        insert into tasks (workspace_id, title, created_by_id)
+        values (${tenantB.workspaceId}, ${"Beta task"}, ${tenantB.userId})
+        returning id
+      `);
+      const statusB = await db.execute(sql`
+        insert into task_statuses (workspace_id, name, sort_order)
+        values (${tenantB.workspaceId}, ${"Beta column"}, ${1})
+        returning id
+      `);
+      const tagB = await db.execute(sql`
+        insert into tags (workspace_id, name, color)
+        values (${tenantB.workspaceId}, ${"beta-tag-" + stamp}, ${"#334155"})
+        returning id
+      `);
+      const taskBId = (taskB.rows[0] as IdRow).id;
+      const statusBId = (statusB.rows[0] as IdRow).id;
+      const tagBId = (tagB.rows[0] as IdRow).id;
+
+      const { tenant, tasks, statuses, tags } = servicesFor(db);
+      const alpha = principalFor(tenantA.userId);
+      const scope = { principal: alpha, workspaceId: tenantA.workspaceId, requestId: null };
+
+      await tenant.run(tenantA.context, async () => {
+        // Read, update and delete each: a guard that only covers the read path
+        // is not a guard.
+        await expectRefused(tasks.read({ ...scope, taskId: taskBId }));
+        await expectRefused(tasks.remove({ ...scope, taskId: taskBId }));
+        await expectRefused(statuses.update({ ...scope, statusId: statusBId, name: "hijacked" }));
+        await expectRefused(statuses.remove({ ...scope, statusId: statusBId }));
+        await expectRefused(tags.update({ ...scope, tagId: tagBId, name: "hijacked" }));
+        await expectRefused(tags.remove({ ...scope, tagId: tagBId }));
+      });
+
+      // Nothing was mutated or removed on the way to being refused.
+      const survivors = await db.execute(sql`
+        select
+          (select count(*) from tasks where id = ${taskBId}) as tasks,
+          (select count(*) from task_statuses where id = ${statusBId}) as statuses,
+          (select count(*) from tags where id = ${tagBId}) as tags
+      `);
+      const counts = survivors.rows[0] as Record<string, unknown>;
+      expect(Number(counts.tasks)).toBe(1);
+      expect(Number(counts.statuses)).toBe(1);
+      expect(Number(counts.tags)).toBe(1);
     } finally {
       await cleanupTenants(db, [tenantA, tenantB]);
     }

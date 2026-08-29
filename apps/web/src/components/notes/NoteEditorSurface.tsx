@@ -280,7 +280,7 @@ export function NoteEditorSurface({
     setCollaborationNotice("This note was restored to an earlier version");
   }, []);
 
-  const { mode, binding, generation, status } = useNoteCollaboration({
+  const { mode, binding, epoch, generation, status, hasUnacknowledgedWork } = useNoteCollaboration({
     enabled: collaborationEnabled,
     workspaceId,
     noteId,
@@ -331,13 +331,57 @@ export function NoteEditorSurface({
    * a remount would reload the note as it was when the page opened — so the pen
    * goes back to the Part 39 autosave in place. Anything else leaves the note
    * with no writer at all under a status line claiming it is live.
+   *
+   * `epoch !== 0` is the whole guard against handing the pen to a document that
+   * has never been filled. A reset adopts an EMPTY `Y.Doc`, bumps the
+   * generation, and remounts `TiptapEditor` with `content: undefined`; if the
+   * re-handshake then fails — a rate-limited reconnect is enough — this used to
+   * turn true while the editor was still blank, and the remount's
+   * `handleEditorReady` published that blank document as the autosave baseline.
+   * The next keystroke then PATCHed the live note empty, for everyone, under a
+   * currently-valid `expectedVersion`.
    */
-  const collaborationWriteFailed = mode === "collaborative" && status === "error";
+  const collaborationWriteFailed = mode === "collaborative" && status === "error" && epoch !== 0;
   const effectiveSaveBinding =
     bindToNoteSave && (!collaborationEnabled || mode === "solo" || collaborationWriteFailed);
   // The handshake has its own budget (1500 ms) inside the provider, so this is
   // bounded: it resolves to `collaborative` or falls back to `solo`.
   const pendingHandshake = collaborationEnabled && mode === "pending";
+
+  /*
+   * The state the guard above deliberately leaves without a writer: a reset
+   * adopted a fresh document and the re-handshake never landed, so the editor is
+   * showing a blank document that belongs to no history and autosave is
+   * intentionally not bound to it. The note itself is safe — `notes.content`
+   * still holds the last projection — but the screen would otherwise say
+   * "saving normally" while nothing is being saved.
+   *
+   * Written into the live region the restore notice already owns, so this costs
+   * no new UI and no new state.
+   */
+  useEffect(() => {
+    if (mode === "collaborative" && status === "error" && epoch === 0) {
+      setCollaborationNotice(
+        "Live editing could not be restored. Reload this note before editing.",
+      );
+    }
+  }, [mode, status, epoch]);
+
+  /*
+   * The provider's unsent Yjs updates are invisible to the Part 39 machine — in
+   * collaborative mode it never receives a `document-changed` at all — while
+   * `CollaborationStatus` tells the writer their offline edits will sync. They
+   * only do if this tab stays open, so back that promise with the one
+   * `beforeunload` guard the app has.
+   *
+   * `collaborationEnabled` excludes the read-only historical preview, which
+   * never opens a session and has nothing to lose.
+   */
+  const registerUnsavedWorkProbe = save.registerUnsavedWorkProbe;
+  useEffect(() => {
+    if (!collaborationEnabled) return;
+    return registerUnsavedWorkProbe(hasUnacknowledgedWork);
+  }, [collaborationEnabled, hasUnacknowledgedWork, registerUnsavedWorkProbe]);
 
   /**
    * Hand autosave the editor's own serialization of the document it opened

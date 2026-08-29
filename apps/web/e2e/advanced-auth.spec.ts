@@ -100,28 +100,20 @@ test.beforeEach(async ({ request }) => {
   await clearMailpit(request);
 });
 
-test("provider metadata renders enabled controls only and OAuth callbacks remain local", async ({
-  page,
-}) => {
-  test.skip(!googleOAuthConfigured, "Run with the Google OAuth fixture credentials configured");
-  let socialBody: Record<string, unknown> | undefined;
-  await page.route("**/api/auth/sign-in/social", async (route) => {
-    socialBody = route.request().postDataJSON() as Record<string, unknown>;
-    await route.fulfill({
-      status: 400,
-      contentType: "application/json",
-      body: JSON.stringify({ code: "MOCK_PROVIDER_UNAVAILABLE" }),
-    });
-  });
-  await page.goto("/login?redirect=https://attacker.invalid/path");
-  await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /GitHub|Microsoft/i })).toHaveCount(0);
-  await page.getByRole("button", { name: "Continue with Google" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "could not be started" })).toBeVisible();
-  expect(socialBody?.callbackURL).toBe("http://localhost:3000/");
-  expect(socialBody?.errorCallbackURL).toBe("http://localhost:3000/login?oauth=error&redirect=%2F");
-  expect(JSON.stringify(socialBody)).not.toContain("attacker.invalid");
-});
+/*
+ * The "provider metadata renders enabled controls" test lived here and gated on
+ * `AUTH_OAUTH_GOOGLE_CLIENT_ID` / `_SECRET`, which nothing in this repository
+ * sets — so it never ran. It could not be revived with `page.route` either: the
+ * provider button is rendered from server-supplied capabilities, so without
+ * those variables it is not in the DOM, and supplying them would flip the
+ * "provider-disabled" test below — which DOES run — to skipped. The pair is
+ * mutually exclusive by construction.
+ *
+ * Its one unique assertion, that a hostile `?redirect=` never reaches the OAuth
+ * callback URLs, now lives in
+ * `src/components/auth/advanced-authentication.test.tsx`, where it runs with no
+ * browser and no credentials.
+ */
 
 test("OAuth callback failures return to a generic local provider error state", async ({ page }) => {
   await page.goto("/login?oauth=error&redirect=%2Fsettings%2Fsecurity");

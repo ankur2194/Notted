@@ -140,6 +140,15 @@ describe.skipIf(typeof DATABASE_URL !== "string" || DATABASE_URL.trim() === "")(
             name: "trash",
             sql: `select id from notes where workspace_id = '${workspaceId}' and is_deleted = true order by deleted_at desc`,
           },
+          {
+            // The recursive term of `NotesService#noteSubtreeRows`. That walk
+            // replaced a workspace-wide scan, so it is only an improvement while
+            // `notes_sibling_order_idx` (workspace_id, parent_id, sort_order)
+            // serves this shape — without a leading-column match the CTE would
+            // be slower than the scan it replaced.
+            name: "subtree recursion",
+            sql: `select id from notes where workspace_id = '${workspaceId}' and parent_id = '${projectId}'`,
+          },
         ] as const;
         for (const fixture of cases) {
           const plan = await client.query(`explain (costs off) ${fixture.sql}`);

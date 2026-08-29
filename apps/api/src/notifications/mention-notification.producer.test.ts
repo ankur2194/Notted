@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 
 import { StructuredLogger } from "../common/logging/structured-logger.service";
 import { emailDeliveries, jobOutbox } from "../database/schema";
-import { WorkspaceEmailProducerService } from "../email/workspace-email-producer.service";
 import { DOMAIN_JOB_TYPES } from "../queue/job-identifiers";
 import {
   MENTION_NOTIFY_JOB_DEFINITION,
@@ -141,13 +140,10 @@ function producerFor(): {
   const tenant = new TenantContextService();
   const logger = { info: () => undefined } as unknown as StructuredLogger;
   return {
-    // The real email producer: its suppression check and its two writes are
-    // exactly what this integration point has to get right.
-    producer: new MentionNotificationProducer(
-      tenant,
-      logger,
-      new WorkspaceEmailProducerService(tenant),
-    ),
+    // No email producer: this one writes the in-app intent and nothing else.
+    // The mention email is queued by `MentionNotificationWorkerService`, behind
+    // the `note.read` re-check that this position cannot perform.
+    producer: new MentionNotificationProducer(tenant, logger),
     tenant,
   };
 }
@@ -338,7 +334,19 @@ describe("MentionNotificationProducer", () => {
     expect(mentionRows(fake).every((row) => row.conflictDoNothing)).toBe(true);
   });
 
-  it("emits an independent email intent alongside each in-app mention intent", async () => {
+  /*
+   * The producer used to queue the mention EMAIL here too, and that was the
+   * disclosure: the only check available in this position is workspace
+   * membership, and membership is not what `note.read` means. A member with no
+   * grant on a restricted project got no in-app notification — the worker
+   * re-authorizes — and an email carrying the note's title anyway.
+   *
+   * This asserts the negative directly, because "the producer stopped writing
+   * email rows" is the security property. The email assertions themselves moved
+   * to `mention-notification.worker.service.test.ts`, where a `note.read`
+   * denial can actually be exercised.
+   */
+  it("writes no email row: the mention email is the worker's to queue, after it re-authorizes", async () => {
     const { producer, tenant } = producerFor();
     const fake = fakeTx([MEMBER_A]);
     await runInTenant(tenant, WORKSPACE_ID, () =>
@@ -350,45 +358,9 @@ describe("MentionNotificationProducer", () => {
         correlationId: REQUEST_ID,
       }),
     );
-    // Two intents, two handlers, two failure domains — plus exactly one
-    // authoritative `email_deliveries` row for the message.
     expect(mentionRows(fake)).toHaveLength(1);
-    expect(emailRows(fake)).toHaveLength(1);
-    expect(deliveryRows(fake)).toHaveLength(1);
-
-    const delivery = deliveryRows(fake)[0]!.values;
-    expect(delivery.templateKey).toBe("mention");
-    expect(delivery.status).toBe("queued");
-    expect(delivery.workspaceId).toBe(WORKSPACE_ID);
-    expect(delivery.recipient).toBe(emailFor(MEMBER_A));
-    expect(delivery.relatedEntityType).toBe("note");
-    expect(delivery.relatedEntityId).toBe(NOTE_ID);
-
-    const emailPayload = emailRows(fake)[0]!.values.payload as Record<string, unknown>;
-    expect(emailPayload.actorId).toBe(ACTOR_ID);
-    expect(emailPayload.deliveryId).toBe(delivery.id);
-    // Identifiers only: no recipient address and no note content in Redis.
-    expect(emailPayload).not.toHaveProperty("recipient");
-    expect(emailRows(fake)[0]!.values.correlationId).toBe(REQUEST_ID);
-  });
-
-  it("keeps the in-app mention intent when the recipient suppressed mention email", async () => {
-    const { producer, tenant } = producerFor();
-    const fake = fakeTx([MEMBER_A], true);
-    await runInTenant(tenant, WORKSPACE_ID, () =>
-      producer.scheduleMentionNotifications(fake.tx, WORKSPACE_ID, {
-        noteId: NOTE_ID,
-        previousContent: EMPTY_DOCUMENT,
-        nextContent: documentMentioning(MEMBER_A),
-        actorId: ACTOR_ID,
-      }),
-    );
-    expect(mentionRows(fake)).toHaveLength(1);
-    // No outbox intent means nothing can ever send it; the `suppressed` delivery
-    // row is the durable record that it was withheld on purpose.
     expect(emailRows(fake)).toHaveLength(0);
-    expect(deliveryRows(fake)).toHaveLength(1);
-    expect(deliveryRows(fake)[0]!.values.status).toBe("suppressed");
+    expect(deliveryRows(fake)).toHaveLength(0);
   });
 });
 

@@ -31,7 +31,10 @@ const MESSAGE: Readonly<Record<NoteCollaborationStatus, string>> = {
   connecting: "Connecting to live editing",
   synced: "Live editing",
   reconnecting: "Reconnecting",
-  offline: "Offline — changes will sync when you reconnect",
+  // Honest about the ceiling: unsent updates live only in this tab's memory
+  // (no `y-indexeddb`), so a closed tab loses them. `beforeunload` warns, but
+  // the copy must not promise more than the code delivers.
+  offline: "Offline — changes sync when you reconnect, and are lost if you close this tab first",
   error: "Live editing unavailable — saving normally",
 };
 

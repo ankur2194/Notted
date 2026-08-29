@@ -2,13 +2,12 @@ import "reflect-metadata";
 
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { API_KEY_SECRET_PREFIX } from "@notted/shared-types";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import compression from "compression";
 import { json, urlencoded, type Express } from "express";
 import helmet from "helmet";
 
-import { ApiKeyAuthService } from "./api-keys";
+import { ApiKeyAuthService, getApiKeyActor } from "./api-keys";
 import { AppModule } from "./app.module";
 import { AuthRateLimitMiddleware } from "./auth/auth-rate-limit.middleware";
 import { AuthService } from "./auth/auth.service";
@@ -290,19 +289,9 @@ export async function createApplication(): Promise<NestExpressApplication> {
   //      line, so the api-key tier can never be overwritten by the user tier.
   express.use("/api/v1", (request, response, next) => {
     void (async () => {
-      // tRPC is the first-party transport, not a compatibility promise: API-key
-      // credentials are rejected here rather than silently ignored.
-      if (
-        `${request.baseUrl}${request.path}`.startsWith(TRPC_PATH) &&
-        (request.header("authorization") ?? "").startsWith(`Bearer ${API_KEY_SECRET_PREFIX}`)
-      ) {
-        response.status(403).json({
-          success: false,
-          error: { code: "FORBIDDEN", message: "You are not allowed to do that." },
-          requestId: response.getHeader("X-Request-Id") ?? "unknown",
-        });
-        return;
-      }
+      // API-key credentials are refused on tRPC by the guard mounted at
+      // `TRPC_PATH` below, which asks whether an api-key actor was installed
+      // rather than re-parsing the request line here. See the comment there.
       if (!(await apiKeyAuth.authenticate(request))) {
         await authService.authenticate(request);
       }
@@ -333,6 +322,31 @@ export async function createApplication(): Promise<NestExpressApplication> {
   express.use(
     TRPC_PATH,
     (request, response, next) => {
+      // tRPC is the first-party transport, not a compatibility promise: API-key
+      // credentials are rejected rather than silently ignored.
+      //
+      // THE QUESTION IS ASKED OF THE PIPELINE, NOT OF THE REQUEST LINE. The
+      // credential middleware above has already run, and only
+      // `ApiKeyAuthService.authenticate` installs the actor, so this fact cannot
+      // drift from the parser that produces it. The string comparison this
+      // replaced could be walked past two different ways: its scheme match was
+      // case-sensitive and single-space while `bearerSecret` lowercases and
+      // trims, and its `baseUrl + path` compare was case-sensitive while Express
+      // matches this very mount case-insensitively.
+      //
+      // THIS GUARD IS LOAD-BEARING. tRPC is raw Express middleware outside the
+      // Nest pipeline, so `ApiKeyRouteGuard` never runs here, and
+      // `createTrpcContext` reads only `getAuthPrincipal` — never the actor. A
+      // key that slipped past would execute every procedure as its CREATOR,
+      // with the creator's full workspace role and the key's scopes ignored.
+      if (getApiKeyActor(request) !== undefined) {
+        response.status(403).json({
+          success: false,
+          error: { code: "FORBIDDEN", message: "You are not allowed to do that." },
+          requestId: response.getHeader("X-Request-Id") ?? "unknown",
+        });
+        return;
+      }
       try {
         rateLimit.enforce(request, response);
         next();

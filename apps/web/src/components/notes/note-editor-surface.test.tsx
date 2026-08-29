@@ -123,6 +123,7 @@ const SOLO: NoteCollaborationState = {
   epoch: 0,
   generation: 0,
   status: "offline",
+  hasUnacknowledgedWork: () => false,
 };
 
 // Every existing test predates Part 58 and must keep behaving exactly as it
@@ -344,6 +345,7 @@ function collaborativeState(): NoteCollaborationState {
     epoch: 1,
     generation: 1,
     status: "synced",
+    hasUnacknowledgedWork: () => false,
   };
 }
 
@@ -356,6 +358,7 @@ function saveSpy() {
     applyExternalVersion: vi.fn(),
     status: "idle",
     hasUnsavedWork: false,
+    registerUnsavedWorkProbe: vi.fn(() => () => undefined),
   } satisfies NoteSaveHandle;
 }
 
@@ -435,6 +438,7 @@ describe("NoteEditorSurface collaboration mode", () => {
       epoch: 0,
       generation: 0,
       status: "connecting",
+      hasUnacknowledgedWork: () => false,
     } satisfies NoteCollaborationState);
     collaborativeView(saveSpy());
 
@@ -448,5 +452,67 @@ describe("NoteEditorSurface collaboration mode", () => {
     expect(collaboration.useNoteCollaboration).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: false, workspaceId: WORKSPACE_ID, noteId: NOTE_ID }),
     );
+  });
+
+  /*
+   * THE DATA-LOSS CASE.
+   *
+   * A reset adopts an EMPTY `Y.Doc`, bumps the generation and remounts the
+   * editor with `content: undefined`, so the editor is blank until the
+   * re-handshake's `Y.applyUpdate` lands. If that handshake then fails — a
+   * rate-limited reconnect is enough — `status` becomes `"error"`, and the
+   * write-failure fallback used to hand the pen back to autosave right there.
+   * The remount re-fires `handleEditorReady`, which published the BLANK document
+   * as the autosave baseline; the next keystroke then PATCHed the live note
+   * empty for everyone, under a currently-valid `expectedVersion`.
+   *
+   * `epoch === 0` is the provider's word for "this document has synced nothing".
+   */
+  it("never publishes an unsynced collaborative document as the autosave baseline", async () => {
+    collaboration.useNoteCollaboration.mockReturnValue({
+      ...collaborativeState(),
+      epoch: 0,
+      status: "error",
+    });
+    const save = saveSpy();
+    const editor = await collaborativeEditor(save);
+
+    editor.commands.insertContent("typed into a document that never synced");
+    await waitFor(() =>
+      expect(editor.getText()).toContain("typed into a document that never synced"),
+    );
+
+    expect(save.onDocumentBaseline).not.toHaveBeenCalled();
+    expect(save.onDocumentChange).not.toHaveBeenCalled();
+  });
+
+  /*
+   * The other half of the same guard: a session that DID sync and then started
+   * failing must still fall back to autosave, or the note is left with no writer
+   * at all under a status line claiming it is live. Pins the Part 58 fallback so
+   * "just never bind on error" cannot be mistaken for a simplification.
+   */
+  it("hands the pen back when a session that had synced starts failing", async () => {
+    collaboration.useNoteCollaboration.mockReturnValue({
+      ...collaborativeState(),
+      epoch: 4,
+      status: "error",
+    });
+    const save = saveSpy();
+    const editor = await collaborativeEditor(save);
+
+    editor.commands.insertContent("typed after realtime gave up");
+    await waitFor(() => expect(save.onDocumentChange).toHaveBeenCalled());
+  });
+
+  it("registers the collaboration unsaved-work probe, but not for a preview", () => {
+    collaboration.useNoteCollaboration.mockReturnValue(collaborativeState());
+    const bound = saveSpy();
+    collaborativeView(bound);
+    expect(bound.registerUnsavedWorkProbe).toHaveBeenCalled();
+
+    const preview = saveSpy();
+    collaborativeView(preview, false);
+    expect(preview.registerUnsavedWorkProbe).not.toHaveBeenCalled();
   });
 });

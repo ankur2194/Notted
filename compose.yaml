@@ -240,6 +240,14 @@ x-api-e2e-environment: &api-e2e-environment
   MINIO_BUCKET_ATTACHMENTS: ${MINIO_E2E_BUCKET_ATTACHMENTS:-notted-e2e-attachments}
   MINIO_BUCKET_EXPORTS: ${MINIO_E2E_BUCKET_EXPORTS:-notted-e2e-exports}
   MEILISEARCH_INDEX_PREFIX: ${MEILISEARCH_E2E_INDEX_PREFIX:-notted_e2e_}
+  # `test/realtime.integration.test.ts` gates on this. `turbo.json` has always
+  # passed it through, but nothing in the repository ever SET it, so the suite —
+  # two-instance Yjs convergence, cross-instance presence roster, presence
+  # forgery, room concealment, the distributed connection cap and session
+  # revocation across instances — was permanently dead rather than conditionally
+  # skipped, in the same way `MEILISEARCH_URL` had killed the hybrid-search
+  # suite. Nothing else proves those properties.
+  REALTIME_INTEGRATION: "true"
   BETTER_AUTH_URL: http://localhost:${NOTTED_E2E_API_PORT:-3011}
   BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:${NOTTED_E2E_WEB_PORT:-3010}
   # Rate limiting is keyed by client IP. A containerised Playwright joins

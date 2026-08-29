@@ -172,7 +172,7 @@ function build(db: NodePgDatabase<typeof schema>) {
       new NoteVersionsService(tenant),
       undefined,
       undefined,
-      new MentionNotificationProducer(tenant, logger, new WorkspaceEmailProducerService(tenant)),
+      new MentionNotificationProducer(tenant, logger),
     ),
     worker: new ExportGenerationWorkerService(
       database,
