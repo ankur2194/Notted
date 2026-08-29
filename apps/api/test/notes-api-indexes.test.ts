@@ -7,7 +7,7 @@ import { getTableConfig } from "drizzle-orm/pg-core";
 import { Client } from "pg";
 import { describe, expect, it } from "vitest";
 
-import { notes } from "../src/database/schema";
+import { noteShares, notes } from "../src/database/schema";
 
 const migrationPath = resolve(process.cwd(), "src/database/migrations/0012_vengeful_payback.sql");
 const correctionMigrationPath = resolve(
@@ -19,6 +19,10 @@ const boardColumnMigrationPath = resolve(
   "src/database/migrations/0015_lumpy_phil_sheldon.sql",
 );
 const journalPath = resolve(process.cwd(), "src/database/migrations/meta/_journal.json");
+const sortOrderMigrationPath = resolve(
+  process.cwd(),
+  "src/database/migrations/0024_complex_shadow_king.sql",
+);
 const expected = [
   "notes_workspace_project_parent_order_idx",
   "notes_workspace_folder_parent_order_idx",
@@ -29,7 +33,16 @@ const expected = [
   // Part 49: the note-board column partition. Appended, so the `slice(0, 4)`
   // assertion below still names exactly the four indexes 0012 created.
   "notes_workspace_board_column_idx",
+  // Audit OPT-10/OPT-14. Two documented list orders had no index at all, and
+  // two referential actions could not use one: `notes.board_column_id` was
+  // covered only by a composite whose leftmost column is not the referenced
+  // one, and `note_shares.created_by_id` by nothing.
+  "notes_workspace_title_idx",
+  "notes_workspace_created_idx",
+  "notes_board_column_id_idx",
 ] as const;
+
+const expectedShareIndexes = ["note_shares_created_by_id_idx"] as const;
 
 describe("Part 31 note indexes and forward migration artifacts", () => {
   it("declares only the evidence-backed note view/order indexes", () => {
@@ -69,6 +82,40 @@ describe("Part 31 note indexes and forward migration artifacts", () => {
     // are the only occurrences, so the statement forms are what is asserted.
     expect(sql).not.toMatch(/UPDATE\s+"notes"|DELETE\s+FROM|DROP\s|TRUNCATE/i);
     expect(sql).not.toContain("NOT NULL");
+  });
+
+  /*
+   * `sortBy=title` and `sortBy=createdAt` are in `noteSortFieldSchema`, so they
+   * are documented list orders a client can ask for on any page. Neither had an
+   * index, while `updatedAt`, templates, trash, pinned/archive and the board
+   * column each got one — so a large workspace scanned every matching row and
+   * sorted externally on page 1. The two referential-action indexes are the
+   * same omission from the other side: an `ON DELETE SET NULL` and an
+   * `ON DELETE RESTRICT` that PostgreSQL could only enforce with a sequential
+   * scan while holding locks.
+   */
+  it("indexes the documented sort orders and both referential actions", () => {
+    const noteIndexes = new Set(getTableConfig(notes).indexes.map((index) => index.config.name));
+    const shareIndexes = new Set(
+      getTableConfig(noteShares).indexes.map((index) => index.config.name),
+    );
+
+    expect(noteIndexes.has("notes_workspace_title_idx")).toBe(true);
+    expect(noteIndexes.has("notes_workspace_created_idx")).toBe(true);
+    expect(noteIndexes.has("notes_board_column_id_idx")).toBe(true);
+    for (const name of expectedShareIndexes) expect(shareIndexes.has(name)).toBe(true);
+
+    const sql = readFileSync(sortOrderMigrationPath, "utf8");
+    expect(sql).toContain(
+      'CREATE INDEX "notes_workspace_title_idx" ON "notes" USING btree ("workspace_id","title") WHERE notes.is_deleted = false;',
+    );
+    expect(sql).toContain(
+      'CREATE INDEX "notes_workspace_created_idx" ON "notes" USING btree ("workspace_id","created_at") WHERE notes.is_deleted = false;',
+    );
+    expect(sql).toContain('CREATE INDEX "notes_board_column_id_idx"');
+    expect(sql).toContain('CREATE INDEX "note_shares_created_by_id_idx"');
+    // Index-only. A migration that also rewrites rows is a different review.
+    expect(sql).not.toMatch(/ALTER TABLE|UPDATE\s+"|DELETE\s+FROM|DROP\s|TRUNCATE/iu);
   });
 
   it("keeps the forward correction ordered and includes the durable restriction backfill", () => {

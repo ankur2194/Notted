@@ -234,10 +234,26 @@ export const notes = pgTable(
       .where(sql`notes.is_deleted = false`),
     // "Notes created by user" admin/authoring view.
     index("notes_created_by_id_idx").on(t.createdById),
+    // `sortBy=title` and `sortBy=createdAt` are documented list orders
+    // (`noteSortFieldSchema`), and both had no index at all while every other
+    // list order got one — so a large workspace scanned all matching rows and
+    // sorted externally on EVERY page, including page 1. Same partial predicate
+    // as the sibling list indexes above, because the same lists use it.
+    index("notes_workspace_title_idx")
+      .on(t.workspaceId, t.title)
+      .where(sql`notes.is_deleted = false`),
+    index("notes_workspace_created_idx")
+      .on(t.workspaceId, t.createdAt)
+      .where(sql`notes.is_deleted = false`),
     // Note-board column partition (Part 49). The board reads one workspace's
     // notes grouped by column; the workspace_id prefix keeps the scan tenant-
     // bounded exactly like every other note index here.
     index("notes_workspace_board_column_idx").on(t.workspaceId, t.boardColumnId),
+    // The referential action needs the REFERENCED column leftmost, which the
+    // composite above does not provide: `board_column_id` has
+    // `ON DELETE SET NULL` to `task_statuses`, so deleting one custom status
+    // sequentially scanned `notes` while holding locks.
+    index("notes_board_column_id_idx").on(t.boardColumnId),
     // Cross-tenant composite FKs (see module comment). `onDelete("no action")`
     // is chained explicitly because the `foreignKey({...})` config does not
     // accept `onDelete` directly; `no action` is also the Drizzle default, but
@@ -293,6 +309,11 @@ export const noteShares = pgTable(
     uniqueIndex("note_shares_note_user_unique").on(t.noteId, t.userId),
     // "Notes shared with user X" lookup.
     index("note_shares_user_id_idx").on(t.userId),
+    // `created_by_id` is `ON DELETE RESTRICT` to `users` and had NO index, so
+    // every account removal sequentially scanned this table to prove the
+    // restriction — the same referential-action cost as the board-column index
+    // above, on a table nothing else covers by this column.
+    index("note_shares_created_by_id_idx").on(t.createdById),
   ],
 );
 
