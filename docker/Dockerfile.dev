@@ -44,7 +44,16 @@ RUN apt-get update \
 # The `mkdir` list pre-creates every path `compose.yaml` mounts a named volume
 # onto. `compose.yaml` also runs a one-shot root container to chown them,
 # because those volumes are declared `nocopy` and start out owned by root.
-RUN corepack enable \
+# The bundled npm is deleted, not upgraded. Nothing in this repository invokes
+# `npm` or `npx` — pnpm is activated through Corepack on the line below, and the
+# only reference to npm anywhere is the registry it downloads from — yet the copy
+# shipped inside the Node image is the single largest source of vulnerable
+# packages in this image: `tar`, `pacote`, `sigstore`, `picomatch`,
+# `ip-address` and `brace-expansion`, one of them CRITICAL, all reachable only
+# by running a command this project never runs. `corepack enable pnpm` rather
+# than a bare `corepack enable`, so Corepack does not put an `npm` shim back.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && corepack enable pnpm \
     && corepack prepare "pnpm@${PNPM_VERSION}" --activate \
     && mkdir -p \
         /state \
