@@ -227,14 +227,31 @@ describe("WorkspaceLogoController public read", () => {
     expect(stream.destroyed).toBe(true);
   });
 
-  it("rejects a non-UUID workspace before reaching the service", async () => {
+  /*
+   * A 404, not a 500.
+   *
+   * The selector used `uuidSchema.parse`, and this route is the one deliberately
+   * public, unauthenticated handler here -- so it has no
+   * `AuthorizationHttpGuard` to wrap the selector in try/catch, and the global
+   * filter has no `ZodError` branch. Attacker-controlled input therefore
+   * produced 500 INTERNAL_SERVER_ERROR plus an "Unhandled HTTP exception" log
+   * line, on a service whose whole contract is that every miss -- unknown
+   * workspace, wrong token, absent object -- answers one identical 404.
+   *
+   * The previous version of this test asserted only `rejects.toThrow()`, which
+   * the 500 satisfied.
+   */
+  it("answers a non-UUID workspace with the same 404 as every other miss", async () => {
     const read = vi.fn();
     await expect(
       controller({ read }).controller.content(
         request({ workspaceId: "../../etc", token }),
         fakeResponse().response,
       ),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      status: 404,
+      safeResponse: { code: "NOT_FOUND" },
+    });
     expect(read).not.toHaveBeenCalled();
   });
 });

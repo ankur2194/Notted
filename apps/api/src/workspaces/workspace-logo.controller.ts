@@ -93,7 +93,22 @@ export class WorkspaceLogoController {
   async content(@Req() request: Request, @Res() response: Response): Promise<void> {
     const token = request.params.token;
     if (typeof token !== "string") this.notFound();
-    const content = await this.logos.read(workspaceIdFromRoute(request), token);
+    /*
+     * `safeParse`, not `parse`, because this is the one deliberately public,
+     * unauthenticated route in this controller.
+     *
+     * `@RequireAuthorization` routes get this for free -- `AuthorizationHttpGuard`
+     * wraps selector calls in try/catch and answers 404. This handler has no
+     * guard, and the global filter has no `ZodError` branch, so
+     * `GET /api/v1/workspaces/not-a-uuid/logo/<32 hex>` produced a
+     * 500 INTERNAL_SERVER_ERROR plus an "Unhandled HTTP exception" log line --
+     * on unauthenticated attacker-controlled input, for a service whose whole
+     * contract is that every miss answers an identical 404
+     * (`workspace-logo.service.ts`). Same shape as the token check above.
+     */
+    const workspaceId = uuidSchema.safeParse(request.params.workspaceId);
+    if (!workspaceId.success) this.notFound();
+    const content = await this.logos.read(workspaceId.data, token);
     response.setHeader("Content-Type", content.mimeType);
     response.setHeader("X-Content-Type-Options", "nosniff");
     // PUBLIC, unlike the attachment route's `private`: the token changes on
