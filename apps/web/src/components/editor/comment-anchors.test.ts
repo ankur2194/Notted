@@ -162,6 +162,27 @@ describe("solo mode", () => {
     expect(resolveCommentAnchor(editor, anchor)).toEqual({ from: 1, to: 6 });
   });
 
+  it("orphans a collaborative anchor it cannot decode instead of guessing", async () => {
+    // Realtime is unavailable, so a note commented on collaboratively opens
+    // solo: `yrel:1` positions cannot be decoded without a binding, and the
+    // stored offsets describe a document that has moved since. Clamping them
+    // marks whatever text now sits there as commented -- the "resurrect the
+    // comment on unrelated text" outcome the module header forbids.
+    const { editor } = await renderEditor();
+
+    const stored: CommentAnchor = {
+      scheme: "yrel:1",
+      from: 1,
+      to: 6,
+      relFrom: "not-decodable-without-a-binding",
+      relTo: "not-decodable-without-a-binding",
+      quote: "hello",
+      schemaVersion: 1,
+    };
+
+    expect(resolveCommentAnchor(editor, stored)).toBeNull();
+  });
+
   it("clamps an out-of-bounds absolute anchor instead of throwing", async () => {
     const { editor } = await renderEditor();
     const size = editor.state.doc.content.size;

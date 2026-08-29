@@ -266,9 +266,18 @@ function computeAnchorRange(state: EditorState, anchor: CommentAnchor): CommentA
     return from <= size && to <= size ? { from, to } : null;
   }
 
-  // `pmabs:1`, and a `yrel:1` anchor read without a binding (solo mode opening
-  // a note that was commented on collaboratively). Absolute positions are the
-  // only thing either case can use, so they are clamped to this document.
+  // A `yrel:1` anchor with no binding is an ORPHAN, not an absolute anchor.
+  // Solo mode opening a note that was commented on collaboratively cannot
+  // decode the relative positions, and the stored `from`/`to` are a snapshot of
+  // a document that has moved since — clamping them lands the highlight on
+  // whatever text now occupies those offsets, which is exactly the "resurrect
+  // the comment on unrelated text" outcome the Orphans note above forbids. The
+  // caller renders an orphan under its stored `quote`, which is what `quote`
+  // exists for.
+  if (anchor.scheme === COMMENT_ANCHOR_SCHEME_YJS) return null;
+
+  // `pmabs:1`. Absolute positions are all this scheme ever had, so they are
+  // clamped to this document.
   const from = clamp(anchor.from, size);
   const to = clamp(anchor.to, size);
   return to <= from ? null : { from, to };
