@@ -12,6 +12,10 @@ import { fileURLToPath } from "node:url";
 
 const workspace = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const composeFile = join(workspace, "compose.yaml");
+// Accepted container advisories, each bound to an exception section in
+// docs/security/remediation-checklist.md and to an expiry date. See the file's
+// own header; `security-scan.test.mjs` enforces both properties.
+export const IGNORE_FILE = join(workspace, ".trivyignore.yaml");
 
 // An unpinned scanner is itself a supply-chain risk: a floating tag can pull a
 // different Trivy build (and vulnerability DB behaviour) on every run, which
@@ -56,10 +60,14 @@ export function trivyRunArguments(tarballDirectory, tarballName) {
     `${tarballDirectory}:/scan:ro`,
     "--volume",
     `${process.env.HOME}/.cache/trivy:/root/.cache/trivy`,
+    "--volume",
+    `${IGNORE_FILE}:/ignore.yaml:ro`,
     TRIVY_IMAGE,
     "image",
     "--input",
     `/scan/${tarballName}`,
+    "--ignorefile",
+    "/ignore.yaml",
     "--severity",
     "HIGH,CRITICAL",
     "--ignore-unfixed",

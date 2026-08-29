@@ -203,11 +203,11 @@ the per-surface STRIDE analysis this checklist is the remediation half of.
 
 ## Exceptions
 
-All seven are owned by **Ankur Patel**. Each deadline is the plan part that closes it, or a
+All eight are owned by **Ankur Patel**. Each deadline is the plan part that closes it, or a
 named review point where no part closes it.
 
-Suppression mechanism: advisories that are accepted here — and only those — are listed in
-`pnpm.auditConfig.ignoreGhsas` in `package.json`. **Not** `ignoreCves`, and **not** the
+Suppression mechanism, dependencies: advisories that are accepted here — and only those — are
+listed in `pnpm.auditConfig.ignoreGhsas` in `package.json`. **Not** `ignoreCves`, and **not** the
 `--ignore` CLI flag; both were previously used and both were silently ineffective:
 
 - `pnpm audit --ignore <id>` is not a filter. In pnpm 10.34.5 it switches `audit` into
@@ -216,6 +216,13 @@ Suppression mechanism: advisories that are accepted here — and only those — 
   advisories. The flag is gone from `audit:prod` and `security:deps`.
 - `pnpm.auditConfig.ignoreCves` matches an advisory's **CVE** identifiers. The entries there
   were GHSA identifiers, so they matched nothing. GHSA identifiers belong in `ignoreGhsas`.
+
+Suppression mechanism, containers: `.trivyignore.yaml` at the repository root, mounted read-only
+into the scanner by `scripts/security-scan.mjs`. Each entry pins the exact file path the
+advisory was accepted for and carries an `expired_at` date, so the suppression lapses on its own
+and `pnpm security:containers` starts failing again with no second action from anyone.
+`scripts/security-scan.test.mjs` fails if an entry has no expiry, has an expiry that has already
+passed, or has no exception section below whose Deadline names a numbered Plan part.
 
 ### E1 — The web CSP requires `script-src 'unsafe-inline'`
 
@@ -344,11 +351,41 @@ Suppression mechanism: advisories that are accepted here — and only those — 
   a patched version on its own; anything still standing at Part 85 is re-triaged there rather
   than carried silently.
 
+### E8 — pnpm's own bundled dependencies inside the development image
+
+- **Owner:** Ankur Patel · **Deadline:** **Part 85** (define and validate the MVP release
+  slice), through the ADR 0008 matrix refresh
+- **Where:** `.trivyignore.yaml`, scoped to
+  `home/node/.cache/node/corepack/v1/pnpm/10.34.5/dist/node_modules/**` in
+  `notted-dev-workspace:local` and `notted-dev-workspace-chromium:local`
+- **Advisories:** `CVE-2026-14257` and `CVE-2026-69152` (`brace-expansion` 2.1.2, high),
+  `CVE-2026-69192` (`ip-address` 10.2.0, high), `CVE-2026-73566` (`tar` 7.5.19, high)
+- **Why not fixed here:** these are not packages this repository installs. They are vendored
+  inside the pnpm release itself, in the payload Corepack unpacks, so the only way to change
+  them is to change the pnpm version. `10.34.5` is the last `10.x`; every fix is in pnpm 11,
+  which requires **Node >= 22.13** and no longer reads the `pnpm` key in `package.json` at all
+  (`overrides`, `onlyBuiltDependencies` and `auditConfig` all move to `pnpm-workspace.yaml`).
+  Raising the declared Node floor is an ADR 0008 decision — the same ADR pins `pdfjs-dist` at
+  `5.6.205` *because* the floor is `>=22.12.0` — and ADR 0008 states that the runtime and
+  package-manager pins change only where that ADR is revalidated. Silently dropping seven
+  security `overrides` on the way past would be the worse outcome of the two.
+- **Residual risk:** three denial-of-service-class advisories in a package manager that runs
+  inside a development container against this repository's own committed lockfile. It is not
+  reachable by the API, the web app, or any request; the input it parses is `pnpm-lock.yaml`.
+  The `npm` copy that shipped in the same base image — eleven advisories, one of them CRITICAL,
+  and never invoked by anything here — was deleted outright rather than suppressed
+  (`docker/Dockerfile.dev`).
+- **Closure:** Part 85 revalidates the ADR 0008 matrix; the pnpm 11 move and the Node floor go
+  together there, with the `pnpm-workspace.yaml` settings migration. Independently, the
+  `expired_at: 2026-11-30` in `.trivyignore.yaml` reopens the finding on its own if that part
+  has not landed by then.
+
 ## Revision History
 
 | Date       | Author      | Change                                                    |
 | ---------- | ----------- | --------------------------------------------------------- |
 | 2026-08-25 | Ankur Patel | Initial OWASP-oriented review and exception log, Part 74. |
+| 2026-08-30 | Ankur Patel | First real container scan (the scanner had never executed — its pinned tag was never published) reported fixable HIGH/CRITICAL advisories in 7 of 8 images. Six are now clean: the bundled `npm` was deleted from the development image, MinIO and `gosu` are rebuilt with a patched Go toolchain and raised module pins, and the Alpine-based upstream images take an `apk upgrade` patch layer. Added E8 for the four that remain, and `.trivyignore.yaml` as the container suppression mechanism. |
 | 2026-08-25 | Ankur Patel | Parts 71–74 review round 1: `pnpm audit --ignore` and `auditConfig.ignoreCves` were both no-ops, so `security:deps` had been passing unconditionally while four high advisories stood. Moved suppression to `auditConfig.ignoreGhsas`, triaged the four (E6 `pdfjs-dist`, E7 `brace-expansion` ×2 and `nanoid`), corrected E3 (still present at moderate, not obsolete), and left the `postcss` moderate deliberately unsuppressed. |
 | 2026-08-25 | Ankur Patel | Parts 71–74 review round 2: no security findings; revision history brought in line with the round-1 rewrite (the `ignoreGhsas` note and exceptions E6/E7 were added in round 1). |
 | 2026-08-29 | Ankur Patel | Audit finding OPT-29: E3, E6 and E7 all had deadlines naming an unscheduled event ("the next dependency refresh"), so a HIGH advisory suppressed in `auditConfig.ignoreGhsas` would reach production by default rather than by decision. All three are now bound to **Part 85**, and `scripts/security-scan.test.mjs` fails if any suppressed GHSA's exception has a deadline that names no Plan part. |

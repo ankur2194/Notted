@@ -4,7 +4,12 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { imagesFromCompose, TRIVY_IMAGE, trivyRunArguments } from "./security-scan.mjs";
+import {
+  IGNORE_FILE,
+  imagesFromCompose,
+  TRIVY_IMAGE,
+  trivyRunArguments,
+} from "./security-scan.mjs";
 
 const FIXTURE = `
 services:
@@ -50,11 +55,21 @@ test("imagesFromCompose finds every concrete image the real compose.yaml declare
  * Asserting against the real compose.yaml, not a fixture: a fixture would have
  * passed on the day the bug shipped.
  */
-test("imagesFromCompose finds the built MinIO images, which have no upstream tag", () => {
+test("imagesFromCompose finds the built images, which have no upstream tag", () => {
   const composeFile = join(resolve(dirname(fileURLToPath(import.meta.url)), ".."), "compose.yaml");
   const images = imagesFromCompose(readFileSync(composeFile, "utf8"));
 
-  for (const expected of ["notted-dev-minio-server:local", "notted-dev-minio-client:local"]) {
+  for (const expected of [
+    "notted-dev-minio-server:local",
+    "notted-dev-minio-client:local",
+    // Patched upstream images (docker/patched-images). They are built for the
+    // sole purpose of clearing advisories, so a scan that cannot see them is
+    // worse than useless: it would report clean while the patch layer went
+    // missing.
+    "notted-dev-postgres:local",
+    "notted-dev-meilisearch:local",
+    "notted-dev-mailpit:local",
+  ]) {
     assert.ok(images.includes(expected), `${expected} is not scanned`);
   }
 });
@@ -167,4 +182,77 @@ test("the scan container is handed a tarball, never the Docker socket", () => {
   assert.ok(argv.includes("/scan/image.tar"));
   // The severity gate is what makes a non-zero exit mean something.
   assert.ok(argv.includes("--exit-code") && argv.includes("1"));
+});
+
+/*
+ * The suppression list is the one place a container finding can be made to
+ * disappear, so the scanner must actually be handed it — and read-only, for the
+ * same reason the tarball mount is.
+ */
+test("the scan container is handed the ignore file, read-only", () => {
+  const argv = trivyRunArguments("/tmp/notted-trivy-abc", "image.tar");
+
+  assert.ok(argv.includes("--ignorefile"), "the accepted-advisory list must be passed to Trivy");
+  assert.ok(argv.includes("/ignore.yaml"), "the ignore file must be the one this repository owns");
+  assert.ok(
+    argv.includes(`${IGNORE_FILE}:/ignore.yaml:ro`),
+    "the ignore file must be mounted read-only",
+  );
+});
+
+/*
+ * Same rule as the `ignoreGhsas` test above, for the container half: an accepted
+ * advisory names a numbered Plan part, or it is not accepted. Trivy adds one
+ * property `pnpm audit` has no equivalent of — `expired_at` — which turns the
+ * promise into something that enforces itself: past that date the finding comes
+ * back on its own and `pnpm security:containers` fails again. A suppression that
+ * has already expired in the committed file is therefore also a defect: it means
+ * the deadline passed and nothing was re-triaged.
+ *
+ * A text predicate over the YAML rather than a parser, for the same reason
+ * `imagesFromCompose` is one — same ceiling, same upgrade path. An empty list is
+ * a pass: nothing suppressed is the goal state, not a broken test.
+ */
+test("every suppressed container advisory expires and names a Plan part", () => {
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const ignoreText = readFileSync(IGNORE_FILE, "utf8");
+  const checklist = readFileSync(
+    join(root, "docs", "security", "remediation-checklist.md"),
+    "utf8",
+  );
+  const sections = checklist.split(/\n(?=#{2,3} )/u).filter((block) => /^### E\d+ /u.test(block));
+
+  const entries = ignoreText
+    .split(/\n {2}- id: /u)
+    .slice(1)
+    .map((block) => ({
+      id: block.slice(0, block.indexOf("\n")).trim(),
+      expiresAt: /\n {4}expired_at: (\S+)/u.exec(block)?.[1] ?? "",
+    }));
+
+  for (const { id, expiresAt } of entries) {
+    assert.match(id, /^(?:CVE|GHSA)-[\w.-]+$/u, `${id} is not a vulnerability identifier`);
+    assert.match(expiresAt, /^\d{4}-\d{2}-\d{2}$/u, `${id} has no expiry date`);
+    assert.ok(
+      new Date(`${expiresAt}T00:00:00Z`).getTime() > Date.now(),
+      `${id} is suppressed with an expiry that has already passed (${expiresAt}); ` +
+        "re-triage it rather than extending the date by reflex",
+    );
+
+    const owning = sections.filter((section) => section.includes(id));
+    assert.ok(
+      owning.length >= 1,
+      `${id} is suppressed in .trivyignore.yaml but has no exception section in ` +
+        "docs/security/remediation-checklist.md",
+    );
+    for (const section of owning) {
+      const deadline = /\*\*Deadline:\*\*([\s\S]*?)\n- /u.exec(section)?.[1] ?? "";
+      assert.match(
+        deadline,
+        /\*\*Part \d+\*\*/u,
+        `${id}: exception "${section.slice(4, section.indexOf("\n"))}" has a deadline ` +
+          `that names no Plan part (${deadline.trim().replace(/\s+/gu, " ")})`,
+      );
+    }
+  }
 });
