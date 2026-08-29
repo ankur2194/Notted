@@ -347,7 +347,23 @@ export class TagsService {
     return rows.map((row) => row.noteId);
   }
 
+  /**
+   * The per-workspace tag ceiling, enforced against concurrent creates.
+   *
+   * The count and the insert are two statements at `read committed`, so two
+   * requests at the limit both counted `TAG_MAX_PER_WORKSPACE - 1` and both
+   * inserted: the ceiling is advisory unless the pair is serialized. The
+   * transaction advisory lock does that without a schema change and releases on
+   * commit or rollback — the same shape, and the same reasoning, as
+   * `MembershipsService.lockMutation` guarding the last-owner count.
+   *
+   * The key is workspace-scoped and prefixed, because advisory locks share ONE
+   * namespace per database: an unprefixed workspace id would serialize tag
+   * creation against every other count-then-mutate keyed the same way.
+   */
   private async assertCapacity(tx: DatabaseTransaction): Promise<void> {
+    const key = `tag-capacity:${activeWorkspaceId(this.tenantContext)}`;
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
     const [row] = await tx
       .select({ count: sql<number>`count(*)::int` })
       .from(tags)

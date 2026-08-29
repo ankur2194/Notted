@@ -175,8 +175,16 @@ function serviceWith(options: TransactionOptions = {}) {
   const updated: Statement[] = [];
   const deleted: Statement[] = [];
   const isolationLevels: (string | undefined)[] = [];
+  // Every `tx.execute` in order, plus how many had run when the capacity count
+  // was issued -- the pair is what makes "the lock was taken BEFORE the count"
+  // an ordering assertion rather than a guess.
+  const executed: SQL[] = [];
+  const executedBeforeCount: number[] = [];
   const scope = {
-    execute: () => Promise.resolve(),
+    execute: (statement: SQL) => {
+      executed.push(statement);
+      return Promise.resolve();
+    },
     select: (fields: Record<string, unknown>) => ({
       from: (table: unknown) => {
         const builder: {
@@ -190,7 +198,10 @@ function serviceWith(options: TransactionOptions = {}) {
             if (table === noteTags) {
               return rows((options.linkedNoteIds ?? []).map((noteId) => ({ noteId })));
             }
-            if ("count" in fields) return rows([{ count: options.tagCount ?? 0 }]);
+            if ("count" in fields) {
+              executedBeforeCount.push(executed.length);
+              return rows([{ count: options.tagCount ?? 0 }]);
+            }
             return rows([storedRow]);
           },
         };
@@ -245,6 +256,8 @@ function serviceWith(options: TransactionOptions = {}) {
     updated,
     deleted,
     isolationLevels,
+    executed,
+    executedBeforeCount,
     tenant,
     authorizeUser,
     producer,
@@ -368,6 +381,28 @@ describe("TagsService search-index fan-out", () => {
 });
 
 describe("TagsService workspace limit and isolation", () => {
+  it("serializes the capacity count against concurrent creates", async () => {
+    // The count and the insert are two statements at `read committed`, so two
+    // requests one below the cap both counted the same number and both
+    // inserted. The workspace advisory lock is what makes the ceiling real; it
+    // releases on commit or rollback, so nothing has to unlock it.
+    const context = serviceWith();
+    await context.service.create(createInput);
+
+    const rendered = context.executed.map((statement) => dialect.sqlToQuery(statement));
+    const lockIndex = rendered.findIndex((query) =>
+      query.params.includes(`tag-capacity:${WORKSPACE_ID}`),
+    );
+    expect(lockIndex).toBeGreaterThanOrEqual(0);
+    expect(rendered[lockIndex]?.sql).toContain("pg_advisory_xact_lock");
+    // Taken BEFORE the count, or it serializes nothing. The idempotency lock
+    // runs first on this path, so the index is compared rather than assumed.
+    expect(context.executedBeforeCount[0] ?? 0).toBeGreaterThan(lockIndex);
+    // A distinct prefix: advisory locks share one namespace per database, so a
+    // bare workspace id would collide with every other count-then-mutate.
+    expect(rendered[lockIndex]?.params).not.toContain(WORKSPACE_ID);
+  });
+
   it("refuses a create at the per-workspace cap with 409 TAG_LIMIT_REACHED", async () => {
     const { service, inserted } = serviceWith({ tagCount: TAG_MAX_PER_WORKSPACE });
     const error = await apiRejection(service.create(createInput));
