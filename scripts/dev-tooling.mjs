@@ -413,6 +413,29 @@ export function playwrightEnvironment({
 }
 
 /**
+ * Environment names whose VALUE must never appear on a command line.
+ *
+ * `docker run --env KEY=VALUE` puts the value in the host process table, where
+ * `ps auxww` shows it to every local user for the whole 7-13 minute run.
+ * `DATABASE_URL` embeds `POSTGRES_PASSWORD`. Today that password is the
+ * throwaway `notted_dev_password`, so the impact is nil — but this function is
+ * the template a staging or CI runner copies, and the pattern travels.
+ */
+export const SECRET_ENVIRONMENT_KEYS = new Set(["DATABASE_URL"]);
+
+/**
+ * Flatten an environment map into `docker run` arguments, passing secret names
+ * WITHOUT their values. `--env KEY` (no `=`) tells Docker to forward the value
+ * from the parent process, which `run()` already inherits via `env: process.env`
+ * — so the caller must set those on `process.env` first. See `e2eTest`.
+ */
+export function dockerEnvironmentArguments(environment) {
+  return Object.entries(environment).flatMap(([key, value]) =>
+    SECRET_ENVIRONMENT_KEYS.has(key) ? ["--env", key] : ["--env", `${key}=${value}`],
+  );
+}
+
+/**
  * Build the argument list for `playwright test` inside the e2e container.
  *
  * Two behaviours, both there to stop a filter from doing more than it says:
@@ -499,6 +522,13 @@ async function runE2eTests(playwrightArguments) {
     lightweight: process.env.PLAYWRIGHT_LIGHTWEIGHT_MODE === "true",
   });
 
+  // Secret values are handed to the child through the inherited environment,
+  // never through argv. `dockerEnvironmentArguments` emits a bare `--env KEY`
+  // for these, so the value has to be here for Docker to forward.
+  for (const key of SECRET_ENVIRONMENT_KEYS) {
+    if (environment[key] !== undefined) process.env[key] = environment[key];
+  }
+
   await run("docker", [
     "run",
     "--rm",
@@ -510,7 +540,7 @@ async function runE2eTests(playwrightArguments) {
     join(workspace, "apps", "web"),
     "--user",
     `${process.getuid()}:${process.getgid()}`,
-    ...Object.entries(environment).flatMap(([key, value]) => ["--env", `${key}=${value}`]),
+    ...dockerEnvironmentArguments(environment),
     playwrightImageTag(webPackageJson),
     "npx",
     "playwright",

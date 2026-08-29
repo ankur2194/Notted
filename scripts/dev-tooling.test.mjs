@@ -14,6 +14,7 @@ import {
   assertLocalDockerEndpoint,
   assertResetEnvironment,
   assertResetTarget,
+  dockerEnvironmentArguments,
   evaluateComposeReadiness,
   e2eReadinessServices,
   e2eUpServices,
@@ -275,6 +276,34 @@ test("Playwright inside the api-e2e namespace addresses dependencies by Compose 
   assert.equal(environment.PLAYWRIGHT_EXTERNAL_SERVERS, "true");
   assert.equal(environment.PLAYWRIGHT_LIGHTWEIGHT_MODE, undefined);
   assert.equal(environment.CI, undefined);
+});
+
+test("the database password never reaches the docker run command line", () => {
+  const environment = playwrightEnvironment({
+    webPort: "3010",
+    apiPort: "3011",
+    databaseName: "notted_e2e_test",
+    postgresUser: "notted",
+    postgresPassword: "hunter2",
+  });
+
+  const argv = dockerEnvironmentArguments(environment);
+
+  // `ps auxww` shows argv to every local user for the whole run, so the secret
+  // is forwarded by NAME and its value travels through the inherited env.
+  assert.equal(
+    argv.some((argument) => argument.includes("hunter2")),
+    false,
+  );
+  assert.equal(
+    argv.some((argument) => argument.startsWith("DATABASE_URL=")),
+    false,
+  );
+  assert.equal(argv.filter((argument) => argument === "DATABASE_URL").length, 1);
+
+  // Everything non-secret still travels inline, so nothing else regressed.
+  assert.ok(argv.includes("PLAYWRIGHT_APP_URL=http://localhost:3010"));
+  assert.ok(argv.includes("PLAYWRIGHT_MAILPIT_URL=http://mailpit:8025"));
 });
 
 test("Playwright diagnostics can be disabled explicitly for a local disposable run", () => {
