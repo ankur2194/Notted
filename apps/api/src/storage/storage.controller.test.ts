@@ -228,6 +228,7 @@ function settingsFacts(): AuthorizationResourceFacts {
     kind: "settings",
     id: "settings-1",
     workspaceId,
+    project: null,
     loadedAt: new Date(NOW).toISOString(),
     relationsValid: true,
     creatorId: userId,

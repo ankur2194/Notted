@@ -43,6 +43,7 @@ const operation = {
     kind: "note",
     id: "note-1",
     workspaceId: "workspace-1",
+    project: null,
     loadedAt: new Date().toISOString(),
     relationsValid: true,
   },

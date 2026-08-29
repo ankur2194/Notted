@@ -86,12 +86,40 @@ function noteFacts(
   });
 }
 
+/*
+ * `project` must be a COMPILE error to omit, not a permissive default.
+ *
+ * Every other optional on `AuthorizationResourceFacts` fails closed on
+ * `undefined`. `project` did not: `projectCanRead`/`projectCanEdit` return true
+ * for `project === undefined`, so a future loader that forgot to populate it
+ * would make a restricted project's notes readable by every editor and viewer
+ * in the workspace, with the type system silent.
+ *
+ * The regression is the compiler, so this assertion is enforced by
+ * `pnpm --filter @notted/api type-check` -- a separate script from `vitest run`.
+ * If `project` becomes optional again, the `@ts-expect-error` goes unused and
+ * tsc reports THAT, which is the failure this is here to produce.
+ */
+// @ts-expect-error -- `project` is required; omitting it must not compile.
+const FACTS_WITHOUT_PROJECT: AuthorizationResourceFacts = {
+  kind: "note",
+  id: "note-1",
+  workspaceId: WORKSPACE_ID,
+  loadedAt: new Date(NOW).toISOString(),
+  relationsValid: true,
+};
+void FACTS_WITHOUT_PROJECT;
+
 function resourceFor(action: AuthorizationAction): AuthorizationResourceFacts {
   const kind = kindForAction(action);
   const common = {
     kind,
     id: `${kind}-1`,
     workspaceId: kind === "session" ? null : WORKSPACE_ID,
+    // `project` is REQUIRED on the facts contract, so every kind states it.
+    // The two kinds that carry a real project override it below; the rest say
+    // "no project" on purpose rather than leaving the policy to assume it.
+    project: null,
     loadedAt: new Date(NOW).toISOString(),
     relationsValid: true,
     creatorId: USER_ID,

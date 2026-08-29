@@ -161,7 +161,29 @@ export interface AuthorizationResourceFacts {
   readonly targetUserId?: string | null;
   readonly targetRole?: WorkspaceRole | null;
   readonly targetMemberActive?: boolean;
-  readonly project?: ProjectAuthorizationFacts | null;
+  /**
+   * REQUIRED, not optional, and it is the only field here that has to be.
+   *
+   * Every other optional on this interface fails CLOSED when a loader omits it:
+   * `creatorId === actorId`, `requestedById === actorId`,
+   * `targetMemberActive === true` and `status !== "ready"` all deny on
+   * `undefined`. `project` does not — `projectCanRead`/`projectCanEdit` return
+   * `true` for `project === undefined`, so a loader that forgets to populate it
+   * makes a restricted project's notes readable by every editor and viewer in
+   * the workspace, and the type system says nothing.
+   *
+   * `null` is the permissive answer ("this resource is in no project"), said on
+   * purpose by a loader that looked. Requiring the field is what forces that
+   * distinction to be stated rather than defaulted.
+   *
+   * A discriminated union on `kind` was the audit's proposal and is the wrong
+   * trade here: this interface is the parameter type of 17 functions in
+   * `authorization-policy.service.ts`, plus the recursive `note`/`source`
+   * fields below, plus `loadDirect`/`loadWorkspaceRoot` which build `{ kind }`
+   * from a variable. Narrowing branches in all of them buys the same compile
+   * error that deleting one `?` buys.
+   */
+  readonly project: ProjectAuthorizationFacts | null;
   readonly sharePermission?: NoteSharePermission | null;
   readonly requestedById?: string | null;
   readonly sourceReadable?: boolean;

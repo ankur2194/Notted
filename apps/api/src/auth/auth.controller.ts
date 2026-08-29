@@ -104,6 +104,7 @@ export class AuthController {
         id: sessionId,
         workspaceId: null,
         targetUserId: principal.userId,
+        project: null,
         loadedAt: new Date().toISOString(),
         relationsValid: true,
       },

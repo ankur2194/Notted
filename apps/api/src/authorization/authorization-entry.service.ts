@@ -60,6 +60,7 @@ function hiddenResource(locator: ResourceLocator): AuthorizationResourceFacts {
     kind: locator.kind,
     id: "concealed",
     workspaceId: null,
+    project: null,
     loadedAt: new Date().toISOString(),
     relationsValid: false,
   });
@@ -138,6 +139,7 @@ export class AuthorizationEntryService {
       id: input.sessionId,
       workspaceId: null,
       targetUserId: input.targetUserId,
+      project: null,
       loadedAt: new Date().toISOString(),
       relationsValid: true,
     });

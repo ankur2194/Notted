@@ -179,6 +179,7 @@ export class ShellService {
           kind,
           id: membership.workspaceId,
           workspaceId: membership.workspaceId,
+          project: null,
           loadedAt: membership.loadedAt,
           relationsValid: true,
         },
