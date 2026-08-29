@@ -84,3 +84,53 @@ test("every long-running compose service opts into bounded logs", () => {
 
   assert.deepEqual(offenders, [], `services with unbounded logs: ${offenders.join(", ")}`);
 });
+
+/*
+ * A suppressed advisory must expire against something that is actually
+ * scheduled.
+ *
+ * `pnpm security:deps` is `pnpm audit --prod --audit-level=high`, so every id in
+ * `pnpm.auditConfig.ignoreGhsas` is a HIGH-or-worse advisory the gate reports as
+ * green. E6 and E7 were both filed with the deadline "the next dependency-matrix
+ * refresh", and E3 with "the next dependency refresh" — none of which is an
+ * event anyone has committed to. An undated suppression survives to production
+ * by default rather than by decision, and the release checklist has nothing to
+ * trip on. Requiring a numbered Plan part in the exception's own Deadline line
+ * is what turns the suppression back into a dated promise.
+ *
+ * A text predicate over the checklist, not a Markdown parse — same ceiling and
+ * same upgrade path as the two predicates above.
+ */
+test("every suppressed advisory names a Plan part as its deadline", () => {
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const checklist = readFileSync(
+    join(root, "docs", "security", "remediation-checklist.md"),
+    "utf8",
+  );
+
+  const suppressed = packageJson.pnpm?.auditConfig?.ignoreGhsas ?? [];
+  assert.ok(suppressed.length > 0, "expected at least one suppressed advisory to check");
+
+  // Each `### E<n> — …` block runs until the next `###`/`##` heading.
+  const sections = checklist.split(/\n(?=#{2,3} )/u).filter((block) => /^### E\d+ /u.test(block));
+
+  for (const advisory of suppressed) {
+    const owning = sections.filter((section) => section.includes(advisory));
+    assert.equal(
+      owning.length >= 1,
+      true,
+      `${advisory} is suppressed in package.json but has no exception section in ` +
+        "docs/security/remediation-checklist.md",
+    );
+    for (const section of owning) {
+      const deadline = /\*\*Deadline:\*\*([\s\S]*?)\n- /u.exec(section)?.[1] ?? "";
+      assert.match(
+        deadline,
+        /\*\*Part \d+\*\*/u,
+        `${advisory}: exception "${section.slice(4, section.indexOf("\n"))}" has a deadline ` +
+          `that names no Plan part (${deadline.trim().replace(/\s+/gu, " ")})`,
+      );
+    }
+  }
+});

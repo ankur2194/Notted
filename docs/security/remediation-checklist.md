@@ -250,8 +250,8 @@ Suppression mechanism: advisories that are accepted here — and only those — 
 
 ### E3 — `GHSA-36xv-jgw5-4q75` is suppressed in `pnpm audit`
 
-- **Owner:** Ankur Patel · **Deadline:** re-evaluate at the **next dependency refresh** (and
-  necessarily at the `@nestjs/core` v11 upgrade, whichever comes first)
+- **Owner:** Ankur Patel · **Deadline:** **Part 85** (define and validate the MVP release
+  slice), and necessarily at the `@nestjs/core` v11 upgrade, whichever comes first
 - **Where:** `package.json` — `pnpm.auditConfig.ignoreGhsas`. (Until Part 71–74 review round 1
   this was `ignoreCves` plus an `--ignore GHSA-36xv-jgw5-4q75` flag on `audit:prod` and
   `security:deps`; neither actually suppressed anything — see the mechanism note above.)
@@ -301,7 +301,8 @@ Suppression mechanism: advisories that are accepted here — and only those — 
 
 ### E6 — `pdfjs-dist` arbitrary JavaScript execution on a malicious PDF
 
-- **Owner:** Ankur Patel · **Deadline:** the **next dependency-matrix refresh** (ADR 0008)
+- **Owner:** Ankur Patel · **Deadline:** **Part 85** (define and validate the MVP release
+  slice), through the ADR 0008 matrix refresh
 - **Advisory:** `GHSA-hq66-cqwq-w95j` / `CVE-2026-16633`, high. Vulnerable `>=5.6.83 <6.2.108`;
   installed `5.6.205` (`apps/web/package.json`). Patched in `>=6.2.108`.
 - **Why not fixed here:** ADR 0008 is the authority for exact versions and the bump crosses a
@@ -314,11 +315,16 @@ Suppression mechanism: advisories that are accepted here — and only those — 
   could reach.
 - **Residual risk:** a workspace member who uploads a crafted PDF could execute script in the
   viewing member's page context, within that same workspace's trust boundary.
-- **Closure:** bump to `pdfjs-dist >= 6.2.108` at the matrix refresh and delete this entry.
+- **Closure:** Part 85 (define and validate the MVP release slice) is the gate. Bump to
+  `pdfjs-dist >= 6.2.108` through the ADR 0008 matrix refresh and delete this entry, or record
+  an explicit decision to ship with it. A HIGH advisory must not reach production because a
+  deadline named an event that was never scheduled — "the next matrix refresh" gave the release
+  checklist nothing to trip on, which is why this is bound to a numbered part instead.
 
 ### E7 — Transitive `brace-expansion` and `nanoid` denial-of-service advisories
 
-- **Owner:** Ankur Patel · **Deadline:** the **next dependency-matrix refresh** (ADR 0008)
+- **Owner:** Ankur Patel · **Deadline:** **Part 85** (define and validate the MVP release
+  slice), through the ADR 0008 matrix refresh
 - **Advisories:**
   - `GHSA-mh99-v99m-4gvg` and `GHSA-rgw5-rvv9-x895` (`brace-expansion`, high), reached only via
     `@bull-board/express > ejs > jake > filelist > minimatch > brace-expansion`. `jake` is
@@ -334,8 +340,9 @@ Suppression mechanism: advisories that are accepted here — and only those — 
   ADR 0008 matrix decision, not a Part 71–74 change.
 - **Residual risk:** a denial of service reachable only by an authenticated platform operator
   (Bull Board) or not reachable at runtime at all (`nanoid`).
-- **Closure:** re-check at the matrix refresh; drop the ignore as soon as the upstream chains
-  resolve to patched versions on their own.
+- **Closure:** Part 85 is the gate. Drop each ignore as soon as the upstream chain resolves to
+  a patched version on its own; anything still standing at Part 85 is re-triaged there rather
+  than carried silently.
 
 ## Revision History
 
@@ -344,3 +351,4 @@ Suppression mechanism: advisories that are accepted here — and only those — 
 | 2026-08-25 | Ankur Patel | Initial OWASP-oriented review and exception log, Part 74. |
 | 2026-08-25 | Ankur Patel | Parts 71–74 review round 1: `pnpm audit --ignore` and `auditConfig.ignoreCves` were both no-ops, so `security:deps` had been passing unconditionally while four high advisories stood. Moved suppression to `auditConfig.ignoreGhsas`, triaged the four (E6 `pdfjs-dist`, E7 `brace-expansion` ×2 and `nanoid`), corrected E3 (still present at moderate, not obsolete), and left the `postcss` moderate deliberately unsuppressed. |
 | 2026-08-25 | Ankur Patel | Parts 71–74 review round 2: no security findings; revision history brought in line with the round-1 rewrite (the `ignoreGhsas` note and exceptions E6/E7 were added in round 1). |
+| 2026-08-29 | Ankur Patel | Audit finding OPT-29: E3, E6 and E7 all had deadlines naming an unscheduled event ("the next dependency refresh"), so a HIGH advisory suppressed in `auditConfig.ignoreGhsas` would reach production by default rather than by decision. All three are now bound to **Part 85**, and `scripts/security-scan.test.mjs` fails if any suppressed GHSA's exception has a deadline that names no Plan part. |
