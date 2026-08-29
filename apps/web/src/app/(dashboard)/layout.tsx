@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -11,6 +12,7 @@ import { getServerSession } from "@/lib/auth/server-session";
 import { getServerFolders, getServerNoteNavigation } from "@/lib/notes/server-notes";
 import { getServerShell } from "@/lib/shell/server-shell";
 import { getServerTags } from "@/lib/tags/server-tags";
+import { PATHNAME_HEADER } from "@/proxy";
 
 function UnavailableState({
   title,
@@ -39,8 +41,12 @@ function UnavailableState({
 }
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
+  // The page the visitor actually asked for, stamped on by `proxy.ts` because
+  // the App Router hands a layout no pathname. Absent (a request the proxy
+  // matcher skipped) falls back to "/", which is what this always did.
+  const intendedPath = (await headers()).get(PATHNAME_HEADER) ?? "/";
   const session = await getServerSession();
-  if (session.status === "unauthenticated") redirect(loginPathFor("/"));
+  if (session.status === "unauthenticated") redirect(loginPathFor(intendedPath));
   if (session.status === "unavailable") {
     return (
       <UnavailableState
@@ -51,7 +57,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   }
 
   const shell = await getServerShell();
-  if (shell.status === "unauthenticated") redirect(loginPathFor("/"));
+  if (shell.status === "unauthenticated") redirect(loginPathFor(intendedPath));
   if (shell.status === "unavailable") {
     return (
       <UnavailableState

@@ -123,6 +123,34 @@ function notFound(): NextResponse {
   });
 }
 
+/**
+ * The request's own pathname, stamped on so a Server Component can read it.
+ *
+ * A layout is given no pathname by the App Router, so `(dashboard)/layout.tsx`
+ * redirected every unauthenticated visitor to `loginPathFor("/")` and dropped
+ * the page they actually asked for — sign in, land on the dashboard, navigate
+ * back to the note in your bookmark by hand. Nothing else in the request
+ * carries it: `referer` is absent on a fresh load and lies on an RSC
+ * navigation.
+ *
+ * The cost is one `Headers` copy per request, on a path that otherwise does no
+ * work at all. That buys the layout an answer it cannot get any other way --
+ * a client `usePathname()` never runs, because the server redirect happens
+ * before any client code does.
+ *
+ * The SEARCH string is deliberately left off: `safeRedirectPath` refuses a
+ * percent sign outright, so a query with any escape in it would take the whole
+ * path down to the "/" fallback with it. Losing the filters is smaller than
+ * losing the page.
+ */
+export const PATHNAME_HEADER = "x-notted-pathname";
+
+function proceed(request: NextRequest): NextResponse {
+  const headers = new Headers(request.headers);
+  headers.set(PATHNAME_HEADER, request.nextUrl.pathname);
+  return NextResponse.next({ request: { headers } });
+}
+
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   // `x-forwarded-host` is what a reverse proxy sets; `host` is what a direct
   // connection carries. Neither is authenticated here, and neither needs to be:
@@ -139,7 +167,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     decideCustomHostRoute({ ...shared, resolved: null, selectedWorkspaceId: null }).kind ===
     "primary"
   ) {
-    return NextResponse.next();
+    return proceed(request);
   }
 
   // THERE IS NO SEPARATE WEB-SIDE FEATURE FLAG. The API's `CUSTOM_DOMAINS_ENABLED`
@@ -161,7 +189,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   });
   if (decision.kind !== "allow") return notFound();
 
-  const response = NextResponse.next();
+  const response = proceed(request);
   if (decision.setWorkspaceCookie !== null) {
     // Host-only, like every cookie in this product: a custom host's selection
     // must not travel to the primary host or to another tenant's host.

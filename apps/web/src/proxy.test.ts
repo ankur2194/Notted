@@ -41,7 +41,7 @@ vi.mock("@/config/public-environment", () => ({
   },
 }));
 
-import { config, proxy } from "./proxy";
+import { config, PATHNAME_HEADER, proxy } from "./proxy";
 
 import { WORKSPACE_SELECTION_COOKIE } from "@/lib/shell/constants";
 
@@ -105,6 +105,21 @@ describe("custom-host proxy", () => {
 
     expect(isPassThrough(response)).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("stamps the requested pathname so a layout can read it", async () => {
+    // The App Router hands a layout no pathname, so `(dashboard)/layout.tsx`
+    // sent every unauthenticated visitor to `loginPathFor("/")` and lost the
+    // page they asked for. Next carries an overridden request header on the
+    // response as `x-middleware-request-<name>`.
+    const response = await proxy(
+      request({ host: "app.notted.test", pathname: "/workspaces/w/notes/n" }),
+    );
+
+    expect(isPassThrough(response)).toBe(true);
+    expect(response.headers.get(`x-middleware-request-${PATHNAME_HEADER}`)).toBe(
+      "/workspaces/w/notes/n",
+    );
   });
 
   it("passes a loopback host through without resolving anything", async () => {
