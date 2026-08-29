@@ -250,12 +250,41 @@ function reachableComponents(
 
 const PATH_PARAMETER = /\{([^}]+)\}/gu;
 
+/**
+ * Path parameters carried the constraint the controllers actually enforce.
+ *
+ * Every one of these was emitted as a bare `{ type: "string" }` while the
+ * handler parsed it with `uuidSchema` (`tags.controller.ts:39`,
+ * `workspace-logo.controller.ts:40`, and every other `*FromRoute` selector), so
+ * a client generated from this document sent `workspaceId: "abc"` and learned
+ * the rule from a runtime 400.
+ *
+ * Named by convention rather than by threading the selector schema onto
+ * `OpenApiRouteDoc`: every path parameter in this API is either an identifier
+ * (`id`, or a `*Id` suffix) or the logo token, and a convention that holds for
+ * 21 of 21 names does not need a per-route declaration to carry it. The one
+ * non-identifier is `token`, whose real rule is `LOGO_TOKEN_PATTERN` in
+ * `workspace-logo.service.ts` — 32 lowercase hex characters, not a UUID.
+ *
+ * ponytail: if a future route takes a path parameter that is neither, this
+ * silently promises `format: "uuid"` for it. Upgrade path: carry the selector
+ * schema on `OpenApiRouteDoc` and run it through `z.toJSONSchema` the way
+ * `queryParameters` already does.
+ */
+const LOGO_TOKEN_JSON_SCHEMA = { type: "string", pattern: "^[0-9a-f]{32}$" } as const;
+
+function pathParameterSchema(name: string): JsonObject {
+  if (name === "token") return { ...LOGO_TOKEN_JSON_SCHEMA };
+  if (name === "id" || name.endsWith("Id")) return { type: "string", format: "uuid" };
+  return { type: "string" };
+}
+
 function pathParameters(path: string): JsonObject[] {
   return [...path.matchAll(PATH_PARAMETER)].map(([, name]) => ({
     name,
     in: "path",
     required: true,
-    schema: { type: "string" },
+    schema: pathParameterSchema(name ?? ""),
   }));
 }
 
@@ -304,6 +333,62 @@ function assertDeclaredSchemas(route: DiscoveredRoute, doc: OpenApiRouteDoc): vo
   }
 }
 
+/**
+ * The error envelope ADR 0013 makes normative, as a document component.
+ *
+ * Every operation emitted a `2XX` response and nothing else, so the shape a
+ * client actually has to handle — `{ success: false, error: { code, message,
+ * details? }, requestId }` — existed in prose in `docs/API.md` and nowhere in
+ * `docs/openapi.json`. A generated client had no type for it and treated a
+ * `409 IDEMPOTENCY_KEY_REUSED` as an unmodelled response.
+ *
+ * Attached as `default` rather than as an enumerated list of statuses: the
+ * envelope is identical for every failure, and enumerating per-route statuses
+ * would be a second place to keep in step with the filter. Hand-written rather
+ * than derived from a Zod schema because the runtime shape lives in
+ * `api-exception.filter.ts` and `@notted/shared-types`, neither of which is a
+ * validator this catalog can convert.
+ */
+const API_FAILURE_COMPONENT = "ApiFailure";
+
+const API_FAILURE_SCHEMA: JsonObject = {
+  type: "object",
+  required: ["success", "error", "requestId"],
+  additionalProperties: false,
+  properties: {
+    success: { type: "boolean", enum: [false] },
+    error: {
+      type: "object",
+      required: ["code", "message"],
+      additionalProperties: false,
+      properties: {
+        code: {
+          type: "string",
+          description: "Stable machine-readable error code. Never localized.",
+        },
+        message: { type: "string" },
+        details: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["path", "code", "message"],
+            additionalProperties: false,
+            properties: {
+              path: { type: "string" },
+              code: { type: "string" },
+              message: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+    requestId: {
+      type: "string",
+      description: "Correlates this response with the server log line that produced it.",
+    },
+  },
+};
+
 function operation(
   catalog: SchemaCatalog,
   route: DiscoveredRoute,
@@ -341,6 +426,14 @@ function operation(
         ...(responseSchema === undefined
           ? {}
           : { content: { "application/json": { schema: responseSchema } } }),
+      },
+      default: {
+        description: "Error envelope. `error.code` is the stable, machine-readable failure.",
+        content: {
+          "application/json": {
+            schema: { $ref: `#/components/schemas/${API_FAILURE_COMPONENT}` },
+          },
+        },
       },
     },
     // Document-level `security` grants the API key everywhere; routes it cannot
@@ -401,7 +494,12 @@ export function buildOpenApiDocument(): OpenApiDocument {
             "scopes cover the action. The secret is returned once, when the key is created.",
         },
       },
-      schemas: reachableComponents(catalog, paths),
+      schemas: Object.fromEntries(
+        Object.entries({
+          ...reachableComponents(catalog, paths),
+          [API_FAILURE_COMPONENT]: API_FAILURE_SCHEMA,
+        }).sort(([a], [b]) => a.localeCompare(b)),
+      ),
     },
   };
 }

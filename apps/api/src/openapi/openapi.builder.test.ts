@@ -107,6 +107,59 @@ describe("collectControllers", () => {
 });
 
 describe("buildOpenApiDocument", () => {
+  /*
+   * Two things a generated client needs that this document did not say.
+   *
+   * Every operation emitted a `2XX` response and nothing else, so the error
+   * envelope ADR 0013 makes normative existed only in prose -- a client had no
+   * type for `{ success: false, error: { code, message }, requestId }` and read
+   * a 409 IDEMPOTENCY_KEY_REUSED as an unmodelled response. And every path
+   * parameter was a bare `{ type: "string" }` while the handler parsed it with
+   * `uuidSchema`, so `workspaceId: "abc"` was discovered as a runtime 400.
+   */
+  it("documents the error envelope on every operation", () => {
+    const document = buildOpenApiDocument();
+    const operations = Object.values(document.paths).flatMap((path) =>
+      Object.values(path as Record<string, unknown>).filter(
+        (value): value is Record<string, unknown> => typeof value === "object" && value !== null,
+      ),
+    );
+
+    expect(operations.length).toBeGreaterThan(0);
+    for (const operation of operations) {
+      const responses = operation.responses as Record<string, unknown>;
+      expect(Object.keys(responses)).toContain("default");
+    }
+
+    const components = document.components as { schemas?: Record<string, unknown> };
+    expect(components.schemas?.ApiFailure).toBeDefined();
+  });
+
+  it("carries the identifier constraint the handlers enforce onto path parameters", () => {
+    const document = buildOpenApiDocument();
+    const pathParameters = Object.values(document.paths).flatMap((path) =>
+      Object.values(path as Record<string, unknown>)
+        .filter(
+          (value): value is Record<string, unknown> => typeof value === "object" && value !== null,
+        )
+        .flatMap((operation) => (operation.parameters ?? []) as Record<string, unknown>[])
+        .filter((parameter) => parameter.in === "path"),
+    );
+
+    expect(pathParameters.length).toBeGreaterThan(0);
+    for (const parameter of pathParameters) {
+      const name = String(parameter.name);
+      const schema = parameter.schema as Record<string, unknown>;
+      // The logo token is 128 bits of hex, not a UUID -- LOGO_TOKEN_PATTERN in
+      // `workspace-logo.service.ts`. Asserted as a table rather than a branch,
+      // so every parameter is checked unconditionally.
+      expect(schema, name).toEqual(
+        name === "token"
+          ? { type: "string", pattern: "^[0-9a-f]{32}$" }
+          : { type: "string", format: "uuid" },
+      );
+    }
+  });
   const document = buildOpenApiDocument();
   const schemas = document.components.schemas as Record<string, Record<string, unknown>>;
 
