@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   explicitBooleanQuerySchema,
+  HEX_COLOR_PATTERN,
   isoTimestampSchema,
   paginationQuerySchema,
   sortDirectionSchema,
@@ -49,7 +50,7 @@ export const taskStatusNameSchema = z
 /** Matches `varchar(7)` on `task_statuses.color`. */
 export const taskStatusColorSchema = z
   .string()
-  .regex(/^#[0-9a-f]{6}$/i, "Expected a six-digit hex color");
+  .regex(HEX_COLOR_PATTERN, "Expected a six-digit hex color");
 
 /** Matches `varchar(500)` on `tasks.title`. */
 export const taskTitleSchema = z.string().trim().min(1).max(500);

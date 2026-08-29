@@ -202,9 +202,11 @@ export type { AccentContrast, AccentContrastLevel } from "./color-contrast";
 export {
   dateRangeQuerySchema,
   explicitBooleanQuerySchema,
+  HEX_COLOR_PATTERN,
   hexColorSchema,
   idempotencyKeySchema,
   isoTimestampSchema,
+  JSON_VALUE_LIMITS,
   jsonValueSchema,
   paginationQuerySchema,
   progressSchema,

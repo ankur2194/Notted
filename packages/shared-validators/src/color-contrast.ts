@@ -15,6 +15,8 @@
 // Formulae: WCAG 2.2 relative luminance (sRGB, gamma 2.4) and the (L1+0.05) /
 // (L2+0.05) contrast ratio.
 
+import { HEX_COLOR_PATTERN } from "./common.schema";
+
 /** Below this an accent is refused outright: 3:1 is the WCAG 2.2 non-text (1.4.11) floor. */
 export const ACCENT_CONTRAST_MIN_RATIO = 3;
 
@@ -22,7 +24,6 @@ export const ACCENT_CONTRAST_MIN_RATIO = 3;
 export const ACCENT_CONTRAST_TARGET_RATIO = 4.5;
 
 const WHITE = "#ffffff";
-const HEX_COLOR = /^#[0-9a-f]{6}$/iu;
 
 function linearChannel(byteValue: number): number {
   const channel = byteValue / 255;
@@ -35,7 +36,7 @@ function linearChannel(byteValue: number): number {
  * including a render pass over untrusted persisted `jsonb` — total.
  */
 export function relativeLuminance(color: string): number | null {
-  if (!HEX_COLOR.test(color)) return null;
+  if (!HEX_COLOR_PATTERN.test(color)) return null;
   const red = linearChannel(Number.parseInt(color.slice(1, 3), 16));
   const green = linearChannel(Number.parseInt(color.slice(3, 5), 16));
   const blue = linearChannel(Number.parseInt(color.slice(5, 7), 16));

@@ -1,15 +1,24 @@
 import { describe, expect, it } from "vitest";
 
+import { contrastRatio } from "./color-contrast";
+
 import {
   dateRangeQuerySchema,
   explicitBooleanQuerySchema,
+  hexColorSchema,
   idempotencyKeySchema,
   isoTimestampSchema,
+  JSON_VALUE_LIMITS,
   jsonValueSchema,
   paginationQuerySchema,
   sortSchema,
+  TAG_COLOR_PATTERN,
+  tagColorSchema,
+  taskStatusColorSchema,
   uuidSchema,
 } from "./index";
+
+import type { JsonValueInput } from "./index";
 
 describe("common schemas", () => {
   it("accepts UUIDs and offset-aware ISO timestamps", () => {
@@ -86,6 +95,40 @@ describe("common schemas", () => {
     expect(jsonValueSchema.safeParse(new Date()).success).toBe(false);
   });
 
+  /*
+   * The barrel publishes `jsonValueSchema` as the package's general-purpose
+   * "validate arbitrary JSON" answer, so its bounds are part of that promise.
+   * Unbounded, it accepted 10 000-deep nesting in 14 ms and a 200 000-key
+   * object in 162 ms. Its only consumer today is server-produced audit
+   * metadata, so this is the guard for the first consumer that points it at
+   * request input.
+   */
+  it("refuses JSON past its depth, breadth, and length bounds", () => {
+    const deep = (levels: number): JsonValueInput => {
+      let value: JsonValueInput = 1;
+      for (let index = 0; index < levels; index += 1) value = { nested: value };
+      return value;
+    };
+    expect(jsonValueSchema.safeParse(deep(JSON_VALUE_LIMITS.maxDepth - 1)).success).toBe(true);
+    expect(jsonValueSchema.safeParse(deep(JSON_VALUE_LIMITS.maxDepth + 1)).success).toBe(false);
+
+    const wide = Object.fromEntries(
+      Array.from({ length: JSON_VALUE_LIMITS.maxKeys + 1 }, (_unused, index) => [`k${index}`, 1]),
+    );
+    expect(jsonValueSchema.safeParse(wide).success).toBe(false);
+
+    expect(
+      jsonValueSchema.safeParse(new Array(JSON_VALUE_LIMITS.maxItems + 1).fill(1)).success,
+    ).toBe(false);
+
+    expect(
+      jsonValueSchema.safeParse("x".repeat(JSON_VALUE_LIMITS.maxStringLength + 1)).success,
+    ).toBe(false);
+    expect(
+      jsonValueSchema.safeParse({ ["x".repeat(JSON_VALUE_LIMITS.maxStringLength + 1)]: 1 }).success,
+    ).toBe(false);
+  });
+
   it("validates sorting and rejects unknown keys", () => {
     expect(sortSchema.parse({ field: "updatedAt" })).toEqual({
       field: "updatedAt",
@@ -102,5 +145,42 @@ describe("common schemas", () => {
         to: "2026-07-24T00:00:00Z",
       }).success,
     ).toBe(false);
+  });
+});
+
+/*
+ * One rule, five call sites.
+ *
+ * The six-digit hex rule was written out five times in this package, and the
+ * copies had already drifted: `TAG_COLOR_PATTERN` carried no `i` flag while the
+ * other four did, so `#FFF000` was a valid highlight colour and a valid task
+ * status colour but reached `tagColorSchema` only because that schema happens to
+ * `.toLowerCase()` first. Delete that one `.toLowerCase()` and two rules that
+ * read identically start disagreeing.
+ *
+ * This asserts they agree on the case that separated them, in both directions.
+ */
+describe("the six-digit hex colour rule", () => {
+  const uppercase = "#FFF000";
+  const lowercase = "#fff000";
+
+  it("accepts an uppercase value everywhere a tenant can choose a colour", () => {
+    expect(hexColorSchema.safeParse(uppercase).success).toBe(true);
+    expect(taskStatusColorSchema.safeParse(uppercase).success).toBe(true);
+    expect(TAG_COLOR_PATTERN.test(uppercase)).toBe(true);
+    expect(contrastRatio(uppercase, "#ffffff")).not.toBeNull();
+
+    // The tag schema normalises before it validates; that is a separate
+    // guarantee (one stored value per colour) and it must keep working.
+    expect(tagColorSchema.parse(uppercase)).toBe(lowercase);
+  });
+
+  it("rejects the same non-colours everywhere", () => {
+    for (const value of ["#fff", "#ffffffff", "fff000", "#gggggg", ""]) {
+      expect(hexColorSchema.safeParse(value).success, value).toBe(false);
+      expect(taskStatusColorSchema.safeParse(value).success, value).toBe(false);
+      expect(TAG_COLOR_PATTERN.test(value), value).toBe(false);
+      expect(contrastRatio(value, "#ffffff"), value).toBeNull();
+    }
   });
 });

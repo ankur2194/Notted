@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  HEX_COLOR_PATTERN,
   isoTimestampSchema,
   paginationQuerySchema,
   sortDirectionSchema,
@@ -9,7 +10,13 @@ import {
 
 /** Neutral gray; mirrors the `tags.color` column default. */
 export const TAG_DEFAULT_COLOR = "#6b7280";
-export const TAG_COLOR_PATTERN = /^#[0-9a-f]{6}$/u;
+/**
+ * Re-exported, not redefined: `apps/web`'s TagManager imports this name, and the
+ * rule behind it is `HEX_COLOR_PATTERN` in `common.schema.ts` like every other
+ * colour in the product. This alias used to be its own literal WITHOUT the `i`
+ * flag the other four carried.
+ */
+export const TAG_COLOR_PATTERN = HEX_COLOR_PATTERN;
 
 /**
  * `.toLowerCase()` is load-bearing, not cosmetic: without it `#FFF000` and
