@@ -276,9 +276,19 @@ x-api-e2e-environment: &api-e2e-environment
 services:
   # --------------------------------------------------------------- infrastructure
   postgres:
-    # Anchored so `db-reset-e2e` reuses the identical pinned digest for its
-    # `psql` client instead of pulling a second, unpinned image.
-    image: &postgres-image pgvector/pgvector:0.8.5-pg16@sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb
+    # Built, not pulled. `gosu` — which `docker-entrypoint.sh` uses to drop
+    # privileges — is the only Go binary in the upstream image and the only
+    # thing Trivy reports against it: one CRITICAL and eight HIGH standard
+    # library advisories, none of which have a package to upgrade. The build
+    # rebuilds the same released gosu source with a patched Go toolchain; the
+    # `pgvector/pgvector` digest it patches is pinned in the Dockerfile.
+    #
+    # Anchored so `db-reset-e2e` reuses the identical image for its `psql`
+    # client instead of pulling a second, unpinned one.
+    build:
+      context: ./docker/patched-images
+      target: postgres
+    image: &postgres-image notted-dev-postgres:local
     restart: unless-stopped
     logging: *log-rotation
     environment:
@@ -313,8 +323,15 @@ services:
       start_period: 5s
     networks: [backend]
 
+  # Built, not pulled: the upstream image is Alpine-based and its published
+  # openssl and c-ares advisories are already fixed in the Alpine branch it
+  # points at, so one `apk upgrade` closes them. The Meilisearch version is
+  # unchanged — the pinned digest lives in the Dockerfile.
   meilisearch:
-    image: getmeili/meilisearch:v1.45.1@sha256:ac40212f9e5a7526d8007586e3e46fb0441d29dd36c7b02fa2341d2c9a1f6493
+    build:
+      context: ./docker/patched-images
+      target: meilisearch
+    image: notted-dev-meilisearch:local
     restart: unless-stopped
     logging: *log-rotation
     environment:
@@ -407,8 +424,17 @@ services:
 
   # On `edge` as well because publishing a port requires host-routable
   # networking; only the web UI is published, SMTP 1025 stays internal.
+  #
+  # Built, not pulled, for two reasons that need each other: v1.30.0 shipped a
+  # Go binary with eleven fixable advisories in its own dependencies, which only
+  # an upstream release fixes (hence v1.31.0, pinned in the Dockerfile), and
+  # v1.31.0 still carries an Alpine openssl advisory, which only `apk upgrade`
+  # fixes. Neither step alone leaves the image clean.
   mailpit:
-    image: axllent/mailpit:v1.30.0@sha256:0059ef81e492a7192af3816281eed6859eb078bd7bdc58b76757c13e10e53a7d
+    build:
+      context: ./docker/patched-images
+      target: mailpit
+    image: notted-dev-mailpit:local
     restart: unless-stopped
     logging: *log-rotation
     environment:
@@ -631,6 +657,13 @@ services:
   # `_test` suffix is also what `assertSafeSeedTarget` in
   # `apps/api/src/database/seed.ts` requires, so one name satisfies both guards.
   db-reset-e2e:
+    # Same build as `postgres`, so this resolves to the identical local image.
+    # It is repeated rather than left to the anchor alone because a service with
+    # only an `image:` key is *pulled*, and `notted-dev-postgres:local` exists in
+    # no registry.
+    build:
+      context: ./docker/patched-images
+      target: postgres
     image: *postgres-image
     profiles: ["e2e"]
     depends_on:

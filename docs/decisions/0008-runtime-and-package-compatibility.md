@@ -86,22 +86,27 @@ blocks the affected part rather than authorizing a Nest or Next major upgrade.
 
 Phase 2 pins deployable tags and multi-architecture manifest digests:
 
-- `pgvector/pgvector:0.8.5-pg16` —
-  `sha256:1d533553fefe4f12e5d80c7b80622ba0c382abb5758856f52983d8789179f0fb`
+- `pgvector/pgvector:0.8.6-pg16` —
+  `sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b`
 - `redis:7.2.14-alpine` —
   `sha256:dfa18828cbc07b3ae6a95ec7343f6c214fdee2d836197b4be8e9904420762cd8`
 - `getmeili/meilisearch:v1.45.1` —
   `sha256:ac40212f9e5a7526d8007586e3e46fb0441d29dd36c7b02fa2341d2c9a1f6493`
-- `axllent/mailpit:v1.30.0` —
-  `sha256:0059ef81e492a7192af3816281eed6859eb078bd7bdc58b76757c13e10e53a7d`
+- `axllent/mailpit:v1.31.0` —
+  `sha256:c96991d9bef73594c246d89ca81411d4e916f03e76a7d2d72fa2ab5dd3c9ce24`
 
-Redis remains on the 7.2 BSD-licensed line required by `Notted.md`. MinIO Community
-Edition is built reproducibly from server commit
+Redis remains on the 7.2 BSD-licensed line required by `Notted.md`. Redis is the only one
+of the four `compose.yaml` still pulls unaltered; the other three are pinned at the digests
+above inside `docker/patched-images/Dockerfile` and consumed through a patch layer — see the
+container CVE remediation section below for what each layer does and why.
+
+MinIO Community Edition is built reproducibly from server commit
 `7aac2a2c5b7c882e68c1ce017d8256be2feea27f` and client commit
-`77f82e18b5401a65958f1619df6ebb994634bd88`. Its build base is
-`golang:1.24.5-alpine3.22@sha256:daae04ebad0c21149979cd8e9db38f565ecefd8547cf4a591240dc1972cf1399`;
+`77f82e18b5401a65958f1619df6ebb994634bd88` — both the current HEAD of their repositories,
+which have been dormant since February 2026. Its build base is
+`golang:1.26.7-alpine3.24@sha256:28d89ee9cc0ff9fec75c82ca201e6bf7fdf9a679d4b7b24dfa04f2bb766bb468`;
 its runtime base is
-`alpine:3.22.1@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1`.
+`alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b`.
 The source archives are independently checksum-pinned to
 `sha256:71794c2df26aad0cc99e8421c58b7aa2dd55969f979b0e7d1e931042e9fabcd6`
 (server) and
@@ -231,6 +236,49 @@ Part 78 added exactly **one** direct runtime dependency to `apps/api` (`prom-cli
 - `@willsoto/nestjs-prometheus` / `nestjs-prometheus` — Nest wrappers around `prom-client`. They provide a DI-registered registry and a controller, which is roughly the twenty lines this part writes by hand, in exchange for a second package tracking Nest's major versions (the repository is on Nest 10 and E3 in the Part 74 remediation checklist already flags a v11 bump as sensitive). The metric objects also need to be reachable from an Express middleware bound with `app.use` and from BullMQ event handlers, neither of which is inside the DI container, so the wrapper's main feature would go unused.
 - `express-prom-bundle` — an HTTP-metrics middleware. It would sit inside the Nest/Express stack and therefore miss what the existing `RequestContextMiddleware` sees for free (tRPC, Better Auth, Bull Board, and every middleware-terminated request), and its default route normalisation is not the bounded, capped labeller this part requires.
 - `pino-prometheus`-style log-derived metrics — deriving counters from log lines makes the metric depend on the log level, which is an operator knob.
+
+### Container CVE remediation, 2026-08-30
+
+The first execution of `pnpm security:containers` that actually ran — the scanner had been
+pinned to `aquasec/trivy:0.68.0`, a tag upstream never published, so every "finding" it had
+ever reported was a `docker run` failure — found fixable HIGH/CRITICAL advisories in seven of
+the eight images. Six are now clean and the seventh is E8 in the remediation checklist. What
+moved, and the rule each move followed:
+
+- **Node stays at `22.23.1`.** `.nvmrc` is the single source of truth for the Node version and
+  this ADR requires container pins to match it, so the base image was not bumped. It carried
+  no advisories of its own: every finding in `notted-dev-workspace` was in the bundled **npm**
+  (`tar`, `pacote`, `sigstore`, `picomatch`, `ip-address`, `brace-expansion` — eleven
+  advisories, one CRITICAL) or in pnpm's Corepack payload. npm is deleted from the image in
+  `docker/Dockerfile.dev`: nothing in this repository invokes `npm` or `npx`, so the entire
+  vulnerable surface is unreachable code, and unreachable code that can be deleted is not worth
+  suppressing. **pnpm stays at `10.34.5`**, which is the last `10.x` — see E8 for why the
+  remaining four are suppressed rather than fixed, and what the fix costs.
+- **Go binaries are rebuilt, not upgraded.** Go links its standard library statically, so a
+  standard-library advisory is fixed by rebuilding with a patched toolchain and by nothing
+  else. That is the whole reason `golang` moves from `1.24.5` to `1.26.7` here (MinIO, ten
+  stdlib advisories per binary) and the whole reason `docker/patched-images` exists at all for
+  PostgreSQL: `gosu` — the binary `docker-entrypoint.sh` uses to drop privileges — was the only
+  thing Trivy reported against the pgvector image, at one CRITICAL and eight HIGH, with no
+  package to upgrade. The same released `gosu` 1.19 source, archive-checksum-pinned, rebuilt
+  with the patched toolchain, reports `1.19 (go1.26.7 …)` and scans clean.
+- **MinIO's own module pins are raised in the build.** `minio/minio` and `minio/mc` have been
+  dormant since February 2026 and their pinned commits are already each repository's HEAD, so
+  there is no newer source to move to and their `go.mod` files still name module versions with
+  published advisories. `docker/minio-source/Dockerfile` therefore raises nine of them
+  (`grpc`, `prometheus`, `thrift`, `jsonparser`, `go-jose`, `otel/sdk`, `x/crypto`, `x/net`,
+  `x/text`) to exact versions before building — the lowest release that closes every advisory
+  against the module it replaces, so the build stays reproducible. Both binaries build and
+  report their version normally.
+- **Alpine bases get an `apk upgrade` layer.** Alpine ships security fixes to the branch well
+  before it republishes a base image, so a digest pin alone leaves openssl, musl, zlib and
+  c-ares advisories standing. The pinned digest still fixes what is built on; `apk upgrade`
+  takes the branch's current patch level on top. This is the one deliberately floating step in
+  the container build, and it is why `meilisearch` and `mailpit` are now built rather than
+  pulled — with the Meilisearch **version unchanged**, since its advisories were entirely in
+  the Alpine layer and a server-version jump would have meant an index-format migration for no
+  security benefit. Mailpit needed both halves: `v1.31.0` for eleven advisories in its own Go
+  dependencies, then `apk upgrade` for the openssl one that release still carries.
 
 ## Validation evidence
 
