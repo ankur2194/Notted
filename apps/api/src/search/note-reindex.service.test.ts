@@ -38,6 +38,9 @@ function fixture(enabled = true) {
       limit: 500,
     }),
     loadDocumentsForNoteIds: vi.fn().mockResolvedValue([]),
+    // Only NOTE_A is live, and it last changed before the run's boundary, so
+    // the default fixture reconciles STALE away and refreshes nothing.
+    loadNoteLiveness: vi.fn().mockResolvedValue([{ id: NOTE_A, updatedAt: new Date(0) }]),
   };
   const noteIndex = {
     indexUid: "notted_test_notes_v1",
@@ -132,17 +135,53 @@ describe("NoteReindexService", () => {
 
   it("rechecks drift candidates so a concurrent create is upserted rather than deleted", async () => {
     const { subject, projection, noteIndex } = fixture();
+    // Committed after the projection pass read its pages, so it is in the index
+    // walk but was never projected: live, and newer than the boundary.
+    projection.loadNoteLiveness.mockResolvedValueOnce([
+      { id: NOTE_A, updatedAt: new Date(0) },
+      { id: STALE, updatedAt: new Date(Date.now() + 60_000) },
+    ]);
     projection.loadDocumentsForNoteIds.mockResolvedValueOnce([document(STALE)]);
     await subject.reindexWorkspace(WORKSPACE_A);
+    expect(projection.loadDocumentsForNoteIds).toHaveBeenCalledWith([STALE]);
     expect(noteIndex.updateDocuments).toHaveBeenCalledWith([document(STALE)]);
     expect(noteIndex.deleteDocuments).not.toHaveBeenCalled();
   });
 
+  it("reconciles one index page at a time instead of materialising every id", async () => {
+    // The two id sets it used to build were both O(notes in the workspace), and
+    // this command exists for the largest workspaces. `loadNoteLiveness` is
+    // asked about one page, never about the whole index.
+    const { subject, projection, noteIndex } = fixture();
+    // A full page of 499 live documents and one stale one, out of 1 001.
+    noteIndex.listWorkspaceDocumentIds
+      .mockResolvedValueOnce({
+        ids: [...Array(499).fill(NOTE_A), STALE],
+        offset: 0,
+        limit: 500,
+        total: 1_001,
+      })
+      .mockResolvedValue({ ids: [], offset: 499, limit: 500, total: 1_000 });
+
+    await subject.reindexWorkspace(WORKSPACE_A);
+
+    for (const [ids] of projection.loadNoteLiveness.mock.calls as [string[]][]) {
+      expect(ids.length).toBeLessThanOrEqual(500);
+    }
+    // 499, not 500: the deletion shifted every later document back by one, so an
+    // offset advanced by the page size would skip a document per deletion.
+    expect(noteIndex.listWorkspaceDocumentIds).toHaveBeenNthCalledWith(2, WORKSPACE_A, {
+      offset: 499,
+      limit: 500,
+    });
+  });
+
   it("repairs a delete/recreate race after the idempotent delete", async () => {
     const { subject, projection, noteIndex } = fixture();
-    projection.loadDocumentsForNoteIds
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([document(STALE)]);
+    // The recreate probe is the only `loadDocumentsForNoteIds` on this path now:
+    // liveness decides what is stale, so a document is fetched after the delete
+    // rather than before it.
+    projection.loadDocumentsForNoteIds.mockResolvedValueOnce([document(STALE)]);
     await subject.reindexWorkspace(WORKSPACE_A);
     expect(noteIndex.deleteDocuments).toHaveBeenCalledWith([STALE]);
     expect(noteIndex.updateDocuments).toHaveBeenLastCalledWith([document(STALE)]);

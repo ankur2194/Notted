@@ -51,6 +51,12 @@ export interface NoteProjectionPage {
   readonly nextCursor?: NoteProjectionCursor;
 }
 
+/** One indexed document's liveness facts, for reindex reconciliation. */
+export interface NoteLiveness {
+  readonly id: string;
+  readonly updatedAt: Date;
+}
+
 export interface NoteProjectionCursor {
   readonly updatedAt: Date;
   readonly id: string;
@@ -80,6 +86,29 @@ export class NoteProjectionRepository {
    * or are soft-deleted are omitted; the caller treats the difference as
    * "delete from index". Duplicate input IDs collapse to a single document.
    */
+  /**
+   * Which of these note ids are live right now, and when each last changed.
+   *
+   * The reindex reconciliation needs exactly two facts per indexed document —
+   * does a live row still own it, and did that row change after the projection
+   * boundary — and needs neither the body nor the relations. Assembling full
+   * documents to learn them costs `assembleWithRelations` plus two joined reads
+   * per page; this is one index-only read of the notes table.
+   */
+  async loadNoteLiveness(noteIds: readonly string[]): Promise<readonly NoteLiveness[]> {
+    if (noteIds.length === 0) return [];
+    return this.database.db
+      .select({ id: notes.id, updatedAt: notes.updatedAt })
+      .from(notes)
+      .where(
+        and(
+          inArray(notes.id, [...new Set(noteIds)]),
+          eq(notes.isDeleted, false),
+          whereWorkspace(notes, this.tenantContext),
+        ),
+      );
+  }
+
   async loadDocumentsForNoteIds(noteIds: readonly string[]): Promise<readonly NoteIndexDocument[]> {
     if (noteIds.length === 0) return [];
     const dedupedIds = [...new Set(noteIds)];

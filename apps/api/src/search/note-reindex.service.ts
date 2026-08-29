@@ -109,7 +109,6 @@ export class NoteReindexService {
     // Kept per workspace (including --all) so an interrupted settings rollout
     // is repaired by the next tenant processed or by a rerun.
     await this.noteIndex.ensureIndex();
-    const authoritativeIds = new Set<string>();
     const boundary = new Date();
     let cursor: NoteProjectionCursor | undefined;
     let projected = 0;
@@ -121,43 +120,68 @@ export class NoteReindexService {
       });
       if (page.documents.length > 0) {
         await this.noteIndex.updateDocuments(page.documents);
-        for (const document of page.documents) authoritativeIds.add(document.id);
         projected += page.documents.length;
       }
       if (page.documents.length < BATCH_SIZE || page.nextCursor === undefined) break;
       cursor = page.nextCursor;
     }
 
-    const indexedIds: string[] = [];
+    /*
+     * Reconciliation is streamed one index page at a time.
+     *
+     * It used to materialise TWO id sets first — every authoritative note id in
+     * the workspace, and every indexed document id — and only then compare them.
+     * Both are O(notes in the workspace) resident strings held for the whole
+     * run, in a command whose entire job is the largest workspaces.
+     *
+     * Nothing needed them: `loadNoteLiveness` re-proves a page against
+     * PostgreSQL immediately before anything is deleted, which is the same
+     * protection the old candidate recheck gave notes created mid-scan, and it
+     * is the authority — the projection set was only ever a pre-filter.
+     */
+    let staleDeleted = 0;
+    // Two counters on purpose: `offset` is where the next page starts (it moves
+    // by the survivors, because deleting shifts later pages back), while
+    // `scanned` is how much of the listing has been examined and is what decides
+    // when the walk is done.
     let offset = 0;
+    let scanned = 0;
     for (;;) {
       const page = await this.noteIndex.listWorkspaceDocumentIds(workspaceId, {
         offset,
         limit: BATCH_SIZE,
       });
-      indexedIds.push(...page.ids);
-      offset += page.ids.length;
-      if (page.ids.length === 0 || offset >= page.total) break;
-    }
+      if (page.ids.length === 0) break;
+      const liveness = await this.projection.loadNoteLiveness(page.ids);
+      const live = new Map(liveness.map(({ id, updatedAt }) => [id, updatedAt]));
+      const staleIds = page.ids.filter((id) => !live.has(id));
 
-    let staleDeleted = 0;
-    for (const candidateIds of chunks(
-      indexedIds.filter((id) => !authoritativeIds.has(id)),
-      BATCH_SIZE,
-    )) {
-      // Re-prove candidates immediately before deletion. This protects notes
-      // created while the projection pages were being scanned.
-      const nowLive = await this.projection.loadDocumentsForNoteIds(candidateIds);
-      const liveIds = new Set(nowLive.map(({ id }) => id));
-      const staleIds = candidateIds.filter((id) => !liveIds.has(id));
-      if (nowLive.length > 0) await this.noteIndex.updateDocuments(nowLive);
-      if (staleIds.length === 0) continue;
-      await this.noteIndex.deleteDocuments(staleIds);
-      staleDeleted += staleIds.length;
-      // Close the delete/recreate race. A commit after this read still has its
-      // transactional incremental job; an interrupted run is safe to rerun.
-      const recreated = await this.projection.loadDocumentsForNoteIds(staleIds);
-      if (recreated.length > 0) await this.noteIndex.updateDocuments(recreated);
+      // A note that changed after the boundary was outside the projection pass
+      // above (it filters `updatedAt <= boundary`), so it is refreshed here
+      // rather than left to its incremental job — the property the old
+      // "recheck drift candidates" branch provided.
+      const drifted = [...live].filter(([, updatedAt]) => updatedAt > boundary).map(([id]) => id);
+      if (drifted.length > 0) {
+        const documents = await this.projection.loadDocumentsForNoteIds(drifted);
+        if (documents.length > 0) await this.noteIndex.updateDocuments(documents);
+      }
+
+      if (staleIds.length > 0) {
+        await this.noteIndex.deleteDocuments(staleIds);
+        staleDeleted += staleIds.length;
+        // Close the delete/recreate race. A commit after this read still has its
+        // transactional incremental job; an interrupted run is safe to rerun.
+        const recreated = await this.projection.loadDocumentsForNoteIds(staleIds);
+        if (recreated.length > 0) await this.noteIndex.updateDocuments(recreated);
+      }
+
+      // `deleteDocuments` awaits the Meilisearch task before returning, so by
+      // now the deleted documents are gone and every later page has shifted
+      // back by exactly that many. Anything recreated is appended and re-examined
+      // at the end of the walk, which is harmless.
+      offset += page.ids.length - staleIds.length;
+      scanned += page.ids.length;
+      if (scanned >= page.total) break;
     }
     return {
       status: "completed",
