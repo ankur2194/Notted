@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 /**
- * Three standing invariants of the browser suite that nothing else asserts.
+ * Four standing invariants of the browser suite that nothing else asserts.
  *
  * `forbidOnly` was `Boolean(process.env.CI)` and this repository sets `CI`
  * nowhere, so it was permanently false: one stray `test.only` cut a 7-13 minute
@@ -54,5 +54,20 @@ describe("playwright config", () => {
     // `docs/standards/testing.md` forbids a retry as a diagnosis; the CI branch
     // is left alone because nothing in this repository sets `CI`.
     expect((await loadConfig()).retries).toBe(0);
+  });
+
+  it("refuses to target the development stack even when CI is set", async () => {
+    // The dev-database guard read `!process.env.CI && PLAYWRIGHT_APP_URL ===
+    // undefined`, so it was disabled in precisely the environment it protects:
+    // `CI=true` with no explicit URL silently fell back to `localhost:3000`.
+    // `PLAYWRIGHT_APP_URL` is the only discriminator, so `CI` must not appear in
+    // this condition at all.
+    vi.stubEnv("PLAYWRIGHT_APP_URL", undefined);
+    vi.stubEnv("CI", "true");
+    await expect(loadConfig()).rejects.toThrow(/Refusing to run the browser suite/u);
+
+    vi.resetModules();
+    vi.stubEnv("CI", "");
+    await expect(loadConfig()).rejects.toThrow(/Refusing to run the browser suite/u);
   });
 });

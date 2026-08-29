@@ -39,12 +39,21 @@ if (
  * exact failure class `pnpm e2e:up` / `pnpm e2e:test` exists to remove, and
  * `docs/standards/testing.md` states the rule; this is the guard behind it.
  *
- * `PLAYWRIGHT_APP_URL` is the discriminator: the disposable runner always sets
- * it (see `playwrightEnvironment` in `scripts/dev-tooling.mjs`), and CI supplies
- * its own stack. Bare `playwright test` on a developer machine sets neither and
- * would silently target `localhost:3000`.
+ * `PLAYWRIGHT_APP_URL` is the discriminator, and it is the ONLY one: the
+ * disposable runner always sets it (see `playwrightEnvironment` in
+ * `scripts/dev-tooling.mjs`). Bare `playwright test` on a developer machine
+ * sets nothing and would silently target `localhost:3000`.
+ *
+ * This guard used to read `!process.env.CI && …`, which disabled it in exactly
+ * the environment it was written for: under `CI=true` with no
+ * `PLAYWRIGHT_APP_URL` — the natural first shape of a CI job — `baseURL` fell
+ * back to `localhost:3000` and 20 of 23 specs skipped on `!disposable`, leaving
+ * three green specs that looked like a healthy run. Fail closed instead. This
+ * is the same fail-open-on-an-unset-`CI` shape the audit already caught twice
+ * (C7's integration gates, R38's `forbidOnly`); this repository sets `CI`
+ * nowhere, so a term that reads it can only ever weaken a check.
  */
-if (!process.env.CI && process.env.PLAYWRIGHT_APP_URL === undefined) {
+if (process.env.PLAYWRIGHT_APP_URL === undefined) {
   throw new Error(
     "Refusing to run the browser suite against the development stack, which would write test " +
       "users and notes into notted_dev. Use `pnpm e2e:up` then `pnpm e2e:test`, which runs " +
