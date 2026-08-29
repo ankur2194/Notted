@@ -1156,7 +1156,17 @@ export function createNoteImage(config: NoteImageConfig = {}) {
             return target instanceof HTMLElement && dom.caption.contains(target);
           },
           destroy: () => {
-            clearCaptionTimer();
+            // COMMIT, not discard. A caption typed within
+            // `IMAGE_CAPTION_COMMIT_DELAY_MS` of teardown -- type, then click a
+            // sidebar link, and the in-app navigation unmounts the editor before
+            // the debounce fires and before any blur handler runs -- was thrown
+            // away with no transaction, so it reached neither the document nor
+            // autosave. `commitCaption` already clears the timer, already
+            // returns when the position is gone, and already no-ops when the
+            // value is unchanged; the only thing it needs is a live editor to
+            // dispatch into.
+            if (editor.isDestroyed) clearCaptionTimer();
+            else commitCaption();
             endSession();
             dom.image.removeEventListener("load", onLoad);
             dom.image.removeEventListener("error", onError);

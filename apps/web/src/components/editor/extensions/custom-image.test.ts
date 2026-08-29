@@ -659,6 +659,27 @@ describe("Part 43 caption debounce", () => {
     expect(imageAttrs(editor).caption).toBe("Fig");
   });
 
+  it("commits a half-typed caption when the editor is torn down", () => {
+    // Type a caption, then click a sidebar link: the in-app navigation unmounts
+    // the editor before the debounce fires, and removing a focused input fires
+    // no blur. Discarding the timer here loses the caption with no transaction,
+    // so it reaches neither the document nor autosave.
+    const editor = makeEditor({
+      directory: createAttachmentDirectory([entry()]),
+      content: imageDocument(),
+    });
+    const input = captionInput(editor);
+    input.value = "Typed then navigated away";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(imageAttrs(editor).caption).toBe("");
+
+    const committed = vi.fn();
+    editor.on("update", committed);
+    editor.destroy();
+
+    expect(committed).toHaveBeenCalledOnce();
+  });
+
   it("does not write when the value is unchanged", () => {
     const editor = makeEditor({
       directory: createAttachmentDirectory([entry()]),
