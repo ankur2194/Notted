@@ -23,6 +23,7 @@ import { getAuthPrincipal } from "../auth/auth-principal";
 import { AuthService } from "../auth/auth.service";
 import { RequireAuthorization } from "../authorization/authorization-http.decorator";
 import { ApiHttpException } from "../common/errors/api-http.exception";
+import { RateLimitTier } from "../common/rate-limit/rate-limit.decorator";
 import { getRequestId } from "../common/request/request-context";
 import { StorageMaintenanceService } from "../maintenance/storage-maintenance.service";
 
@@ -86,9 +87,22 @@ export class StorageController {
    * `HttpCode(OK)` rather than the POST default of 201: nothing is created, and
    * with `dryRun` (the schema default) nothing is modified either. The response
    * is a report.
+   *
+   * The sensitive tier is the cooldown. This is the most expensive request the
+   * API serves — four sweeps, two bucket listings, and up to
+   * `maintenanceBatchLimit` object stats — and it held only the caller's general
+   * allowance, so an owner could hold several of them open at once. The tier has
+   * its own bucket (`actor:user:<id>:sensitive`), disjoint from that general
+   * allowance, so throttling cleanup cannot lock an admin out of the product.
+   *
+   * ponytail: the budget is PER ACTOR, not per workspace, so two admins of one
+   * workspace each get their own. Upgrade path if concurrent runs ever need to
+   * be excluded outright: a workspace advisory lock around the sweep itself,
+   * which is a different guarantee from a rate limit.
    */
   @Post("maintenance")
   @HttpCode(HttpStatus.OK)
+  @RateLimitTier("sensitive")
   @RequireAuthorization(MAINTENANCE_AUTHORIZATION)
   runMaintenance(
     @Req() request: Request,

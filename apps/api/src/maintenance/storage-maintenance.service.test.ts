@@ -257,13 +257,25 @@ class FakeObjectStore implements ObjectStore {
     return Promise.reject(new Error("the maintenance sweeps never read object bodies"));
   }
 
+  /** Highest number of `statObject` calls outstanding at once. 1 means serial. */
+  statPeakInFlight = 0;
+  private statInFlight = 0;
+  /** Keys whose stat rejects, modelling a storage error that is NOT a 404. */
+  readonly statFailingKeys = new Set<string>();
+
   statObject(_bucket: StorageBucket, key: string): Promise<StoredObjectStat | null> {
     this.log.push("statObject");
-    return Promise.resolve(
-      this.presentKeys.has(key)
+    this.statInFlight += 1;
+    this.statPeakInFlight = Math.max(this.statPeakInFlight, this.statInFlight);
+    // Resolution is deferred by a microtask so overlap is observable at all: a
+    // synchronously resolved promise makes a batched loop look serial.
+    return Promise.resolve().then(() => {
+      this.statInFlight -= 1;
+      if (this.statFailingKeys.has(key)) throw new Error("storage unavailable");
+      return this.presentKeys.has(key)
         ? { size: 1, etag: "etag", lastModified: ago(365 * DAY), contentType: null }
-        : null,
-    );
+        : null;
+    });
   }
 
   listObjects(): Promise<ListObjectsResult> {
@@ -667,6 +679,77 @@ describe("StorageMaintenanceService orphan reconciliation", () => {
     // The same defect, second bucket: the audit named only the attachments
     // site, and `reconcileExportObjects` repeated it verbatim.
     expect(rendered("exportJobs:id,objectKey,workspaceId")).not.toContain("workspace_id");
+  });
+
+  it("probes for missing objects in bounded batches rather than one at a time", async () => {
+    // `maintenanceBatchLimit` is 200, so a strictly serial loop is 200 sequential
+    // round trips inside one owner-facing request.
+    const context = build({
+      database: {
+        selects: {
+          missingObjectCandidates: [
+            [
+              {
+                id: "60000000-0000-4000-8900-000000000001",
+                status: "ready",
+                createdAt: ago(30 * DAY),
+                storageKey: `w/${workspaceId}/a/60000000-0000-4000-8900-000000000001/original/${token("1")}.png`,
+              },
+              {
+                id: "60000000-0000-4000-8900-000000000002",
+                status: "ready",
+                createdAt: ago(30 * DAY),
+                storageKey: `w/${workspaceId}/a/60000000-0000-4000-8900-000000000002/original/${token("2")}.png`,
+              },
+              {
+                id: "60000000-0000-4000-8900-000000000003",
+                status: "ready",
+                createdAt: ago(30 * DAY),
+                storageKey: `w/${workspaceId}/a/60000000-0000-4000-8900-000000000003/original/${token("3")}.png`,
+              },
+              {
+                id: "60000000-0000-4000-8900-000000000004",
+                status: "ready",
+                createdAt: ago(30 * DAY),
+                storageKey: `w/${workspaceId}/a/60000000-0000-4000-8900-000000000004/original/${token("4")}.png`,
+              },
+            ],
+          ],
+        },
+      },
+    });
+
+    await context.service.runSystemSweeps({ dryRun: true });
+
+    expect(context.log.filter((entry) => entry === "statObject")).toHaveLength(4);
+    expect(context.store.statPeakInFlight).toBeGreaterThan(1);
+  });
+
+  it("still aborts the sweep when a stat fails for anything other than a 404", async () => {
+    // The batching must not soften this into `allSettled`: only a positive 404
+    // means "the bytes are gone", and a misconfigured endpoint must never be
+    // able to mark a workspace's whole library as broken.
+    const context = build({
+      database: {
+        selects: {
+          missingObjectCandidates: [
+            [
+              {
+                id: attachmentId,
+                status: "ready",
+                createdAt: ago(30 * DAY),
+                storageKey: ORIGINAL_KEY,
+              },
+            ],
+          ],
+        },
+      },
+    });
+    context.store.statFailingKeys.add(ORIGINAL_KEY);
+
+    await expect(context.service.runSystemSweeps({ dryRun: true })).rejects.toThrow(
+      "storage unavailable",
+    );
   });
 
   it("refuses unparsable keys and workspace mismatches, noting both", async () => {

@@ -77,6 +77,17 @@ import type {
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const HOUR_MS = 60 * 60 * 1_000;
 
+/**
+ * How many `statObject` probes the missing-object sweep has in flight at once.
+ *
+ * ponytail: a fixed number rather than an environment variable nobody would
+ * tune. It exists to stop `maintenanceBatchLimit` (200) round trips from running
+ * strictly one after another — at a realistic 50 ms per probe that is 10 s of a
+ * request spent waiting — while staying far below anything MinIO would consider
+ * a burst. Raise it here if the sweep is ever measured as the bottleneck.
+ */
+const OBJECT_STAT_CONCURRENCY = 10;
+
 /** The attachment key family's fixed root segment (`w/{workspaceId}/a/...`). */
 const ATTACHMENT_KEY_ROOT = "w/";
 
@@ -478,19 +489,30 @@ export class StorageMaintenanceService {
     accumulator.examined += batch.length;
 
     const missing: string[] = [];
-    for (const candidate of batch) {
-      const stat = await this.objects.statObject("attachments", candidate.storageKey);
-      if (
-        !shouldMarkMissingObject(
-          { ...candidate, primaryObjectAbsent: stat === null },
-          context.windows,
-        )
-      ) {
-        continue;
+    // Bounded batches, in candidate order. `Promise.all` rejecting on the first
+    // non-404 is the property this must not lose: `statObject` answers `null`
+    // only for a positive 404, so any other storage error still aborts the whole
+    // sweep rather than being read as "the bytes are gone".
+    for (let index = 0; index < batch.length; index += OBJECT_STAT_CONCURRENCY) {
+      const window = batch.slice(index, index + OBJECT_STAT_CONCURRENCY);
+      const stats = await Promise.all(
+        window.map((candidate) => this.objects.statObject("attachments", candidate.storageKey)),
+      );
+      for (const [offset, stat] of stats.entries()) {
+        const candidate = window[offset];
+        if (
+          candidate === undefined ||
+          !shouldMarkMissingObject(
+            { ...candidate, primaryObjectAbsent: stat === null },
+            context.windows,
+          )
+        ) {
+          continue;
+        }
+        accumulator.selected += 1;
+        accumulator.sample(candidate.id);
+        missing.push(candidate.id);
       }
-      accumulator.selected += 1;
-      accumulator.sample(candidate.id);
-      missing.push(candidate.id);
     }
     if (missing.length === 0) return;
     accumulator.note(STORAGE_MAINTENANCE_NOTES.missingObjectsMarked);

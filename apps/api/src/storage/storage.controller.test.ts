@@ -20,6 +20,7 @@ import {
   type HttpAuthorizationSpec,
 } from "../authorization/authorization-http.decorator";
 import { AuthorizationPolicyService } from "../authorization/authorization-policy.service";
+import { RATE_LIMIT_TIER } from "../common/rate-limit/rate-limit.decorator";
 import { setRequestId } from "../common/request/request-context";
 
 import { StorageController } from "./storage.controller";
@@ -112,6 +113,17 @@ describe("StorageController", () => {
     expect(
       Reflect.getMetadata(HTTP_CODE_METADATA, StorageController.prototype.runMaintenance),
     ).toBe(200);
+  });
+
+  it("puts the cleanup route on the sensitive tier and leaves the read route alone", () => {
+    // The most expensive request the API serves -- four sweeps, two bucket
+    // listings, up to `maintenanceBatchLimit` object stats -- held only the
+    // caller's general allowance. The sensitive tier has its own bucket, so the
+    // cooldown cannot lock an admin out of the rest of the product.
+    expect(Reflect.getMetadata(RATE_LIMIT_TIER, StorageController.prototype.runMaintenance)).toBe(
+      "sensitive",
+    );
+    expect(Reflect.getMetadata(RATE_LIMIT_TIER, StorageController.prototype.read)).toBeUndefined();
   });
 
   it("binds the read route to settings.read and the cleanup route to settings.update", () => {
