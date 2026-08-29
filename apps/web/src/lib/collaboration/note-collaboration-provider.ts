@@ -6,6 +6,18 @@ import {
 } from "y-protocols/awareness";
 import * as Y from "yjs";
 
+import {
+  asBinary,
+  asInteger,
+  asRecord,
+  isForNote,
+  parseSyncAck,
+  parseUpdateAck,
+  sameBytes,
+  type AckError,
+} from "./note-frame-codec";
+import { emitWithAck } from "./socket-ack";
+
 import type { Socket } from "socket.io-client";
 
 import { presenceColorForUser } from "@/lib/collaboration/user-color";
@@ -147,136 +159,6 @@ interface NoteRoomSelector {
   readonly kind: "note";
   readonly workspaceId: string;
   readonly noteId: string;
-}
-
-type AckError = "denied" | "invalid" | "limited" | "stale" | "unavailable";
-
-const ACK_ERRORS: readonly string[] = ["denied", "invalid", "limited", "stale", "unavailable"];
-
-type AckOutcome<T> =
-  { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: AckError };
-
-interface SyncAck {
-  readonly epoch: number;
-  readonly revision: number;
-  readonly schemaVersion: number;
-  readonly update: Uint8Array;
-  readonly stateVector: Uint8Array;
-}
-
-interface UpdateAck {
-  readonly epoch: number;
-  readonly revision: number;
-}
-
-/* ------------------------------------------------------------------------- *
- * Trust boundary
- *
- * Everything below arrives over a socket and is `unknown` until proven
- * otherwise. A frame that does not parse is dropped, never applied: feeding a
- * malformed buffer to `Y.applyUpdate` corrupts the document for everyone in the
- * room, and the writer's own text is the thing being protected.
- * ------------------------------------------------------------------------- */
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
-}
-
-function asInteger(value: unknown): number | null {
-  return typeof value === "number" && Number.isInteger(value) ? value : null;
-}
-
-/**
- * Socket.IO frames binary natively, but some browser builds hand the payload
- * back as an `ArrayBuffer` rather than a `Uint8Array`. Normalise that one case;
- * reject everything else, including strings that merely look like base64.
- */
-function asBinary(value: unknown): Uint8Array | null {
-  if (value instanceof Uint8Array) {
-    return value;
-  }
-  if (value instanceof ArrayBuffer) {
-    return new Uint8Array(value);
-  }
-
-  return null;
-}
-
-function parseAck<T>(
-  raw: unknown,
-  parseValue: (record: Record<string, unknown>) => T | null,
-): AckOutcome<T> {
-  const record = asRecord(raw);
-
-  if (record === null) {
-    return { ok: false, error: "invalid" };
-  }
-
-  if (record.ok !== true) {
-    const error = record.error;
-
-    return {
-      ok: false,
-      error:
-        typeof error === "string" && ACK_ERRORS.includes(error) ? (error as AckError) : "invalid",
-    };
-  }
-
-  const value = parseValue(record);
-
-  return value === null ? { ok: false, error: "invalid" } : { ok: true, value };
-}
-
-function parseSyncAck(record: Record<string, unknown>): SyncAck | null {
-  const epoch = asInteger(record.epoch);
-  const revision = asInteger(record.revision);
-  const schemaVersion = asInteger(record.schemaVersion);
-  const update = asBinary(record.update);
-  const stateVector = asBinary(record.stateVector);
-
-  if (
-    epoch === null ||
-    revision === null ||
-    schemaVersion === null ||
-    update === null ||
-    stateVector === null
-  ) {
-    return null;
-  }
-
-  return { epoch, revision, schemaVersion, update, stateVector };
-}
-
-function parseUpdateAck(record: Record<string, unknown>): UpdateAck | null {
-  const epoch = asInteger(record.epoch);
-  const revision = asInteger(record.revision);
-
-  return epoch === null || revision === null ? null : { epoch, revision };
-}
-
-/**
- * One Socket.io connection is shared by the whole app, and Socket.io dispatches
- * by EVENT NAME, not by room: a socket that holds two note rooms receives both
- * notes' frames on this provider's handlers. Every server -> room frame carries
- * `noteId` so each provider can drop the ones that are not its own. Filtering on
- * `epoch` alone would not do it — epochs are per-note and collide freely, so a
- * frame for another note would be applied to this document.
- */
-function isForNote(record: Record<string, unknown>, noteId: string): boolean {
-  return record.noteId === noteId;
-}
-
-function sameBytes(first: Uint8Array, second: Uint8Array): boolean {
-  if (first.length !== second.length) {
-    return false;
-  }
-  for (let index = 0; index < first.length; index += 1) {
-    if (first[index] !== second[index]) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 export class NoteCollaborationProvider {
@@ -633,7 +515,8 @@ export class NoteCollaborationProvider {
     }
 
     const deadline = Date.now() + this.syncTimeoutMs;
-    const joined = await this.emitAck(
+    const joined = await emitWithAck(
+      this.socket,
       EVENT.join,
       { selector: this.selector },
       this.syncTimeoutMs,
@@ -651,7 +534,8 @@ export class NoteCollaborationProvider {
     // Join first, then sync. A sync against a room we are not in is either
     // refused or — worse — answered for a room we have no authorization on.
     const doc = this.doc;
-    const synced = await this.emitAck(
+    const synced = await emitWithAck(
+      this.socket,
       EVENT.noteSync,
       {
         selector: this.selector,
@@ -806,7 +690,8 @@ export class NoteCollaborationProvider {
     const update = Y.mergeUpdates(this.pending);
     this.pending = [];
 
-    const ack = await this.emitAck(
+    const ack = await emitWithAck(
+      this.socket,
       EVENT.noteUpdate,
       { selector: this.selector, epoch: this.epoch, update },
       this.syncTimeoutMs,
@@ -1289,34 +1174,6 @@ export class NoteCollaborationProvider {
   /* ----------------------------------------------------------------------- *
    * Plumbing
    * ----------------------------------------------------------------------- */
-
-  private emitAck<T>(
-    event: string,
-    payload: object,
-    timeoutMs: number,
-    parseValue: (record: Record<string, unknown>) => T | null,
-  ): Promise<AckOutcome<T>> {
-    return new Promise((resolve) => {
-      let settled = false;
-
-      const timer = setTimeout(() => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        resolve({ ok: false, error: "unavailable" });
-      }, timeoutMs);
-
-      this.socket.emit(event, payload, (raw: unknown) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        clearTimeout(timer);
-        resolve(parseAck(raw, parseValue));
-      });
-    });
-  }
 
   private publish(
     status: NoteCollaborationStatus,
