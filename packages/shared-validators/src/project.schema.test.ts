@@ -103,6 +103,7 @@ describe("project schemas", () => {
           accessSource: "project",
         },
       ],
+      membersTruncated: false,
       taskProgress: { coverage: "tasks-and-checklists", completed: 2, total: 3 },
     };
     expect(projectDetailSchema.safeParse(detail).success).toBe(true);
@@ -172,6 +173,7 @@ describe("project schemas", () => {
       updatedAt: timestamp,
       lastActivityAt: timestamp,
       members: [],
+      membersTruncated: false,
       taskProgress: { coverage: "tasks-and-checklists", completed: 0, total: 0 },
     };
     expect(projectDetailSchema.safeParse(base).success).toBe(true);

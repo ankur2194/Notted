@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { NOTE_DOCUMENT_LIMITS } from "./document.schema";
 import {
   createFolderSchema,
   createNoteSchema,
@@ -37,7 +38,14 @@ describe("Part 31 note validators with the Part 33 document contract", () => {
     { type: "paragraph" },
     { type: "doc", content: [{ type: "text", text: 3 }] },
     { type: "doc", content: [{ type: "text", text: "ok", html: "<script>" }] },
-    { type: "doc", content: new Array(201).fill({ type: "paragraph" }) },
+    // The ROOT child bound, not the per-node `maxChildren: 200` this used to
+    // pin: `maxRootChildren` was raised to 2 000 so a real long note opens,
+    // and `maxNodes` is the same 2 000, so one over the root bound is also
+    // one over the node budget. Read the constant rather than restating it.
+    {
+      type: "doc",
+      content: new Array(NOTE_DOCUMENT_LIMITS.maxRootChildren + 1).fill({ type: "paragraph" }),
+    },
     { type: "doc", content: [{ type: "text", text: "x".repeat(20_001) }] },
     { type: "doc", attrs: { value: Number.NaN } },
   ])("rejects malformed or over-limit document %#", (value) => {
