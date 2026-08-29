@@ -18,6 +18,7 @@
     "print.css"
   ],
   "dependencies": {
+    "@notted/shared-types": "workspace:*",
     "zod": "4.4.3"
   },
   "scripts": {

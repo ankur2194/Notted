@@ -1,17 +1,27 @@
 import { z } from "zod";
 
-import { uuidSchema } from "./common.schema";
+import { HEX_COLOR_PATTERN } from "./common.schema";
 import { formatBinaryBytes } from "./format-bytes";
 
-/** JSON values accepted by the framework-neutral document contract. */
-export type NoteDocumentJson =
-  boolean | number | string | null | NoteDocumentJson[] | { [key: string]: NoteDocumentJson };
+import type { JsonValue, NoteDocument } from "@notted/shared-types";
 
-/** Structurally compatible with `NoteDocument` from `@notted/shared-types`. */
-export interface NoteDocument {
-  readonly type: "doc";
-  readonly [key: string]: NoteDocumentJson;
-}
+/**
+ * JSON values accepted by the framework-neutral document contract.
+ *
+ * An alias for `JsonValue`, not a second declaration of it. These were two
+ * structurally identical recursive types whose only stated relationship was a
+ * comment, so if either grew a member the mismatch would surface as an
+ * assignability error in whichever app imported both — and nothing here would
+ * fail.
+ */
+export type NoteDocumentJson = JsonValue;
+
+/**
+ * The document contract, re-exported from `@notted/shared-types` rather than
+ * declared twice. The node types, attribute rules, bounds and migration policy
+ * are owned here; the shape is owned there.
+ */
+export type { NoteDocument };
 
 export interface NoteDocumentMigrationResult {
   readonly doc: NoteDocument;
@@ -278,8 +288,25 @@ function isUsableMentionLabel(value: unknown): value is string {
   return !UNSAFE_TEXT_PATTERN.test(value);
 }
 
+/**
+ * The same rule `uuidSchema` enforces, as a plain regex.
+ *
+ * This ran `uuidSchema.safeParse` per UUID attribute, from `validateNodeAttrs`,
+ * the three attribute readers, and every render path — and
+ * `TiptapEditor.handleUpdate` calls `safeParseNoteDocument(editor.getJSON())` on
+ * EVERY editor transaction, i.e. every keystroke. Building a Zod result object
+ * per attribute per keystroke is the wrong shape for this position; the file
+ * already prefers module-level regexes for every other hot predicate
+ * (`UNSAFE_TEXT_PATTERN`, `URL_SCHEME_PATTERN`, `HTTP_HOST_LABEL_PATTERN`), and
+ * this was the lone Zod holdout among them.
+ *
+ * Version-agnostic on purpose, matching `uuidSchema`: the contract is "36 hex
+ * characters in 8-4-4-4-12", not "RFC 4122 v4".
+ */
+const UUID_VALUE_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
 function isUuidValue(value: unknown): value is string {
-  return typeof value === "string" && uuidSchema.safeParse(value).success;
+  return typeof value === "string" && UUID_VALUE_PATTERN.test(value);
 }
 
 function isMentionId(value: unknown): value is string {
@@ -888,7 +915,7 @@ const URL_MAX_LENGTH = 2_048;
 const MAILTO_ADDRESS_MAX_LENGTH = 320;
 const TEL_VALUE_MAX_LENGTH = 64;
 const URL_SCHEME_PATTERN = /^([A-Za-z][A-Za-z0-9+.-]*):/;
-const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
+// Imported from `common.schema.ts`; see HEX_COLOR_PATTERN there.
 const HTTP_HOST_LABEL_PATTERN = /^[a-z0-9-]+$/i;
 const MAILBOX_LOCAL_PATTERN = /^[A-Za-z0-9.!#$&'*+/=?^_`{|}~-]+$/;
 const TELEPHONE_PATTERN = /^\+?(?:\d|\(\d+\))(?:[\d .-]|\(\d+\))*$/;
@@ -2061,13 +2088,18 @@ function validateNode(
   }
 }
 
-function validateDocumentContract(value: unknown, errors: string[]): void {
-  let serialized: string | undefined;
-  try {
-    serialized = JSON.stringify(value);
-  } catch {
-    errors.push("Document must be serializable JSON");
-    return;
+function validateDocumentContract(value: unknown, errors: string[], serializedHint?: string): void {
+  // `serializedHint` exists so the migration path does not stringify the same
+  // input twice: `assertMigrationInputBounds` already produced this string, and
+  // on a large note that serialisation is the dominant cost of the whole parse.
+  let serialized: string | undefined = serializedHint;
+  if (serialized === undefined) {
+    try {
+      serialized = JSON.stringify(value);
+    } catch {
+      errors.push("Document must be serializable JSON");
+      return;
+    }
   }
   if (serialized === undefined) {
     errors.push("Document must be serializable JSON");
@@ -2094,9 +2126,12 @@ function validateDocumentContract(value: unknown, errors: string[]): void {
 }
 
 /** Validate the complete contract while collecting all independently reachable issues. */
-export function safeParseNoteDocument(value: unknown): NoteDocumentSafeParseResult {
+export function safeParseNoteDocument(
+  value: unknown,
+  serializedHint?: string,
+): NoteDocumentSafeParseResult {
   const errors: string[] = [];
-  validateDocumentContract(value, errors);
+  validateDocumentContract(value, errors, serializedHint);
   return errors.length === 0
     ? { success: true, doc: value as NoteDocument, errors: [] }
     : { success: false, errors };
@@ -2163,7 +2198,7 @@ function childLimitAt(depth: number): number {
   return depth === 0 ? NOTE_DOCUMENT_LIMITS.maxRootChildren : NOTE_DOCUMENT_LIMITS.maxChildren;
 }
 
-function assertMigrationInputBounds(input: unknown): void {
+function assertMigrationInputBounds(input: unknown): string {
   let serialized: string | undefined;
   try {
     serialized = JSON.stringify(input);
@@ -2176,6 +2211,7 @@ function assertMigrationInputBounds(input: unknown): void {
   if (utf8ByteLength(serialized) > NOTE_DOCUMENT_LIMITS.serializedBytes) {
     throw new NoteDocumentMigrationError("input exceeds the serialized byte limit");
   }
+  const serializedInput = serialized;
 
   const counters = { nodes: 0, totalText: 0 };
   const visit = (node: unknown, depth: number): void => {
@@ -2244,6 +2280,7 @@ function assertMigrationInputBounds(input: unknown): void {
     for (const child of node.content) visit(child, depth + 1);
   };
   visit(input, 0);
+  return serializedInput;
 }
 
 function recoverTextFromNode(node: unknown): string {
@@ -2742,8 +2779,10 @@ export function normalizeUnsupportedNodes(input: unknown): {
   readonly doc: NoteDocument;
   readonly changed: boolean;
 } {
-  assertMigrationInputBounds(input);
-  const clean = safeParseNoteDocument(input);
+  // One serialisation of `input`, reused. Both calls stringified it separately,
+  // and on a large note that is the dominant cost of this path.
+  const serialized = assertMigrationInputBounds(input);
+  const clean = safeParseNoteDocument(input, serialized);
   if (clean.success) return { doc: clean.doc, changed: false };
 
   const content = normalizeToBlocks(input);

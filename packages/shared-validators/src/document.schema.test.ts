@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { uuidSchema } from "./common.schema";
 import {
   NOTE_DOCUMENT_ATTACHMENT_CLASS,
   NOTE_DOCUMENT_ATTACHMENT_META_CLASS,
@@ -2368,5 +2369,71 @@ describe("root block budget", () => {
         content: [{ type: "blockquote", content: paras(NOTE_DOCUMENT_LIMITS.maxChildren + 1) }],
       }),
     ).toThrow(NoteDocumentMigrationError);
+  });
+});
+
+/*
+ * `safeParseNoteDocument` runs on EVERY editor transaction
+ * (`TiptapEditor.handleUpdate`), so its two hot costs are pinned here.
+ */
+describe("hot-path parse cost", () => {
+  const ID = "9bb58c7e-8f49-4a7d-b60c-0e32a30a2980";
+
+  it("accepts and rejects exactly the identifiers uuidSchema does", () => {
+    // `isUuidValue` stopped calling `uuidSchema.safeParse` per attribute per
+    // keystroke and now tests a module-level regex. The two must not drift, so
+    // this compares them on the same values, through the document contract.
+    const accepted = [ID, ID.toUpperCase()];
+    const rejected = [
+      "",
+      "not-a-uuid",
+      ID.slice(0, -1),
+      `${ID}0`,
+      ` ${ID}`,
+      `${ID}\n`,
+      ID.replace("-", ""),
+      ID.replace("9", "g"),
+    ];
+
+    for (const value of [...accepted, ...rejected]) {
+      const viaContract = safeParseNoteDocument({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "mention", attrs: { id: value, label: "Ada" } }],
+          },
+        ],
+      }).success;
+      expect(viaContract, value).toBe(uuidSchema.safeParse(value).success);
+    }
+  });
+
+  it("serializes a migration input once, not twice", () => {
+    // `assertMigrationInputBounds` and `safeParseNoteDocument` each used to
+    // stringify the same input. On a large note that serialisation dominates
+    // the call, so the bounds check now hands its result to the parse.
+    //
+    // Counted through `toJSON`, which `JSON.stringify` calls once per
+    // serialisation of this exact object — a direct measure of the thing that
+    // was duplicated, with no spy on a global.
+    let serializations = 0;
+    const content = Array.from({ length: 40 }, (_unused, index) => ({
+      type: "paragraph",
+      content: [{ type: "text", text: `line ${index}` }],
+    }));
+    const document = {
+      type: "doc",
+      content,
+      toJSON(): unknown {
+        serializations += 1;
+        return { type: "doc", content };
+      },
+    };
+
+    const result = migrateNoteDocument(document);
+
+    expect(result.doc.content).toHaveLength(40);
+    expect(serializations).toBe(1);
   });
 });
