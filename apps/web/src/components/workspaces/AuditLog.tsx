@@ -62,14 +62,24 @@ export function AuditLog({ workspaceId }: { readonly workspaceId: string }) {
   const [toInput, setToInput] = useState("");
 
   const headingRef = useRef<HTMLHeadingElement>(null);
+  /** Monotonic request id; only the newest response is applied. */
+  const requestSequence = useRef(0);
 
   const load = useCallback(async () => {
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
     setLoadFailure(null);
     const result = await listAuditLogs(workspaceId, {
       page: pageNumber,
       limit: PAGE_LIMIT,
       ...filters,
     });
+    // Paging and filtering both re-run this effect while a request may still be
+    // in flight, and nothing ordered the responses: a slower earlier request
+    // landing last overwrote the newer answer, so the table showed the previous
+    // page's rows -- or the unfiltered rows -- under the current controls. Only
+    // the newest request may write.
+    if (requestSequence.current !== sequence) return;
     if (result.ok) {
       setPage(result.data);
       return;

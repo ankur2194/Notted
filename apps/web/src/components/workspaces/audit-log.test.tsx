@@ -148,6 +148,32 @@ describe("AuditLog", () => {
     expect(screen.getByRole("button", { name: "Previous" })).toBeEnabled();
   });
 
+  it("ignores a superseded response that lands after a newer one", async () => {
+    // Nothing ordered these responses. Filtering (or paging) while the previous
+    // request is still in flight left the older answer free to overwrite the
+    // newer one, so the table showed unfiltered rows under the applied filter.
+    const user = userEvent.setup();
+    const filtered: AuditLogEntry = { ...entry, id: `${USER_ID}9`, action: "webhook.created" };
+    let resolveFirst: (value: ReturnType<typeof page>) => void = () => undefined;
+    list.mockReturnValueOnce(
+      new Promise((resolvePage) => {
+        resolveFirst = resolvePage;
+      }),
+    );
+    list.mockResolvedValue(page([filtered]));
+
+    render(<AuditLog workspaceId={WORKSPACE_ID} />);
+    await user.type(screen.getByLabelText("Action"), "webhook.created");
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(await screen.findByText("webhook.created")).toBeVisible();
+
+    // The unfiltered first request finally answers.
+    resolveFirst(page([entry]));
+    await screen.findByText("webhook.created");
+
+    expect(screen.queryByText("apiKey.created")).toBeNull();
+  });
+
   it("disables Next when there is no further page", async () => {
     list.mockResolvedValue(page([entry], false));
     render(<AuditLog workspaceId={WORKSPACE_ID} />);
