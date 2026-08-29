@@ -66,6 +66,37 @@ function saveRegion(): HTMLElement {
   return screen.getByTestId("note-save-status");
 }
 
+/**
+ * A `ResizeObserver` stand-in, because jsdom implements none: it captures the
+ * callback so a test can deliver notifications on demand, and a manual
+ * animation-frame queue so a test decides when the frame runs.
+ */
+function observeHarness() {
+  const notify: (() => void)[] = [];
+  const frames: (() => void)[] = [];
+  class FakeResizeObserver {
+    constructor(callback: () => void) {
+      notify.push(callback);
+    }
+    observe(): void {}
+    disconnect(): void {}
+    unobserve(): void {}
+  }
+  vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+  vi.stubGlobal("requestAnimationFrame", (callback: () => void) => frames.push(callback));
+  vi.stubGlobal("cancelAnimationFrame", () => undefined);
+  return {
+    deliver: () => {
+      for (const callback of notify) callback();
+    },
+    runFrame: () => {
+      const queued = frames.splice(0, frames.length);
+      for (const callback of queued) callback();
+    },
+    frameCount: () => frames.length,
+  };
+}
+
 describe("PageContainer layout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -665,5 +696,35 @@ describe("PageContainer focus mode", () => {
     await user.click(toggle());
     expect(focusAttribute()).toBe("true");
     expect(mocks.updateNote).not.toHaveBeenCalled();
+  });
+});
+
+describe("page container measurement", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("measures once per frame however many resize notifications arrive", () => {
+    // `measure` forces layout about six times and once more per page break, in
+    // the same frame ProseMirror writes to the DOM. Its own `setState` resizes
+    // the elements it observes, so notifications arrive in bursts.
+    const harness = observeHarness();
+    view();
+
+    const rect = vi.spyOn(Element.prototype, "getBoundingClientRect");
+    harness.deliver();
+    harness.deliver();
+    harness.deliver();
+    // Three notifications, one queued frame.
+    expect(harness.frameCount()).toBe(1);
+    expect(rect).not.toHaveBeenCalled();
+
+    act(() => harness.runFrame());
+    const afterOnePass = rect.mock.calls.length;
+    expect(afterOnePass).toBeGreaterThan(0);
+
+    // And the frame really is the throttle: nothing further runs until the next
+    // notification queues another one.
+    act(() => harness.runFrame());
+    expect(rect.mock.calls.length).toBe(afterOnePass);
+    rect.mockRestore();
   });
 });

@@ -281,6 +281,39 @@ export function PageContainer({
     );
   }, [readExplicitBreaks]);
 
+  /**
+   * One measurement per frame, however many notifications arrive.
+   *
+   * `measure` forces layout roughly six times — two `clientWidth`/`clientHeight`
+   * reads, two `offsetHeight` reads, two `getBoundingClientRect` calls — plus
+   * one rect per explicit page break, and it does that in the same frame
+   * ProseMirror is writing to the DOM. A `ResizeObserver` callback that calls
+   * `setState` resizes the very elements it observes, so the next frame brings
+   * another notification; coalescing bounds each frame to a single pass instead
+   * of one per notification.
+   *
+   * The mount call below stays synchronous: the first paint needs its
+   * measurements, not the ones after the next frame.
+   *
+   * Deliberately NOT caching the explicit-break offsets keyed on their count,
+   * zoom and page size, as the finding suggests. Editing text ABOVE a break
+   * moves it without changing any of those three, and editing is precisely when
+   * this runs — the cache would leave the guides drawn where the breaks used to
+   * be, which is worse than measuring them.
+   */
+  const pendingFrame = useRef<number | null>(null);
+  const scheduleMeasure = useCallback((): void => {
+    if (typeof requestAnimationFrame === "undefined") {
+      measure();
+      return;
+    }
+    if (pendingFrame.current !== null) return;
+    pendingFrame.current = requestAnimationFrame(() => {
+      pendingFrame.current = null;
+      measure();
+    });
+  }, [measure]);
+
   useEffect(() => {
     measure();
     // jsdom implements no `ResizeObserver`, and neither does a server render.
@@ -293,14 +326,20 @@ export function PageContainer({
     // while the table dialog is open. Editing the note changes the content
     // column's height, which is what wakes this observer.
     if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => measure());
+    const observer = new ResizeObserver(() => scheduleMeasure());
     if (viewportRef.current !== null) observer.observe(viewportRef.current);
     if (paperRef.current !== null) observer.observe(paperRef.current);
     if (contentRef.current !== null) observer.observe(contentRef.current);
     const flow = flowElement();
     if (flow !== null && flow !== contentRef.current) observer.observe(flow);
-    return () => observer.disconnect();
-  }, [measure, flowElement]);
+    return () => {
+      observer.disconnect();
+      if (pendingFrame.current !== null) {
+        cancelAnimationFrame(pendingFrame.current);
+        pendingFrame.current = null;
+      }
+    };
+  }, [measure, scheduleMeasure, flowElement]);
 
   const scale = resolveZoomScale(zoom, viewport, pageSize);
   scaleRef.current = scale;
