@@ -21,6 +21,7 @@ import {
   schema,
 } from "../src/database/schema";
 import { SEED_IDS, seedDatabase } from "../src/database/seed";
+import { FoldersService } from "../src/notes/folders.service";
 import { NoteSharesService } from "../src/notes/note-shares.service";
 import { NoteVersionsService } from "../src/notes/note-versions.service";
 import { NOTE_DOMAIN_EVENT_QUEUE } from "../src/notes/notes.constants";
@@ -109,12 +110,22 @@ async function withNotes(
       const suffix = randomUUID();
       await work({
         tx: tx as unknown as DatabaseTransaction,
+        // Part 15/16: folders moved to their own service, so this harness wires
+        // the real one. `NotesService` still exposes the four folder use cases
+        // as delegates, which is what every caller in this suite goes through.
         service: new NotesService(
           database,
           authorization,
           tenant,
           { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
           new NoteVersionsService(tenant),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          new FoldersService(database, authorization, tenant, {
+            scheduleSearchSync: async () => undefined,
+          } as unknown as NoteSearchIndexProducer),
         ),
         shareService: new NoteSharesService(database, authorization, tenant),
         owner: principal(SEED_IDS.users.alphaOwner),
@@ -1064,6 +1075,20 @@ describe.skipIf(!HAS_DATABASE)("Part 31 core note APIs (live PostgreSQL)", () =>
         tenant,
         { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
         new NoteVersionsService(tenant),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        new FoldersService(
+          database,
+          new AuthorizationEntryService(
+            new AuthorizationRepository(database, tenant),
+            new AuthorizationPolicyService(),
+            tenant,
+          ),
+          tenant,
+          { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
+        ),
       );
     const normalTenant = new TenantContextService();
     const normalDatabase = {
@@ -1452,6 +1477,20 @@ describe.skipIf(!HAS_DATABASE)("Part 31 core note APIs (live PostgreSQL)", () =>
       tenant,
       { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
       new NoteVersionsService(tenant),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new FoldersService(
+        guardedDatabase,
+        new AuthorizationEntryService(
+          new AuthorizationRepository(guardedDatabase, tenant),
+          new AuthorizationPolicyService(),
+          tenant,
+        ),
+        tenant,
+        { scheduleSearchSync: async () => undefined } as unknown as NoteSearchIndexProducer,
+      ),
     );
     const create = (title: string, parentId: string | null) =>
       service.create({
