@@ -3,6 +3,7 @@ import "server-only";
 import { SHELL_API_PATHS, type ShellBootstrap } from "@notted/shared-types";
 import { shellBootstrapSchema, uuidSchema } from "@notted/shared-validators";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 import { publicEnvironment } from "@/config/public-environment";
 import { WORKSPACE_SELECTION_COOKIE } from "@/lib/shell/constants";
@@ -33,7 +34,15 @@ async function requestBootstrap(cookie: string, workspaceId?: string): Promise<R
   });
 }
 
-export async function getServerShell(): Promise<ServerShellResult> {
+/**
+ * Wrapped in React `cache()` because the dashboard reads it TWICE per
+ * navigation: `layout.tsx` needs the memberships and notifications for the
+ * shell, and `page.tsx` needs the current workspace for its own content. App
+ * Router cannot pass props from a layout to a page, so both call it, and each
+ * call is a `/shell/bootstrap` round trip. The cache is per request, which is
+ * exactly the scope in which the second call is redundant.
+ */
+export const getServerShell = cache(async function getServerShell(): Promise<ServerShellResult> {
   const values = await cookies();
   const forwardedCookies = cookieHeader(values);
   const selected = uuidSchema.safeParse(values.get(WORKSPACE_SELECTION_COOKIE)?.value);
@@ -54,4 +63,4 @@ export async function getServerShell(): Promise<ServerShellResult> {
   } catch {
     return { status: "unavailable" };
   }
-}
+});

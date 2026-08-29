@@ -12,9 +12,16 @@ export default async function DashboardPage() {
   // Read only once a workspace is actually selected: with no tenant to scope a
   // task query to there is nobody to be the assignee either.
   const viewerId = shell.status === "ready" && current !== null ? shell.data.user.id : null;
-  const recent =
-    current === null ? null : await getServerNoteList(current.workspaceId, {}, { view: "recent" });
-  const folders = current === null ? null : await getServerFolders(current.workspaceId);
+  // Independent reads, so they overlap. Awaited one after the other, the page
+  // paid both round trips end to end for data neither call needs from the
+  // other; `tasks/page.tsx` already reads its two in parallel.
+  const [recent, folders] =
+    current === null
+      ? [null, null]
+      : await Promise.all([
+          getServerNoteList(current.workspaceId, {}, { view: "recent" }),
+          getServerFolders(current.workspaceId),
+        ]);
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <section

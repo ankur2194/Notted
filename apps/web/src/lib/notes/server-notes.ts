@@ -11,6 +11,7 @@ import {
   uuidSchema,
   workspaceMemberPageSchema,
 } from "@notted/shared-validators";
+import { cache } from "react";
 
 import type { ServerReadResult } from "@/lib/api/server-read";
 import type {
@@ -143,13 +144,22 @@ export function getServerNoteNavigation(
   );
 }
 
-export function getServerFolders(workspaceId: string): Promise<ServerReadResult<FolderPage>> {
+/**
+ * Wrapped in React `cache()`: the dashboard layout reads the folder list for the
+ * sidebar and the dashboard page reads it again for the note browser, one
+ * request apart, with no way to pass it down (App Router gives a layout no
+ * channel to its page). Per request is precisely the window in which the second
+ * read is redundant.
+ */
+export const getServerFolders = cache(function getServerFolders(
+  workspaceId: string,
+): Promise<ServerReadResult<FolderPage>> {
   const workspace = uuidSchema.safeParse(workspaceId);
   if (!workspace.success) return Promise.resolve({ status: "not-found" });
   return readJson(`${NOTE_API_PATHS.folders(workspace.data)}?page=1&limit=100`, (value) =>
     folderPageSchema.safeParse(value),
   );
-}
+});
 
 export function getServerWorkspaceMembers(
   workspaceId: string,
