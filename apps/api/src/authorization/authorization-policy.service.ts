@@ -300,7 +300,7 @@ export class AuthorizationPolicyService {
     }
 
     if (resource.kind === "session") {
-      return this.decideSession(evaluation, action, resource, now);
+      return this.decideSession(evaluation, action, now);
     }
 
     if (
@@ -377,12 +377,25 @@ export class AuthorizationPolicyService {
   private decideSession(
     evaluation: AuthorizationEvaluation,
     action: AuthorizationAction,
-    resource: AuthorizationResourceFacts,
     now: number,
   ): AuthorizationDecision {
     const actor = evaluation.actor;
-    if (actor === null || actor.kind !== "user" || resource.targetUserId !== actor.userId) {
-      return deny(evaluation, "authorization.concealed", "session_owner_mismatch");
+    // NOT an ownership check, and it never was one. `resource.targetUserId` for
+    // a session is not a loaded fact — `AuthorizationRepository.loadResource`
+    // returns null for a session locator, so the field can only ever be
+    // whatever the caller put there, which the facts contract forbids using as
+    // an authorization input. The single caller derived it from the same
+    // principal as the actor, so `targetUserId !== actor.userId` never fired
+    // and read as a guard while enforcing nothing; the coverage report showed
+    // that arm as an uncovered statement.
+    //
+    // The real ownership proof lives where the row does:
+    // `eq(session.userId, principal.userId)` in `auth-security.service.ts`. All
+    // this branch decides is that a session control needs a user actor at all,
+    // which is a live decision — an API-key or system actor reaching
+    // `session.list` is refused here.
+    if (actor === null || actor.kind !== "user") {
+      return deny(evaluation, "authorization.concealed", "current_user_session_only");
     }
     if (action !== "session.list" && action !== "session.revoke") {
       return deny(evaluation, "authorization.forbidden", "invalid_session_action");

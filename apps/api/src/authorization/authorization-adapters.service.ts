@@ -77,15 +77,6 @@ export class AuthorizationAdaptersService {
     return this.entry.authorizeApiKey(input);
   }
 
-  authorizeCurrentUserSession(input: {
-    readonly principal: AuthenticatedPrincipal;
-    readonly action: "session.list" | "session.revoke";
-    readonly sessionId: string;
-    readonly targetUserId: string;
-  }): AuthorizedOperation {
-    return this.entry.authorizeCurrentUserSession(input);
-  }
-
   run<T>(operation: AuthorizedOperation, work: () => T): T {
     return this.entry.run(operation, work);
   }

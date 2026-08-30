@@ -103,7 +103,6 @@ export class AuthController {
         kind: "session",
         id: sessionId,
         workspaceId: null,
-        targetUserId: principal.userId,
         project: null,
         loadedAt: new Date().toISOString(),
         relationsValid: true,

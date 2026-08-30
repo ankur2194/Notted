@@ -127,39 +127,6 @@ export class AuthorizationEntryService {
     return this.authorizeMachine(input.actor, input.action, input.resource, input.correlationId);
   }
 
-  authorizeCurrentUserSession(input: {
-    readonly principal: AuthenticatedPrincipal;
-    readonly action: "session.list" | "session.revoke";
-    readonly sessionId: string;
-    readonly targetUserId: string;
-  }): AuthorizedOperation {
-    const actor = actorFromPrincipal(input.principal);
-    const resource: AuthorizationResourceFacts = Object.freeze({
-      kind: "session",
-      id: input.sessionId,
-      workspaceId: null,
-      targetUserId: input.targetUserId,
-      project: null,
-      loadedAt: new Date().toISOString(),
-      relationsValid: true,
-    });
-    const decision = assertAllowed(this.policy, {
-      actor,
-      action: input.action,
-      resource,
-      tenant: { workspaceId: null, membershipRole: null, membershipLoadedAt: null },
-    });
-    return Object.freeze({
-      actor,
-      action: input.action,
-      resource,
-      workspaceId: null,
-      userId: actor.userId,
-      decision,
-      membershipRole: null,
-    });
-  }
-
   run<T>(operation: AuthorizedOperation, work: () => T): T {
     if (operation.workspaceId === null) return work();
     const context = createTenantContext({

@@ -546,6 +546,44 @@ describe("AuthorizationPolicyService", () => {
     }
   });
 
+  /*
+   * What the session branch actually decides, now that it says so.
+   *
+   * It used to compare `resource.targetUserId` against the actor and deny
+   * `session_owner_mismatch`, which read as an ownership check. It could not
+   * be one: `AuthorizationRepository.loadResource` returns null for a session
+   * locator, so that field is never a server-loaded fact — the only caller
+   * built it from the same principal as the actor, and the branch was an
+   * uncovered statement in the coverage report. Ownership of a session row is
+   * proved by `eq(session.userId, principal.userId)` in
+   * `auth-security.service.ts`.
+   *
+   * The decision that remains is live and worth pinning: a session control
+   * needs a user actor. An API key or a system actor holding the right scopes
+   * must not reach one.
+   */
+  it("refuses session controls to any actor that is not a signed-in user", () => {
+    for (const action of ["session.list", "session.revoke"] as const) {
+      const base = evaluation("owner", action, resourceFor(action));
+      expect(policy.decide(base, NOW).allowed).toBe(true);
+
+      for (const other of [
+        {
+          kind: "api-key" as const,
+          apiKeyId: "key-1",
+          workspaceId: WORKSPACE_ID,
+          scopes: ["read", "write", "admin"] as const,
+        },
+        { kind: "system" as const, jobName: "session-sweep" },
+      ]) {
+        expect(policy.decide({ ...base, actor: other }, NOW)).toMatchObject({
+          allowed: false,
+          code: "authorization.concealed",
+        });
+      }
+    }
+  });
+
   it("requires a fresh session to write AI provider credentials", () => {
     const stale: UserAuthorizationActor = { ...actor, isFresh: false };
     expect(

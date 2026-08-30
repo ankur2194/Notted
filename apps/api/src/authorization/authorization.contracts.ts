@@ -256,7 +256,15 @@ export type ResourceLocator =
       readonly id: string;
     }
   | { readonly kind: "tag"; readonly id: string }
-  | { readonly kind: "session"; readonly id: string; readonly targetUserId: string };
+  /*
+   * No `targetUserId`. A session is the only kind `AuthorizationRepository`
+   * refuses to load — it returns null for this locator — so there are no
+   * server-loaded facts to compare a target against, and the field was only
+   * ever the caller repeating the principal back to itself. Ownership of a
+   * session row is proved by the query that touches it, in
+   * `auth-security.service.ts`.
+   */
+  | { readonly kind: "session"; readonly id: string };
 
 export interface AuthorizedOperation {
   readonly actor: AuthorizationActor;
@@ -268,8 +276,8 @@ export interface AuthorizedOperation {
   /**
    * The actor's workspace membership role at the time of authorization.
    *
-   * `null` for system / API-key actors and for the session-only
-   * `authorizeCurrentUserSession` path. User actors carry the role loaded by
+   * `null` for system / API-key actors and for the session-only path in
+   * `AuthController`. User actors carry the role loaded by
    * `AuthorizationRepository.findMembership`; downstream handlers that need
    * the role for batch decisions (e.g. Part 52 search authorizing many notes
    * with one role lookup) read it from here rather than re-querying.

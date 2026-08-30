@@ -185,18 +185,4 @@ describe("AuthorizationAdaptersService contracts", () => {
     expect(result).toMatchObject({ workspaceId: WORKSPACE_ID, userId: USER_ID });
     expect(tenant.tryGet()).toBeNull();
   });
-
-  it("delegates current-user session controls to the same policy without workspace authority", () => {
-    const { adapters, repository, decide } = harness();
-    const operation = adapters.authorizeCurrentUserSession({
-      principal,
-      action: "session.revoke",
-      sessionId: "session-1",
-      targetUserId: USER_ID,
-    });
-    expect(operation).toMatchObject({ workspaceId: null, decision: { allowed: true } });
-    expect(repository.findMembership).not.toHaveBeenCalled();
-    expect(repository.loadResource).not.toHaveBeenCalled();
-    expect(decide).toHaveBeenCalledOnce();
-  });
 });
