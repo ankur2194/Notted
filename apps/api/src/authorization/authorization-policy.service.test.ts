@@ -4,6 +4,7 @@ import { AuthorizationPolicyService } from "./authorization-policy.service";
 import {
   AUTHORIZATION_ACTIONS,
   type AuthorizationAction,
+  type AuthorizationActor,
   type AuthorizationEvaluation,
   type AuthorizationResourceFacts,
   type AuthorizationResourceKind,
@@ -567,15 +568,23 @@ describe("AuthorizationPolicyService", () => {
       const base = evaluation("owner", action, resourceFor(action));
       expect(policy.decide(base, NOW).allowed).toBe(true);
 
-      for (const other of [
+      const others: readonly AuthorizationActor[] = [
         {
-          kind: "api-key" as const,
+          kind: "api-key",
           apiKeyId: "key-1",
           workspaceId: WORKSPACE_ID,
-          scopes: ["read", "write", "admin"] as const,
+          scopes: ["read", "write", "admin"],
         },
-        { kind: "system" as const, jobName: "session-sweep" },
-      ]) {
+        {
+          kind: "system",
+          authorityId: "authority-1",
+          workspaceId: WORKSPACE_ID,
+          purpose: "session-sweep",
+          allowedActions: [...AUTHORIZATION_ACTIONS],
+          allowedResourceKinds: ["session"],
+        },
+      ];
+      for (const other of others) {
         expect(policy.decide({ ...base, actor: other }, NOW)).toMatchObject({
           allowed: false,
           code: "authorization.concealed",

@@ -27,6 +27,7 @@
 
 import { HttpStatus, Inject, Injectable, type NestMiddleware } from "@nestjs/common";
 
+import { writeApiFailure } from "../common/errors/write-api-failure";
 import { VerifiedHostsService } from "../common/verified-hosts.service";
 import { APP_CONFIG, type AppConfig } from "../config/app.config";
 
@@ -67,26 +68,18 @@ export class TrustedHostMiddleware implements NestMiddleware {
           next();
           return;
         }
-        response.status(HttpStatus.MISDIRECTED).json({
-          success: false,
-          error: {
-            code: "UNTRUSTED_HOST",
-            message: "This host is not served by this deployment.",
-          },
-          requestId: response.getHeader("X-Request-Id") ?? "unknown",
+        writeApiFailure(response, HttpStatus.MISDIRECTED, {
+          code: "UNTRUSTED_HOST",
+          message: "This host is not served by this deployment.",
         });
       })
       .catch(() => {
         // `isTrustedHost` already fails closed on a database error, so reaching
         // here means something unexpected. Refuse rather than let an unchecked
         // host through on an error path.
-        response.status(HttpStatus.MISDIRECTED).json({
-          success: false,
-          error: {
-            code: "UNTRUSTED_HOST",
-            message: "This host is not served by this deployment.",
-          },
-          requestId: response.getHeader("X-Request-Id") ?? "unknown",
+        writeApiFailure(response, HttpStatus.MISDIRECTED, {
+          code: "UNTRUSTED_HOST",
+          message: "This host is not served by this deployment.",
         });
       });
   }

@@ -3,6 +3,8 @@ import { ExpressAdapter } from "@bull-board/express";
 import { Injectable, type OnApplicationBootstrap } from "@nestjs/common";
 import { Router } from "express";
 
+import { writeApiFailure } from "../common/errors/write-api-failure";
+
 import { BULL_BOARD_PATH } from "./bull-board-policy";
 import { QueueInfrastructureService } from "./queue-infrastructure.service";
 import { RedactedBullMqAdapter } from "./redacted-bull-mq.adapter";
@@ -24,10 +26,9 @@ export class BullBoardService implements OnApplicationBootstrap {
     return (request: Request, response: Response, next: NextFunction): void => {
       this.initialize();
       if (!this.ready) {
-        response.status(503).json({
-          success: false,
-          error: { code: "SERVICE_UNAVAILABLE", message: "Queue administration is unavailable." },
-          requestId: response.getHeader("X-Request-Id") ?? "unknown",
+        writeApiFailure(response, 503, {
+          code: "SERVICE_UNAVAILABLE",
+          message: "Queue administration is unavailable.",
         });
         return;
       }

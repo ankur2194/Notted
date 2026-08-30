@@ -1,9 +1,9 @@
 import { Inject, Injectable } from "@nestjs/common";
 
 import { ApiHttpException } from "../common/errors/api-http.exception";
+import { writeApiFailure } from "../common/errors/write-api-failure";
 import { RateLimitService } from "../common/rate-limit/rate-limit.service";
 import { RATE_LIMIT_STORE, type RateLimitStore } from "../common/rate-limit/rate-limit.types";
-import { getRequestId } from "../common/request/request-context";
 import { APP_CONFIG, type AppConfig } from "../config/app.config";
 
 import type { NextFunction, Request, Response } from "express";
@@ -84,10 +84,11 @@ export class AuthRateLimitMiddleware {
    * headers by the time it throws.
    */
   private reject(request: Request, response: Response): void {
-    response.status(429).json({
-      success: false,
-      error: { code: "RATE_LIMITED", message: "Too many requests. Try again later." },
-      requestId: getRequestId(request) ?? "unknown",
-    });
+    writeApiFailure(
+      response,
+      429,
+      { code: "RATE_LIMITED", message: "Too many requests. Try again later." },
+      request,
+    );
   }
 }

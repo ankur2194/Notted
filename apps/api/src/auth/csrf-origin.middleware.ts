@@ -20,7 +20,7 @@ import { Injectable } from "@nestjs/common";
 
 import { getApiKeyActor } from "../api-keys/api-key-context";
 import { ApiHttpException } from "../common/errors/api-http.exception";
-import { getRequestId } from "../common/request/request-context";
+import { writeApiFailure } from "../common/errors/write-api-failure";
 
 import { AuthService } from "./auth.service";
 
@@ -53,11 +53,7 @@ export class CsrfOriginMiddleware {
         next(error);
         return;
       }
-      response.status(error.getStatus()).json({
-        success: false,
-        error: error.safeResponse,
-        requestId: getRequestId(request) ?? "unknown",
-      });
+      writeApiFailure(response, error.getStatus(), error.safeResponse, request);
     }
   }
 }

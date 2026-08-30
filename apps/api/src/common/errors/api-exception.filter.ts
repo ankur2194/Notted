@@ -20,8 +20,8 @@ import { StructuredLogger } from "../logging/structured-logger.service";
 import { getRequestId } from "../request/request-context";
 
 import { ApiHttpException } from "./api-http.exception";
+import { REQUEST_ID_UNAVAILABLE, writeApiFailure } from "./write-api-failure";
 
-import type { ApiErrorEnvelope } from "./api-error";
 import type { ApiError } from "@notted/shared-types";
 import type { Request, Response } from "express";
 
@@ -115,7 +115,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const context = host.switchToHttp();
     const request = context.getRequest<Request>();
     const response = context.getResponse<Response>();
-    const requestId = getRequestId(request) ?? "unavailable";
+    const requestId = getRequestId(request) ?? REQUEST_ID_UNAVAILABLE;
     const status = statusForUnknownException(exception);
     const fallback: ApiError =
       ERROR_BY_STATUS[status] ??
@@ -153,16 +153,15 @@ export class ApiExceptionFilter implements ExceptionFilter {
       );
     }
 
-    const envelope: ApiErrorEnvelope = {
-      success: false,
-      error: {
+    writeApiFailure(
+      response,
+      status,
+      {
         code: safeResponse.code,
         message: safeResponse.message,
         ...(safeResponse.details === undefined ? {} : { details: safeResponse.details }),
       },
-      requestId,
-    };
-
-    response.status(status).json(envelope);
+      request,
+    );
   }
 }

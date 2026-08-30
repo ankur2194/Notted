@@ -17,6 +17,7 @@ import { PlatformOperatorService } from "./auth/platform-operator.service";
 import { ApiExceptionFilter } from "./common/errors/api-exception.filter";
 import { ApiHttpException } from "./common/errors/api-http.exception";
 import { validationExceptionFactory } from "./common/errors/validation-exception.factory";
+import { writeApiFailure } from "./common/errors/write-api-failure";
 import { StructuredLogger } from "./common/logging/structured-logger.service";
 import { RateLimitService } from "./common/rate-limit/rate-limit.service";
 import { getRequestId } from "./common/request/request-context";
@@ -192,10 +193,9 @@ export async function createApplication(): Promise<NestExpressApplication> {
        */
       const declaredLength = Number(request.headers["content-length"]);
       if (!Number.isFinite(declaredLength) || declaredLength > config.requestBodyLimitBytes) {
-        response.status(413).json({
-          success: false,
-          error: { code: "PAYLOAD_TOO_LARGE", message: "The request body is too large." },
-          requestId: response.getHeader("X-Request-Id") ?? "unknown",
+        writeApiFailure(response, 413, {
+          code: "PAYLOAD_TOO_LARGE",
+          message: "The request body is too large.",
         });
         return;
       }
@@ -204,10 +204,9 @@ export async function createApplication(): Promise<NestExpressApplication> {
         next();
         return;
       }
-      response.status(403).json({
-        success: false,
-        error: { code: "CSRF_ORIGIN_INVALID", message: "The request origin is not allowed." },
-        requestId: response.getHeader("X-Request-Id") ?? "unknown",
+      writeApiFailure(response, 403, {
+        code: "CSRF_ORIGIN_INVALID",
+        message: "The request origin is not allowed.",
       });
     });
     express.use(authConfig.basePath, authRateLimit.use.bind(authRateLimit));
@@ -215,10 +214,9 @@ export async function createApplication(): Promise<NestExpressApplication> {
       void authHandler(request, response).catch(() => {
         logger.failure({ component: "auth", outcome: "error" }, "Auth handler failed");
         if (!response.headersSent) {
-          response.status(503).json({
-            success: false,
-            error: { code: "SERVICE_UNAVAILABLE", message: "Authentication is unavailable." },
-            requestId: response.getHeader("X-Request-Id") ?? "unknown",
+          writeApiFailure(response, 503, {
+            code: "SERVICE_UNAVAILABLE",
+            message: "Authentication is unavailable.",
           });
         }
       });
@@ -257,10 +255,9 @@ export async function createApplication(): Promise<NestExpressApplication> {
 
         const policy = bullBoardRequestPolicy(request.method, request.path);
         if (policy === null || (policy.kind === "read" && !hasSafeBullBoardQuery(request.query))) {
-          response.status(404).json({
-            success: false,
-            error: { code: "NOT_FOUND", message: "The requested resource was not found." },
-            requestId: response.getHeader("X-Request-Id") ?? "unknown",
+          writeApiFailure(response, 404, {
+            code: "NOT_FOUND",
+            message: "The requested resource was not found.",
           });
           return;
         }
@@ -286,17 +283,12 @@ export async function createApplication(): Promise<NestExpressApplication> {
         bullBoard.middleware()(request, response, next);
       })().catch((error: unknown) => {
         if (error instanceof ApiHttpException) {
-          response.status(error.getStatus()).json({
-            success: false,
-            error: error.safeResponse,
-            requestId: response.getHeader("X-Request-Id") ?? "unknown",
-          });
+          writeApiFailure(response, error.getStatus(), error.safeResponse);
           return;
         }
-        response.status(503).json({
-          success: false,
-          error: { code: "SERVICE_UNAVAILABLE", message: "Administrative access is unavailable." },
-          requestId: response.getHeader("X-Request-Id") ?? "unknown",
+        writeApiFailure(response, 503, {
+          code: "SERVICE_UNAVAILABLE",
+          message: "Administrative access is unavailable.",
         });
       });
     },
@@ -328,17 +320,12 @@ export async function createApplication(): Promise<NestExpressApplication> {
       // An invalid API key raises a real 401. Collapsing every error into 503
       // would report that — and every other credential failure — as an outage.
       if (error instanceof ApiHttpException) {
-        response.status(error.getStatus()).json({
-          success: false,
-          error: error.safeResponse,
-          requestId: response.getHeader("X-Request-Id") ?? "unknown",
-        });
+        writeApiFailure(response, error.getStatus(), error.safeResponse);
         return;
       }
-      response.status(503).json({
-        success: false,
-        error: { code: "SERVICE_UNAVAILABLE", message: "Authentication is unavailable." },
-        requestId: response.getHeader("X-Request-Id") ?? "unknown",
+      writeApiFailure(response, 503, {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Authentication is unavailable.",
       });
     });
   });
@@ -368,10 +355,9 @@ export async function createApplication(): Promise<NestExpressApplication> {
       // key that slipped past would execute every procedure as its CREATOR,
       // with the creator's full workspace role and the key's scopes ignored.
       if (getApiKeyActor(request) !== undefined) {
-        response.status(403).json({
-          success: false,
-          error: { code: "FORBIDDEN", message: "You are not allowed to do that." },
-          requestId: response.getHeader("X-Request-Id") ?? "unknown",
+        writeApiFailure(response, 403, {
+          code: "FORBIDDEN",
+          message: "You are not allowed to do that.",
         });
         return;
       }
@@ -380,11 +366,7 @@ export async function createApplication(): Promise<NestExpressApplication> {
         next();
       } catch (error: unknown) {
         if (error instanceof ApiHttpException) {
-          response.status(error.getStatus()).json({
-            success: false,
-            error: error.safeResponse,
-            requestId: response.getHeader("X-Request-Id") ?? "unknown",
-          });
+          writeApiFailure(response, error.getStatus(), error.safeResponse);
           return;
         }
         next(error);
