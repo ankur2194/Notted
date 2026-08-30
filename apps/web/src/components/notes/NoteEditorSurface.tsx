@@ -196,7 +196,15 @@ export function NoteEditorSurface({
       if (!result.ok) throw new Error(`attachments unavailable: ${result.kind}`);
       return result.data;
     },
-    enabled: needsAttachments,
+    // Part 58 widens the gate for the same reason the member directory does.
+    // `initialDocument` is the server's projection of the note, but a
+    // collaborative session renders the Y.Doc, and the projection is debounced
+    // -- and refused outright if the document ever fails its contract. While
+    // the two disagree, a stored image node has no directory entry to resolve
+    // against, and an unloaded directory reports `unknown`, never `missing`, so
+    // the node view paints "loading" with nothing left to call it back. Same
+    // key, so a note that also stores an image still issues one request.
+    enabled: needsAttachments || collaborationEnabled,
   });
 
   // Created once and mutated, for the same reason as the mention directory:
@@ -209,12 +217,12 @@ export function NoteEditorSurface({
     // `null` means "not loaded or unavailable", which renders a stored image as
     // loading rather than falsely claiming the attachment was deleted.
     if (attachments.data === undefined) {
-      if (!needsAttachments) return;
+      if (!needsAttachments && !collaborationEnabled) return;
       attachmentDirectory.setEntries(null);
       return;
     }
     attachmentDirectory.setEntries(attachmentEntries(attachments.data));
-  }, [attachmentDirectory, attachments.data, needsAttachments]);
+  }, [attachmentDirectory, attachments.data, needsAttachments, collaborationEnabled]);
 
   const images = useImageUploads({
     workspaceId,

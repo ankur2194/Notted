@@ -7,6 +7,15 @@ import * as Y from "yjs";
 const mocks = vi.hoisted(() => ({ requestAllWorkspaceMembers: vi.fn() }));
 vi.mock("@/lib/notes/requests", () => mocks);
 
+// Only the listing call is replaced; `attachmentEntries` and the path builders
+// stay real, because what these tests prove is whether the request is issued at
+// all, not how a response is mapped onto directory entries.
+const attachments = vi.hoisted(() => ({ requestNoteAttachments: vi.fn() }));
+vi.mock("@/lib/notes/attachment-requests", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/notes/attachment-requests")>()),
+  requestNoteAttachments: attachments.requestNoteAttachments,
+}));
+
 // Part 58. Mocked at the module boundary: what this file proves is which mode
 // the surface resolves to and what that does to the Part 39 save binding, not
 // how a socket handshake behaves.
@@ -400,7 +409,26 @@ describe("NoteEditorSurface collaboration mode", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requestAllWorkspaceMembers.mockResolvedValue(memberPage(WORKSPACE_ID));
+    attachments.requestNoteAttachments.mockResolvedValue({ ok: true, data: { items: [] } });
     collaboration.useNoteCollaboration.mockReturnValue(SOLO);
+  });
+
+  // `initialDocument` is the server's *projection* of the note, and in a
+  // collaborative session the editor renders the Y.Doc instead. The two
+  // disagree for as long as the debounced projection lags -- and indefinitely
+  // if it is refused -- so gating this fetch on the projection alone leaves a
+  // stored image with no directory entry to resolve against. The node view then
+  // paints "Loading image..." forever, because an unloaded directory reports
+  // `unknown`, never `missing`, and nothing ever calls back to repaint it.
+  // The member directory already widens its own gate the same way.
+  it("requests the attachment listing whenever a session is collaborative", async () => {
+    collaboration.useNoteCollaboration.mockReturnValue(collaborativeState());
+    const save = saveSpy();
+    collaborativeView(save);
+
+    await waitFor(() =>
+      expect(attachments.requestNoteAttachments).toHaveBeenCalledWith(WORKSPACE_ID, NOTE_ID),
+    );
   });
 
   it("keeps autosave bound when the handshake resolves to solo", async () => {

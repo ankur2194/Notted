@@ -201,7 +201,18 @@ function validateNodeAttrs(type: NoteDocumentNodeType, attrs: unknown, errors: s
         `Document ${type} rowspan attribute must be an integer 1-${NOTE_DOCUMENT_LIMITS.maxTableCellSpan}`,
       );
     }
-    if (attrs.colwidth !== null && columnWidthsOrNull(attrs.colwidth) === null) {
+    // Absent counts as null. `noteDocumentToYDoc` drops null attributes because
+    // `y-prosemirror` does, so a cell that carries no explicit column widths
+    // comes back from `yDocToNoteDocument` with no `colwidth` key at all rather
+    // than with an explicit null. Treating that as a violation made every note
+    // containing a table fail projection permanently: `notes.content` froze at
+    // the last table-free revision while the Yjs log kept advancing, and every
+    // consumer of that projection silently read a stale document.
+    if (
+      attrs.colwidth !== null &&
+      attrs.colwidth !== undefined &&
+      columnWidthsOrNull(attrs.colwidth) === null
+    ) {
       errors.push(
         `Document ${type} colwidth attribute must be null or an array of widths 0-${NOTE_DOCUMENT_LIMITS.maxTableColumnWidth}`,
       );

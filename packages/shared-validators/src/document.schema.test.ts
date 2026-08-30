@@ -605,6 +605,28 @@ function tableDocument(rows: readonly unknown[]) {
 }
 
 describe("Part 35 table contract", () => {
+  // `noteDocumentToYDoc` drops null attributes on purpose, because
+  // `y-prosemirror` does: a null `colwidth` is stored as no attribute at all,
+  // so `yDocToNoteDocument` hands the projection a cell whose `colwidth` is
+  // absent rather than null. Requiring the key to be present made every note
+  // holding a table fail `safeParseNoteDocument`, which silently froze its
+  // `notes.content` at the last table-free revision -- and with it every reader
+  // of that projection, including the editor's own attachment gate.
+  it("accepts a table cell whose null colwidth was dropped by the Yjs round trip", () => {
+    const document = tableDocument([
+      {
+        type: "tableRow",
+        content: [
+          { ...header("Metric"), attrs: { colspan: 1, rowspan: 1 } },
+          { ...cell("42"), attrs: { colspan: 1, rowspan: 1 } },
+        ],
+      },
+    ]);
+    const result = safeParseNoteDocument(document);
+    expect(result.errors).toEqual([]);
+    expect(result.success).toBe(true);
+  });
+
   it("accepts the structure TipTap's table extensions actually emit", () => {
     const document = tableDocument([
       { type: "tableRow", content: [header("Metric"), header("Value")] },
