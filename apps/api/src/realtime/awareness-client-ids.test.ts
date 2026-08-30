@@ -91,4 +91,31 @@ describe("decodeAwarenessClientIds", () => {
     const overlong = new Uint8Array([0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01]);
     expect(decodeAwarenessClientIds(overlong)).toBeNull();
   });
+
+  /*
+   * The per-entry length check only catches a frame that claims MORE than it
+   * carries. A frame that carries more than it claims decoded happily, so the
+   * clientIDs returned here described only the leading part of a payload the
+   * gateway then relays verbatim — and the contract on this function says
+   * `null` for ANY malformed frame.
+   */
+  it("returns null for trailing bytes after the last declared entry", () => {
+    const exact = awarenessUpdate([[42, 1, [123, 34, 125]]]);
+    expect(decodeAwarenessClientIds(exact)).toEqual([42]);
+    expect(decodeAwarenessClientIds(new Uint8Array([...exact, 0]))).toBeNull();
+    expect(decodeAwarenessClientIds(new Uint8Array([...exact, 1, 2, 3]))).toBeNull();
+
+    // A second entry the count does not declare is the same defect, and is the
+    // shape that actually smuggles presence past the forgery check.
+    const undeclared = new Uint8Array([
+      ...varUint(1),
+      ...varUint(42),
+      ...varUint(1),
+      ...varUint(0),
+      ...varUint(99),
+      ...varUint(1),
+      ...varUint(0),
+    ]);
+    expect(decodeAwarenessClientIds(undeclared)).toBeNull();
+  });
 });

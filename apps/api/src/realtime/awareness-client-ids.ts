@@ -34,9 +34,10 @@ const MAX_VARUINT_BYTES = 5;
 
 /**
  * Returns the clientIDs in wire order, or `null` for ANY malformed frame —
- * truncation, an over-long varUint, an implausible entry count, or a declared
- * state length that runs past the end. It never throws: this runs inside a
- * socket handler, and a refusal must be an ack, not an unhandled rejection.
+ * truncation, an over-long varUint, an implausible entry count, a declared
+ * state length that runs past the end, or bytes left over after the last
+ * declared entry. It never throws: this runs inside a socket handler, and a
+ * refusal must be an ack, not an unhandled rejection.
  */
 export function decodeAwarenessClientIds(update: Uint8Array): readonly number[] | null {
   let offset = 0;
@@ -73,5 +74,11 @@ export function decodeAwarenessClientIds(update: Uint8Array): readonly number[] 
     if (offset > update.length) return null;
     clientIds.push(clientId);
   }
+  // Trailing bytes are malformed too. The per-entry check above only catches a
+  // frame that claims MORE than it carries; a frame that carries more than it
+  // claims decoded happily, which contradicts the "null for ANY malformed
+  // frame" contract above and means the clientIDs vouched for here describe
+  // only part of what the gateway would then relay verbatim.
+  if (offset !== update.length) return null;
   return clientIds;
 }
