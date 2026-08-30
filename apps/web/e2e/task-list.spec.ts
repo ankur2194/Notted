@@ -93,13 +93,13 @@ async function apiPost<T>(
     },
     data,
   });
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   return response.json() as Promise<T>;
 }
 
 async function apiGet<T>(request: APIRequestContext, path: string): Promise<T> {
   const response = await request.get(`${apiUrl}${path}`);
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   return response.json() as Promise<T>;
 }
 
@@ -118,7 +118,7 @@ async function inviteAndJoin(
       data: { email: account.email, role },
     },
   );
-  expect(invite.ok()).toBeTruthy();
+  await expect(invite).toBeOK();
   await register(member, account);
   await member.goto(await latestActionLink(owner.request, account.email, `Join ${workspaceName}`));
   await member.getByRole("button", { name: "Accept workspace invitation" }).click();

@@ -239,7 +239,7 @@ async function createNote(page: Page, workspaceId: string, title: string): Promi
     headers: { Origin: appUrl, "Idempotency-Key": randomUUID() },
     data: { title, projectId: null, folderId: null, parentId: null },
   });
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   const result = (await response.json()) as { note: { id: string } };
   return result.note.id;
 }

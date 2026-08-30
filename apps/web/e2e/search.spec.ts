@@ -55,7 +55,7 @@ async function apiPost(
     },
     data,
   });
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   return response.json() as Promise<Record<string, unknown>>;
 }
 
@@ -64,7 +64,7 @@ async function apiPatch(request: APIRequestContext, path: string, data: unknown)
     headers: { Origin: appUrl, "Content-Type": "application/json" },
     data,
   });
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
 }
 
 /**

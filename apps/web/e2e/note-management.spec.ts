@@ -52,7 +52,7 @@ async function apiPost(
     },
     data,
   });
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   return response.json() as Promise<Record<string, unknown>>;
 }
 
@@ -68,7 +68,7 @@ async function inviteAndJoin(
     `${apiUrl}/api/v1/workspaces/${workspaceId}/invitations`,
     { headers: { Origin: appUrl }, data: { email: account.email, role } },
   );
-  expect(invite.ok()).toBeTruthy();
+  await expect(invite).toBeOK();
   await register(member, account);
   await member.goto(await latestActionLink(owner.request, account.email, `Join ${workspaceName}`));
   await member.getByRole("button", { name: "Accept workspace invitation" }).click();

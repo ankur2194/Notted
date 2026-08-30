@@ -160,7 +160,7 @@ async function apiPost(
     },
     data,
   });
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   return response.json() as Promise<Record<string, unknown>>;
 }
 
@@ -183,7 +183,7 @@ async function storedDocument(
   const response = await request.get(`${apiUrl}/api/v1/workspaces/${workspaceId}/notes/${noteId}`, {
     headers: { Origin: appUrl },
   });
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   // `GET /notes/:noteId` returns a `NoteDetail`, which carries `content` at the
   // TOP level — there is no `note` envelope on this endpoint.
   const body = (await response.json()) as { content: unknown };

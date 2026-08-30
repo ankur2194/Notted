@@ -36,7 +36,7 @@ function parseMessage(value: unknown): MailpitMessage {
 
 export async function clearMailpit(request: APIRequestContext): Promise<void> {
   const response = await request.delete(`${mailpitUrl}/api/v1/messages`);
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
 }
 
 /**
@@ -76,7 +76,7 @@ export async function latestActionLink(
 
   if (messageId === undefined) throw new Error("Mailpit polling completed without a message id");
   const response = await request.get(`${mailpitUrl}/api/v1/message/${messageId}`);
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   const message = parseMessage(await response.json());
   const content = `${message.Text ?? ""}\n${message.HTML ?? ""}`.replaceAll("&amp;", "&");
   const match = content.match(/https?:\/\/[^\s"'<>]+/u);

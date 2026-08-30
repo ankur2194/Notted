@@ -53,7 +53,7 @@ async function invite(
       data: { email: account.email, role },
     },
   );
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   await register(member, account);
   await member.goto(await latestActionLink(owner.request, account.email, `Join ${workspaceName}`));
   await member.getByRole("button", { name: "Accept workspace invitation" }).click();

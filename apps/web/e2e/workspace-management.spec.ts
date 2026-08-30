@@ -161,7 +161,14 @@ test.describe("Part 27 workspace management", () => {
         response.url().endsWith(`/api/v1/workspaces/${firstId}`),
     );
     await page.getByRole("button", { name: "Save changes" }).click();
-    expect((await updateResponse).ok()).toBeTruthy();
+    // A page `Response`, not an `APIResponse`, so `toBeOK()` does not apply.
+    // The message argument carries the same diagnostic that matcher would
+    // print: without it a 403 here reads only "expected false to be truthy".
+    const update = await updateResponse;
+    expect(
+      update.ok(),
+      `PATCH ${update.url()} -> ${update.status()}: ${await update.text()}`,
+    ).toBeTruthy();
     await expect(nameField).toHaveValue(renamedFirst);
     await expect(page.getByLabel("Default page size")).toHaveValue("letter");
 
@@ -235,7 +242,7 @@ test.describe("Part 27 workspace management", () => {
           data: { email: viewerIdentity.email, role: "viewer" },
         },
       );
-      expect(inviteResponse.ok()).toBeTruthy();
+      await expect(inviteResponse).toBeOK();
       const invitationUrl = await latestActionLink(
         ownerPage.request,
         viewerIdentity.email,

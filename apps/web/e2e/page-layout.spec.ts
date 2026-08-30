@@ -87,7 +87,7 @@ async function apiPost(
     },
     data,
   });
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   return response.json() as Promise<Record<string, unknown>>;
 }
 

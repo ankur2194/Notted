@@ -174,7 +174,7 @@ async function apiPost(
     },
     data,
   });
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   return response.json() as Promise<Record<string, unknown>>;
 }
 
@@ -197,7 +197,7 @@ async function storedDocument(
   const response = await request.get(`${apiUrl}/api/v1/workspaces/${workspaceId}/notes/${noteId}`, {
     headers: { Origin: appUrl },
   });
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   const body = (await response.json()) as { content: unknown };
   return JSON.stringify(body.content);
 }
@@ -332,7 +332,7 @@ test.describe.serial("Part 44 generic attachments in a real browser", () => {
 
       // The same route, asserted at the header level so the reason is explicit.
       const head = await page.request.get(download.url(), { headers: { Origin: appUrl } });
-      expect(head.ok()).toBeTruthy();
+      await expect(head).toBeOK();
       expect(head.headers()["content-disposition"] ?? "").toContain("attachment");
       expect(head.headers()["x-content-type-options"] ?? "").toBe("nosniff");
 

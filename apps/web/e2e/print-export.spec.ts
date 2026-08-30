@@ -70,7 +70,7 @@ async function createWorkspace(page: Page, name: string): Promise<string> {
 
 async function apiGet(request: APIRequestContext, path: string) {
   const response = await request.get(`${apiUrl}${path}`, { headers: { Origin: appUrl } });
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   return response.json() as Promise<Record<string, unknown>>;
 }
 
@@ -87,7 +87,7 @@ async function apiPost(
     },
     data,
   });
-  expect(response.ok()).toBeTruthy();
+  await expect(response).toBeOK();
   return response.json() as Promise<Record<string, unknown>>;
 }
 
