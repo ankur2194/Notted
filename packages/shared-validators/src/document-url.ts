@@ -105,12 +105,24 @@ interface RuntimeUrl {
   readonly username: string;
 }
 
-type RuntimeUrlConstructor = new (input: string) => RuntimeUrl;
-
-function runtimeUrlConstructor(): RuntimeUrlConstructor | null {
-  const runtime = globalThis as unknown as { readonly URL?: RuntimeUrlConstructor };
-  return runtime.URL ?? null;
-}
+/**
+ * Declared, not probed. This file used to read `globalThis.URL ?? null` and
+ * treat an absent global as "reject this link", which fails closed on an
+ * ENVIRONMENT PROBE rather than on the input: in a runtime without `URL` every
+ * http(s) href in every document became invalid, and `normalizeMarks` silently
+ * dropped the link mark instead of saying why. It also made this package hold
+ * three contradictory beliefs about one global — a probe here, a `declare` in
+ * `domain.schema.ts`, and a comment in `webhook.schema.ts` asserting it does
+ * not exist.
+ *
+ * `domain.schema.ts` has the right shape and its reasoning is written down
+ * there: the package targets runtimes that all have `URL`, but its `tsconfig`
+ * deliberately declares neither the DOM nor the Node type libraries, so one
+ * structural declaration of exactly the members used is smaller than pulling in
+ * `lib.dom`. A missing global is now a load-time failure, which is what an
+ * unsupported runtime should look like.
+ */
+declare const URL: new (input: string) => RuntimeUrl;
 
 function sanitizeHttpUrl(
   value: string,
@@ -121,11 +133,9 @@ function sanitizeHttpUrl(
   const authority = rawHttpAuthority(value, schemeLength);
   if (authority === null || authority.includes("%") || authority.endsWith(":")) return null;
 
-  const Url = runtimeUrlConstructor();
-  if (Url === null) return null;
   let parsed: RuntimeUrl;
   try {
-    parsed = new Url(value);
+    parsed = new URL(value);
   } catch {
     return null;
   }

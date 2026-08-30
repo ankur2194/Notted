@@ -53,11 +53,13 @@ export const webhookEventsSchema = z
  * in a path or query is untouched, because that is ordinary data and not a
  * credential.
  *
- * This is a regex rather than a `new URL()` inspection on purpose: this package
- * compiles under `"lib": ["ES2022"]` with no DOM lib and no `@types/node`, so
- * the `URL` global does not exist here. Zod's own `z.url()` does the parsing
- * (it owns the platform detail), and this pattern adds only the credential rule
- * zod has no option for.
+ * This is a regex rather than a `new URL()` inspection on purpose, but NOT
+ * because the global is unreachable — `domain.schema.ts` and `document-url.ts`
+ * both `declare const URL` and use it, and this file could do the same. The
+ * reason is division of labour: `z.url()` already owns the parsing and the
+ * protocol check on the line above, so a second parse here would only be a
+ * second opinion about the same string. This pattern adds exactly the one rule
+ * zod has no option for, over the value zod already accepted.
  */
 const NO_EMBEDDED_CREDENTIALS = /^https?:\/\/[^/?#@]+(?:[/?#]|$)/iu;
 
