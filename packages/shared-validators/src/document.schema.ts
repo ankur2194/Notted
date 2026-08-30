@@ -163,8 +163,15 @@ function validateNodeAttrs(type: NoteDocumentNodeType, attrs: unknown, errors: s
   }
   if (type === "orderedList") {
     const start = attrs.start;
-    if (typeof start !== "number" || !Number.isInteger(start) || start < 1) {
-      errors.push("Document orderedList start attribute must be an integer >= 1");
+    if (
+      typeof start !== "number" ||
+      !Number.isInteger(start) ||
+      start < 1 ||
+      start > NOTE_DOCUMENT_LIMITS.maxOrderedListStart
+    ) {
+      errors.push(
+        `Document orderedList start attribute must be an integer 1-${NOTE_DOCUMENT_LIMITS.maxOrderedListStart}`,
+      );
     }
     if (attrs.type !== undefined && attrs.type !== null) {
       errors.push("Document orderedList type attribute must be null or omitted");

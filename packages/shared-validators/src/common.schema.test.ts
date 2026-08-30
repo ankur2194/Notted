@@ -27,6 +27,26 @@ describe("common schemas", () => {
     expect(isoTimestampSchema.safeParse("2026-07-24T18:00:00+05:30").success).toBe(true);
   });
 
+  /*
+   * The nil and max UUIDs are the two well-formed UUIDs that can never name a
+   * row — `gen_random_uuid()` cannot emit either — and zod has no option that
+   * refuses them: RFC 9562 defines both as special values outside the
+   * version/variant scheme, so `z.string().uuid()`, `z.uuid()` and `z.guid()`
+   * all accept them. Without this they validated at every trust boundary in the
+   * system and became a 404 several layers later.
+   *
+   * `document-core.ts`'s `UUID_VALUE_PATTERN` refuses the same two values; the
+   * two implementations must agree on this or the next reader has to work out
+   * which to trust.
+   */
+  it("rejects the nil and max UUIDs", () => {
+    expect(uuidSchema.safeParse("00000000-0000-0000-0000-000000000000").success).toBe(false);
+    expect(uuidSchema.safeParse("ffffffff-ffff-ffff-ffff-ffffffffffff").success).toBe(false);
+    expect(uuidSchema.safeParse("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF").success).toBe(false);
+    // One hex digit off the max UUID is an ordinary id and stays accepted.
+    expect(uuidSchema.safeParse("ffffffff-ffff-4fff-bfff-fffffffffffe").success).toBe(true);
+  });
+
   it("rejects malformed identifiers and timestamps without offsets", () => {
     expect(uuidSchema.safeParse("workspace-1").success).toBe(false);
     expect(isoTimestampSchema.safeParse("2026-07-24").success).toBe(false);

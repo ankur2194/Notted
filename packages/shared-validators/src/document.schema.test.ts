@@ -31,6 +31,8 @@ import {
   sanitizeDocumentUrl,
 } from "./document.schema";
 
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+
 const SAFE_LINK_ATTRS = {
   href: "https://example.test/path",
   target: "_blank",
@@ -1080,6 +1082,78 @@ describe("Part 36 mention contract", () => {
     expect(result.migrated).toBe(true);
     expect(noteDocumentSchema.safeParse(result.doc).success).toBe(true);
     expect(extractNoteContentPlain(result.doc)).toBe("cc @Ada Lovelace");
+  });
+
+  /*
+   * `collectNoteDocumentMentionIds` is documented as the single source of truth
+   * for who gets notified, and the nil UUID is the one well-formed UUID that
+   * can never address a user. Downstream, `mention-notification.producer.ts`
+   * filters it out with a membership lookup — but that is a second guard on a
+   * different layer, not a reason for this one to accept the value.
+   */
+  it("refuses the nil UUID as a mention id and migrates it to recoverable text", () => {
+    const nilMention = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "mention", attrs: { id: NIL_UUID, label: "Nobody" } },
+          ],
+        },
+      ],
+    } as const;
+
+    expect(noteDocumentSchema.safeParse(nilMention).success).toBe(false);
+    expect(collectNoteDocumentMentionIds(nilMention)).toEqual([]);
+
+    const result = migrateNoteDocument(nilMention);
+    expect(noteDocumentSchema.safeParse(result.doc).success).toBe(true);
+    expect(collectNoteDocumentMentionIds(result.doc)).toEqual([]);
+    expect(extractNoteContentPlain(result.doc)).toBe("@Nobody");
+  });
+
+  /*
+   * `orderedList.start` had a floor and no ceiling, so `MAX_SAFE_INTEGER`
+   * validated and rendered `<ol start="9007199254740991">`. The contract now
+   * refuses it and the migrator clamps it to 1 — the same reject-on-write,
+   * repair-on-read split `maxTableColumnWidth` and `maxImageDimension` use, so
+   * a document already stored with an absurd start still opens.
+   */
+  it("bounds the ordered-list start attribute and repairs an out-of-range one", () => {
+    const oversized = {
+      type: "doc",
+      content: [
+        {
+          type: "orderedList",
+          attrs: { start: Number.MAX_SAFE_INTEGER, type: null },
+          content: [{ type: "listItem", content: [{ type: "paragraph" }] }],
+        },
+      ],
+    } as const;
+
+    expect(noteDocumentSchema.safeParse(oversized).success).toBe(false);
+    expect(
+      noteDocumentSchema.safeParse({
+        ...oversized,
+        content: [
+          {
+            ...oversized.content[0],
+            attrs: { start: NOTE_DOCUMENT_LIMITS.maxOrderedListStart, type: null },
+          },
+        ],
+      }).success,
+    ).toBe(true);
+
+    // The renderer reads `orderedListStartOrNull` directly, so this pins the
+    // coercer itself rather than only the contract branch above: out of range
+    // means "no start attribute", which renders as an ordinary list.
+    expect(renderDocumentHtml(oversized)).toContain("<ol>");
+    expect(renderDocumentHtml(oversized)).not.toContain(String(Number.MAX_SAFE_INTEGER));
+
+    const result = migrateNoteDocument(oversized);
+    expect(noteDocumentSchema.safeParse(result.doc).success).toBe(true);
+    expect(renderDocumentHtml(result.doc)).not.toContain(String(Number.MAX_SAFE_INTEGER));
   });
 
   it("keeps a valid mention as a mention while repairing the block around it", () => {

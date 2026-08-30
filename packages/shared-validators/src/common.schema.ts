@@ -14,7 +14,33 @@ const integerQueryValue = z.union([
     .transform((value) => Number(value)),
 ]);
 
-export const uuidSchema = z.string().uuid();
+/**
+ * The nil and max UUIDs are the two syntactically valid UUIDs that can never
+ * name a row: PostgreSQL's `gen_random_uuid()` cannot emit either, so no entity
+ * in this system has ever carried one.
+ *
+ * Zod's `uuid()` does check the version and variant nibbles — it refuses
+ * `11111111-1111-1111-1111-111111111111` — but RFC 9562 defines nil and max as
+ * special values outside that scheme, so `z.string().uuid()`, `z.uuid()` and
+ * `z.guid()` all let them through. Accepting them turns "this id is
+ * structurally impossible" into a 404 several layers later, and lets them reach
+ * places documented as sources of truth for real users — see
+ * `collectNoteDocumentMentionIds` in `document-core.ts`.
+ *
+ * Both are refused, not just the nil one the audit named: they are the same
+ * defect, and closing half of it leaves the identical hole open one value over.
+ */
+const UNADDRESSABLE_UUIDS: ReadonlySet<string> = new Set([
+  "00000000-0000-0000-0000-000000000000",
+  "ffffffff-ffff-ffff-ffff-ffffffffffff",
+]);
+
+export const uuidSchema = z
+  .string()
+  .uuid()
+  .refine((value) => !UNADDRESSABLE_UUIDS.has(value.toLowerCase()), {
+    message: "Must not be the nil or max UUID",
+  });
 export type UuidInput = z.input<typeof uuidSchema>;
 
 export const idempotencyKeySchema = z

@@ -138,6 +138,15 @@ export const NOTE_DOCUMENT_LIMITS = Object.freeze({
   maxTableCells: 600,
   maxTableCellSpan: 100,
   maxTableColumnWidth: 2_000,
+  /**
+   * `orderedList.start` had a floor of 1 and no ceiling, so
+   * `Number.MAX_SAFE_INTEGER` validated and rendered
+   * `<ol start="9007199254740991">`. 10 000 is far above any list a person
+   * writes and far below the range where the number stops being a list
+   * position and starts being a payload; `maxRootChildren` (2 000) is the real
+   * bound on how many items can follow it.
+   */
+  maxOrderedListStart: 10_000,
   maxMentions: 200,
   maxMentionLabel: 200,
   maxImages: 100,
@@ -291,11 +300,21 @@ export function isUsableMentionLabel(value: unknown): value is string {
  * (`UNSAFE_TEXT_PATTERN`, `URL_SCHEME_PATTERN`, `HTTP_HOST_LABEL_PATTERN`), and
  * this was the lone Zod holdout among them.
  *
- * Version-agnostic on purpose, matching `uuidSchema`: the contract is "36 hex
- * characters in 8-4-4-4-12", not "RFC 4122 v4".
+ * Version-agnostic: the shape it enforces is "36 hex characters in 8-4-4-4-12",
+ * not "RFC 4122 v4". `uuidSchema` is stricter — zod's `uuid()` also checks the
+ * version and variant nibbles — and that asymmetry is safe rather than drift:
+ * every id that reaches a document attribute was already validated at the API
+ * boundary by `uuidSchema`, so this predicate guards the shape of stored
+ * content, not the trust boundary.
+ *
+ * The leading lookahead is the part the two DO share. It refuses the nil and
+ * max UUIDs, the two well-formed UUIDs that can never name a row —
+ * `gen_random_uuid()` cannot emit either — so a `mention.id` carrying one
+ * addresses nobody, and this predicate feeds `collectNoteDocumentMentionIds`,
+ * which is documented as the single source of truth for who gets notified.
  */
 export const UUID_VALUE_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+  /^(?!(?:0{8}-0{4}-0{4}-0{4}-0{12}|f{8}-f{4}-f{4}-f{4}-f{12})$)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 export function isUuidValue(value: unknown): value is string {
   return typeof value === "string" && UUID_VALUE_PATTERN.test(value);
@@ -964,7 +983,12 @@ export function textAlignOrNull(attrs: unknown): string | null {
 export function orderedListStartOrNull(attrs: unknown): number | null {
   if (!isRecord(attrs)) return null;
   const start = attrs.start;
-  return typeof start === "number" && Number.isInteger(start) && start >= 1 ? start : null;
+  return typeof start === "number" &&
+    Number.isInteger(start) &&
+    start >= 1 &&
+    start <= NOTE_DOCUMENT_LIMITS.maxOrderedListStart
+    ? start
+    : null;
 }
 
 /** `colspan`/`rowspan`: an integer between 1 and the table span limit. */
