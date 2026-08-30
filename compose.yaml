@@ -617,6 +617,17 @@ services:
       NEXT_PUBLIC_APP_URL: http://localhost:${NOTTED_WEB_PORT:-3000}
       NEXT_PUBLIC_API_URL: http://localhost:${NOTTED_API_PORT:-3001}
       NEXT_PUBLIC_WS_URL: ws://localhost:${NOTTED_API_PORT:-3001}
+      # Bound the dev server's heap. `next dev` has no ceiling of its own, and
+      # an unbounded Turbopack graph will happily grow past the WSL2 VM's total
+      # RAM, at which point the kernel swaps and every container on the host
+      # thrashes -- the symptom reads as runaway container disk I/O rather than
+      # as a memory fault, because the writes are page-outs, not file writes.
+      # A hard cap converts that silent host-wide stall into a loud, local
+      # heap-limit crash in the one process responsible for it. 3 GiB is well
+      # above a healthy run (~1.5-2 GiB with a fresh cache) and well below the
+      # VM's budget, so it fires only on a real leak or a corrupted cache.
+      # `web-e2e` extends this service and merges this map, so it inherits it.
+      NODE_OPTIONS: --max-old-space-size=3072
     command:
       - /bin/sh
       - -eu
