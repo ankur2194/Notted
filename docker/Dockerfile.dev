@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.18
 #
 # Shared development image for every Notted workspace service
-# (workspace-permissions, deps, contracts, db-init, api, web). It deliberately copies no
+# (deps, contracts, db-init, api, web). It deliberately copies no
 # application source: the repository is bind-mounted at /workspace by
 # `compose.yaml`, so a file edited on the host is immediately visible to the
 # watchers inside the containers and the image never rebuilds for a code change.
@@ -42,8 +42,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # The `mkdir` list pre-creates every path `compose.yaml` mounts a named volume
-# onto. `compose.yaml` also runs a one-shot root container to chown them,
-# because those volumes are declared `nocopy` and start out owned by root.
+# onto, and chowns them to `node` further down. That is what makes a privileged
+# one-shot container to fix ownership unnecessary — see the `x-workspace-volumes`
+# comment in `compose.yaml`, which explains the same design from the other end.
 # The bundled npm is deleted, not upgraded. Nothing in this repository invokes
 # `npm` or `npx` — pnpm is activated through Corepack on the line below, and the
 # only reference to npm anywhere is the registry it downloads from — yet the copy
