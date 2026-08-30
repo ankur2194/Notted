@@ -30,7 +30,22 @@
     },
     "type-check": {
       "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", "src/**/*", "scripts/**/*", "tsconfig*.json", "package.json"]
+      "inputs": ["$TURBO_DEFAULT$", "src/**/*", "scripts/**/*", "tsconfig*.json", "package.json"],
+      // `tsconfig.base.json` sets `composite: true`, so every package's
+      // `tsc --noEmit -p tsconfig.json` writes a `.tsbuildinfo` even though it
+      // emits nothing else. Without declaring it, a cache HIT skipped the run
+      // and restored no incremental state, so the next real invocation had no
+      // prior build-info to diff against and did a cold, full check — the exact
+      // work `composite` exists to avoid.
+      //
+      // The paths are the measured ones, not a `**/*.tsbuildinfo` glob. That
+      // glob would also match `tsconfig.build.tsbuildinfo`, which belongs to
+      // `build`: a type-check cache hit in a fresh clone would then restore
+      // build state with no matching `dist/*.js` beside it, and a later `build`
+      // could believe it was up to date. `apps/api` writes into `dist/` because
+      // its `tsconfig.json` sets `outDir`; the other three write at the package
+      // root.
+      "outputs": ["tsconfig.tsbuildinfo", "dist/tsconfig.tsbuildinfo"]
     },
     "test": {
       "dependsOn": ["^build"],
