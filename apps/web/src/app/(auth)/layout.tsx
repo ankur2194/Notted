@@ -10,7 +10,7 @@ export default function AuthLayout({ children }: Readonly<{ children: React.Reac
           </Link>
         </div>
       </header>
-      <main id="main-content" className="flex-1" role="main">
+      <main id="main-content" tabIndex={-1} className="flex-1" role="main">
         {children}
       </main>
       <footer className="border-t border-border py-4">

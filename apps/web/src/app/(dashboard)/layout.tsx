@@ -24,7 +24,7 @@ function UnavailableState({
   readonly message: string;
 }) {
   return (
-    <main id="main-content" className="grid min-h-dvh place-items-center px-4">
+    <main id="main-content" tabIndex={-1} className="grid min-h-dvh place-items-center px-4">
       <div
         className="max-w-md space-y-4 rounded-xl border bg-card p-8 text-center shadow-sm"
         role="alert"

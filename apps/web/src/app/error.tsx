@@ -20,6 +20,7 @@ export default function Error({ error, reset }: ErrorProps) {
     <main
       className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4"
       id="main-content"
+      tabIndex={-1}
     >
       <div className="text-center space-y-4" role="alert">
         <h1 className="text-2xl font-semibold text-foreground">Something went wrong</h1>
