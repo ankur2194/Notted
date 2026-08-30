@@ -58,6 +58,15 @@ function readEncryptionKeys(
   const versions = new Set<number>();
   const keys = raw.split(",").map((entry): EncryptionKey => {
     const separator = entry.indexOf(":");
+    // Checked before the slices, not after. `indexOf` answers -1 for a
+    // colonless entry, which makes `slice(0, -1)` drop the last character and
+    // `slice(0)` return the whole entry — so an all-digit entry such as
+    // `123456` passed the version test below on a truncated version and then
+    // died on the base64 length check, telling the operator their key is the
+    // wrong size when the real problem is that they omitted `version:`.
+    if (separator === -1) {
+      throw new Error("DATA_ENCRYPTION_KEYS must use version:base64 entries");
+    }
     const versionText = entry.slice(0, separator);
     const encodedKey = entry.slice(separator + 1);
     if (!/^[1-9]\d*$/u.test(versionText) || encodedKey === "") {

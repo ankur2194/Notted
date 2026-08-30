@@ -24,6 +24,28 @@ describe("security configuration", () => {
     expect(parseSecurityConfig({}).webhookAllowInsecureUrls).toBe(false);
   });
 
+  /*
+   * The error an operator reads is the whole value of a startup check. A
+   * colonless entry used to reach the base64 length test on a version string
+   * `indexOf(":") === -1` had silently truncated, so `123456` — a key pasted
+   * without its `version:` prefix — failed with "must decode to exactly 32
+   * bytes", pointing at the key material instead of the missing prefix.
+   */
+  it("names the missing version prefix rather than the key length", () => {
+    expect(() => parseSecurityConfig({ DATA_ENCRYPTION_KEYS: "123456" })).toThrow(
+      /must use version:base64 entries/u,
+    );
+    expect(() =>
+      parseSecurityConfig({ DATA_ENCRYPTION_KEYS: PRODUCTION_KEY.slice(2) }),
+    ).toThrow(/must use version:base64 entries/u);
+    // A well-formed entry still parses, and a genuinely short key still gets
+    // the length message.
+    expect(parseSecurityConfig({ DATA_ENCRYPTION_KEYS: PRODUCTION_KEY }).encryptionKeys).toHaveLength(1);
+    expect(() => parseSecurityConfig({ DATA_ENCRYPTION_KEYS: "1:c2hvcnQ=" })).toThrow(
+      /decode to exactly 32 bytes/u,
+    );
+  });
+
   it("bounds the outbound webhook request timeout", () => {
     expect(parseSecurityConfig({}).webhookRequestTimeoutMs).toBe(10_000);
     expect(
