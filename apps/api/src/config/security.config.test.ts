@@ -35,12 +35,14 @@ describe("security configuration", () => {
     expect(() => parseSecurityConfig({ DATA_ENCRYPTION_KEYS: "123456" })).toThrow(
       /must use version:base64 entries/u,
     );
-    expect(() =>
-      parseSecurityConfig({ DATA_ENCRYPTION_KEYS: PRODUCTION_KEY.slice(2) }),
-    ).toThrow(/must use version:base64 entries/u);
+    expect(() => parseSecurityConfig({ DATA_ENCRYPTION_KEYS: PRODUCTION_KEY.slice(2) })).toThrow(
+      /must use version:base64 entries/u,
+    );
     // A well-formed entry still parses, and a genuinely short key still gets
     // the length message.
-    expect(parseSecurityConfig({ DATA_ENCRYPTION_KEYS: PRODUCTION_KEY }).encryptionKeys).toHaveLength(1);
+    expect(
+      parseSecurityConfig({ DATA_ENCRYPTION_KEYS: PRODUCTION_KEY }).encryptionKeys,
+    ).toHaveLength(1);
     expect(() => parseSecurityConfig({ DATA_ENCRYPTION_KEYS: "1:c2hvcnQ=" })).toThrow(
       /decode to exactly 32 bytes/u,
     );

@@ -75,7 +75,6 @@ const UNTYPED_CALLSITE_PATHS = [
   "request.body",
 ] as const;
 
-
 @Injectable()
 export class StructuredLogger implements LoggerService {
   private readonly logger: Logger;

@@ -137,8 +137,7 @@ describe("StructuredLogger auth redaction", () => {
  */
 describe("StructuredLogger redaction path derivation", () => {
   /** `'["x-api-key"]'` is a pino path; the property it addresses is `x-api-key`. */
-  const propertyName = (key: string): string =>
-    key.startsWith("[") ? key.slice(2, -2) : key;
+  const propertyName = (key: string): string => (key.startsWith("[") ? key.slice(2, -2) : key);
 
   it.each(SENSITIVE_KEYS.map((key) => [key]))(
     "redacts %s at the top level and one object deep",

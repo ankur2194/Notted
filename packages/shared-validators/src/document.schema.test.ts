@@ -1097,9 +1097,7 @@ describe("Part 36 mention contract", () => {
       content: [
         {
           type: "paragraph",
-          content: [
-            { type: "mention", attrs: { id: NIL_UUID, label: "Nobody" } },
-          ],
+          content: [{ type: "mention", attrs: { id: NIL_UUID, label: "Nobody" } }],
         },
       ],
     } as const;
