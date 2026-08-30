@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { StructuredLogger } from "./structured-logger.service";
+import { SENSITIVE_KEYS, StructuredLogger } from "./structured-logger.service";
 
 import type { AppConfig } from "../../config/app.config";
 
@@ -123,6 +123,43 @@ describe("StructuredLogger auth redaction", () => {
     }
     write.mockRestore();
   });
+});
+
+/*
+ * The nested spellings are DERIVED from `SENSITIVE_KEYS` rather than written
+ * out a second time, and this is what proves the derivation reaches every key
+ * in both positions. The two halves used to be two hand-written lists with
+ * nothing comparing them, so a key added to one and forgotten in the other
+ * would have been redacted at the top level and leaked one object deep.
+ *
+ * Driven off the exported list, so a 34th key is covered the day it is added,
+ * including the two written in pino's bracket notation.
+ */
+describe("StructuredLogger redaction path derivation", () => {
+  /** `'["x-api-key"]'` is a pino path; the property it addresses is `x-api-key`. */
+  const propertyName = (key: string): string =>
+    key.startsWith("[") ? key.slice(2, -2) : key;
+
+  it.each(SENSITIVE_KEYS.map((key) => [key]))(
+    "redacts %s at the top level and one object deep",
+    (key) => {
+      const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+      const property = propertyName(key);
+      const logger = new StructuredLogger({ nodeEnv: "test", logLevel: "info" } as AppConfig);
+      logger.info(
+        {
+          [property]: `bare-${property}-secret`,
+          detail: { [property]: `nested-${property}-secret` },
+        } as unknown as Parameters<StructuredLogger["info"]>[0],
+        "Derived redaction probe",
+      );
+      const output = write.mock.calls.map(([chunk]) => String(chunk)).join("");
+      write.mockRestore();
+
+      expect(output).not.toContain(`bare-${property}-secret`);
+      expect(output).not.toContain(`nested-${property}-secret`);
+    },
+  );
 });
 
 /**

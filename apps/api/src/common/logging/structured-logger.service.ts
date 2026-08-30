@@ -5,6 +5,77 @@ import { APP_CONFIG, type AppConfig } from "../../config/app.config";
 
 type LogMetadata = Readonly<Record<string, boolean | number | string | undefined>>;
 
+/*
+ * ONE list, two spellings derived from it. These were 33 keys written out by
+ * hand and then written out again with a nesting prefix, with nothing checking
+ * that the halves agreed — so adding `otpSecret` to the first half only would
+ * have redacted it at the top level and leaked it one object deep, silently.
+ *
+ * The nested spelling for the two bracket-notation keys changes from
+ * `*["x-api-key"]` to `*.["x-api-key"]`. Verified equivalent against the
+ * installed pino: both forms, and a bare `*.x-api-key`, redact the same nested
+ * value, so the uniform prefix costs nothing and a special case for it would be
+ * a branch no test could tell from the other.
+ */
+export const SENSITIVE_KEYS = [
+  "authorization",
+  "cookie",
+  "password",
+  "email",
+  "recipient",
+  "secret",
+  "token",
+  "url",
+  "actionUrl",
+  "encryptedContext",
+  "providerMessageId",
+  "code",
+  "backupCodes",
+  "recoveryCodes",
+  "totpURI",
+  "credentialID",
+  "credentialId",
+  "publicKey",
+  "clientSecret",
+  "accessToken",
+  "refreshToken",
+  "idToken",
+  "apiKey",
+  "api_key",
+  '["x-api-key"]',
+  "signature",
+  '["set-cookie"]',
+  "privateKey",
+  "webhookSecret",
+  "secretKey",
+  "accessKey",
+  "connectionString",
+  "dsn",
+] as const;
+
+/*
+ * `req.*`/`res.*`/`err.*`/`error.*`/`request.*` are unreachable through the
+ * typed `LogMetadata` (scalars only, deliberately, so callers cannot dump
+ * objects into a log line). They defend the untyped call sites — pino
+ * serializers and Nest's `LoggerService` overloads, which hand pino whole
+ * request/response/error objects.
+ */
+const UNTYPED_CALLSITE_PATHS = [
+  "req.headers",
+  "res.headers",
+  "response.headers",
+  "err.config",
+  "err.request",
+  "err.response",
+  "err.headers",
+  "error.config",
+  "error.request",
+  "error.response",
+  "request.headers",
+  "request.body",
+] as const;
+
+
 @Injectable()
 export class StructuredLogger implements LoggerService {
   private readonly logger: Logger;
@@ -18,90 +89,9 @@ export class StructuredLogger implements LoggerService {
       },
       redact: {
         paths: [
-          "authorization",
-          "cookie",
-          "password",
-          "email",
-          "recipient",
-          "secret",
-          "token",
-          "url",
-          "actionUrl",
-          "encryptedContext",
-          "providerMessageId",
-          "code",
-          "backupCodes",
-          "recoveryCodes",
-          "totpURI",
-          "credentialID",
-          "credentialId",
-          "publicKey",
-          "clientSecret",
-          "accessToken",
-          "refreshToken",
-          "idToken",
-          "apiKey",
-          "api_key",
-          '["x-api-key"]',
-          "signature",
-          '["set-cookie"]',
-          "privateKey",
-          "webhookSecret",
-          "secretKey",
-          "accessKey",
-          "connectionString",
-          "dsn",
-          "*.authorization",
-          "*.cookie",
-          "*.password",
-          "*.email",
-          "*.recipient",
-          "*.secret",
-          "*.token",
-          "*.url",
-          "*.actionUrl",
-          "*.encryptedContext",
-          "*.providerMessageId",
-          "*.code",
-          "*.backupCodes",
-          "*.recoveryCodes",
-          "*.totpURI",
-          "*.credentialID",
-          "*.credentialId",
-          "*.publicKey",
-          "*.clientSecret",
-          "*.accessToken",
-          "*.refreshToken",
-          "*.idToken",
-          "*.apiKey",
-          "*.api_key",
-          '*["x-api-key"]',
-          "*.signature",
-          '*["set-cookie"]',
-          "*.privateKey",
-          "*.webhookSecret",
-          "*.secretKey",
-          "*.accessKey",
-          "*.connectionString",
-          "*.dsn",
-          // `req.*`/`res.*`/`err.*`/`error.*`/`request.*` are unreachable through
-          // the typed `LogMetadata` (scalars only, deliberately, so callers
-          // cannot dump objects into a log line). They defend the untyped call
-          // sites — pino serializers and Nest's `LoggerService` overloads,
-          // which hand pino whole request/response/error objects.
-          "req.headers",
-          "res.headers",
-          "response.headers",
-          "err.config",
-          "err.request",
-          "err.response",
-          "err.headers",
-          "error.config",
-          "error.request",
-          "error.response",
-
-          "request.headers",
-          "request.body",
+          ...SENSITIVE_KEYS,
+          ...SENSITIVE_KEYS.map((key) => `*.${key}`),
+          ...UNTYPED_CALLSITE_PATHS,
         ],
         censor: "[REDACTED]",
       },
