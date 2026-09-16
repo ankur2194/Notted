@@ -21,6 +21,7 @@ import {
 import { useExportJob } from "@/hooks/useExportJob";
 import { cancelExportJob, createExportJob, exportDownloadUrl } from "@/lib/api/export-requests";
 import { exportQueryKeys } from "@/lib/exports/query-keys";
+import { browserStorage, readPagePreferences } from "@/lib/notes/page-preferences";
 
 /*
  * Part 64 — the user-facing half of the export lifecycle.
@@ -132,6 +133,7 @@ export function ExportNoteDialog({
         includeAttachments: bundles && includeAttachments,
         includeComments: bundles && includeComments,
         includeVersionHistory: bundles && includeVersionHistory,
+        margins: readPagePreferences(browserStorage()).margins,
       },
     };
     const fingerprint = JSON.stringify(input);

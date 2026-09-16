@@ -2290,8 +2290,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/notes/[noteId]/page.tsx": {
-    "mtime": 1786364599.355104,
-    "ast_hash": "534e2c721a362a1554fb322050068c5d",
+    "mtime": 1789561968.502177,
+    "ast_hash": "14f532b7ae98631d117949ca1d9affe7",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/notes/error.tsx": {
@@ -2380,8 +2380,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/projects/[projectId]/notes/[noteId]/page.tsx": {
-    "mtime": 1786702084.1432543,
-    "ast_hash": "18a77dd979162dd2289b69f56db617c7",
+    "mtime": 1789561986.4262471,
+    "ast_hash": "bf0552c090d2d093a82c4ed81e2919d6",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/projects/[projectId]/page.test.tsx": {
@@ -2675,8 +2675,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/editor/TiptapEditor.tsx": {
-    "mtime": 1788008995.0852659,
-    "ast_hash": "cf73b45d8c83e65e59fd819a59e71da3",
+    "mtime": 1789561530.0416238,
+    "ast_hash": "6d628c772e3076efc25690fb5ef6ae8f",
     "semantic_hash": ""
   },
   "apps/web/src/components/editor/attachment-card.test.ts": {
@@ -3030,13 +3030,13 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/NoteDetailView.tsx": {
-    "mtime": 1789560271.505319,
-    "ast_hash": "6171e8654865c25a8c08e930af928ea3",
+    "mtime": 1789562293.4405885,
+    "ast_hash": "47c59675f303493b10cbab6d69564f99",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/NoteEditorSurface.tsx": {
-    "mtime": 1788121782.1452987,
-    "ast_hash": "98d105c4d8f39b1a3768bc04bbeabd45",
+    "mtime": 1789562350.6687858,
+    "ast_hash": "a7129affbaebd157bb12ece7f2a8e353",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/NoteGrid.tsx": {
@@ -3065,8 +3065,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/PageContainer.tsx": {
-    "mtime": 1788031465.4067187,
-    "ast_hash": "64c8da358a47b6d3b0bf0c8ef7854294",
+    "mtime": 1789561944.8711443,
+    "ast_hash": "504da433b0d22e7b9a7fa8f5071ab865",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/PagePrintStyle.tsx": {
@@ -3125,8 +3125,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/note-components.test.tsx": {
-    "mtime": 1786857172.8468025,
-    "ast_hash": "51bf8a49697f033c8e0247613e2aa550",
+    "mtime": 1789562018.8726468,
+    "ast_hash": "9ec5a8862cf37af202e8ca12c568b2a8",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/note-editor-surface.test.tsx": {
@@ -5615,13 +5615,13 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/NoteComments.tsx": {
-    "mtime": 1789560271.505319,
-    "ast_hash": "1f4fc9a1119cb0b5839f71438b5b67d2",
+    "mtime": 1789561659.6006868,
+    "ast_hash": "d2db6932cfbd706befa94447ac580724",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/note-comments.test.tsx": {
-    "mtime": 1787993454.4921963,
-    "ast_hash": "ebcca76395b3d3e6e5ac1a1f2963dcc2",
+    "mtime": 1789561674.9163866,
+    "ast_hash": "1e6444951a964192650a4fd3927ad9bf",
     "semantic_hash": ""
   },
   "docs/completed-parts/part-58-yjs-collaborative-editing.md": {
@@ -7387,6 +7387,16 @@
   "apps/web/src/components/notes/note-comments-slot.ts": {
     "mtime": 1789560136.1762984,
     "ast_hash": "844261800aad6737b5a949038d4a02b7",
+    "semantic_hash": ""
+  },
+  "apps/web/src/components/editor/editor-toolbar-slot.ts": {
+    "mtime": 1789561511.6487365,
+    "ast_hash": "6868e8f20a032efa80e167dfe6c65c05",
+    "semantic_hash": ""
+  },
+  "apps/web/src/components/notes/presence-bar-slot.ts": {
+    "mtime": 1789562270.6116283,
+    "ast_hash": "83a1487feb96df4828e1cfd2c495b9ca",
     "semantic_hash": ""
   }
 }
