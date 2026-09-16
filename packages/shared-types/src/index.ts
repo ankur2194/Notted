@@ -199,6 +199,7 @@ export type {
   NoteType,
   NoteUpdateResult,
   PageSize,
+  PublicNote,
 } from "./note";
 /**
  * Physical page geometry (Part 37/38, moved here by Part 63).
