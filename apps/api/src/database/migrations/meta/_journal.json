@@ -176,6 +176,20 @@
       "when": 1788024325680,
       "tag": "0024_complex_shadow_king",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789587519070,
+      "tag": "0025_happy_blockbuster",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789587544001,
+      "tag": "0026_tricky_thundra",
+      "breakpoints": true
     }
   ]
 }

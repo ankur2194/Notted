@@ -69,6 +69,7 @@ import {
   noteCollaborationUpdatesRelations,
 } from "./note-collaboration";
 import { noteEmbeddings, noteEmbeddingsRelations } from "./note-embeddings";
+import { notePublicLinks, notePublicLinksRelations } from "./note-public-links";
 import { noteVersions, noteVersionsRelations } from "./note-versions";
 import {
   noteShares,
@@ -172,6 +173,7 @@ export {
   notes,
   notesRelations,
 } from "./notes";
+export { notePublicLinks, notePublicLinksRelations } from "./note-public-links";
 export {
   projectAccess,
   projectAccessRelations,
@@ -306,6 +308,12 @@ export const schema = {
   noteSharesRelations,
   noteTypeEnum,
   noteSharePermissionEnum,
+  // Part 82 — public share links: one revocable, unauthenticated read-only
+  // link per note (unique note_id), stored as a peppered token hash never
+  // the raw token. Composite FK proves the link's workspace matches its
+  // note's workspace. See note-public-links.ts module comment.
+  notePublicLinks,
+  notePublicLinksRelations,
   // Part 16 — tags, note_tags junction, attachments (processing state +
   // variants per ADR 0005), comments (selection anchors per ADR 0004), and
   // note_versions snapshot rows. Cross-workspace tag-assignment invariant is

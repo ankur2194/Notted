@@ -254,6 +254,12 @@ export const notes = pgTable(
     // `ON DELETE SET NULL` to `task_statuses`, so deleting one custom status
     // sequentially scanned `notes` while holding locks.
     index("notes_board_column_id_idx").on(t.boardColumnId),
+    // Composite FK target for `note_public_links(workspace_id, note_id)`
+    // (Part 82). The pair is already unique because `id` alone is the PK;
+    // this explicit unique index exists solely so PostgreSQL accepts that
+    // composite FK, matching `projects_workspace_id_id_unique` /
+    // `folders_workspace_id_id_unique`.
+    uniqueIndex("notes_workspace_id_id_unique").on(t.workspaceId, t.id),
     // Cross-tenant composite FKs (see module comment). `onDelete("no action")`
     // is chained explicitly because the `foreignKey({...})` config does not
     // accept `onDelete` directly; `no action` is also the Drizzle default, but

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "notes_workspace_id_id_unique" ON "notes" USING btree ("workspace_id","id");
