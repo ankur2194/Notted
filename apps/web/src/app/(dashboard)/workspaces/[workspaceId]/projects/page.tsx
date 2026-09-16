@@ -53,7 +53,7 @@ export default async function ProjectsPage({
   const filtered = query.status !== undefined || query.name !== undefined;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="space-y-6">
       <header
         className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
         aria-labelledby="projects-heading"

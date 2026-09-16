@@ -2245,8 +2245,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/page.tsx": {
-    "mtime": 1788031023.8533084,
-    "ast_hash": "55be30cf98a811bb19e6d3e07f371277",
+    "mtime": 1789566700.0332382,
+    "ast_hash": "6a1fe4441fd542478c5ba74f28c56969",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/settings/security/error.tsx": {
@@ -2255,13 +2255,13 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/settings/security/loading.tsx": {
-    "mtime": 1785408531.4789462,
-    "ast_hash": "19caf07ca2440e41a489c65f7b5b4f57",
+    "mtime": 1789566760.6821167,
+    "ast_hash": "8bacb7c2fb0f30742f77851e83203d1c",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/settings/security/page.tsx": {
-    "mtime": 1785346433.439394,
-    "ast_hash": "2a1a756d9028c1b5a97f86b8178b7234",
+    "mtime": 1789566710.037039,
+    "ast_hash": "6ffbb3fe7e7476138f16e509e641c60e",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/templates/page.tsx": {
@@ -2280,8 +2280,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/loading.tsx": {
-    "mtime": 1785564972.920705,
-    "ast_hash": "cc079d88546284c1c88359f4ef9542f0",
+    "mtime": 1789566715.2695057,
+    "ast_hash": "6245d01bc03e2e855d681f69349f1a6f",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/not-found.tsx": {
@@ -2300,8 +2300,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/notes/loading.tsx": {
-    "mtime": 1785581196.7541556,
-    "ast_hash": "1be7ee5e184f4e6716e787474fe8d222",
+    "mtime": 1789566717.5920188,
+    "ast_hash": "820dfec8767a93f1a32e37dbfd4f155f",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/notes/not-found.tsx": {
@@ -2345,8 +2345,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/page.tsx": {
-    "mtime": 1786109887.8842468,
-    "ast_hash": "232377abd3199e3cd66f4fcc23dfecf2",
+    "mtime": 1789566702.2840466,
+    "ast_hash": "edcbb52420b2e735d8f9da803798d9a2",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/projects/[projectId]/error.tsx": {
@@ -2355,8 +2355,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/projects/[projectId]/loading.tsx": {
-    "mtime": 1785581196.9261672,
-    "ast_hash": "4bb52c4d805216c2a47529ee2c2bc3a8",
+    "mtime": 1789566720.0844972,
+    "ast_hash": "abaa7e04381964b5149aefefdd39c346",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/projects/[projectId]/not-found.tsx": {
@@ -2370,8 +2370,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/projects/[projectId]/notes/[noteId]/loading.tsx": {
-    "mtime": 1786702084.1415806,
-    "ast_hash": "903d0a8ddc6769fea970311064bc10e5",
+    "mtime": 1789566723.2121053,
+    "ast_hash": "707a92f7465939339ae15ef31351cb4c",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/projects/[projectId]/notes/[noteId]/not-found.tsx": {
@@ -2390,8 +2390,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/projects/[projectId]/page.tsx": {
-    "mtime": 1786366481.6483498,
-    "ast_hash": "1dab41cd11cfdf539a9cde7ffa75cd25",
+    "mtime": 1789566707.1174238,
+    "ast_hash": "dd18a2f04909d91fc8c0c984bffbf405",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/projects/error.tsx": {
@@ -2400,8 +2400,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/projects/loading.tsx": {
-    "mtime": 1785581197.126181,
-    "ast_hash": "404f8f2e2a3de1502a30dbc194171ed8",
+    "mtime": 1789566718.7748222,
+    "ast_hash": "f9bcb36034e296a9245b97e5e740b91e",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/projects/not-found.tsx": {
@@ -2415,8 +2415,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/projects/page.tsx": {
-    "mtime": 1789566300.9225233,
-    "ast_hash": "422f4f15703a64264ff9269f39bbc932",
+    "mtime": 1789566708.1522868,
+    "ast_hash": "4944ac063bb959c0be8902c8ef07ffb3",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/settings/error.tsx": {
@@ -2425,18 +2425,18 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/settings/loading.tsx": {
-    "mtime": 1785527387.823235,
-    "ast_hash": "3c3bb72d06bafa997946f18e6062aa5c",
+    "mtime": 1789566760.673464,
+    "ast_hash": "f376186e82cfc300a0e1854f4149fbc9",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/settings/page.tsx": {
-    "mtime": 1787646937.2561815,
-    "ast_hash": "35d91b53cbc9698bd073c9943cfdb2cc",
+    "mtime": 1789566709.2055016,
+    "ast_hash": "640be2e9116f575c67726bc888d18569",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/tags/page.tsx": {
-    "mtime": 1786265974.214645,
-    "ast_hash": "65dcb2a9a6d87692e4a32dbcb9e4d506",
+    "mtime": 1789566706.0293834,
+    "ast_hash": "11174d4b4a2a382f1729c612d733d638",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/tasks/error.tsx": {
@@ -2445,8 +2445,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/tasks/loading.tsx": {
-    "mtime": 1786363455.1643326,
-    "ast_hash": "7eb0975bd2ee8cc1b39e62ad28b64945",
+    "mtime": 1789566716.4088414,
+    "ast_hash": "9cd3f6a852ca713617d5abd114a9980b",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/tasks/not-found.tsx": {
@@ -2455,8 +2455,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/tasks/page.tsx": {
-    "mtime": 1786364106.3064644,
-    "ast_hash": "7dda6e6c820d04bff43897af2cdab9bf",
+    "mtime": 1789566703.3202825,
+    "ast_hash": "c44598428648d1ce91e972bdf14793ce",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/error.tsx": {
@@ -2465,8 +2465,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/loading.tsx": {
-    "mtime": 1785564973.0087125,
-    "ast_hash": "2c4cc3c0fce07717fb50f7890dc81a6a",
+    "mtime": 1789566714.0415313,
+    "ast_hash": "5a9f3fe3d1d892f7484ddd84273217fa",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/page.test.tsx": {
@@ -2475,8 +2475,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/page.tsx": {
-    "mtime": 1785564973.0487158,
-    "ast_hash": "5b09e5e0ad22febd3192b67c74156f50",
+    "mtime": 1789566701.1739388,
+    "ast_hash": "2e9642c0598ba15359e6734a10984372",
     "semantic_hash": ""
   },
   "apps/web/src/app/api/shell/workspace/route.ts": {
@@ -3095,8 +3095,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/WorkspaceNoteBrowser.tsx": {
-    "mtime": 1785650070.8941586,
-    "ast_hash": "e9b959aaab40f4d232ef8f59d87b1556",
+    "mtime": 1789567378.0048118,
+    "ast_hash": "9d01db907a0c51c816e63639b7585f1b",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/folder-controls.test.tsx": {
@@ -5080,8 +5080,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/search/page.tsx": {
-    "mtime": 1786563362.1559002,
-    "ast_hash": "4eaea2756c44664a5821ffac23afb167",
+    "mtime": 1789566704.0253086,
+    "ast_hash": "9786b9b7e121d66a241cd5fb260b7287",
     "semantic_hash": ""
   },
   "apps/web/src/components/search/GlobalSearchDialog.test.tsx": {

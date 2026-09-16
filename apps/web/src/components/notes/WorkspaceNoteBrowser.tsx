@@ -86,18 +86,16 @@ export async function WorkspaceNoteBrowser({
         ]
       : [];
   return (
-    <div className="mx-auto max-w-6xl">
-      <NoteBrowser
-        workspaceId={workspaceId}
-        initialPage={notes.data.page}
-        initialFolders={folders.data}
-        query={notes.data.query}
-        canCreate={role !== "viewer"}
-        canDelete={role === "owner" || role === "admin"}
-        title={viewCopy[view].title}
-        description={viewCopy[view].description}
-        projectIds={projectIds}
-      />
-    </div>
+    <NoteBrowser
+      workspaceId={workspaceId}
+      initialPage={notes.data.page}
+      initialFolders={folders.data}
+      query={notes.data.query}
+      canCreate={role !== "viewer"}
+      canDelete={role === "owner" || role === "admin"}
+      title={viewCopy[view].title}
+      description={viewCopy[view].description}
+      projectIds={projectIds}
+    />
   );
 }

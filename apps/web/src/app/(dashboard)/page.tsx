@@ -23,7 +23,7 @@ export default async function DashboardPage() {
           getServerFolders(current.workspaceId),
         ]);
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
+    <div className="space-y-8">
       <section
         aria-labelledby="dashboard-heading"
         className="rounded-2xl border bg-card p-6 shadow-sm sm:p-8"

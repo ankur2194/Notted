@@ -73,7 +73,7 @@ export default async function ProjectDetailPage({
   });
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="space-y-6">
       <Link
         href={projectCollectionPath(workspaceId)}
         className="inline-flex min-h-11 items-center text-sm font-medium text-muted-foreground hover:text-foreground"

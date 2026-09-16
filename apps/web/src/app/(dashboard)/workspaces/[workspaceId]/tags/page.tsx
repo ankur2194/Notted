@@ -42,13 +42,11 @@ export default async function TagsPage({
   }
   const role = workspace.data.currentUserRole;
   return (
-    <div className="mx-auto max-w-4xl">
-      <TagManager
-        workspaceId={workspaceId}
-        initialTags={tags.data}
-        canManage={role !== "viewer"}
-        canDelete={role === "owner" || role === "admin"}
-      />
-    </div>
+    <TagManager
+      workspaceId={workspaceId}
+      initialTags={tags.data}
+      canManage={role !== "viewer"}
+      canDelete={role === "owner" || role === "admin"}
+    />
   );
 }

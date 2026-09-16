@@ -45,7 +45,7 @@ export default async function WorkspaceSettingsPage({
   const canDelete = workspace.currentUserRole === "owner";
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="space-y-6">
       <nav aria-label="Workspace breadcrumb">
         <Link
           href={`/workspaces/${workspace.id}`}

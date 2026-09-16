@@ -47,7 +47,7 @@ export default async function WorkspaceOverviewPage({
   const storage = await getServerWorkspaceStorageUsage(workspace.id);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="space-y-8">
       <nav aria-label="Workspace breadcrumb">
         <Link
           href="/workspaces"
