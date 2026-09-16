@@ -37,6 +37,9 @@ export const NOTE_API_PATHS = Object.freeze({
     `/api/v1/workspaces/${workspaceId}/notes/${noteId}/versions/${versionId}/restore`,
   share: (workspaceId: string, noteId: string, userId: string) =>
     `/api/v1/workspaces/${workspaceId}/notes/${noteId}/shares/${userId}`,
+  publicLink: (workspaceId: string, noteId: string) =>
+    `/api/v1/workspaces/${workspaceId}/notes/${noteId}/public-link`,
+  publicNote: (token: string) => `/api/v1/public/notes/${token}`,
 } as const);
 
 export type NoteType = "document" | "task-list";
@@ -260,6 +263,33 @@ export interface NoteShareDeleteResult {
   readonly noteId: NoteId;
   readonly userId: UserId;
   readonly revoked: true;
+}
+
+export interface NotePublicLinkStatus {
+  readonly enabled: boolean;
+  readonly createdAt: IsoTimestamp | null;
+}
+
+export interface NotePublicLinkCreateResult {
+  /** Full public URL, `${NEXT_PUBLIC_APP_URL}/p/:token`. Shown once. */
+  readonly url: string;
+}
+
+export interface NotePublicLinkRevokeResult {
+  readonly noteId: NoteId;
+  readonly revoked: true;
+}
+
+/**
+ * The read-only subset of `NoteDetail` served by the unauthenticated public
+ * endpoint. No capabilities, no ids beyond what the document content itself
+ * carries, no author identity.
+ */
+export interface PublicNote {
+  readonly title: string;
+  readonly content: NoteDocument;
+  readonly pageSize: PageSize;
+  readonly updatedAt: IsoTimestamp;
 }
 
 export interface NoteListQuery {

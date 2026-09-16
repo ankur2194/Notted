@@ -442,6 +442,28 @@ export const noteShareDeleteResultSchema = z
   .object({ noteId: uuidSchema, userId: uuidSchema, revoked: z.literal(true) })
   .strict();
 
+export const notePublicLinkStatusSchema = z
+  .object({ enabled: z.boolean(), createdAt: timestampSchema.nullable() })
+  .strict();
+
+export const notePublicLinkCreateResultSchema = z.object({ url: z.string().url() }).strict();
+
+export const notePublicLinkRevokeResultSchema = z
+  .object({ noteId: uuidSchema, revoked: z.literal(true) })
+  .strict();
+
+/** Matches `PUBLIC_LINK_TOKEN_PATTERN` in `apps/api/src/notes/note-public-link-token.ts`. */
+export const publicNoteTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{32}$/);
+
+export const publicNoteSchema = z
+  .object({
+    title: z.string(),
+    content: noteDocumentSchema,
+    pageSize: pageSizeSchema,
+    updatedAt: timestampSchema,
+  })
+  .strict();
+
 // Compatibility aliases retained for earlier consumers; location mutation is intentionally removed.
 export const createNoteMetadataSchema = createNoteSchema;
 export const updateNoteMetadataSchema = updateNoteSchema;
