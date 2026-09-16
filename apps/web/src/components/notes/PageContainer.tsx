@@ -23,6 +23,7 @@ import {
   zoomLabel,
   zoomLevelStep,
 } from "@notted/shared-types";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -48,8 +49,8 @@ import type {
   ZoomSelection,
 } from "@notted/shared-types";
 
+import { EDITOR_TOOLBAR_SLOT_ID } from "@/components/editor/editor-toolbar-slot";
 import { PAGE_BREAK_CLASS } from "@/components/editor/extensions/page-break";
-import { FormField } from "@/components/ui/form-controls";
 import { setFocusMode, useFocusMode } from "@/lib/notes/focus-mode";
 import {
   browserStorage,
@@ -123,6 +124,8 @@ export function PageContainer({
   const zoomSelectId = useId();
   const marginXId = useId();
   const marginYId = useId();
+  const pageToolsId = useId();
+  const [toolsOpen, setToolsOpen] = useState(true);
 
   /**
    * The one autosave machine for this note: one version cell, one in-flight
@@ -491,165 +494,211 @@ export function PageContainer({
   return (
     <div className="notted-page-region">
       <PagePrintStyle size={pageSize} margins={margins} />
-      <div
-        className="notted-page-controls mb-3 flex flex-wrap items-end gap-x-4 gap-y-3"
-        role="group"
-        aria-label="Page layout"
+      {/*
+       * A hairline strip, not a control-sized button: this only toggles
+       * whether the page-layout and formatting bars below cost any vertical
+       * space at all, so it deliberately does not claim a full 44px row of its
+       * own the way every other control here does.
+       */}
+      <button
+        type="button"
+        className="mb-1 flex h-4 w-full items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+        aria-expanded={toolsOpen}
+        aria-controls={pageToolsId}
+        data-notted-focus-hide
+        data-notted-print-hide
+        onClick={() => setToolsOpen((current) => !current)}
       >
-        {/*
-         * Focus mode hides the layout controls but never this toggle: a control
-         * that disappears the moment it is used leaves no way back by mouse, and
-         * nothing for Escape to return focus to.
-         */}
+        {toolsOpen ? (
+          <ChevronUp aria-hidden="true" className="size-3" />
+        ) : (
+          <ChevronDown aria-hidden="true" className="size-3" />
+        )}
+        <span className="sr-only">{toolsOpen ? "Collapse page tools" : "Expand page tools"}</span>
+      </button>
+      <div id={pageToolsId} className={toolsOpen ? "contents" : "hidden"}>
         <div
-          className="flex items-end gap-1"
+          className="notted-page-controls mb-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card px-2 py-1.5"
           role="group"
-          aria-label="Zoom controls"
-          data-notted-focus-hide
-          data-notted-print-hide
+          aria-label="Page layout"
         >
-          <button
-            type="button"
-            className={CONTROL_CLASSES}
-            aria-label="Zoom out"
-            aria-disabled={canStepZoom(scale, -1) ? undefined : true}
-            onClick={() => stepZoom(-1)}
-          >
-            <span aria-hidden="true">-</span>
-          </button>
-          <div className="flex flex-col gap-1">
-            <label htmlFor={zoomSelectId} className="text-xs font-medium text-muted-foreground">
-              Zoom
-            </label>
-            <select
-              id={zoomSelectId}
-              className="min-h-11 rounded-md border border-input bg-background px-2 text-sm text-foreground"
-              value={zoomOptionValue(zoom)}
-              onChange={(event) => {
-                const next = parseZoomOption(event.target.value);
-                if (next !== null) selectZoom(next);
-              }}
-            >
-              {ZOOM_LEVELS.map((level) => (
-                <option key={level} value={String(level)}>
-                  {zoomLabel(level)}
-                </option>
-              ))}
-              {ZOOM_FIT_MODES.map((mode) => (
-                <option key={mode} value={mode}>
-                  {zoomLabel(mode)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="button"
-            className={CONTROL_CLASSES}
-            aria-label="Zoom in"
-            aria-disabled={canStepZoom(scale, 1) ? undefined : true}
-            onClick={() => stepZoom(1)}
-          >
-            <span aria-hidden="true">+</span>
-          </button>
-        </div>
-
-        {canUpdate ? (
+          {/*
+           * Focus mode hides the layout controls but never this toggle: a control
+           * that disappears the moment it is used leaves no way back by mouse, and
+           * nothing for Escape to return focus to.
+           */}
           <div
             className="flex items-end gap-1"
             role="group"
-            aria-label="Page size"
+            aria-label="Zoom controls"
             data-notted-focus-hide
             data-notted-print-hide
           >
-            {PAGE_SIZE_VALUES.map((size) => (
-              <button
-                key={size}
-                type="button"
-                className={CONTROL_CLASSES}
-                aria-pressed={pageSize === size}
-                // Never `disabled`, and never gated on a save being in flight: a
-                // press during a save is queued into the next patch, and a
-                // control that leaves the tab order mid-interaction is the trap
-                // Part 34 avoided.
-                onClick={() => persistPageSize(size)}
+            <button
+              type="button"
+              className={CONTROL_CLASSES}
+              aria-label="Zoom out"
+              aria-disabled={canStepZoom(scale, -1) ? undefined : true}
+              onClick={() => stepZoom(-1)}
+            >
+              <span aria-hidden="true">-</span>
+            </button>
+            <div className="flex items-center gap-1">
+              <label htmlFor={zoomSelectId} className="sr-only">
+                Zoom
+              </label>
+              <select
+                id={zoomSelectId}
+                title="Zoom"
+                className="min-h-11 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                value={zoomOptionValue(zoom)}
+                onChange={(event) => {
+                  const next = parseZoomOption(event.target.value);
+                  if (next !== null) selectZoom(next);
+                }}
               >
-                {pageSizeLabel(size)}
-              </button>
-            ))}
+                {ZOOM_LEVELS.map((level) => (
+                  <option key={level} value={String(level)}>
+                    {zoomLabel(level)}
+                  </option>
+                ))}
+                {ZOOM_FIT_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {zoomLabel(mode)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              className={CONTROL_CLASSES}
+              aria-label="Zoom in"
+              aria-disabled={canStepZoom(scale, 1) ? undefined : true}
+              onClick={() => stepZoom(1)}
+            >
+              <span aria-hidden="true">+</span>
+            </button>
           </div>
-        ) : (
-          <p
-            className="text-sm text-muted-foreground"
-            role="note"
+
+          {canUpdate ? (
+            <div
+              className="flex items-end gap-1"
+              role="group"
+              aria-label="Page size"
+              data-notted-focus-hide
+              data-notted-print-hide
+            >
+              {PAGE_SIZE_VALUES.map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  className={CONTROL_CLASSES}
+                  aria-pressed={pageSize === size}
+                  // Never `disabled`, and never gated on a save being in flight: a
+                  // press during a save is queued into the next patch, and a
+                  // control that leaves the tab order mid-interaction is the trap
+                  // Part 34 avoided.
+                  onClick={() => persistPageSize(size)}
+                >
+                  {pageSizeLabel(size)}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p
+              className="text-sm text-muted-foreground"
+              role="note"
+              data-notted-focus-hide
+              data-notted-print-hide
+            >
+              Page size: {pageSizeLabel(pageSize)}. Changing it requires edit access.
+            </p>
+          )}
+
+          <div
+            className="flex flex-wrap items-center gap-x-2 gap-y-2"
             data-notted-focus-hide
             data-notted-print-hide
           >
-            Page size: {pageSizeLabel(pageSize)}. Changing it requires edit access.
-          </p>
-        )}
+            <label htmlFor={marginXId} className="sr-only">
+              Side margin (mm)
+            </label>
+            <input
+              id={marginXId}
+              title="Side margin (mm)"
+              type="number"
+              inputMode="numeric"
+              min={MIN_PAGE_MARGIN_MM}
+              max={MAX_PAGE_MARGINS.x}
+              step={1}
+              className="h-11 w-16 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+              value={marginDraft.x}
+              onChange={(event) =>
+                setMarginDraft((current) => ({ ...current, x: event.target.value }))
+              }
+              onBlur={(event) => commitMargin("x", event.target.value)}
+            />
+            <label htmlFor={marginYId} className="sr-only">
+              Top and bottom margin (mm)
+            </label>
+            <input
+              id={marginYId}
+              title="Top and bottom margin (mm)"
+              type="number"
+              inputMode="numeric"
+              min={MIN_PAGE_MARGIN_MM}
+              max={MAX_PAGE_MARGINS.y}
+              step={1}
+              className="h-11 w-16 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+              value={marginDraft.y}
+              onChange={(event) =>
+                setMarginDraft((current) => ({ ...current, y: event.target.value }))
+              }
+              onBlur={(event) => commitMargin("y", event.target.value)}
+            />
+          </div>
 
+          <button
+            ref={focusToggleRef}
+            type="button"
+            className={CONTROL_CLASSES}
+            // `aria-pressed`, not a swapped label: the control is one toggle whose
+            // state assistive technology reads, and it keeps its accessible name
+            // across both states so focus restoration lands somewhere recognisable.
+            aria-pressed={focusMode}
+            data-notted-print-hide
+            onClick={() => setFocusMode(!focusMode)}
+          >
+            Focus mode
+          </button>
+          <div data-notted-focus-hide data-notted-print-hide>
+            <VersionHistory
+              workspaceId={workspaceId}
+              noteId={noteId}
+              currentVersion={autosave.version}
+              currentDocument={autosave.savedDocument ?? initialDocument}
+              canRestore={canUpdate}
+              saveStatus={autosave.status}
+              hasUnsavedWork={autosave.hasUnsavedWork}
+              hasUnacknowledgedWork={autosave.hasUnacknowledgedWork}
+            />
+          </div>
+        </div>
+
+        {/*
+         * The formatting toolbar's landing spot. `TiptapEditor` portals it here
+         * (see `EDITOR_TOOLBAR_SLOT_ID`) instead of rendering it inside the
+         * scaled paper: a thin bar spanning the full viewport wraps far less
+         * than the physical page's ~640px content column ever could. Focus
+         * mode hides it the same way it hides the row above, because focus
+         * mode floats its own reduced toolbar over the page instead.
+         */}
         <div
-          className="flex flex-wrap items-end gap-x-4 gap-y-3"
+          id={EDITOR_TOOLBAR_SLOT_ID}
+          className="notted-editor-toolbar-slot mb-2 empty:hidden"
           data-notted-focus-hide
           data-notted-print-hide
-        >
-          <FormField
-            id={marginXId}
-            label="Side margin (mm)"
-            type="number"
-            inputMode="numeric"
-            min={MIN_PAGE_MARGIN_MM}
-            max={MAX_PAGE_MARGINS.x}
-            step={1}
-            className="h-11 w-24"
-            value={marginDraft.x}
-            onChange={(event) =>
-              setMarginDraft((current) => ({ ...current, x: event.target.value }))
-            }
-            onBlur={(event) => commitMargin("x", event.target.value)}
-          />
-          <FormField
-            id={marginYId}
-            label="Top and bottom margin (mm)"
-            type="number"
-            inputMode="numeric"
-            min={MIN_PAGE_MARGIN_MM}
-            max={MAX_PAGE_MARGINS.y}
-            step={1}
-            className="h-11 w-24"
-            value={marginDraft.y}
-            onChange={(event) =>
-              setMarginDraft((current) => ({ ...current, y: event.target.value }))
-            }
-            onBlur={(event) => commitMargin("y", event.target.value)}
-          />
-        </div>
-
-        <button
-          ref={focusToggleRef}
-          type="button"
-          className={CONTROL_CLASSES}
-          // `aria-pressed`, not a swapped label: the control is one toggle whose
-          // state assistive technology reads, and it keeps its accessible name
-          // across both states so focus restoration lands somewhere recognisable.
-          aria-pressed={focusMode}
-          data-notted-print-hide
-          onClick={() => setFocusMode(!focusMode)}
-        >
-          Focus mode
-        </button>
-        <div data-notted-focus-hide data-notted-print-hide>
-          <VersionHistory
-            workspaceId={workspaceId}
-            noteId={noteId}
-            currentVersion={autosave.version}
-            currentDocument={autosave.savedDocument ?? initialDocument}
-            canRestore={canUpdate}
-            saveStatus={autosave.status}
-            hasUnsavedWork={autosave.hasUnsavedWork}
-            hasUnacknowledgedWork={autosave.hasUnacknowledgedWork}
-          />
-        </div>
+        />
       </div>
 
       {/*

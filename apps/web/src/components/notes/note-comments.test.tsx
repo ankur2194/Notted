@@ -127,9 +127,8 @@ function view(
   );
 }
 
-/** The panel is a disclosure: nothing is fetched until it is opened. */
+/** The panel is always mounted now; this just waits for the first fetch. */
 async function openPanel(): Promise<void> {
-  await userEvent.click(screen.getByRole("button", { name: "Comments" }));
   await screen.findByRole("heading", { name: /Comments/u });
 }
 
@@ -332,34 +331,18 @@ describe("NoteComments", () => {
   });
 
   /**
-   * The disclosure, as a disclosure.
-   *
-   * The panel used to be two disjoint renders — a "Comments" button OR a section
-   * with its own "Hide comments" button — so the control the reader pressed
-   * unmounted on both transitions and focus fell to `<body>` each time. One
-   * persistent toggle carrying `aria-expanded`/`aria-controls` is what fixes it,
-   * and this is the assertion that it stays one.
+   * The panel used to be a disclosure a reader had to open before anything
+   * fetched. It is now always mounted (Part 60 follow-up: always-visible
+   * sidebar), so it renders — and fetches — on mount, with no toggle at all.
    */
-  it("keeps focus on the comments toggle across open and close", async () => {
+  it("renders the panel and fetches on mount, with no toggle", async () => {
     requests.requestNoteComments.mockResolvedValue(page([thread({ id: "t1" })]));
     view();
 
-    const toggle = screen.getByRole("button", { name: "Comments" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(toggle).toHaveAttribute("aria-controls", "note-comments-panel");
-
-    await userEvent.click(toggle);
-    await screen.findByRole("heading", { name: /Comments/u });
-    // The same element, still focused, now expanded and pointing at a panel
-    // that exists.
-    expect(toggle).toHaveFocus();
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByRole("button", { name: "Comments" })).toBeNull();
     expect(screen.getByTestId("note-comments")).toHaveAttribute("id", "note-comments-panel");
-
-    await userEvent.click(toggle);
-    expect(toggle).toHaveFocus();
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByTestId("note-comments")).toBeNull();
+    await screen.findByRole("heading", { name: /Comments/u });
+    await waitFor(() => expect(requests.requestNoteComments).toHaveBeenCalledTimes(1));
   });
 
   /**

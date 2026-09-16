@@ -3,10 +3,12 @@
 import { ATTACHMENT_UPLOAD_ACCEPT, safeParseNoteDocument } from "@notted/shared-validators";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { ImageUploadFileInput } from "./ImageUploadFileInput";
 import { useHasNoteSaveHost, useNoteSave } from "./note-save-context";
 import { NoteComments } from "./NoteComments";
+import { PRESENCE_BAR_SLOT_ID } from "./presence-bar-slot";
 import { PresenceBar } from "./PresenceBar";
 import { useImageUploads } from "./useImageUploads";
 
@@ -267,6 +269,19 @@ export function NoteEditorSurface({
 
   const [collaborationNotice, setCollaborationNotice] = useState("");
 
+  /*
+   * The collaboration status row leaves this subtree the same way the
+   * comments panel does: `NoteDetailView` renders a slot in its header, next
+   * to Share and Export, so "Reconnecting" never has to compete with the
+   * editor content for space. A render with no matching element — this
+   * component's own standalone unit tests — keeps the previous in-place
+   * rendering instead.
+   */
+  const [presenceSlot, setPresenceSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setPresenceSlot(document.getElementById(PRESENCE_BAR_SLOT_ID));
+  }, []);
+
   const handleProjected = useCallback(
     (version: number): void => {
       // The projection wrote `notes.content` server-side; autosave adopts the
@@ -484,27 +499,32 @@ export function NoteEditorSurface({
        * live region created together with its text is often not announced. A
        * note that never opens a session renders none of this.
        */}
-      {collaborationEnabled ? (
-        <div className="flex flex-wrap items-center gap-3" data-notted-print-hide>
-          <PresenceBar
-            mode={mode}
-            status={status}
-            workspaceId={workspaceId}
-            roster={roster}
-            selfUserId={userId}
-            onReconnect={handleReconnect}
-          />
-          <p
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-            data-testid="note-collab-notice"
-            className="text-sm text-muted-foreground"
-          >
-            {collaborationNotice}
-          </p>
-        </div>
-      ) : null}
+      {collaborationEnabled
+        ? (() => {
+            const presence = (
+              <div className="flex flex-wrap items-center gap-3" data-notted-print-hide>
+                <PresenceBar
+                  mode={mode}
+                  status={status}
+                  workspaceId={workspaceId}
+                  roster={roster}
+                  selfUserId={userId}
+                  onReconnect={handleReconnect}
+                />
+                <p
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                  data-testid="note-collab-notice"
+                  className="text-sm text-muted-foreground"
+                >
+                  {collaborationNotice}
+                </p>
+              </div>
+            );
+            return presenceSlot === null ? presence : createPortal(presence, presenceSlot);
+          })()
+        : null}
       {pendingHandshake ? (
         <div data-testid="note-collaboration-pending" data-notted-print-hide>
           <Skeleton className="h-64 w-full" />

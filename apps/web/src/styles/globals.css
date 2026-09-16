@@ -54,6 +54,7 @@
   --font-sans:
     system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
     sans-serif;
+  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
@@ -342,7 +343,7 @@
    * belongs to `print.css` (Part 38).
    */
   .notted-editor-content {
-    @apply min-h-40 w-full max-w-full break-words text-base leading-7 outline-none;
+    @apply min-h-40 w-full max-w-full break-words font-serif text-base leading-7 outline-none;
   }
 
   .notted-editor-content:focus-visible {
@@ -1081,7 +1082,9 @@
        sheet stays aligned with the wrapper that reserves its space. */
     transform-origin: top center;
     background-color: #ffffff;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.08);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.12),
+      0 16px 32px -12px rgba(0, 0, 0, 0.18);
     @apply text-slate-950;
   }
 

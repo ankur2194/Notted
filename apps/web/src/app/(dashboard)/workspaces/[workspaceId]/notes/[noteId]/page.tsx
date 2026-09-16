@@ -1,15 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
-import type { NoteNavigationItem } from "@notted/shared-types";
-
 import { NoteDetailView } from "@/components/notes/NoteDetailView";
 import { projectNotePath } from "@/lib/notes/paths";
-import {
-  getServerFolders,
-  getServerNoteDetail,
-  getServerNoteNavigation,
-} from "@/lib/notes/server-notes";
+import { getServerNoteDetail } from "@/lib/notes/server-notes";
 import { getServerTaskList } from "@/lib/tasks/server-tasks";
 import { getServerWorkspaceDetail } from "@/lib/workspaces/server-workspaces";
 
@@ -19,11 +13,9 @@ export default async function StandaloneNotePage({
   readonly params: Promise<{ readonly workspaceId: string; readonly noteId: string }>;
 }) {
   const { workspaceId, noteId } = await params;
-  const [note, workspace, folders, navigation] = await Promise.all([
+  const [note, workspace] = await Promise.all([
     getServerNoteDetail(workspaceId, noteId),
     getServerWorkspaceDetail(workspaceId),
-    getServerFolders(workspaceId),
-    getServerNoteNavigation(workspaceId),
   ]);
   if (
     note.status === "not-found" ||
@@ -47,23 +39,6 @@ export default async function StandaloneNotePage({
     );
   if (note.data.projectId !== null)
     redirect(projectNotePath(workspaceId, note.data.projectId, note.data.id));
-  const byId = new Map(
-    navigation.status === "ready" ? navigation.data.items.map((item) => [item.id, item]) : [],
-  );
-  const ancestors: NoteNavigationItem[] = [];
-  let parentId = note.data.parentId;
-  const seen = new Set<string>();
-  while (parentId !== null && !seen.has(parentId)) {
-    seen.add(parentId);
-    const parent = byId.get(parentId);
-    if (parent === undefined) break;
-    ancestors.unshift(parent);
-    parentId = parent.parentId;
-  }
-  const folderName =
-    folders.status === "ready" && note.data.folderId !== null
-      ? folders.data.items.find((folder) => folder.id === note.data.folderId)?.name
-      : undefined;
   /*
    * Sequential rather than part of the parallel block above: the note's own
    * type decides whether a task list exists at all, so fetching it eagerly
@@ -75,9 +50,6 @@ export default async function StandaloneNotePage({
   return (
     <NoteDetailView
       note={note.data}
-      workspaceName={workspace.data.name}
-      folderName={folderName}
-      ancestors={ancestors}
       initialTasks={tasks?.status === "ready" ? tasks.data : null}
       viewer={{ userId: note.data.currentActorId, role: workspace.data.currentUserRole }}
     />

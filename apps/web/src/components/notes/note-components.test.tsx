@@ -112,7 +112,6 @@ describe("note components", () => {
             currentActorId: note.id,
             capabilities: { canUpdate: false, canDelete: false, canShare: false, canExport: false },
           }}
-          workspaceName="Alpha"
         />,
       ),
     );
@@ -124,7 +123,7 @@ describe("note components", () => {
     expect(screen.getByText(/3\/7 done · 1\/3 checklist items · 2\/4 tasks/u)).toBeVisible();
   });
 
-  it("renders deep-link breadcrumbs and persisted content without interpreting it as HTML", async () => {
+  it("renders persisted content without interpreting it as HTML", async () => {
     // The note body is rendered exactly once, by the editor. Persisted text that
     // looks like markup must reach the screen as characters: TipTap is fed
     // contract JSON, never an HTML string, so `<b>` stays literal text.
@@ -145,11 +144,9 @@ describe("note components", () => {
             currentActorId: note.id,
             capabilities: { canUpdate: true, canDelete: true, canShare: true, canExport: true },
           }}
-          workspaceName="Alpha"
         />,
       ),
     );
-    expect(screen.getByRole("navigation", { name: "Note breadcrumbs" })).toHaveTextContent("Alpha");
     const surface = await screen.findByRole("textbox", { name: `Note content: ${note.title}` });
     await waitFor(() => expect(surface).toHaveTextContent("<b>literal text</b>"));
     expect(document.querySelector("b")).toBeNull();
@@ -172,7 +169,6 @@ describe("note components", () => {
             currentActorId: note.id,
             capabilities: { canUpdate: false, canDelete: false, canShare: false, canExport: false },
           }}
-          workspaceName="Alpha"
         />,
       ),
     );
@@ -193,7 +189,6 @@ describe("note components", () => {
             currentActorId: note.id,
             capabilities: { canUpdate: false, canDelete: false, canShare: false, canExport: false },
           }}
-          workspaceName="Alpha"
         />,
       ),
     );
@@ -220,7 +215,6 @@ describe("note components", () => {
             currentActorId: note.id,
             capabilities: { canUpdate: true, canDelete: true, canShare: true, canExport: true },
           }}
-          workspaceName="Alpha"
         />,
       ),
     );

@@ -2,8 +2,11 @@
 
 import { COMMENT_CONTENT_MAX_LENGTH } from "@notted/shared-validators";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, LoaderCircle, MessageSquare, Pencil, Reply, Trash2, Undo2 } from "lucide-react";
+import { Check, LoaderCircle, Pencil, Reply, Trash2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
+import { NOTE_COMMENTS_SLOT_ID } from "./note-comments-slot";
 
 import type { CommentAnchorTarget } from "@/components/editor/extensions/comment-decorations";
 import type { CommentAnchor, CommentSummary, CommentThread } from "@notted/shared-types";
@@ -181,15 +184,6 @@ export function NoteComments({
   onActiveCommentIdChange,
 }: NoteCommentsProps) {
   const queryClient = useQueryClient();
-  /*
-   * ponytail: the panel is a disclosure and fetches nothing until it is opened.
-   * Ceiling: no open-comment count on the closed button, so a reader has to open
-   * the panel to learn a note has comments. Upgrade path: the note detail
-   * payload already carries `progress`; adding an `openCommentCount` there costs
-   * one aggregate and would let the button carry a badge without this component
-   * fetching on every note open.
-   */
-  const [open, setOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [draft, setDraft] = useState("");
@@ -202,6 +196,19 @@ export function NoteComments({
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const offline = useIsOffline();
 
+  /*
+   * The sidebar slot lives outside the page content this component is rendered
+   * inside (`NoteEditorSurface`, itself inside `PageContainer`'s scaled paper),
+   * so a plain child render would sit under the note text rather than beside
+   * it. `NoteDetailView` renders the slot only on the real note page; a render
+   * with no matching element — this component's own unit tests — keeps the
+   * previous inline placement instead of rendering nothing.
+   */
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setSlot(document.getElementById(NOTE_COMMENTS_SLOT_ID));
+  }, []);
+
   const comments = useQuery({
     queryKey: noteQueryKeys.comments(workspaceId, noteId),
     queryFn: async () => {
@@ -211,7 +218,6 @@ export function NoteComments({
       if (!result.ok) throw new Error(`comments unavailable: ${result.kind}`);
       return result.data;
     },
-    enabled: open,
   });
 
   const threads = useMemo(() => comments.data?.items ?? [], [comments.data]);
@@ -303,7 +309,6 @@ export function NoteComments({
    * Realtime: identifiers only, one action, guarded by note.
    * --------------------------------------------------------------------- */
   useEffect(() => {
-    if (!open) return;
     const socket = getRealtimeSocket();
     const handleChanged = (payload: unknown): void => {
       if (!isCommentFrameForNote(payload, noteId)) return;
@@ -317,7 +322,7 @@ export function NoteComments({
     return () => {
       socket.off(COMMENT_CHANGED_EVENT, handleChanged);
     };
-  }, [noteId, open, queryClient, workspaceId]);
+  }, [noteId, queryClient, workspaceId]);
 
   const submitThread = useCallback(
     (event: FormEvent<HTMLFormElement>): void => {
@@ -612,140 +617,130 @@ export function NoteComments({
   const live = threads.filter((thread) => !orphanIds.has(thread.id));
   const orphans = threads.filter((thread) => orphanIds.has(thread.id));
 
-  return (
-    /*
-     * ONE toggle, mounted in both states. The panel used to be two disjoint
-     * renders — a "Comments" button, or a section with its own "Hide comments"
-     * button — so opening it unmounted the control the reader had just pressed
-     * and closing it unmounted the other one: focus landed on `<body>` on BOTH
-     * transitions. A single persistent button that owns `aria-expanded` and
-     * `aria-controls` is the standard disclosure, keeps focus where the reader
-     * put it, and needs no focus-restoration code at all.
-     */
-    <div className="space-y-4" data-notted-print-hide>
-      <Button
-        variant={open ? "ghost" : "outline"}
-        size="sm"
-        aria-expanded={open}
-        aria-controls={PANEL_ID}
-        data-testid="note-comments-toggle"
-        onClick={() => setOpen((current) => !current)}
+  const panel =
+    (
+      /*
+       * Always mounted, with its own scroll region: the panel used to be a
+       * disclosure a reader had to open before it fetched anything, but that
+       * hid the discussion behind an extra click and made "how many comments
+       * does this note have" invisible until pressed. It now sits permanently
+       * in the sidebar slot (`NoteDetailView`), sticky and independently
+       * scrollable, so an arbitrarily long thread list never grows the page
+       * around it.
+       */
+      <section
+        id={PANEL_ID}
+        aria-labelledby="note-comments-heading"
+        className="max-h-[calc(100vh-3rem)] space-y-4 overflow-y-auto rounded-xl border bg-card p-4"
+        data-testid="note-comments"
+        data-notted-print-hide
       >
-        <MessageSquare aria-hidden="true" /> {open ? "Hide comments" : "Comments"}
-      </Button>
-      {open ? (
-        <section
-          id={PANEL_ID}
-          aria-labelledby="note-comments-heading"
-          className="space-y-4 rounded-xl border bg-card p-4"
-          data-testid="note-comments"
+        <h2
+          id="note-comments-heading"
+          // Focusable only programmatically: the delete handler hands focus
+          // here when the comment that held it disappears.
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-lg font-semibold"
         >
-          <h2
-            id="note-comments-heading"
-            // Focusable only programmatically: the delete handler hands focus
-            // here when the comment that held it disappears.
-            ref={headingRef}
-            tabIndex={-1}
-            className="text-lg font-semibold"
-          >
-            Comments
-            {comments.data === undefined ? null : (
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
-                {comments.data.openCount} open
-              </span>
-            )}
-          </h2>
+          Comments
+          {comments.data === undefined ? null : (
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              {comments.data.openCount} open
+            </span>
+          )}
+        </h2>
 
-          <p
-            className="sr-only"
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-            data-testid="note-comments-announcement"
-          >
-            {announcement}
+        <p
+          className="sr-only"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          data-testid="note-comments-announcement"
+        >
+          {announcement}
+        </p>
+
+        {offline ? (
+          <p className="rounded-md border bg-muted/40 p-3 text-sm" role="note">
+            {OFFLINE_MESSAGE}
           </p>
+        ) : null}
 
-          {offline ? (
-            <p className="rounded-md border bg-muted/40 p-3 text-sm" role="note">
-              {OFFLINE_MESSAGE}
-            </p>
-          ) : null}
+        {comments.isPending ? (
+          <div role="status" aria-label="Loading comments" className="space-y-2">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+        ) : null}
 
-          {comments.isPending ? (
-            <div role="status" aria-label="Loading comments" className="space-y-2">
-              <Skeleton className="h-16 w-full" />
-              <Skeleton className="h-16 w-full" />
-            </div>
-          ) : null}
-
-          {comments.isError ? (
-            <div className="rounded-lg border border-destructive/40 p-3 text-sm" role="alert">
-              <p>Comments could not be loaded.</p>
-              <Button
-                className="mt-2"
-                size="sm"
-                variant="outline"
-                onClick={() => void comments.refetch()}
-              >
-                Retry
-              </Button>
-            </div>
-          ) : null}
-
-          {comments.isSuccess && threads.length === 0 ? (
-            <p className="text-sm text-muted-foreground" role="status">
-              No comments yet. Select text in the note, or write below to comment on the whole note.
-            </p>
-          ) : null}
-
-          {live.length > 0 ? (
-            <ul className="space-y-3" aria-label="Comment threads">
-              {live.map((thread) => renderThread(thread, false))}
-            </ul>
-          ) : null}
-
-          {orphans.length > 0 ? (
-            <div className="space-y-2">
-              <h3 id="note-comments-orphaned-heading" className="text-sm font-semibold">
-                Orphaned
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                The text these comments pointed at is gone. They are kept exactly as written and are
-                not highlighted in the note.
-              </p>
-              <ul className="space-y-3" aria-labelledby="note-comments-orphaned-heading">
-                {orphans.map((thread) => renderThread(thread, true))}
-              </ul>
-            </div>
-          ) : null}
-
-          <form className="space-y-2 border-t pt-3" onSubmit={submitThread}>
-            <label className="block text-sm font-medium" htmlFor="note-comment-new">
-              Add a comment
-            </label>
-            <p id="note-comment-new-hint" className="text-xs text-muted-foreground">
-              Anything you have selected in the note is attached to the comment.
-            </p>
-            <textarea
-              id="note-comment-new"
-              aria-describedby="note-comment-new-hint"
-              className="min-h-24 w-full rounded-md border bg-background p-2 text-sm"
-              maxLength={COMMENT_CONTENT_MAX_LENGTH}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-            />
+        {comments.isError ? (
+          <div className="rounded-lg border border-destructive/40 p-3 text-sm" role="alert">
+            <p>Comments could not be loaded.</p>
             <Button
-              type="submit"
+              className="mt-2"
               size="sm"
-              data-testid="comment-submit"
-              aria-disabled={submitInert || draft.trim().length === 0 ? true : undefined}
+              variant="outline"
+              onClick={() => void comments.refetch()}
             >
-              Comment
+              Retry
             </Button>
-          </form>
-        </section>
-      ) : null}
-    </div>
-  );
+          </div>
+        ) : null}
+
+        {comments.isSuccess && threads.length === 0 ? (
+          <p className="text-sm text-muted-foreground" role="status">
+            No comments yet. Select text in the note, or write below to comment on the whole note.
+          </p>
+        ) : null}
+
+        {live.length > 0 ? (
+          <ul className="space-y-3" aria-label="Comment threads">
+            {live.map((thread) => renderThread(thread, false))}
+          </ul>
+        ) : null}
+
+        {orphans.length > 0 ? (
+          <div className="space-y-2">
+            <h3 id="note-comments-orphaned-heading" className="text-sm font-semibold">
+              Orphaned
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              The text these comments pointed at is gone. They are kept exactly as written and are
+              not highlighted in the note.
+            </p>
+            <ul className="space-y-3" aria-labelledby="note-comments-orphaned-heading">
+              {orphans.map((thread) => renderThread(thread, true))}
+            </ul>
+          </div>
+        ) : null}
+
+        <form className="space-y-2 border-t pt-3" onSubmit={submitThread}>
+          <label className="block text-sm font-medium" htmlFor="note-comment-new">
+            Add a comment
+          </label>
+          <p id="note-comment-new-hint" className="text-xs text-muted-foreground">
+            Anything you have selected in the note is attached to the comment.
+          </p>
+          <textarea
+            id="note-comment-new"
+            aria-describedby="note-comment-new-hint"
+            className="min-h-24 w-full rounded-md border bg-background p-2 text-sm"
+            maxLength={COMMENT_CONTENT_MAX_LENGTH}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            data-testid="comment-submit"
+            aria-disabled={submitInert || draft.trim().length === 0 ? true : undefined}
+          >
+            Comment
+          </Button>
+        </form>
+      </section>
+    );
+
+  return slot === null ? panel : createPortal(panel, slot);
 }

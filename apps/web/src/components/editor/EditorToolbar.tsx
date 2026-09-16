@@ -41,7 +41,7 @@ const CONTROL_CLASSES =
   "inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-sm text-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none aria-pressed:border-input aria-pressed:bg-accent aria-pressed:text-accent-foreground aria-disabled:opacity-50";
 
 const SELECT_CLASSES =
-  "min-h-11 rounded-md border border-input bg-background px-2 text-sm text-foreground";
+  "min-h-11 w-28 truncate rounded-md border border-input bg-background px-2 text-sm text-foreground";
 
 export interface EditorToolbarProps {
   readonly editor: Editor | null;

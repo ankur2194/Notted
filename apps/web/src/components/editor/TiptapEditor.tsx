@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { AttachmentDialogs } from "./AttachmentDialogs";
 import { prepareNoteDocumentForEditor } from "./document-contract";
 import { areDocumentsEquivalent } from "./document-sync";
+import { EDITOR_TOOLBAR_SLOT_ID } from "./editor-toolbar-slot";
 import { EditorToolbar } from "./EditorToolbar";
 import { EditorShortcuts, type EditorShortcutHandlerMap } from "./extensions/editor-shortcuts";
 import { createNoteEditorExtensions } from "./extensions/note-editor-extensions";
@@ -343,6 +344,19 @@ function EditorSurface({
     setPortalTarget(document.body);
   }, []);
 
+  /*
+   * Outside focus mode, the toolbar still leaves this subtree: `PageContainer`
+   * renders a thin, full-width bar above the paper (`EDITOR_TOOLBAR_SLOT_ID`)
+   * so the toolbar's row-wrapping is bounded by the viewport rather than by the
+   * physical page's fixed content width. A render with no matching element —
+   * this component's own standalone unit tests — keeps the previous in-place
+   * rendering instead.
+   */
+  const [toolbarSlot, setToolbarSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setToolbarSlot(document.getElementById(EDITOR_TOOLBAR_SLOT_ID));
+  }, []);
+
   // Latest values are read through refs so changing a callback or the editable
   // flag never rebuilds the editor and never discards editing history.
   const changeRef = useRef(onDocumentChange);
@@ -642,7 +656,9 @@ function EditorSurface({
       )}
       {focusMode && portalTarget !== null
         ? createPortal(<div className="notted-focus-toolbar">{toolbar}</div>, portalTarget)
-        : toolbar}
+        : toolbarSlot !== null
+          ? createPortal(toolbar, toolbarSlot)
+          : toolbar}
       {/*
        * One event, one assertive announcement.
        *

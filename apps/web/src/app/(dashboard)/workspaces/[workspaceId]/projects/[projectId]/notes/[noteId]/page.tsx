@@ -1,10 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import type { NoteNavigationItem } from "@notted/shared-types";
-
 import { NoteDetailView } from "@/components/notes/NoteDetailView";
-import { getServerNoteDetail, getServerNoteNavigation } from "@/lib/notes/server-notes";
+import { getServerNoteDetail } from "@/lib/notes/server-notes";
 import { getServerProjectDetail } from "@/lib/projects/server-projects";
 import { getServerTaskList } from "@/lib/tasks/server-tasks";
 import { getServerWorkspaceDetail } from "@/lib/workspaces/server-workspaces";
@@ -19,11 +17,10 @@ export default async function ProjectNotePage({
   }>;
 }) {
   const { workspaceId, projectId, noteId } = await params;
-  const [note, project, workspace, navigation] = await Promise.all([
+  const [note, project, workspace] = await Promise.all([
     getServerNoteDetail(workspaceId, noteId),
     getServerProjectDetail(workspaceId, projectId),
     getServerWorkspaceDetail(workspaceId),
-    getServerNoteNavigation(workspaceId),
   ]);
   if (
     note.status === "not-found" ||
@@ -54,19 +51,6 @@ export default async function ProjectNotePage({
       </section>
     );
   if (note.data.projectId !== projectId) notFound();
-  const byId = new Map(
-    navigation.status === "ready" ? navigation.data.items.map((item) => [item.id, item]) : [],
-  );
-  const ancestors: NoteNavigationItem[] = [];
-  let parentId = note.data.parentId;
-  const seen = new Set<string>();
-  while (parentId !== null && !seen.has(parentId)) {
-    seen.add(parentId);
-    const parent = byId.get(parentId);
-    if (parent === undefined) break;
-    ancestors.unshift(parent);
-    parentId = parent.parentId;
-  }
   /*
    * Sequential rather than part of the parallel block above: the note's own
    * type decides whether a task list exists at all, so fetching it eagerly
@@ -78,9 +62,7 @@ export default async function ProjectNotePage({
   return (
     <NoteDetailView
       note={note.data}
-      workspaceName={workspace.data.name}
       projectName={project.data.name}
-      ancestors={ancestors}
       initialTasks={tasks?.status === "ready" ? tasks.data : null}
       viewer={{ userId: note.data.currentActorId, role: workspace.data.currentUserRole }}
     />
