@@ -24,6 +24,7 @@ import { AuthGuard } from "../auth/auth.guard";
 import { AuthService } from "../auth/auth.service";
 import { RequireAuthorization } from "../authorization/authorization-http.decorator";
 import { ApiHttpException } from "../common/errors/api-http.exception";
+import { RateLimitTier } from "../common/rate-limit/rate-limit.decorator";
 import { getRequestId } from "../common/request/request-context";
 
 import { MembershipsService } from "./memberships.service";
@@ -114,6 +115,7 @@ export class MembershipsController {
 
   @Post("workspaces/:workspaceId/invitations")
   @RequireAuthorization(inviteAuthorization)
+  @RateLimitTier("sensitive")
   invite(@Req() request: Request, @Body() rawBody: unknown): Promise<WorkspaceInviteResult> {
     this.auth.assertTrustedMutationOrigin(request);
     const body = inviteWorkspaceMemberSchema.safeParse(rawBody);
@@ -129,6 +131,7 @@ export class MembershipsController {
 
   @Post("workspaces/:workspaceId/invitations/:invitationId/resend")
   @RequireAuthorization(inviteAuthorization)
+  @RateLimitTier("sensitive")
   resend(@Req() request: Request): Promise<WorkspaceInvitationResendResult> {
     this.auth.assertTrustedMutationOrigin(request);
     return this.memberships.resend({

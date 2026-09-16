@@ -32,6 +32,7 @@ import { AuthService } from "../auth/auth.service";
 import { RequireAuthorization } from "../authorization/authorization-http.decorator";
 import { ApiHttpException } from "../common/errors/api-http.exception";
 import { requireIdempotencyKey } from "../common/idempotency/api-idempotency";
+import { RateLimitTier } from "../common/rate-limit/rate-limit.decorator";
 import { getRequestId } from "../common/request/request-context";
 
 import { admitUpload } from "./attachment-admission";
@@ -227,21 +228,16 @@ export class NoteAttachmentsController {
    * methods additionally re-run admission for themselves, so a mis-wired
    * transport cannot force a payload down the wrong path.
    *
-   * ponytail: this route is governed only by the GLOBAL authenticated bucket
-   * (`AUTH_RATE_LIMIT_PER_MINUTE`, 1000/min) even though it is by far the most
-   * expensive endpoint in the API — up to 50 MiB buffered in memory, then
-   * decoded. A single authorized actor can therefore issue ~1000 large uploads a
-   * minute; the workspace quota bounds what is KEPT, not what is buffered.
-   * `RateLimitService` has one bucket and no per-route policy, so tightening
-   * this needs a route-scoped policy decorator, guard metadata resolution, and a
-   * config value — recorded as follow-up in the Part 44 completion record rather
-   * than bolted on here. The concrete mitigations already in place are the
-   * `maxBytes` ceiling (a body is refused before it is fully buffered), the
-   * per-request idempotency key, and `file.upload` authorization on the note.
+   * This is by far the most expensive endpoint in the API — up to 50 MiB
+   * buffered in memory, then decoded — so it carries the sensitive rate-limit
+   * tier (its own bucket, tighter than the general authenticated allowance) on
+   * top of the `maxBytes` ceiling, the per-request idempotency key, and
+   * `file.upload` authorization on the note.
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @RequireAuthorization(noteAuthorization("file.upload"))
+  @RateLimitTier("sensitive")
   async upload(@Req() request: Request): Promise<AttachmentUploadResult> {
     this.auth.assertTrustedMutationOrigin(request);
     const idempotencyKey = requireIdempotencyKey(request);

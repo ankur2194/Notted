@@ -15,6 +15,34 @@ This policy applies to the Drizzle migration surface introduced in Plan Part 12.
 - `pnpm db:check` must pass after generation. Do not use `drizzle-kit push` as a
   substitute for a reviewed migration.
 
+## Locking on populated tables
+
+`drizzle-kit` runs each migration file inside one transaction, so
+`CREATE INDEX CONCURRENTLY` (which cannot run inside a transaction) is not
+available through the normal `pnpm db:generate` / `pnpm db:migrate` path. Every
+existing migration predates any production data and is left as-is per
+Immutability below, but before the first production deploy with real data
+volume, review any new migration against `notes`, `audit_logs`, or another
+table expected to be large for:
+
+- A plain `CREATE INDEX` (ACCESS SHARE only blocks writes for the build
+  duration, but that duration grows with table size) — build the index
+  through a separate, non-transactional step (a superuser script or a
+  migration-runner change that opts specific statements out of the
+  transaction) using `CONCURRENTLY` instead.
+- A column addition whose `DEFAULT` calls a volatile function
+  (`gen_random_uuid()`, `now()`, `random()`) — Postgres cannot use the
+  metadata-only fast path and rewrites the whole table under
+  `ACCESS EXCLUSIVE`. Add the column nullable with no default, backfill in
+  batches, then set the default and `NOT NULL` once backfilled.
+- A new foreign key without `NOT VALID` — validation locks the table for the
+  full scan. Add `NOT VALID`, then `VALIDATE CONSTRAINT` in a follow-up
+  migration, which only takes a `SHARE UPDATE EXCLUSIVE` lock.
+- A `TYPE` change on an existing column — this rewrites the table under
+  `ACCESS EXCLUSIVE` regardless of transaction wrapping; there is no
+  in-transaction workaround, so plan a dual-column/backfill/swap migration
+  sequence instead for a populated table.
+
 ## Immutability
 
 Once a migration is accepted into shared history or applied to any persistent
