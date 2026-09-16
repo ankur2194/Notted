@@ -27,6 +27,7 @@ import type { CustomTaskStatus, NoteSummary, TagSummary } from "@notted/shared-t
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/form-controls";
 
 /**
  * The leading bucket. Not a column id: a note lands here when it has no column
@@ -107,9 +108,8 @@ function ColumnMover({
         <label className="text-xs font-medium" htmlFor={selectId}>
           Column for {note.title}
         </label>
-        <select
+        <Select
           id={selectId}
-          className="min-h-11 rounded-md border bg-background px-3 text-sm"
           value={target}
           disabled={disabled}
           onChange={(event) => setTarget(event.target.value)}
@@ -119,7 +119,7 @@ function ColumnMover({
               {column.label}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <Button
         type="button"

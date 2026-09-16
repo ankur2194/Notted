@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 import { ProjectCollection } from "@/components/projects/ProjectCollection";
+import { Select } from "@/components/ui/form-controls";
 import { projectListHref } from "@/lib/projects/paths";
 import { getServerProjectList, type ProjectSearchParams } from "@/lib/projects/server-projects";
 import { getServerWorkspaceDetail } from "@/lib/workspaces/server-workspaces";
@@ -101,47 +102,47 @@ export default async function ProjectsPage({
           <label htmlFor="project-status-filter" className="text-sm font-medium">
             Status
           </label>
-          <select
+          <Select
             id="project-status-filter"
             name="status"
             defaultValue={query.status ?? ""}
-            className="min-h-11 w-full rounded-md border bg-background px-3 text-sm"
+            className="w-full"
           >
             <option value="">All statuses</option>
             <option value="active">Active</option>
             <option value="completed">Completed</option>
             <option value="archived">Archived</option>
-          </select>
+          </Select>
         </div>
         <div className="space-y-1">
           <label htmlFor="project-sort-filter" className="text-sm font-medium">
             Sort by
           </label>
-          <select
+          <Select
             id="project-sort-filter"
             name="sortBy"
             defaultValue={query.sortBy}
-            className="min-h-11 w-full rounded-md border bg-background px-3 text-sm"
+            className="w-full"
           >
             <option value="updatedAt">Last updated</option>
             <option value="createdAt">Created</option>
             <option value="name">Name</option>
             <option value="dueAt">Due date</option>
-          </select>
+          </Select>
         </div>
         <div className="space-y-1">
           <label htmlFor="project-direction-filter" className="text-sm font-medium">
             Direction
           </label>
-          <select
+          <Select
             id="project-direction-filter"
             name="sortDirection"
             defaultValue={query.sortDirection}
-            className="min-h-11 w-full rounded-md border bg-background px-3 text-sm"
+            className="w-full"
           >
             <option value="desc">Descending</option>
             <option value="asc">Ascending</option>
-          </select>
+          </Select>
         </div>
         <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-5">
           <button

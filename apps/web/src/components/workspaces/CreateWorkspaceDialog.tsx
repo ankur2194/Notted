@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ErrorSummary, FormField, FormStatus } from "@/components/ui/form-controls";
+import { ErrorSummary, FormField, FormStatus, Select } from "@/components/ui/form-controls";
 import { selectWorkspace } from "@/lib/shell/requests";
 import { createWorkspace, suggestSlugFromName } from "@/lib/workspaces/requests";
 
@@ -260,9 +260,9 @@ export function CreateWorkspaceDialog({
               <label htmlFor="workspace-default-page-size" className="text-sm font-medium">
                 Default page size
               </label>
-              <select
+              <Select
                 id="workspace-default-page-size"
-                className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full"
                 value={defaultPageSize}
                 disabled={submitting}
                 aria-describedby="workspace-default-page-size-hint"
@@ -273,7 +273,7 @@ export function CreateWorkspaceDialog({
               >
                 <option value="a4">A4</option>
                 <option value="letter">Letter</option>
-              </select>
+              </Select>
               <p id="workspace-default-page-size-hint" className="text-sm text-muted-foreground">
                 New notes use this paper size unless someone chooses another size for the note.
               </p>

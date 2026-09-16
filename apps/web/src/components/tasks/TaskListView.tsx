@@ -36,6 +36,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/form-controls";
 import { fetchWorkspaceMemberDirectory } from "@/lib/notes/member-directory";
 import { noteQueryKeys, tagQueryKeys, taskQueryKeys } from "@/lib/notes/query-keys";
 import { requestTagPage } from "@/lib/tags/requests";
@@ -559,9 +560,8 @@ export function TaskListView({
               <label className="text-sm font-medium" htmlFor="task-grouping">
                 Group tasks by
               </label>
-              <select
+              <Select
                 id="task-grouping"
-                className="min-h-11 rounded-md border bg-background px-3 text-sm"
                 value={grouping}
                 onChange={(event) => setGrouping(event.target.value as TaskGrouping)}
               >
@@ -570,7 +570,7 @@ export function TaskListView({
                     {entry.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           ) : null}
           {canEdit ? <CreateTaskForm disabled={operationPending} onCreate={create} /> : null}
@@ -671,9 +671,8 @@ export function TaskListView({
                   <label className="text-xs font-medium" htmlFor="bulk-priority">
                     Priority for selected tasks
                   </label>
-                  <select
+                  <Select
                     id="bulk-priority"
-                    className="min-h-11 rounded-md border bg-background px-3 text-sm"
                     value={bulkPriority}
                     disabled={operationPending}
                     onChange={(event) => setBulkPriority(event.target.value as TaskPriority)}
@@ -683,7 +682,7 @@ export function TaskListView({
                         {entry.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <Button
                   type="button"

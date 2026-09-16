@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import type { WorkspaceDetail, WorkspaceSettings } from "@notted/shared-types";
 
 import { Button } from "@/components/ui/button";
-import { ErrorSummary, FormField, FormStatus } from "@/components/ui/form-controls";
+import { ErrorSummary, FormField, FormStatus, Select } from "@/components/ui/form-controls";
 import { CustomDomainSettings } from "@/components/workspaces/CustomDomainSettings";
 import { WorkspaceAvatar } from "@/components/workspaces/WorkspaceAvatar";
 import { WorkspaceStorageLimit } from "@/components/workspaces/WorkspaceStorageLimit";
@@ -444,9 +444,9 @@ export function WorkspaceSettings({
             <label htmlFor="settings-default-page-size" className="text-sm font-medium">
               Default page size
             </label>
-            <select
+            <Select
               id="settings-default-page-size"
-              className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full"
               value={defaultPageSize}
               disabled={!canManage || saving}
               onChange={(event) => {
@@ -459,7 +459,7 @@ export function WorkspaceSettings({
             >
               <option value="a4">A4</option>
               <option value="letter">Letter</option>
-            </select>
+            </Select>
           </div>
           <div className="flex flex-wrap gap-3">
             <Button type="submit" disabled={!canSave() || !hasPageDefaultChanges()}>

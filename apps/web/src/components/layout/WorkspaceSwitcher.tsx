@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import type { ShellWorkspaceMembership } from "@notted/shared-types";
 
+import { Select } from "@/components/ui/form-controls";
 import { publicEnvironment } from "@/config/public-environment";
 import { selectWorkspace } from "@/lib/shell/requests";
 
@@ -101,12 +102,12 @@ export function WorkspaceSwitcher({
       >
         Current workspace
       </label>
-      <select
+      <Select
         id={compact ? "mobile-workspace" : "workspace-switcher"}
         aria-describedby={
           state === "error" ? `${compact ? "mobile-" : ""}workspace-error` : undefined
         }
-        className="min-h-11 w-full rounded-md border bg-background px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-70"
+        className="w-full font-medium"
         value={currentWorkspace?.workspaceId ?? ""}
         onChange={(event) => void change(event.target.value)}
         disabled={state === "loading" || workspaces.length === 1}
@@ -117,7 +118,7 @@ export function WorkspaceSwitcher({
             {workspace.name} · {workspace.role}
           </option>
         ))}
-      </select>
+      </Select>
       {workspaces.length === 1 && !compact && (
         <p className="text-xs text-muted-foreground">Only one workspace is available.</p>
       )}

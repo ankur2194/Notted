@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ErrorSummary } from "@/components/ui/form-controls";
+import { ErrorSummary, Select } from "@/components/ui/form-controls";
 
 interface StableSubmission {
   readonly fingerprint: string;
@@ -134,17 +134,17 @@ export function CreateNoteDialog({
             <label htmlFor="create-note-type" className="text-sm font-medium">
               Type
             </label>
-            <select
+            <Select
               id="create-note-type"
               value={type}
               onChange={(event) => setType(event.target.value as NoteType)}
               disabled={pending}
               aria-describedby="create-note-type-help"
-              className="min-h-11 w-full rounded-md border bg-background px-3"
+              className="w-full"
             >
               <option value="document">Document</option>
               <option value="task-list">Task list</option>
-            </select>
+            </Select>
             {/*
              * The type never replaces the editor. Part 47 adds the task list
              * below the page rather than instead of it, so this help text has

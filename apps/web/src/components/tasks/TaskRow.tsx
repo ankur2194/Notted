@@ -15,6 +15,7 @@ import type { UpdateTaskInput } from "@notted/shared-validators";
 
 import { TagPicker } from "@/components/tags/TagPicker";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/form-controls";
 import {
   composeDueDate,
   dueLabel,
@@ -288,9 +289,9 @@ export function TaskRow({
           <label className="text-xs font-medium" htmlFor={`${idPrefix}-assignee`}>
             Assignee for {task.title}
           </label>
-          <select
+          <Select
             id={`${idPrefix}-assignee`}
-            className="min-h-11 w-full rounded-md border bg-background px-3 text-sm"
+            className="w-full"
             value={task.assigneeId ?? ""}
             disabled={locked}
             onChange={(event) =>
@@ -305,15 +306,15 @@ export function TaskRow({
                 {member.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium" htmlFor={`${idPrefix}-priority`}>
             Priority for {task.title}
           </label>
-          <select
+          <Select
             id={`${idPrefix}-priority`}
-            className="min-h-11 w-full rounded-md border bg-background px-3 text-sm"
+            className="w-full"
             value={task.priority}
             disabled={locked}
             onChange={(event) => onUpdate(task, { priority: event.target.value as TaskPriority })}
@@ -323,7 +324,7 @@ export function TaskRow({
                 {entry.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -331,9 +332,9 @@ export function TaskRow({
         <label className="text-xs font-medium" htmlFor={`${idPrefix}-recurrence`}>
           Recurrence for {task.title}
         </label>
-        <select
+        <Select
           id={`${idPrefix}-recurrence`}
-          className="min-h-11 w-full rounded-md border bg-background px-3 text-sm sm:max-w-xs"
+          className="w-full sm:max-w-xs"
           value={recurrence}
           disabled={locked}
           onChange={(event) => commitRecurrence(event.target.value as TaskRecurrence)}
@@ -343,7 +344,7 @@ export function TaskRow({
               {entry.label}
             </option>
           ))}
-        </select>
+        </Select>
         {recurrence === "custom" ? (
           <div className="space-y-1 pt-2">
             <label className="text-xs font-medium" htmlFor={`${idPrefix}-cron`}>
@@ -443,9 +444,8 @@ export function TaskRow({
           <label className="text-xs font-medium" htmlFor={`${idPrefix}-position`}>
             Position for {task.title}
           </label>
-          <select
+          <Select
             id={`${idPrefix}-position`}
-            className="min-h-11 rounded-md border bg-background px-3 text-sm"
             value={position}
             disabled={locked || movement.dragDisabled}
             onChange={(event) => setPosition(event.target.value)}
@@ -455,7 +455,7 @@ export function TaskRow({
                 {slot} of {movement.total}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <Button
           type="button"

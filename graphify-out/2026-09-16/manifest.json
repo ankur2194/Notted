@@ -2970,8 +2970,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/layout/Sidebar.tsx": {
-    "mtime": 1788031225.2724285,
-    "ast_hash": "575274146057c6426dfce46303f5dc54",
+    "mtime": 1789565610.2013254,
+    "ast_hash": "e9b00e358bf4f4d713cdf5821ed5e289",
     "semantic_hash": ""
   },
   "apps/web/src/components/layout/TopBar.tsx": {
@@ -5935,8 +5935,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/ExportNoteDialog.tsx": {
-    "mtime": 1786910006.293698,
-    "ast_hash": "426ed8acdb530b9e5a95fe9079061ca8",
+    "mtime": 1789563134.2257128,
+    "ast_hash": "52d13a6f64e0c14da057f044262437c8",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/export-note-dialog.test.tsx": {

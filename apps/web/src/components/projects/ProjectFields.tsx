@@ -1,6 +1,6 @@
 import type { ProjectStatus } from "@notted/shared-types";
 
-import { FormField } from "@/components/ui/form-controls";
+import { FormField, Select } from "@/components/ui/form-controls";
 
 export function ProjectFields({
   prefix,
@@ -75,9 +75,9 @@ export function ProjectFields({
         <label htmlFor={`${prefix}-status`} className="text-sm font-medium">
           Status
         </label>
-        <select
+        <Select
           id={`${prefix}-status`}
-          className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+          className="w-full"
           value={status}
           disabled={disabled}
           onChange={(event) => {
@@ -89,7 +89,7 @@ export function ProjectFields({
           <option value="active">Active</option>
           <option value="completed">Completed</option>
           <option value="archived">Archived</option>
-        </select>
+        </Select>
       </div>
     </div>
   );

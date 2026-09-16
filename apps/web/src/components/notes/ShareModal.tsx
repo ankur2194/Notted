@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/form-controls";
 import { fetchWorkspaceMemberDirectory } from "@/lib/notes/member-directory";
 import { noteQueryKeys } from "@/lib/notes/query-keys";
 import {
@@ -224,12 +225,12 @@ export function ShareModal({
                   <label className="sr-only" htmlFor="share-member">
                     Workspace member
                   </label>
-                  <select
+                  <Select
                     id="share-member"
                     value={targetUserId}
                     onChange={(event) => setTargetUserId(event.target.value)}
                     disabled={pendingUserId !== null}
-                    className="min-h-11 min-w-0 rounded-md border bg-background px-3"
+                    className="min-w-0"
                   >
                     <option value="">Choose a member</option>
                     {candidates.map((member) => (
@@ -237,20 +238,19 @@ export function ShareModal({
                         {member.name} · {member.role}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                   <label className="sr-only" htmlFor="share-permission">
                     Permission
                   </label>
-                  <select
+                  <Select
                     id="share-permission"
                     value={permission}
                     onChange={(event) => setPermission(mutationPermission(event.target.value))}
                     disabled={pendingUserId !== null}
-                    className="min-h-11 rounded-md border bg-background px-3"
                   >
                     <option value="view">View</option>
                     <option value="edit">Edit</option>
-                  </select>
+                  </Select>
                   <Button
                     disabled={targetUserId === "" || pendingUserId !== null}
                     onClick={() => void save(targetUserId, permission)}
@@ -287,21 +287,20 @@ export function ShareModal({
                               : share.permission}
                           </p>
                         </div>
-                        <select
+                        <Select
                           aria-label={`Permission for ${member?.name ?? share.userId}`}
                           value={share.permission}
                           disabled={pendingUserId !== null || share.permission === "comment"}
                           onChange={(event) =>
                             void save(share.userId, mutationPermission(event.target.value))
                           }
-                          className="min-h-11 rounded-md border bg-background px-3"
                         >
                           <option value="view">View</option>
                           {share.permission === "comment" ? (
                             <option value="comment">Comment</option>
                           ) : null}
                           <option value="edit">Edit</option>
-                        </select>
+                        </Select>
                         <Button
                           type="button"
                           size="sm"

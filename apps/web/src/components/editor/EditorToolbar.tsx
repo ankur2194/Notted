@@ -37,11 +37,10 @@ import { useRovingToolbar } from "./useRovingToolbar";
 
 import type { Editor } from "@tiptap/core";
 
+import { Select } from "@/components/ui/form-controls";
+
 const CONTROL_CLASSES =
   "inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-sm text-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none aria-pressed:border-input aria-pressed:bg-accent aria-pressed:text-accent-foreground aria-disabled:opacity-50";
-
-const SELECT_CLASSES =
-  "min-h-11 w-28 truncate rounded-md border border-input bg-background px-2 text-sm text-foreground";
 
 export interface EditorToolbarProps {
   readonly editor: Editor | null;
@@ -166,14 +165,14 @@ export function EditorToolbar({
 
   function renderBlockType(item: ToolbarControlCommand) {
     return (
-      <select
+      <Select
         key={item.id}
         data-toolbar-item={item.id}
         tabIndex={tabIndexFor(item.id)}
         onFocus={() => onItemFocus(item.id)}
         aria-label={item.label}
         title={item.label}
-        className={SELECT_CLASSES}
+        className="w-28"
         value={editor === null ? "paragraph" : activeBlockType(editor)}
         onChange={(event) => {
           if (editor === null) return;
@@ -187,20 +186,20 @@ export function EditorToolbar({
             {option.label}
           </option>
         ))}
-      </select>
+      </Select>
     );
   }
 
   function renderFontSize(item: ToolbarControlCommand) {
     return (
-      <select
+      <Select
         key={item.id}
         data-toolbar-item={item.id}
         tabIndex={tabIndexFor(item.id)}
         onFocus={() => onItemFocus(item.id)}
         aria-label={item.label}
         title={item.label}
-        className={SELECT_CLASSES}
+        className="w-28"
         value={editor === null ? "" : (activeFontSize(editor) ?? "")}
         onChange={(event) => {
           if (editor === null) return;
@@ -214,7 +213,7 @@ export function EditorToolbar({
             {size}
           </option>
         ))}
-      </select>
+      </Select>
     );
   }
 
@@ -313,7 +312,7 @@ export function EditorToolbar({
   function renderCodeLanguageControl(item: ToolbarControlCommand) {
     const inCodeBlock = editor !== null && editor.isActive("codeBlock");
     return (
-      <select
+      <Select
         key={item.id}
         data-toolbar-item={item.id}
         tabIndex={tabIndexFor(item.id)}
@@ -323,7 +322,7 @@ export function EditorToolbar({
         // Kept mounted and focusable outside a code block so the roving tab
         // index never has to reshuffle; it simply has nothing to change.
         aria-disabled={inCodeBlock ? undefined : true}
-        className={SELECT_CLASSES}
+        className="w-28"
         value={editor === null ? "" : (activeCodeLanguage(editor) ?? "")}
         onChange={(event) => {
           if (editor === null || !inCodeBlock) return;
@@ -337,7 +336,7 @@ export function EditorToolbar({
             {option.label}
           </option>
         ))}
-      </select>
+      </Select>
     );
   }
 

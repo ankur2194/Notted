@@ -25,6 +25,7 @@ import type { FolderSummary, NoteSummary, TagSummary } from "@notted/shared-type
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/form-controls";
 
 export interface NoteMoveDestination {
   readonly projectId: string | null;
@@ -200,9 +201,9 @@ function SortableNote({
               <label className="sr-only" htmlFor={`destination-${note.id}`}>
                 Destination for {note.title}
               </label>
-              <select
+              <Select
                 id={`destination-${note.id}`}
-                className="min-h-11 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm"
+                className="min-w-0 flex-1"
                 disabled={pending || movementDisabled}
                 value={destinationValue}
                 onChange={(event) => setDestinationValue(event.target.value)}
@@ -216,7 +217,7 @@ function SortableNote({
                     {destination.label}
                   </option>
                 ))}
-              </select>
+              </Select>
               <Button
                 type="button"
                 size="sm"

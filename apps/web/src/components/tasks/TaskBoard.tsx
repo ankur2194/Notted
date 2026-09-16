@@ -28,6 +28,7 @@ import type { UpdateTaskInput } from "@notted/shared-validators";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/form-controls";
 import { taskQueryKeys } from "@/lib/notes/query-keys";
 import { requestTaskStatuses } from "@/lib/tasks/requests";
 
@@ -173,9 +174,8 @@ function ColumnMover({
         <label className="text-xs font-medium" htmlFor={selectId}>
           Column for {task.title}
         </label>
-        <select
+        <Select
           id={selectId}
-          className="min-h-11 rounded-md border bg-background px-3 text-sm"
           value={target}
           disabled={disabled}
           onChange={(event) => setTarget(event.target.value)}
@@ -185,7 +185,7 @@ function ColumnMover({
               {column.label}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <Button
         type="button"

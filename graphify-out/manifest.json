@@ -2415,8 +2415,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/projects/page.tsx": {
-    "mtime": 1785581197.218187,
-    "ast_hash": "7bfe7c18b54406826848e03c0f0d19cc",
+    "mtime": 1789566300.9225233,
+    "ast_hash": "422f4f15703a64264ff9269f39bbc932",
     "semantic_hash": ""
   },
   "apps/web/src/app/(dashboard)/workspaces/[workspaceId]/settings/error.tsx": {
@@ -2625,8 +2625,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/editor/EditorToolbar.tsx": {
-    "mtime": 1789560240.1463225,
-    "ast_hash": "f46649314769b0b48aa5f82131e26861",
+    "mtime": 1789566035.596804,
+    "ast_hash": "75db2d4db67383b4d699319439d61545",
     "semantic_hash": ""
   },
   "apps/web/src/components/editor/ImageAltTextDialog.tsx": {
@@ -2970,8 +2970,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/layout/Sidebar.tsx": {
-    "mtime": 1788031225.2724285,
-    "ast_hash": "575274146057c6426dfce46303f5dc54",
+    "mtime": 1789565610.2013254,
+    "ast_hash": "e9b00e358bf4f4d713cdf5821ed5e289",
     "semantic_hash": ""
   },
   "apps/web/src/components/layout/TopBar.tsx": {
@@ -2980,8 +2980,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/layout/WorkspaceSwitcher.tsx": {
-    "mtime": 1788031389.3599153,
-    "ast_hash": "f9d57d92dc37123e8d58233ee9d7fc4e",
+    "mtime": 1789566311.6390233,
+    "ast_hash": "b210aee11c105a712b5ff9995df6fd1a",
     "semantic_hash": ""
   },
   "apps/web/src/components/layout/dashboard-shell.test.tsx": {
@@ -3000,13 +3000,13 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/CreateNoteDialog.tsx": {
-    "mtime": 1786295129.4984713,
-    "ast_hash": "42d03eda172b9f46a48e3190aab67b96",
+    "mtime": 1789566124.0490756,
+    "ast_hash": "15d31ab45293e89f9dff03f7cc928e51",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/FolderControls.tsx": {
-    "mtime": 1785651809.963427,
-    "ast_hash": "3bdd754b4d465772e1fb86a96dd49a7b",
+    "mtime": 1789566311.6390233,
+    "ast_hash": "004725b9c1d5fb84172a0b41e524de75",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/ImageUploadFileInput.tsx": {
@@ -3015,8 +3015,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/NoteBoard.tsx": {
-    "mtime": 1787747253.679176,
-    "ast_hash": "0ab0bed1f2aa9341dc487979981b90d3",
+    "mtime": 1789566260.2972424,
+    "ast_hash": "3e25349ebece83fef2c56c64989dc8c3",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/NoteBrowser.tsx": {
@@ -3050,8 +3050,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/NoteList.tsx": {
-    "mtime": 1786366317.7918715,
-    "ast_hash": "b816c22717ccc2bdd22456022c2e3d61",
+    "mtime": 1789565929.1568155,
+    "ast_hash": "8e1d08dc800cd9c449686925b89fa36d",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/NoteTimeline.tsx": {
@@ -3065,8 +3065,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/PageContainer.tsx": {
-    "mtime": 1789561944.8711443,
-    "ast_hash": "504da433b0d22e7b9a7fa8f5071ab865",
+    "mtime": 1789565982.6710672,
+    "ast_hash": "72b8472ded08c1709236185e6f216b47",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/PagePrintStyle.tsx": {
@@ -3090,8 +3090,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/ShareModal.tsx": {
-    "mtime": 1785767803.7394395,
-    "ast_hash": "9c0e366fd8f6f8d05cfaabf332c53cd0",
+    "mtime": 1789566311.6390233,
+    "ast_hash": "305868ca80a6f27373e9738fd60d0533",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/WorkspaceNoteBrowser.tsx": {
@@ -3215,8 +3215,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/projects/ProjectFields.tsx": {
-    "mtime": 1785581166.2689693,
-    "ast_hash": "d9cf6b2f3cbfa693b32634c903e523be",
+    "mtime": 1789566216.3107305,
+    "ast_hash": "d62020eab08c559b1523bd5b22145647",
     "semantic_hash": ""
   },
   "apps/web/src/components/projects/ProjectGrid.tsx": {
@@ -3290,8 +3290,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/tasks/TaskBoard.tsx": {
-    "mtime": 1787747253.6794007,
-    "ast_hash": "4123f1a6b186a51d03c8bf40f8c2ebc9",
+    "mtime": 1789566108.7117205,
+    "ast_hash": "ad6ef618ddf64561861b96263281bd15",
     "semantic_hash": ""
   },
   "apps/web/src/components/tasks/TaskCalendar.tsx": {
@@ -3300,13 +3300,13 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/tasks/TaskListView.tsx": {
-    "mtime": 1788032260.632902,
-    "ast_hash": "85b7d25b111ad7f2ec1e28348ea30e64",
+    "mtime": 1789566311.6390233,
+    "ast_hash": "786670a027eb350c84dde83e21b1223c",
     "semantic_hash": ""
   },
   "apps/web/src/components/tasks/TaskRow.tsx": {
-    "mtime": 1786384078.166038,
-    "ast_hash": "d074f02b0debe41511a6e372f744f55d",
+    "mtime": 1789566157.7522497,
+    "ast_hash": "9f2ff6e4a52e7b25118d01d1dd194dd2",
     "semantic_hash": ""
   },
   "apps/web/src/components/tasks/TaskSortableList.tsx": {
@@ -3370,8 +3370,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/ui/form-controls.tsx": {
-    "mtime": 1785532097.5506551,
-    "ast_hash": "21b689396940f55425e7d8f07b617621",
+    "mtime": 1789566300.550968,
+    "ast_hash": "d529e03c21b3c2a5022e1ef0e1894f1f",
     "semantic_hash": ""
   },
   "apps/web/src/components/ui/skeleton.test.tsx": {
@@ -3400,8 +3400,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/workspaces/CreateWorkspaceDialog.tsx": {
-    "mtime": 1787646937.2601817,
-    "ast_hash": "a331eb02398d14df8da4180b8bf67e98",
+    "mtime": 1789566279.700009,
+    "ast_hash": "9778dad8c04b132f2e3d7baa7463c45f",
     "semantic_hash": ""
   },
   "apps/web/src/components/workspaces/WorkspaceAvatar.tsx": {
@@ -3415,8 +3415,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/workspaces/WorkspaceSettings.tsx": {
-    "mtime": 1787646937.2601817,
-    "ast_hash": "d6d2ff40866d4104ed765b4562d8a9e9",
+    "mtime": 1789566173.8305235,
+    "ast_hash": "f968e27eb198bbf5bb7616474b75846b",
     "semantic_hash": ""
   },
   "apps/web/src/components/workspaces/WorkspaceStorageLimit.tsx": {
@@ -5100,8 +5100,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/search/SearchFilters.tsx": {
-    "mtime": 1786563229.5802257,
-    "ast_hash": "c6cbbf3caab9238782b618bc53d01bc9",
+    "mtime": 1789565912.1091473,
+    "ast_hash": "bec802228c87bcc6e0659a4c9f9edc2a",
     "semantic_hash": ""
   },
   "apps/web/src/components/search/SearchResults.test.tsx": {
@@ -5935,8 +5935,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/ExportNoteDialog.tsx": {
-    "mtime": 1789563134.2257128,
-    "ast_hash": "52d13a6f64e0c14da057f044262437c8",
+    "mtime": 1789566093.1699455,
+    "ast_hash": "74b6fa1bbb5f9d6fc12e3eacc4c37f09",
     "semantic_hash": ""
   },
   "apps/web/src/components/notes/export-note-dialog.test.tsx": {

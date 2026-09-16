@@ -18,6 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/form-controls";
 import { useExportJob } from "@/hooks/useExportJob";
 import { cancelExportJob, createExportJob, exportDownloadUrl } from "@/lib/api/export-requests";
 import { exportQueryKeys } from "@/lib/exports/query-keys";
@@ -195,19 +196,18 @@ export function ExportNoteDialog({
           <label className="font-medium" htmlFor="export-format">
             Format
           </label>
-          <select
+          <Select
             id="export-format"
             value={format}
             disabled={starting || running}
             onChange={(event) => setFormat(event.target.value as ExportFormat)}
-            className="min-h-11 rounded-md border bg-background px-3"
           >
             {SUPPORTED_EXPORT_FORMATS.map((value) => (
               <option key={value} value={value}>
                 {FORMAT_LABELS[value]}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         {bundles ? (
           <fieldset className="space-y-2 rounded-md border p-3">

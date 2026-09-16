@@ -2,8 +2,8 @@
 
 import type { SearchSort, SearchSortDirection } from "@notted/shared-types";
 
-const SELECT_CLASSES =
-  "min-h-11 rounded-md border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50";
+import { Select } from "@/components/ui/form-controls";
+
 const DATE_INPUT_CLASSES =
   "min-h-11 rounded-md border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -90,9 +90,8 @@ export function SearchFilters({
           <label className="text-sm font-medium" htmlFor="search-filter-project">
             Project
           </label>
-          <select
+          <Select
             id="search-filter-project"
-            className={SELECT_CLASSES}
             value={values.projectId}
             onChange={(event) => onChange({ projectId: event.target.value })}
           >
@@ -102,16 +101,15 @@ export function SearchFilters({
                 {project.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <div className="space-y-1">
           <label className="text-sm font-medium" htmlFor="search-filter-author">
             Author
           </label>
-          <select
+          <Select
             id="search-filter-author"
-            className={SELECT_CLASSES}
             value={values.authorId}
             onChange={(event) => onChange({ authorId: event.target.value })}
           >
@@ -121,16 +119,15 @@ export function SearchFilters({
                 {member.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <div className="space-y-1">
           <label className="text-sm font-medium" htmlFor="search-filter-attachments">
             Attachments
           </label>
-          <select
+          <Select
             id="search-filter-attachments"
-            className={SELECT_CLASSES}
             value={values.hasAttachments}
             onChange={(event) =>
               onChange({ hasAttachments: event.target.value as "" | "true" | "false" })
@@ -141,7 +138,7 @@ export function SearchFilters({
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <fieldset className="space-y-1">
@@ -207,9 +204,8 @@ export function SearchFilters({
             <label className="text-sm font-medium" htmlFor="search-filter-sort-by">
               Sort by
             </label>
-            <select
+            <Select
               id="search-filter-sort-by"
-              className={SELECT_CLASSES}
               value={values.sortBy}
               onChange={(event) => onChange({ sortBy: event.target.value as SearchSort })}
             >
@@ -218,15 +214,14 @@ export function SearchFilters({
                   {option.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="flex-1 space-y-1">
             <label className="text-sm font-medium" htmlFor="search-filter-sort-direction">
               Direction
             </label>
-            <select
+            <Select
               id="search-filter-sort-direction"
-              className={SELECT_CLASSES}
               value={values.sortDirection}
               onChange={(event) =>
                 onChange({ sortDirection: event.target.value as SearchSortDirection })
@@ -237,7 +232,7 @@ export function SearchFilters({
                   {option.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
       </div>

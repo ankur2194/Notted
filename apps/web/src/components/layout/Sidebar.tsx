@@ -52,7 +52,7 @@ export function Sidebar({
   return (
     <aside
       aria-label={mobile ? "Mobile workspace navigation" : "Workspace navigation"}
-      className="flex h-full min-h-0 flex-col bg-secondary/40"
+      className="flex h-full min-h-0 flex-col overflow-y-auto bg-secondary/40"
     >
       <div className="border-b p-3">
         {/*
@@ -234,7 +234,7 @@ export function Sidebar({
 
       <section
         aria-labelledby={hideLabels ? undefined : "note-tree-heading"}
-        className="min-h-0 flex-1 border-t p-3"
+        className="border-t p-3"
       >
         {!hideLabels && (
           <h2
@@ -252,12 +252,10 @@ export function Sidebar({
             Notes
           </span>
         ) : (
-          <div className="h-full overflow-y-auto">
-            <NoteTree
-              workspaceId={shell.currentWorkspace?.workspaceId ?? null}
-              state={noteNavigation}
-            />
-          </div>
+          <NoteTree
+            workspaceId={shell.currentWorkspace?.workspaceId ?? null}
+            state={noteNavigation}
+          />
         )}
       </section>
 

@@ -17,6 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/form-controls";
 import { noteQueryKeys } from "@/lib/notes/query-keys";
 import { createFolder, deleteFolder, updateFolder } from "@/lib/notes/requests";
 
@@ -146,8 +147,8 @@ export function FolderControls({
               </label>
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Parent folder</span>
-                <select
-                  className="min-h-11 w-full rounded-md border bg-background px-3"
+                <Select
+                  className="w-full"
                   value={parentId}
                   disabled={pendingId !== null}
                   onChange={(event) => setParentId(event.target.value)}
@@ -162,7 +163,7 @@ export function FolderControls({
                       {folder.name} · level {folderDepths.get(folder.id) ?? 1}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <DialogFooter>
                 <DialogClose asChild>

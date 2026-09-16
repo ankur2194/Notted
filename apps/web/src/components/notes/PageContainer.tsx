@@ -51,6 +51,7 @@ import type {
 
 import { EDITOR_TOOLBAR_SLOT_ID } from "@/components/editor/editor-toolbar-slot";
 import { PAGE_BREAK_CLASS } from "@/components/editor/extensions/page-break";
+import { Select } from "@/components/ui/form-controls";
 import { setFocusMode, useFocusMode } from "@/lib/notes/focus-mode";
 import {
   browserStorage,
@@ -547,10 +548,9 @@ export function PageContainer({
               <label htmlFor={zoomSelectId} className="sr-only">
                 Zoom
               </label>
-              <select
+              <Select
                 id={zoomSelectId}
                 title="Zoom"
-                className="min-h-11 rounded-md border border-input bg-background px-2 text-sm text-foreground"
                 value={zoomOptionValue(zoom)}
                 onChange={(event) => {
                   const next = parseZoomOption(event.target.value);
@@ -567,7 +567,7 @@ export function PageContainer({
                     {zoomLabel(mode)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <button
               type="button"
