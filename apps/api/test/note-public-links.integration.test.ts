@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AuthorizationEntryService } from "../src/authorization/authorization-entry.service";
 import { AuthorizationPolicyService } from "../src/authorization/authorization-policy.service";
@@ -177,8 +177,16 @@ describe.skipIf(!HAS_DATABASE)("note public links integration", () => {
               links.revoke({ principal: owner, workspaceId: SEED_IDS.workspaces.alpha, noteId }),
             ).resolves.toMatchObject({ revoked: true });
 
-            // Garbage / malformed token never reaches the database query.
+            // Garbage / malformed token never reaches the database query: a
+            // bogus hash would also miss every row and return `null`, so the
+            // `toBeNull()` result alone can't distinguish "guard fired, zero
+            // queries" from "guard bypassed, query ran and missed." Spy on
+            // the transaction-scoped `db.select` to prove `resolve` never
+            // even calls it for a token that fails `PUBLIC_LINK_TOKEN_PATTERN`.
+            const selectSpy = vi.spyOn(database.db, "select");
             expect(await publicNote.resolve("not-a-valid-token")).toBeNull();
+            expect(selectSpy).not.toHaveBeenCalled();
+            selectSpy.mockRestore();
           },
         );
         throw new Rollback();
