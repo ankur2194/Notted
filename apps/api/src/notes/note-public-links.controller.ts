@@ -27,7 +27,6 @@ const managementAuthorization = {
 };
 
 @Controller("workspaces/:workspaceId/notes/:noteId/public-link")
-// eslint-disable-next-line @darraghor/nestjs-typed/injectable-should-be-provided -- wired into notes.module.ts's controllers in a later task (module wiring), not this one
 export class NotePublicLinkController {
   constructor(
     private readonly links: NotePublicLinksService,

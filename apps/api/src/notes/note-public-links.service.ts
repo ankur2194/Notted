@@ -35,7 +35,6 @@ interface LinkScope {
  * not a per-recipient grant like `note.share`.
  */
 @Injectable()
-// eslint-disable-next-line @darraghor/nestjs-typed/injectable-should-be-provided -- wired into notes.module.ts's providers in the plan's next task (controller + module wiring), not this one
 export class NotePublicLinksService {
   constructor(
     private readonly database: DatabaseService,

@@ -8,12 +8,16 @@ import { SearchModule } from "../search/search.module";
 import { WebhooksModule } from "../webhooks/webhooks.module";
 
 import { FoldersService } from "./folders.service";
+import { NotePublicLinkController } from "./note-public-links.controller";
+import { NotePublicLinksService } from "./note-public-links.service";
 import { NoteSharesController } from "./note-shares.controller";
 import { NoteSharesService } from "./note-shares.service";
 import { NoteVersionsService } from "./note-versions.service";
 import { FoldersController, NotesController } from "./notes.controller";
 import { NotesService } from "./notes.service";
 import { NotesTrpcRouter } from "./notes.trpc";
+import { PublicNoteController } from "./public-note.controller";
+import { PublicNoteService } from "./public-note.service";
 
 @Module({
   // SearchModule supplies the NoteSearchIndexProducer used to emit
@@ -39,13 +43,21 @@ import { NotesTrpcRouter } from "./notes.trpc";
     SearchModule,
     WebhooksModule,
   ],
-  controllers: [NotesController, FoldersController, NoteSharesController],
+  controllers: [
+    NotesController,
+    FoldersController,
+    NoteSharesController,
+    NotePublicLinkController,
+    PublicNoteController,
+  ],
   providers: [
     FoldersService,
     NotesService,
     NoteSharesService,
     NoteVersionsService,
     NotesTrpcRouter,
+    NotePublicLinksService,
+    PublicNoteService,
   ],
   exports: [FoldersService, NotesService, NoteSharesService, NoteVersionsService, NotesTrpcRouter],
 })

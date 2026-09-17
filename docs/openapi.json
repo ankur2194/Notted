@@ -287,6 +287,49 @@
         "security": []
       }
     },
+    "/api/v1/public/notes/{token}": {
+      "get": {
+        "summary": "Read a note by its public link token.",
+        "tags": [
+          "Note public links"
+        ],
+        "description": "PUBLIC and unauthenticated — no session, no API key, and no workspace scope in the path. Every miss, including a malformed, revoked, or trashed-note token, is the same 404.",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Read a note by its public link token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicNote"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error envelope. `error.code` is the stable, machine-readable failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiFailure"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
     "/api/v1/shell/bootstrap": {
       "get": {
         "summary": "Workspace memberships and shell state for the signed-in user.",
@@ -4041,6 +4084,154 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NotePermanentDeleteResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error envelope. `error.code` is the stable, machine-readable failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{workspaceId}/notes/{noteId}/public-link": {
+      "delete": {
+        "summary": "Revoke a note's public link.",
+        "tags": [
+          "Note public links"
+        ],
+        "description": "Idempotent: revoking a link that does not exist succeeds — that is the resting state, not an error.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "noteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Revoke a note's public link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotePublicLinkRevokeResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error envelope. `error.code` is the stable, machine-readable failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiFailure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Read a note's public link status.",
+        "tags": [
+          "Note public links"
+        ],
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "noteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Read a note's public link status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotePublicLinkStatus"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error envelope. `error.code` is the stable, machine-readable failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiFailure"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Create or regenerate a note's public link.",
+        "tags": [
+          "Note public links"
+        ],
+        "description": "Regenerate semantics: deletes any existing link and issues a fresh token in the same transaction, so a previously issued link stops working the moment a new one is created.",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "noteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Create or regenerate a note's public link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotePublicLinkCreateResult"
                 }
               }
             }
@@ -10378,6 +10569,59 @@
         ],
         "additionalProperties": false
       },
+      "NotePublicLinkCreateResult": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "NotePublicLinkRevokeResult": {
+        "type": "object",
+        "properties": {
+          "noteId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "revoked": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "noteId",
+          "revoked"
+        ],
+        "additionalProperties": false
+      },
+      "NotePublicLinkStatus": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IsoTimestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "enabled",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
       "NoteRestoreResult": {
         "type": "object",
         "properties": {
@@ -11556,6 +11800,30 @@
         },
         "required": [
           "project"
+        ],
+        "additionalProperties": false
+      },
+      "PublicNote": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "$ref": "#/components/schemas/NoteDocument"
+          },
+          "pageSize": {
+            "$ref": "#/components/schemas/PageSize"
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/IsoTimestamp"
+          }
+        },
+        "required": [
+          "title",
+          "content",
+          "pageSize",
+          "updatedAt"
         ],
         "additionalProperties": false
       },

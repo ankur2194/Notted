@@ -67,6 +67,9 @@ import {
   noteNavigationSchema,
   notePageSchema,
   notePermanentDeleteResultSchema,
+  notePublicLinkCreateResultSchema,
+  notePublicLinkRevokeResultSchema,
+  notePublicLinkStatusSchema,
   noteRestoreResultSchema,
   noteShareDeleteResultSchema,
   noteShareListSchema,
@@ -93,6 +96,7 @@ import {
   projectPageSchema,
   projectStatusResultSchema,
   projectUpdateResultSchema,
+  publicNoteSchema,
   reorderTaskSchema,
   restoreNoteSchema,
   restoreNoteVersionSchema,
@@ -530,6 +534,35 @@ export const OPENAPI_ROUTES: Record<string, OpenApiRouteDoc> = {
     summary: "Revoke a user's share.",
     tags: ["Note shares"],
     response: noteShareDeleteResultSchema,
+  },
+
+  // Note public links. Part 82: a singleton share-by-link per note plus one
+  // PUBLIC read that is deliberately unauthenticated.
+  "GET /workspaces/{workspaceId}/notes/{noteId}/public-link": {
+    summary: "Read a note's public link status.",
+    tags: ["Note public links"],
+    response: notePublicLinkStatusSchema,
+  },
+  "PUT /workspaces/{workspaceId}/notes/{noteId}/public-link": {
+    summary: "Create or regenerate a note's public link.",
+    tags: ["Note public links"],
+    response: notePublicLinkCreateResultSchema,
+    description:
+      "Regenerate semantics: deletes any existing link and issues a fresh token in the same transaction, so a previously issued link stops working the moment a new one is created.",
+  },
+  "DELETE /workspaces/{workspaceId}/notes/{noteId}/public-link": {
+    summary: "Revoke a note's public link.",
+    tags: ["Note public links"],
+    response: notePublicLinkRevokeResultSchema,
+    description:
+      "Idempotent: revoking a link that does not exist succeeds — that is the resting state, not an error.",
+  },
+  "GET /public/notes/{token}": {
+    summary: "Read a note by its public link token.",
+    tags: ["Note public links"],
+    response: publicNoteSchema,
+    description:
+      "PUBLIC and unauthenticated — no session, no API key, and no workspace scope in the path. Every miss, including a malformed, revoked, or trashed-note token, is the same 404.",
   },
 
   // Folders.
