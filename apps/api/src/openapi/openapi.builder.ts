@@ -261,20 +261,32 @@ const PATH_PARAMETER = /\{([^}]+)\}/gu;
  *
  * Named by convention rather than by threading the selector schema onto
  * `OpenApiRouteDoc`: every path parameter in this API is either an identifier
- * (`id`, or a `*Id` suffix) or the logo token, and a convention that holds for
- * 21 of 21 names does not need a per-route declaration to carry it. The one
- * non-identifier is `token`, whose real rule is `LOGO_TOKEN_PATTERN` in
- * `workspace-logo.service.ts` — 32 lowercase hex characters, not a UUID.
+ * (`id`, or a `*Id` suffix) or a non-UUID token, and a convention that holds
+ * for every name does not need a per-route declaration to carry it. Two
+ * routes now share the non-identifier name `token` with two DIFFERENT real
+ * rules — `LOGO_TOKEN_PATTERN` (`workspace-logo.service.ts`, 32 lowercase hex
+ * characters) for the logo route, `PUBLIC_LINK_TOKEN_PATTERN`
+ * (`note-public-link-token.ts`, 32 mixed-case alphanumeric plus `-`/`_`) for
+ * the public note-link route — so name alone no longer disambiguates and the
+ * route path is checked too.
  *
- * ponytail: if a future route takes a path parameter that is neither, this
- * silently promises `format: "uuid"` for it. Upgrade path: carry the selector
- * schema on `OpenApiRouteDoc` and run it through `z.toJSONSchema` the way
+ * ponytail: if a future route takes a path parameter that is neither an
+ * identifier, the logo token, nor the public-link token, this silently
+ * promises `format: "uuid"` for it. Upgrade path: carry the selector schema
+ * on `OpenApiRouteDoc` and run it through `z.toJSONSchema` the way
  * `queryParameters` already does.
  */
 const LOGO_TOKEN_JSON_SCHEMA = { type: "string", pattern: "^[0-9a-f]{32}$" } as const;
+const PUBLIC_LINK_TOKEN_JSON_SCHEMA = { type: "string", pattern: "^[A-Za-z0-9_-]{32}$" } as const;
 
-function pathParameterSchema(name: string): JsonObject {
-  if (name === "token") return { ...LOGO_TOKEN_JSON_SCHEMA };
+function pathParameterSchema(name: string, path: string): JsonObject {
+  if (name === "token") {
+    return {
+      ...(path.startsWith("/public/notes/")
+        ? PUBLIC_LINK_TOKEN_JSON_SCHEMA
+        : LOGO_TOKEN_JSON_SCHEMA),
+    };
+  }
   if (name === "id" || name.endsWith("Id")) return { type: "string", format: "uuid" };
   return { type: "string" };
 }
@@ -284,7 +296,7 @@ function pathParameters(path: string): JsonObject[] {
     name,
     in: "path",
     required: true,
-    schema: pathParameterSchema(name ?? ""),
+    schema: pathParameterSchema(name ?? "", path),
   }));
 }
 

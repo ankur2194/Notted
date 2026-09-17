@@ -301,7 +301,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^[0-9a-f]{32}$"
+              "pattern": "^[A-Za-z0-9_-]{32}$"
             }
           }
         ],

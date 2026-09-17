@@ -137,27 +137,34 @@ describe("buildOpenApiDocument", () => {
 
   it("carries the identifier constraint the handlers enforce onto path parameters", () => {
     const document = buildOpenApiDocument();
-    const pathParameters = Object.values(document.paths).flatMap((path) =>
-      Object.values(path as Record<string, unknown>)
+    const pathParameters = Object.entries(document.paths).flatMap(([path, methods]) =>
+      Object.values(methods as Record<string, unknown>)
         .filter(
           (value): value is Record<string, unknown> => typeof value === "object" && value !== null,
         )
         .flatMap((operation) => (operation.parameters ?? []) as Record<string, unknown>[])
-        .filter((parameter) => parameter.in === "path"),
+        .filter((parameter) => parameter.in === "path")
+        .map((parameter) => ({ path, parameter })),
     );
 
     expect(pathParameters.length).toBeGreaterThan(0);
-    for (const parameter of pathParameters) {
+    for (const { path, parameter } of pathParameters) {
       const name = String(parameter.name);
       const schema = parameter.schema as Record<string, unknown>;
-      // The logo token is 128 bits of hex, not a UUID -- LOGO_TOKEN_PATTERN in
-      // `workspace-logo.service.ts`. Asserted as a table rather than a branch,
-      // so every parameter is checked unconditionally.
-      expect(schema, name).toEqual(
+      // Two routes share the non-identifier name `token` with two different
+      // real rules, so the path disambiguates rather than the name alone:
+      // the logo token is 128 bits of hex (LOGO_TOKEN_PATTERN,
+      // `workspace-logo.service.ts`), the public note-link token is
+      // mixed-case alphanumeric plus `-`/`_` (PUBLIC_LINK_TOKEN_PATTERN,
+      // `note-public-link-token.ts`). Asserted as a table rather than a
+      // branch, so every parameter is checked unconditionally.
+      const expected =
         name === "token"
-          ? { type: "string", pattern: "^[0-9a-f]{32}$" }
-          : { type: "string", format: "uuid" },
-      );
+          ? path.includes("/public/notes/")
+            ? { type: "string", pattern: "^[A-Za-z0-9_-]{32}$" }
+            : { type: "string", pattern: "^[0-9a-f]{32}$" }
+          : { type: "string", format: "uuid" };
+      expect(schema, `${name} @ ${path}`).toEqual(expected);
     }
   });
   const document = buildOpenApiDocument();
