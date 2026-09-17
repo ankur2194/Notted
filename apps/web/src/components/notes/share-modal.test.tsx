@@ -144,6 +144,30 @@ describe("ShareModal", () => {
     expect(await screen.findByRole("button", { name: "Create link" })).toBeVisible();
   });
 
+  it("clears the revealed public URL on close so reopening never shows it beside stale status", async () => {
+    mocks.createNotePublicLink.mockResolvedValue({
+      ok: true,
+      data: { url: "https://app.example/p/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    });
+    const user = userEvent.setup();
+    view();
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    await user.click(await screen.findByRole("button", { name: "Create link" }));
+    expect(await screen.findByDisplayValue(/\/p\//u)).toBeInTheDocument();
+
+    // Close the dialog without revoking, then simulate the link having been
+    // revoked from another session while it was closed.
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    mocks.requestNotePublicLinkStatus.mockResolvedValue({
+      ok: true,
+      data: { enabled: false, createdAt: null },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    expect(await screen.findByRole("button", { name: "Create link" })).toBeVisible();
+    expect(screen.queryByDisplayValue(/\/p\//u)).not.toBeInTheDocument();
+  });
+
   it("renders existing comment grants without offering comment for new grants", async () => {
     mocks.requestNoteShares.mockResolvedValue({
       ok: true,

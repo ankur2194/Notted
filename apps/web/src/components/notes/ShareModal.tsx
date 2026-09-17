@@ -181,7 +181,13 @@ export function ShareModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setPublicUrl(null);
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="outline">
           <Share2 aria-hidden="true" className="size-4" />
