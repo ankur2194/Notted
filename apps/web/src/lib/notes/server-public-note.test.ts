@@ -34,7 +34,7 @@ describe("getPublicNote", () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  it("forwards the visitor's address from x-forwarded-for as X-Forwarded-For", async () => {
+  it("forwards the incoming x-forwarded-for chain verbatim as X-Forwarded-For", async () => {
     headersStore.get.mockImplementation((name: string) =>
       name === "x-forwarded-for" ? "203.0.113.7, 10.0.0.1" : null,
     );
@@ -42,8 +42,11 @@ describe("getPublicNote", () => {
 
     await getPublicNote(token);
 
+    // The whole chain, unmodified: picking an entry (e.g. left-most) is the
+    // API's job, done by trusted hop count, not the web tier's — the
+    // left-most entry is client-controlled and must not be pre-selected here.
     expect(new Headers(fetchMock.mock.calls[0]![1]?.headers).get("x-forwarded-for")).toBe(
-      "203.0.113.7",
+      "203.0.113.7, 10.0.0.1",
     );
   });
 

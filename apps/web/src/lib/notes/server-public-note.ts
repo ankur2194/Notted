@@ -27,17 +27,22 @@ export async function getPublicNote(token: string): Promise<PublicNoteResult> {
     // This is a server-side fetch, so without forwarding the visitor's own
     // address every anonymous view would arrive at the API from this Next.js
     // server's single IP, collapsing the API's per-IP unauthenticated rate
-    // limit into one shared bucket for all public-link traffic. The reverse
-    // proxy in front of the web app sets `x-forwarded-for` on the incoming
-    // request; take its left-most (closest-to-visitor) entry.
+    // limit into one shared bucket for all public-link traffic. Forward the
+    // incoming `x-forwarded-for` chain VERBATIM — do not pick an entry here.
+    // The left-most entry is client-controlled (a visitor can set their own
+    // `x-forwarded-for` and have the proxy append to it), so selecting it
+    // would hand an attacker a free, rotatable rate-limit bucket key. The
+    // API already resolves the trusted entry by hop count (Express `trust
+    // proxy`, same principle as `realtime-socket.adapter.ts`); that's where
+    // this decision belongs.
     const incomingHeaders = await headers();
-    const visitorIp = incomingHeaders.get("x-forwarded-for")?.split(",")[0]?.trim();
+    const forwardedFor = incomingHeaders.get("x-forwarded-for");
     const response = await fetch(
       new URL(NOTE_API_PATHS.publicNote(parsedToken.data), publicEnvironment.NEXT_PUBLIC_API_URL),
       {
         cache: "no-store",
         signal: AbortSignal.timeout(5_000),
-        headers: visitorIp ? { "X-Forwarded-For": visitorIp } : undefined,
+        headers: forwardedFor ? { "X-Forwarded-For": forwardedFor } : undefined,
       },
     );
     if (response.status === 404) return { status: "not-found" };

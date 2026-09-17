@@ -113,6 +113,18 @@ describe("redactSecretPathSegment", () => {
       "/api/v1/workspaces/11111111-1111-1111-1111-111111111111/notes/22222222-2222-2222-2222-222222222222";
     expect(redactSecretPathSegment(path)).toBe(path);
   });
+
+  it("redacts a trailing-slash variant, which Express still routes to the same handler", () => {
+    expect(redactSecretPathSegment("/api/v1/public/notes/abcdef0123456789/")).toBe(
+      "/api/v1/public/notes/[redacted]",
+    );
+  });
+
+  it("redacts a case-variant path, which Express still routes to the same handler", () => {
+    expect(redactSecretPathSegment("/api/v1/PUBLIC/NOTES/abcdef0123456789")).toBe(
+      "/api/v1/PUBLIC/NOTES/[redacted]",
+    );
+  });
 });
 
 describe("RequestContextMiddleware secret path redaction in logs", () => {

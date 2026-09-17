@@ -34,14 +34,24 @@ const SECRET_PATH_SEGMENT_MARKERS = [
   "/logo/", // apps/api/src/workspaces/workspace-logo.controller.ts
 ] as const;
 
+// One alternation-based regex per marker: case-insensitive (Express's
+// routing here is neither strict nor case-sensitive, so `/PUBLIC/NOTES/<token>`
+// still reaches the real handler) and tolerant of a trailing slash
+// (`/public/notes/<token>/` also routes). `[^/]+` still matches exactly one
+// segment — the token — same as before.
+const SECRET_PATH_SEGMENT_PATTERNS = SECRET_PATH_SEGMENT_MARKERS.map(
+  (marker) => new RegExp(`(${escapeRegExp(marker)})[^/]+/?$`, "iu"),
+);
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
 /** Replaces a trailing secret token segment (matched via `SECRET_PATH_SEGMENT_MARKERS`) with a placeholder, leaving the rest of the path visible. */
 export function redactSecretPathSegment(path: string): string {
-  for (const marker of SECRET_PATH_SEGMENT_MARKERS) {
-    const markerIndex = path.indexOf(marker);
-    if (markerIndex === -1) continue;
-    const afterMarker = path.slice(markerIndex + marker.length);
-    if (afterMarker.length > 0 && !afterMarker.includes("/")) {
-      return `${path.slice(0, markerIndex + marker.length)}[redacted]`;
+  for (const pattern of SECRET_PATH_SEGMENT_PATTERNS) {
+    if (pattern.test(path)) {
+      return path.replace(pattern, "$1[redacted]");
     }
   }
   return path;
