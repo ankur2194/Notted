@@ -9,32 +9,17 @@
 // import time. `input.document` is untrusted persisted TipTap JSON and is
 // handed to `renderDocumentHtml`, which already walks it defensively.
 
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-
 import { PAGE_SIZES, clampMargins, cssLength, pageRuleCss } from "@notted/shared-types";
-import { renderDocumentHtml } from "@notted/shared-validators";
+import { printStylesheet, renderDocumentHtml } from "@notted/shared-validators";
 
 import type { PageMargins, PageSize } from "@notted/shared-types";
 
-const requireFrom = createRequire(__filename);
-
-let cachedPrintStylesheet: string | null = null;
-
-/**
- * The verbatim contents of `@notted/shared-validators/print.css`, read once
- * and memoized. Resolved through the package's `exports` map (never a raw
- * relative path into another package) and read from disk lazily on first use
- * rather than at import time, so importing this module never touches the
- * filesystem by itself.
- */
-export function printStylesheet(): string {
-  if (cachedPrintStylesheet === null) {
-    const resolved = requireFrom.resolve("@notted/shared-validators/print.css");
-    cachedPrintStylesheet = readFileSync(resolved, "utf8");
-  }
-  return cachedPrintStylesheet;
-}
+// Relocated to `@notted/shared-validators/document-html.ts` (Task 12 of the
+// note-public-links plan) so `apps/web`'s `/p/:token` route can use it too —
+// per ADR 0001, apps may depend on packages but never on each other.
+// Re-exported here verbatim so this module's own existing consumers (its
+// unit tests included) keep importing it from `./export-html`.
+export { printStylesheet };
 
 function escapeHtml(value: string): string {
   return value

@@ -307,6 +307,7 @@ export {
   noteDocumentMentionAttrs,
   noteDocumentSchema,
   parseNoteDocument,
+  printStylesheet,
   renderDocumentHtml,
   resolveNoteImageWrap,
   formatNoteDocumentErrors,
