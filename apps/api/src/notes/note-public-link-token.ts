@@ -1,5 +1,5 @@
 //
-// Part 82 — raw public-link token generation and hashing. Deliberately pure
+// Raw public-link token generation and hashing. Deliberately pure
 // and Nest-free, mirroring `api-keys/api-key-secret.ts` exactly: no
 // injection, no database, no logger, so the credential arithmetic can be
 // reasoned about (and tested) on its own.

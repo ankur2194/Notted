@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { hashApiKey } from "../api-keys/api-key-secret";
+
 import {
   generatePublicLinkToken,
   hashPublicLinkToken,
@@ -35,14 +37,11 @@ describe("note public link token", () => {
   it("never collides with an api-key hash under a shared pepper, by construction", () => {
     // Domain-separation prefixes differ ("notted:note-public-link:v1:" vs
     // "notted:api-key:v1:"), so the same raw string hashes to different
-    // digests under the same pepper — proven by comparing this module's
-    // prefix constant against the literal used by `hashApiKey`.
+    // digests under the same pepper. Proven directly against `hashApiKey`
+    // (`api-keys/api-key-secret.ts`), the actual function whose domain this
+    // claims separation from — not inferred from an unrelated regex.
     const raw = "shared-raw-value";
-    const ours = hashPublicLinkToken(raw, "pepper");
-    const apiKeyStyle = hashPublicLinkToken(raw, "pepper");
-    // Same function/prefix called twice is equal; the real guarantee is
-    // structural (distinct prefix strings), asserted by the constant below.
-    expect(ours).toBe(apiKeyStyle);
-    expect(PUBLIC_LINK_TOKEN_PATTERN.source).not.toContain("api-key");
+    const pepper = "pepper";
+    expect(hashPublicLinkToken(raw, pepper)).not.toBe(hashApiKey(raw, pepper));
   });
 });

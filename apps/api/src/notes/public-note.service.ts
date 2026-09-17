@@ -1,4 +1,4 @@
-// Part 82 — the one unauthenticated read in this codebase that returns note
+// The one unauthenticated read in this codebase that returns note
 // content. Deliberately does NOT use `TenantContextService`/`whereWorkspace`:
 // an anonymous visitor has no session and therefore no tenant context to
 // read. Tenancy is proved by the row data itself (`note_public_links`'s

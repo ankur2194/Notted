@@ -2,6 +2,7 @@ import "server-only";
 
 import { NOTE_API_PATHS } from "@notted/shared-types";
 import { publicNoteSchema, publicNoteTokenSchema } from "@notted/shared-validators";
+import { headers } from "next/headers";
 
 import type { PublicNote } from "@notted/shared-types";
 
@@ -23,9 +24,21 @@ export async function getPublicNote(token: string): Promise<PublicNoteResult> {
   const parsedToken = publicNoteTokenSchema.safeParse(token);
   if (!parsedToken.success) return { status: "not-found" };
   try {
+    // This is a server-side fetch, so without forwarding the visitor's own
+    // address every anonymous view would arrive at the API from this Next.js
+    // server's single IP, collapsing the API's per-IP unauthenticated rate
+    // limit into one shared bucket for all public-link traffic. The reverse
+    // proxy in front of the web app sets `x-forwarded-for` on the incoming
+    // request; take its left-most (closest-to-visitor) entry.
+    const incomingHeaders = await headers();
+    const visitorIp = incomingHeaders.get("x-forwarded-for")?.split(",")[0]?.trim();
     const response = await fetch(
       new URL(NOTE_API_PATHS.publicNote(parsedToken.data), publicEnvironment.NEXT_PUBLIC_API_URL),
-      { cache: "no-store", signal: AbortSignal.timeout(5_000) },
+      {
+        cache: "no-store",
+        signal: AbortSignal.timeout(5_000),
+        headers: visitorIp ? { "X-Forwarded-For": visitorIp } : undefined,
+      },
     );
     if (response.status === 404) return { status: "not-found" };
     if (!response.ok) return { status: "unavailable" };

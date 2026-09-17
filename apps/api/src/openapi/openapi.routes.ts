@@ -536,7 +536,7 @@ export const OPENAPI_ROUTES: Record<string, OpenApiRouteDoc> = {
     response: noteShareDeleteResultSchema,
   },
 
-  // Note public links. Part 82: a singleton share-by-link per note plus one
+  // Note public links: a singleton share-by-link per note plus one
   // PUBLIC read that is deliberately unauthenticated.
   "GET /workspaces/{workspaceId}/notes/{noteId}/public-link": {
     summary: "Read a note's public link status.",

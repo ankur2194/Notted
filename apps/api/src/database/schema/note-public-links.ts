@@ -1,4 +1,4 @@
-// Part 82 — public share links: one revocable, unauthenticated read-only
+// Public share links: one revocable, unauthenticated read-only
 // link per note. Anticipated by the `notes.ts` module comment ("public
 // sharing, if later authorized, uses revocable hashed tokens in a separate
 // table") since Part 15.

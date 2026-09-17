@@ -1,7 +1,15 @@
-// Part 82 — the one route in this codebase with NO `@RequireAuthorization`.
-// That is deliberate, not an oversight: this endpoint IS the public link
-// feature. `RateLimitGuard` (global) still applies at the unauthenticated
-// per-IP tier automatically, since no session is attached to the request.
+// The one route in this codebase with NO `@RequireAuthorization`. That is
+// deliberate, not an oversight: this endpoint IS the public link feature.
+// `RateLimitGuard` (global) still applies at the unauthenticated per-IP tier,
+// since no session is attached to the request — but "per IP" is only as good
+// as the IP it sees. `apps/web/src/lib/notes/server-public-note.ts` now
+// forwards the visitor's address via `X-Forwarded-For` on its server-side
+// fetch (instead of every anonymous view arriving from the Next.js server's
+// one IP), and `RequestContextMiddleware`'s `request.ip` honours that only if
+// `TRUST_PROXY_HOPS` (`app.config.ts`) is set to match the real number of
+// proxy hops in front of this service in the deployed environment. That hop
+// count is infrastructure this repo does not fix or verify — get it wrong and
+// the per-IP tier silently degrades back to one shared bucket.
 
 import { Controller, Get, Req } from "@nestjs/common";
 

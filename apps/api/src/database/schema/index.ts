@@ -308,7 +308,7 @@ export const schema = {
   noteSharesRelations,
   noteTypeEnum,
   noteSharePermissionEnum,
-  // Part 82 — public share links: one revocable, unauthenticated read-only
+  // Public share links: one revocable, unauthenticated read-only
   // link per note (unique note_id), stored as a peppered token hash never
   // the raw token. Composite FK proves the link's workspace matches its
   // note's workspace. See note-public-links.ts module comment.

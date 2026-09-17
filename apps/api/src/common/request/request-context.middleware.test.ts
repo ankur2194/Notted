@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { StructuredLogger } from "../logging/structured-logger.service";
 
 import { getRequestContext } from "./request-context";
-import { RequestContextMiddleware, selectRequestId } from "./request-context.middleware";
+import {
+  RequestContextMiddleware,
+  redactSecretPathSegment,
+  selectRequestId,
+} from "./request-context.middleware";
 
 import type { NextFunction, Request, Response } from "express";
 
@@ -17,18 +21,25 @@ describe("selectRequestId", () => {
   });
 });
 
-function fakeResponse(): Response {
+function fakeResponse(): Response & { emitFinish: () => void } {
+  const handlers = new Map<string, () => void>();
   return {
     statusCode: 200,
     setHeader: vi.fn(),
-    once: vi.fn(),
-  } as unknown as Response;
+    once: vi.fn((event: string, handler: () => void) => {
+      handlers.set(event, handler);
+    }),
+    emitFinish: () => handlers.get("finish")?.(),
+  } as unknown as Response & { emitFinish: () => void };
 }
 
-function fakeRequest(overrides: Partial<Record<"ip" | "userAgent", string>> = {}): Request {
+function fakeRequest(
+  overrides: Partial<Record<"ip" | "userAgent" | "originalUrl" | "path", string>> = {},
+): Request {
   return {
     method: "GET",
-    path: "/api/v1/workspaces",
+    path: overrides.path ?? "/api/v1/workspaces",
+    originalUrl: overrides.originalUrl ?? overrides.path ?? "/api/v1/workspaces",
     headers: {} as Record<string, string>,
     ip: overrides.ip,
     header: (name: string) => (name === "user-agent" ? overrides.userAgent : undefined),
@@ -81,5 +92,64 @@ describe("RequestContextMiddleware request context", () => {
     middleware().use(fakeRequest({ ip: "198.51.100.4" }), fakeResponse(), () => undefined);
 
     expect(getRequestContext()).toBeNull();
+  });
+});
+
+describe("redactSecretPathSegment", () => {
+  it("redacts the raw token on a public-note view", () => {
+    expect(redactSecretPathSegment("/api/v1/public/notes/abcdef0123456789")).toBe(
+      "/api/v1/public/notes/[redacted]",
+    );
+  });
+
+  it("redacts the raw token on a workspace logo fetch", () => {
+    expect(
+      redactSecretPathSegment("/api/v1/workspaces/11111111-1111-1111-1111-111111111111/logo/xyz"),
+    ).toBe("/api/v1/workspaces/11111111-1111-1111-1111-111111111111/logo/[redacted]");
+  });
+
+  it("leaves an ordinary path untouched", () => {
+    const path =
+      "/api/v1/workspaces/11111111-1111-1111-1111-111111111111/notes/22222222-2222-2222-2222-222222222222";
+    expect(redactSecretPathSegment(path)).toBe(path);
+  });
+});
+
+describe("RequestContextMiddleware secret path redaction in logs", () => {
+  it("redacts a public-note token before logging path, but logs an ordinary path unredacted", () => {
+    const info = vi.fn();
+    const logger = { info } as unknown as StructuredLogger;
+
+    const secretResponse = fakeResponse();
+    new RequestContextMiddleware(logger).use(
+      fakeRequest({ originalUrl: "/api/v1/public/notes/super-secret-raw-token?foo=bar" }),
+      secretResponse,
+      () => undefined,
+    );
+    secretResponse.emitFinish();
+
+    const ordinaryResponse = fakeResponse();
+    new RequestContextMiddleware(logger).use(
+      fakeRequest({
+        originalUrl:
+          "/api/v1/workspaces/11111111-1111-1111-1111-111111111111/notes/22222222-2222-2222-2222-222222222222",
+      }),
+      ordinaryResponse,
+      () => undefined,
+    );
+    ordinaryResponse.emitFinish();
+
+    expect(info).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ path: "/api/v1/public/notes/[redacted]" }),
+      "HTTP request completed",
+    );
+    expect(info).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        path: "/api/v1/workspaces/11111111-1111-1111-1111-111111111111/notes/22222222-2222-2222-2222-222222222222",
+      }),
+      "HTTP request completed",
+    );
   });
 });

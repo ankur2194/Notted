@@ -23,6 +23,30 @@ import type { NextFunction, Request, Response } from "express";
 const REQUEST_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
+// Markers for routes whose final path segment is a bearer-secret (a raw
+// public-link token, a logo signing token) rather than an ordinary resource
+// id. The query string is already stripped from `path` below because it
+// carries tokens too — these routes are the ones that put the secret in the
+// path instead, so the same defense doesn't cover them. Add a marker here,
+// not a new branch, for a future route with the same shape.
+const SECRET_PATH_SEGMENT_MARKERS = [
+  "/public/notes/", // apps/api/src/notes/public-note.controller.ts
+  "/logo/", // apps/api/src/workspaces/workspace-logo.controller.ts
+] as const;
+
+/** Replaces a trailing secret token segment (matched via `SECRET_PATH_SEGMENT_MARKERS`) with a placeholder, leaving the rest of the path visible. */
+export function redactSecretPathSegment(path: string): string {
+  for (const marker of SECRET_PATH_SEGMENT_MARKERS) {
+    const markerIndex = path.indexOf(marker);
+    if (markerIndex === -1) continue;
+    const afterMarker = path.slice(markerIndex + marker.length);
+    if (afterMarker.length > 0 && !afterMarker.includes("/")) {
+      return `${path.slice(0, markerIndex + marker.length)}[redacted]`;
+    }
+  }
+  return path;
+}
+
 export function selectRequestId(
   incomingRequestId: string | undefined,
   generateRequestId: () => string = randomUUID,
@@ -88,7 +112,7 @@ export class RequestContextMiddleware implements NestMiddleware {
           // never calls — so this line used to log `/sign-up/email` for a
           // request to `/api/auth/sign-up/email`. The query string is cut
           // because it carries tokens and search terms.
-          path: request.originalUrl.split("?")[0] ?? request.path,
+          path: redactSecretPathSegment(request.originalUrl.split("?")[0] ?? request.path),
           statusCode,
           durationMs,
           outcome: statusCode >= 500 ? "error" : statusCode >= 400 ? "denied" : "success",

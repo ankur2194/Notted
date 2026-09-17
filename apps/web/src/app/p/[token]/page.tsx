@@ -2,7 +2,17 @@ import { renderDocumentHtml } from "@notted/shared-validators";
 import { printStylesheet } from "@notted/shared-validators/server";
 import { notFound } from "next/navigation";
 
+import type { Metadata } from "next";
+
 import { getPublicNote } from "@/lib/notes/server-public-note";
+
+// A capability URL is only meant for whoever holds the link — the root
+// layout's `robots: "index, follow"` default would let a crawler that
+// stumbles onto one (pasted into a forum, a ticket, telemetry) permanently
+// index the note's full text. Opt this route out explicitly.
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 /**
  * `/p/:token` — the unauthenticated, read-only public note view. Sits as a
@@ -21,7 +31,7 @@ export default async function PublicNotePage({
   if (result.status === "not-found") notFound();
   if (result.status === "unavailable") {
     return (
-      <main className="mx-auto max-w-3xl p-8" role="alert">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-3xl p-8" role="alert">
         <h1 className="text-2xl font-bold">This note is unavailable</h1>
         <p className="mt-2 text-muted-foreground">
           The note could not be loaded safely. No content was rendered.
@@ -31,7 +41,7 @@ export default async function PublicNotePage({
   }
   const { title, content } = result.data;
   return (
-    <main className="mx-auto max-w-3xl p-8">
+    <main id="main-content" tabIndex={-1} className="mx-auto max-w-3xl p-8">
       {/*
         `printStylesheet()` is almost entirely `@media print` rules, same as
         the HTML export path — see `buildStandaloneHtml`. It's included here
