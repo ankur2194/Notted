@@ -32,6 +32,10 @@ describe("NOTE_API_PATHS", () => {
     expect(NOTE_API_PATHS.share(workspaceId, noteId, userId)).toBe(
       `${base}/notes/${noteId}/shares/${userId}`,
     );
+    expect(NOTE_API_PATHS.publicLink(workspaceId, noteId)).toBe(
+      `${base}/notes/${noteId}/public-link`,
+    );
+    expect(NOTE_API_PATHS.publicNote("some-token")).toBe(`/api/v1/public/notes/some-token`);
   });
 
   /**
@@ -58,9 +62,16 @@ describe("NOTE_API_PATHS", () => {
       NOTE_API_PATHS.restoreVersion(workspaceId, noteId, userId),
       NOTE_API_PATHS.share(workspaceId, noteId, userId),
       NOTE_API_PATHS.copy(workspaceId, noteId),
+      NOTE_API_PATHS.publicLink(workspaceId, noteId),
+      // publicNote(token) is deliberately excluded: it is an unauthenticated
+      // capability URL (`/api/v1/public/notes/:token`) with no workspace or
+      // note id in the path at all, so a leaked token discloses nothing about
+      // which workspace or note it belongs to. It is the one route in this
+      // object that is intentionally NOT workspace-scoped.
     ];
 
-    expect(built).toHaveLength(Object.keys(NOTE_API_PATHS).length);
+    // -1 accounts for publicNote, the one deliberate exception above.
+    expect(built).toHaveLength(Object.keys(NOTE_API_PATHS).length - 1);
     for (const path of built) expect(path.startsWith(prefix)).toBe(true);
   });
 
