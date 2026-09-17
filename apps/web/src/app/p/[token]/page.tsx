@@ -1,4 +1,5 @@
-import { renderDocumentHtml, printStylesheet } from "@notted/shared-validators";
+import { renderDocumentHtml } from "@notted/shared-validators";
+import { printStylesheet } from "@notted/shared-validators/server";
 import { notFound } from "next/navigation";
 
 import { getPublicNote } from "@/lib/notes/server-public-note";

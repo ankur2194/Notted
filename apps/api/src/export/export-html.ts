@@ -10,13 +10,17 @@
 // handed to `renderDocumentHtml`, which already walks it defensively.
 
 import { PAGE_SIZES, clampMargins, cssLength, pageRuleCss } from "@notted/shared-types";
-import { printStylesheet, renderDocumentHtml } from "@notted/shared-validators";
+import { renderDocumentHtml } from "@notted/shared-validators";
+import { printStylesheet } from "@notted/shared-validators/server";
 
 import type { PageMargins, PageSize } from "@notted/shared-types";
 
-// Relocated to `@notted/shared-validators/document-html.ts` (Task 12 of the
+// Relocated to `@notted/shared-validators/server.ts` (Task 12 of the
 // note-public-links plan) so `apps/web`'s `/p/:token` route can use it too —
-// per ADR 0001, apps may depend on packages but never on each other.
+// per ADR 0001, apps may depend on packages but never on each other. It's a
+// dedicated server-only subpath, not the package's main barrel, because that
+// barrel is client-bundled by `apps/web`'s note editor; see the comment on
+// `printStylesheet` itself for why that distinction matters.
 // Re-exported here verbatim so this module's own existing consumers (its
 // unit tests included) keep importing it from `./export-html`.
 export { printStylesheet };

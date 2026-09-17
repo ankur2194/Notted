@@ -9,9 +9,6 @@
  * before it can reach a `style` attribute.
  */
 
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-
 import {
   MAX_WALK_DEPTH,
   NOTE_DOCUMENT_ATTACHMENT_CLASS,
@@ -41,27 +38,6 @@ import {
 } from "./document-core";
 import { sanitizeDocumentUrl, SAFE_LINK_REL } from "./document-url";
 import { formatBinaryBytes } from "./format-bytes";
-
-const requireFrom = createRequire(__filename);
-
-let cachedPrintStylesheet: string | null = null;
-
-/**
- * The verbatim contents of `@notted/shared-validators/print.css`, read once
- * and memoized. Resolved through the package's own `exports` map (Node's
- * self-referencing packages feature — this module lives inside
- * `@notted/shared-validators` itself, so it resolves its own subpath rather
- * than a raw relative path) and read from disk lazily on first use rather
- * than at import time, so importing this module never touches the
- * filesystem by itself.
- */
-export function printStylesheet(): string {
-  if (cachedPrintStylesheet === null) {
-    const resolved = requireFrom.resolve("@notted/shared-validators/print.css");
-    cachedPrintStylesheet = readFileSync(resolved, "utf8");
-  }
-  return cachedPrintStylesheet;
-}
 
 function escapeHtml(value: string): string {
   return value
