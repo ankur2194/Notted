@@ -73,7 +73,7 @@ describe("ShareModal", () => {
     mocks.requestNoteShares.mockResolvedValue({ ok: true, data: { items: [] } });
     mocks.requestNotePublicLinkStatus.mockResolvedValue({
       ok: true,
-      data: { enabled: false, createdAt: null },
+      data: { enabled: false, createdAt: null, url: null },
     });
 
     mockWriteText = vi.fn().mockResolvedValue(undefined);
@@ -144,7 +144,30 @@ describe("ShareModal", () => {
     expect(await screen.findByRole("button", { name: "Create link" })).toBeVisible();
   });
 
-  it("clears the revealed public URL on close so reopening never shows it beside stale status", async () => {
+  it("shows the same public URL again on reopen, since it is stored reversibly, not shown once", async () => {
+    const url = "https://app.example/p/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    mocks.createNotePublicLink.mockResolvedValue({ ok: true, data: { url } });
+    const user = userEvent.setup();
+    view();
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    await user.click(await screen.findByRole("button", { name: "Create link" }));
+    expect(await screen.findByDisplayValue(url)).toBeInTheDocument();
+
+    // Close the dialog, then reopen it. `status` now returns the SAME url a
+    // fresh read would return (the API decrypts it back, not the client
+    // remembering it) — simulated here by pointing the status mock at it.
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    mocks.requestNotePublicLinkStatus.mockResolvedValue({
+      ok: true,
+      data: { enabled: true, createdAt: "2026-08-01T00:00:00.000Z", url },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    expect(await screen.findByDisplayValue(url)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Regenerate link" })).toBeVisible();
+  });
+
+  it("shows Create link again after the link was revoked from another session", async () => {
     mocks.createNotePublicLink.mockResolvedValue({
       ok: true,
       data: { url: "https://app.example/p/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
@@ -160,7 +183,7 @@ describe("ShareModal", () => {
     await user.click(screen.getByRole("button", { name: "Close" }));
     mocks.requestNotePublicLinkStatus.mockResolvedValue({
       ok: true,
-      data: { enabled: false, createdAt: null },
+      data: { enabled: false, createdAt: null, url: null },
     });
 
     await user.click(screen.getByRole("button", { name: "Share" }));

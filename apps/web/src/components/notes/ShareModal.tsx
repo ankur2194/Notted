@@ -77,8 +77,8 @@ export function ShareModal({
       return result.data;
     },
   });
-  const [publicUrl, setPublicUrl] = useState<string | null>(null);
   const [publicLinkPending, setPublicLinkPending] = useState(false);
+  const publicUrl = publicLink.data?.enabled === true ? publicLink.data.url : null;
   const memberByUserId = new Map(
     (members.data?.items ?? []).map((member) => [member.userId, member]),
   );
@@ -155,12 +155,12 @@ export function ShareModal({
       setStatus("The public link could not be created.");
       return;
     }
-    setPublicUrl(result.data.url);
     queryClient.setQueryData<NotePublicLinkStatus>(noteQueryKeys.publicLink(workspaceId, noteId), {
       enabled: true,
       createdAt: new Date().toISOString(),
+      url: result.data.url,
     });
-    setStatus("Public link created. Copy it now — it will not be shown again.");
+    setStatus("Public link created.");
   }
 
   async function revokePublicLink(): Promise<void> {
@@ -172,22 +172,16 @@ export function ShareModal({
       setStatus("The public link could not be revoked.");
       return;
     }
-    setPublicUrl(null);
     queryClient.setQueryData<NotePublicLinkStatus>(noteQueryKeys.publicLink(workspaceId, noteId), {
       enabled: false,
       createdAt: null,
+      url: null,
     });
     setStatus("Public link revoked. It no longer works for anyone who had it.");
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-        if (!nextOpen) setPublicUrl(null);
-      }}
-    >
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline">
           <Share2 aria-hidden="true" className="size-4" />
@@ -271,6 +265,12 @@ export function ShareModal({
                 Copy link
               </Button>
             </div>
+          ) : null}
+          {publicLink.data?.enabled === true && publicUrl === null ? (
+            <p role="alert" className="text-sm text-destructive">
+              The public link exists but could not be read back. Regenerate it to get a new,
+              copyable link.
+            </p>
           ) : null}
           {publicLink.isError ? (
             <div role="alert" className="rounded-md border border-destructive/40 p-3 text-sm">

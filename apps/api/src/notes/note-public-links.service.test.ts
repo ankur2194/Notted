@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { NotePublicLinksService } from "./note-public-links.service";
 
 import type { AuthorizationEntryService } from "../authorization/authorization-entry.service";
+import type { StructuredLogger } from "../common/logging/structured-logger.service";
 import type { AppConfig } from "../config/app.config";
 import type { AuthConfig } from "../config/auth.config";
+import type { SecurityConfig } from "../config/security.config";
 import type { DatabaseService } from "../database/database.service";
 import type { TenantContextService } from "../tenant";
 
@@ -22,6 +24,11 @@ const principal = Object.freeze({
 });
 const authConfig = { secret: "test-pepper" } as AuthConfig;
 const appConfig = { appUrl: new URL("https://app.example.test") } as AppConfig;
+const securityConfig = {
+  activeEncryptionKeyVersion: 1,
+  encryptionKeys: [{ version: 1, encodedKey: Buffer.alloc(32).toString("base64") }],
+} as unknown as SecurityConfig;
+const loggerStub = { warn: vi.fn() } as unknown as StructuredLogger;
 
 function tenantStub(): TenantContextService {
   return { get: () => ({ workspaceId, userId: actorId }) } as unknown as TenantContextService;
@@ -37,6 +44,8 @@ describe("NotePublicLinksService authorization", () => {
       tenantStub(),
       authConfig,
       appConfig,
+      securityConfig,
+      loggerStub,
     );
     await expect(service.status({ principal, workspaceId, noteId })).rejects.toBe(denial);
     await expect(service.create({ principal, workspaceId, noteId })).rejects.toBe(denial);

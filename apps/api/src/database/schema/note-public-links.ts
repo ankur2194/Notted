@@ -9,11 +9,28 @@
 // `note_shares` would mean a nullable `user_id` meaning two different things
 // depending on which other columns are set.
 //
-// TOKEN_HASH, NEVER THE RAW TOKEN. Same "shown once" contract as `api_keys`
-// (see that table's module comment): `token_hash` is a peppered HMAC-SHA256
-// digest (`note-public-link-token.ts`), so a database-only compromise can
-// neither read nor forge a working link. The raw token is returned once, in
-// the create/regenerate response body, and is not recoverable afterward.
+// TOKEN_HASH proves an INCOMING token without ever reading the row: it is a
+// peppered HMAC-SHA256 digest (`note-public-link-token.ts`), the same
+// construction `api_keys` uses, and the public GET route's only query is
+// `where token_hash = $1`. Unlike an API key, the link itself is meant to be
+// re-displayed and re-copied by its owner at any time — it is a share link,
+// not a rotated credential — so `encrypted_token`/`encryption_key_version`
+// ALSO carry the raw token, reversibly, via AES-256-GCM
+// (`note-public-link-token-encryption.ts`, same key-rotation-aware
+// `SECURITY_CONFIG` infrastructure `webhook-secret.service.ts` uses). A
+// database-only compromise still cannot use `token_hash` to forge or resolve
+// a link; it can only recover a link's URL if it also holds
+// `DATA_ENCRYPTION_KEYS`, which the database itself never stores.
+//
+// `encrypted_token`/`encryption_key_version` are NULLABLE, not `.notNull()`,
+// for a reason that is not optional: a row written before this pair existed
+// has no raw token anywhere to backfill it from — only its hash was ever
+// stored, by design, before this change. `NOT NULL` would have made the
+// migration that added these columns fail outright against any database that
+// already held a link. `NotePublicLinksService#status` treats a `NULL` pair
+// exactly like a decrypt failure: "enabled", but `url: null`, prompting a
+// regenerate rather than crashing or silently exposing a token it does not
+// have.
 //
 // ONE LINK PER NOTE (`note_id` UNIQUE). v1 is a toggle, not a list:
 // regenerating deletes the existing row and inserts a fresh one in the same
@@ -35,7 +52,16 @@
 //   link" lives in the audit trail (`note.publicLink.created`), not this FK.
 
 import { relations } from "drizzle-orm";
-import { foreignKey, index, pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import {
+  foreignKey,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 import { notes } from "./notes";
 import { users } from "./users";
@@ -56,6 +82,14 @@ export const notePublicLinks = pgTable(
     tokenHash: varchar("token_hash", { length: 64 })
       .notNull()
       .unique("note_public_links_token_hash_unique"),
+    // Base64 AES-256-GCM blob (nonce + auth tag + ciphertext), see module
+    // comment. Reversible so the owner can re-copy the link at any time.
+    // Nullable: see module comment.
+    encryptedToken: text("encrypted_token"),
+    // Names the key `encryptedToken` was written with, so a `DATA_ENCRYPTION_KEYS`
+    // rotation keeps every existing row decryptable. Same convention as
+    // `webhooks.encryption_key_version`. Nullable: see module comment.
+    encryptionKeyVersion: integer("encryption_key_version"),
     createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     // Present per project convention; never actually mutated — revoke

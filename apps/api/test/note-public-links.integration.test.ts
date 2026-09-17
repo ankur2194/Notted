@@ -19,8 +19,10 @@ import { TenantContextService } from "../src/tenant";
 
 import { HAS_DATABASE, requireDatabase } from "./database-test-helpers";
 
+import type { StructuredLogger } from "../src/common/logging/structured-logger.service";
 import type { AppConfig } from "../src/config/app.config";
 import type { AuthConfig } from "../src/config/auth.config";
+import type { SecurityConfig } from "../src/config/security.config";
 import type { NoteSearchIndexProducer } from "../src/search/note-search-index-producer";
 import type { AuthenticatedPrincipal } from "@notted/shared-types";
 
@@ -31,6 +33,13 @@ const MIGRATIONS_FOLDER = resolve(process.cwd(), "src/database/migrations");
 const testAuthConfig = { secret: "integration-test-pepper" } as AuthConfig;
 // Only `.appUrl` is read by NotePublicLinksService, to build the returned public URL.
 const testAppConfig = { appUrl: new URL("https://app.example.test") } as AppConfig;
+// Real AES-256-GCM round-trips through `encryptPublicLinkToken`/`decryptPublicLinkToken`
+// below, so this needs a genuine 32-byte key, not a narrowed stub.
+const testSecurityConfig = {
+  activeEncryptionKeyVersion: 1,
+  encryptionKeys: [{ version: 1, encodedKey: Buffer.alloc(32, 7).toString("base64") }],
+} as unknown as SecurityConfig;
+const testLogger = { warn: vi.fn() } as unknown as StructuredLogger;
 
 function principal(userId: string): AuthenticatedPrincipal {
   return Object.freeze({
@@ -96,6 +105,8 @@ describe.skipIf(!HAS_DATABASE)("note public links integration", () => {
           tenant,
           testAuthConfig,
           testAppConfig,
+          testSecurityConfig,
+          testLogger,
         );
         const publicNote = new PublicNoteService(database, testAuthConfig);
 
@@ -139,7 +150,19 @@ describe.skipIf(!HAS_DATABASE)("note public links integration", () => {
             const firstResolved = await publicNote.resolve(firstToken);
             expect(firstResolved?.title).toBe("Public link fixture");
 
-            // Regenerate -> old token stops working, new one works.
+            // The URL is re-copyable at any time, not shown once: a fresh
+            // `status` call (a page refresh, or reopening the share modal)
+            // decrypts and returns the SAME URL `create` returned.
+            expect(
+              await links.status({
+                principal: owner,
+                workspaceId: SEED_IDS.workspaces.alpha,
+                noteId,
+              }),
+            ).toMatchObject({ enabled: true, url: first.url });
+
+            // Regenerate -> old token stops working, new one works, and
+            // `status` now reflects the NEW url, not the old one.
             const second = await links.create({
               principal: owner,
               workspaceId: SEED_IDS.workspaces.alpha,
@@ -149,6 +172,13 @@ describe.skipIf(!HAS_DATABASE)("note public links integration", () => {
             expect(secondToken).not.toBe(firstToken);
             expect(await publicNote.resolve(firstToken)).toBeNull();
             expect((await publicNote.resolve(secondToken))?.title).toBe("Public link fixture");
+            expect(
+              await links.status({
+                principal: owner,
+                workspaceId: SEED_IDS.workspaces.alpha,
+                noteId,
+              }),
+            ).toMatchObject({ enabled: true, url: second.url });
 
             // Trash -> 404s. Restore -> works again, same token.
             const trashed = await notesService.softDelete({

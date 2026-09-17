@@ -443,7 +443,11 @@ export const noteShareDeleteResultSchema = z
   .strict();
 
 export const notePublicLinkStatusSchema = z
-  .object({ enabled: z.boolean(), createdAt: timestampSchema.nullable() })
+  .object({
+    enabled: z.boolean(),
+    createdAt: timestampSchema.nullable(),
+    url: z.string().url().nullable(),
+  })
   .strict();
 
 export const notePublicLinkCreateResultSchema = z.object({ url: z.string().url() }).strict();

@@ -10659,11 +10659,23 @@
                 "type": "null"
               }
             ]
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "enabled",
-          "createdAt"
+          "createdAt",
+          "url"
         ],
         "additionalProperties": false
       },

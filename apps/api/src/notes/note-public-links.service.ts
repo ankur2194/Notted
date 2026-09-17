@@ -4,13 +4,19 @@ import { and, eq } from "drizzle-orm";
 import { recordAudit } from "../audit/audit-record";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { ApiHttpException } from "../common/errors/api-http.exception";
+import { StructuredLogger } from "../common/logging/structured-logger.service";
 import { APP_CONFIG, type AppConfig } from "../config/app.config";
 import { AUTH_CONFIG, type AuthConfig } from "../config/auth.config";
+import { SECURITY_CONFIG, type SecurityConfig } from "../config/security.config";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import { notePublicLinks, notes } from "../database/schema";
 import { activeWorkspaceId, TenantContextService, whereWorkspace } from "../tenant";
 
 import { generatePublicLinkToken, hashPublicLinkToken } from "./note-public-link-token";
+import {
+  decryptPublicLinkToken,
+  encryptPublicLinkToken,
+} from "./note-public-link-token-encryption";
 import { NOTE_AUDIT_ENTITY_TYPE } from "./notes.constants";
 
 import type {
@@ -42,13 +48,19 @@ export class NotePublicLinksService {
     private readonly tenantContext: TenantContextService,
     @Inject(AUTH_CONFIG) private readonly authConfig: AuthConfig,
     @Inject(APP_CONFIG) private readonly appConfig: AppConfig,
+    @Inject(SECURITY_CONFIG) private readonly securityConfig: SecurityConfig,
+    private readonly logger: StructuredLogger,
   ) {}
 
   async status(input: LinkScope): Promise<NotePublicLinkStatus> {
     const operation = await this.authorize(input);
     return this.authorizationEntry.run(operation, async () => {
       const [row] = await this.database.db
-        .select({ createdAt: notePublicLinks.createdAt })
+        .select({
+          createdAt: notePublicLinks.createdAt,
+          encryptedToken: notePublicLinks.encryptedToken,
+          encryptionKeyVersion: notePublicLinks.encryptionKeyVersion,
+        })
         .from(notePublicLinks)
         .innerJoin(notes, eq(notes.id, notePublicLinks.noteId))
         .where(
@@ -58,6 +70,7 @@ export class NotePublicLinksService {
       return Object.freeze({
         enabled: row !== undefined,
         createdAt: row === undefined ? null : row.createdAt.toISOString(),
+        url: row === undefined ? null : this.decryptUrl(input.noteId, row),
       });
     });
   }
@@ -70,6 +83,11 @@ export class NotePublicLinksService {
     return this.authorizationEntry.run(operation, async () => {
       const raw = generatePublicLinkToken();
       const tokenHash = hashPublicLinkToken(raw, this.authConfig.secret);
+      const { encryptedToken, encryptionKeyVersion } = encryptPublicLinkToken(
+        this.securityConfig,
+        input.noteId,
+        raw,
+      );
       await this.database.transaction(async (tx) => {
         const [liveNote] = await tx
           .select({ id: notes.id })
@@ -89,11 +107,13 @@ export class NotePublicLinksService {
           noteId: input.noteId,
           workspaceId: activeWorkspaceId(this.tenantContext),
           tokenHash,
+          encryptedToken,
+          encryptionKeyVersion,
           createdById: input.principal.userId,
         });
         await this.recordMutation(tx, "note.publicLink.created", input);
       });
-      return Object.freeze({ url: new URL(`/p/${raw}`, this.appConfig.appUrl).toString() });
+      return Object.freeze({ url: this.buildUrl(raw) });
     });
   }
 
@@ -141,6 +161,45 @@ export class NotePublicLinksService {
       entityId: input.noteId,
       requestId: input.requestId ?? null,
     });
+  }
+
+  private buildUrl(rawToken: string): string {
+    return new URL(`/p/${rawToken}`, this.appConfig.appUrl).toString();
+  }
+
+  /**
+   * `null` rather than a thrown error, for two distinct reasons:
+   *
+   * - `encryptedToken`/`encryptionKeyVersion` are `null` for a link row
+   *   written before this pair of columns existed — there was never anything
+   *   to decrypt, and that is expected, not a failure. No log, no exception.
+   * - A decrypt genuinely fails (an operator dropped a key version from
+   *   `DATA_ENCRYPTION_KEYS` before every row under it was re-encrypted).
+   *   Recoverable by restoring the key, not by the caller retrying, so this
+   *   only logs and degrades rather than throwing and failing the whole
+   *   status read.
+   *
+   * Either way, a link the owner already has still shows as "enabled" with
+   * no copyable URL, prompting a regenerate.
+   */
+  private decryptUrl(
+    noteId: string,
+    row: { readonly encryptedToken: string | null; readonly encryptionKeyVersion: number | null },
+  ): string | null {
+    if (row.encryptedToken === null || row.encryptionKeyVersion === null) return null;
+    try {
+      return this.buildUrl(
+        decryptPublicLinkToken(
+          this.securityConfig,
+          noteId,
+          row.encryptedToken,
+          row.encryptionKeyVersion,
+        ),
+      );
+    } catch {
+      this.logger.warn("Public link token is unreadable; status served without a URL");
+      return null;
+    }
   }
 
   private notFound(): never {

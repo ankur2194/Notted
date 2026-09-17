@@ -268,10 +268,12 @@ export interface NoteShareDeleteResult {
 export interface NotePublicLinkStatus {
   readonly enabled: boolean;
   readonly createdAt: IsoTimestamp | null;
+  /** Full public URL, `${NEXT_PUBLIC_APP_URL}/p/:token`. Present iff `enabled`. */
+  readonly url: string | null;
 }
 
 export interface NotePublicLinkCreateResult {
-  /** Full public URL, `${NEXT_PUBLIC_APP_URL}/p/:token`. Shown once. */
+  /** Full public URL, `${NEXT_PUBLIC_APP_URL}/p/:token`. */
   readonly url: string;
 }
 
