@@ -513,7 +513,7 @@ export function createNotePublicLink(
   noteId: string,
 ): Promise<NoteRequestResult<NotePublicLinkCreateResult>> {
   if (!validIds(workspaceId, noteId)) return Promise.resolve({ ok: false, kind: "invalid" });
-  return requestJson(NOTE_API_PATHS.publicLink(workspaceId, noteId), { method: "PUT" }, (value) =>
+  return requestJson(NOTE_API_PATHS.publicLink(workspaceId, noteId), { method: "POST" }, (value) =>
     notePublicLinkCreateResultSchema.safeParse(value),
   );
 }

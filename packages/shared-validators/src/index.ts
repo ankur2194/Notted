@@ -308,6 +308,7 @@ export {
   noteDocumentSchema,
   parseNoteDocument,
   renderDocumentHtml,
+  renderPublicDocumentHtml,
   resolveNoteImageWrap,
   formatNoteDocumentErrors,
   safeParseNoteDocument,

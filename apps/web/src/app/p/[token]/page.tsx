@@ -1,4 +1,4 @@
-import { renderDocumentHtml } from "@notted/shared-validators";
+import { renderPublicDocumentHtml } from "@notted/shared-validators";
 import { printStylesheet } from "@notted/shared-validators/server";
 import { notFound } from "next/navigation";
 
@@ -52,11 +52,14 @@ export default async function PublicNotePage({
       <h1 className="text-3xl font-bold">{title}</h1>
       <div
         className="prose mt-6 max-w-none"
-        // `renderDocumentHtml` is the same defensive TipTap-JSON-to-HTML
-        // converter the HTML/PDF export path already uses on the exact same
-        // untrusted persisted content; it never emits `src`/`href`-bearing
-        // markup outside its own sanitized allowlist.
-        dangerouslySetInnerHTML={{ __html: renderDocumentHtml(content) }}
+        // `renderPublicDocumentHtml` is `renderDocumentHtml` — the same
+        // defensive TipTap-JSON-to-HTML converter the HTML/PDF export path
+        // uses on the exact same untrusted persisted content, never emitting
+        // `src`/`href`-bearing markup outside its own sanitized allowlist —
+        // with `data-mention-id`/`data-attachment-id` stripped, since this
+        // page has no session and those ids have no business reaching an
+        // anonymous viewer.
+        dangerouslySetInnerHTML={{ __html: renderPublicDocumentHtml(content) }}
       />
     </main>
   );

@@ -488,8 +488,9 @@ export function buildOpenApiDocument(): OpenApiDocument {
         "the `/api/v1` prefix and is covered by the compatibility promise of that version. " +
         "tRPC is the first-party transport for the Notted web client only: it is an internal " +
         "implementation detail, is not part of this public contract, and may change without a " +
-        "version bump. Workspace-scoped routes accept an API key bearer token; the session-only " +
-        "routes declare `security: []` and are reachable with a browser session alone.",
+        "version bump. Workspace-scoped routes accept an API key bearer token; the remaining " +
+        "routes declare `security: []` — most need a browser session instead, and a public " +
+        "capability-token route needs no credential at all.",
     },
     security: [{ apiKey: [] }],
     paths: Object.fromEntries(Object.entries(paths).sort(([a], [b]) => a.localeCompare(b))),

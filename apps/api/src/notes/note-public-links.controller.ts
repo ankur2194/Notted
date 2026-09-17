@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Put, Req } from "@nestjs/common";
+import { Controller, Delete, Get, Post, Req } from "@nestjs/common";
 import { uuidSchema } from "@notted/shared-validators";
 
 import { getAuthPrincipal } from "../auth/auth-principal";
@@ -39,7 +39,7 @@ export class NotePublicLinkController {
     return this.links.status(this.scope(request));
   }
 
-  @Put()
+  @Post()
   @RequireAuthorization(managementAuthorization)
   create(@Req() request: Request): Promise<NotePublicLinkCreateResult> {
     this.auth.assertTrustedMutationOrigin(request);

@@ -74,7 +74,13 @@ export class NotePublicLinksService {
         const [liveNote] = await tx
           .select({ id: notes.id })
           .from(notes)
-          .where(and(eq(notes.id, input.noteId), whereWorkspace(notes, this.tenantContext)))
+          .where(
+            and(
+              eq(notes.id, input.noteId),
+              eq(notes.isDeleted, false),
+              whereWorkspace(notes, this.tenantContext),
+            ),
+          )
           .limit(1)
           .for("update");
         if (liveNote === undefined) this.notFound();

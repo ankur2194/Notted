@@ -272,7 +272,19 @@ export function ShareModal({
               </Button>
             </div>
           ) : null}
-          {publicLink.data?.enabled === true ? (
+          {publicLink.isError ? (
+            <div role="alert" className="rounded-md border border-destructive/40 p-3 text-sm">
+              <p>Public link status is unavailable.</p>
+              <Button
+                className="mt-2"
+                size="sm"
+                variant="outline"
+                onClick={() => void publicLink.refetch()}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : publicLink.data?.enabled === true ? (
             <div className="flex gap-2">
               <Button
                 type="button"

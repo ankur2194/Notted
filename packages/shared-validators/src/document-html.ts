@@ -310,3 +310,16 @@ function renderNodeHtml(node: unknown, depth = 0): string {
 export function renderDocumentHtml(document: unknown): string {
   return renderNodeHtml(document);
 }
+
+/**
+ * `renderDocumentHtml` output, with `data-mention-id`/`data-attachment-id`
+ * stripped. Both are escaped attribute values with no embedded `"`, so a
+ * plain regex is a safe strip. For the public-note view only: those ids are
+ * enumerable workspace-member/attachment identifiers that have no business
+ * riding along invisibly to an anonymous, unauthenticated viewer. Every
+ * other consumer (export, print, authenticated preview) keeps calling
+ * `renderDocumentHtml` directly.
+ */
+export function renderPublicDocumentHtml(document: unknown): string {
+  return renderNodeHtml(document).replace(/ data-(?:mention|attachment)-id="[^"]*"/g, "");
+}

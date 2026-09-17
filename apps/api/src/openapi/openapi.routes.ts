@@ -543,7 +543,7 @@ export const OPENAPI_ROUTES: Record<string, OpenApiRouteDoc> = {
     tags: ["Note public links"],
     response: notePublicLinkStatusSchema,
   },
-  "PUT /workspaces/{workspaceId}/notes/{noteId}/public-link": {
+  "POST /workspaces/{workspaceId}/notes/{noteId}/public-link": {
     summary: "Create or regenerate a note's public link.",
     tags: ["Note public links"],
     response: notePublicLinkCreateResultSchema,
