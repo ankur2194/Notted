@@ -10,6 +10,8 @@ export const noteQueryKeys = Object.freeze({
   folders: (workspaceId: string) => ["notes", workspaceId, "folders"] as const,
   shares: (workspaceId: string, noteId: string) =>
     ["notes", workspaceId, noteId, "shares"] as const,
+  publicLink: (workspaceId: string, noteId: string) =>
+    ["notes", workspaceId, noteId, "public-link"] as const,
   members: (workspaceId: string) => ["workspace-members", workspaceId] as const,
   /**
    * Attachment metadata for one note (Part 42). Nested under the note rather

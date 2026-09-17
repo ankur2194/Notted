@@ -23,6 +23,9 @@ import {
   noteMoveResultSchema,
   notePageSchema,
   notePermanentDeleteResultSchema,
+  notePublicLinkCreateResultSchema,
+  notePublicLinkRevokeResultSchema,
+  notePublicLinkStatusSchema,
   noteRestoreResultSchema,
   noteShareDeleteResultSchema,
   noteShareListSchema,
@@ -58,6 +61,9 @@ import type {
   NoteMoveResult,
   NotePage,
   NotePermanentDeleteResult,
+  NotePublicLinkCreateResult,
+  NotePublicLinkRevokeResult,
+  NotePublicLinkStatus,
   NoteRestoreResult,
   NoteShareDeleteResult,
   NoteShareList,
@@ -489,6 +495,38 @@ export function revokeNoteShare(
     NOTE_API_PATHS.share(workspaceId, noteId, userId),
     { method: "DELETE" },
     (value) => noteShareDeleteResultSchema.safeParse(value),
+  );
+}
+
+export function requestNotePublicLinkStatus(
+  workspaceId: string,
+  noteId: string,
+): Promise<NoteRequestResult<NotePublicLinkStatus>> {
+  if (!validIds(workspaceId, noteId)) return Promise.resolve({ ok: false, kind: "invalid" });
+  return requestJson(NOTE_API_PATHS.publicLink(workspaceId, noteId), {}, (value) =>
+    notePublicLinkStatusSchema.safeParse(value),
+  );
+}
+
+export function createNotePublicLink(
+  workspaceId: string,
+  noteId: string,
+): Promise<NoteRequestResult<NotePublicLinkCreateResult>> {
+  if (!validIds(workspaceId, noteId)) return Promise.resolve({ ok: false, kind: "invalid" });
+  return requestJson(NOTE_API_PATHS.publicLink(workspaceId, noteId), { method: "PUT" }, (value) =>
+    notePublicLinkCreateResultSchema.safeParse(value),
+  );
+}
+
+export function revokeNotePublicLink(
+  workspaceId: string,
+  noteId: string,
+): Promise<NoteRequestResult<NotePublicLinkRevokeResult>> {
+  if (!validIds(workspaceId, noteId)) return Promise.resolve({ ok: false, kind: "invalid" });
+  return requestJson(
+    NOTE_API_PATHS.publicLink(workspaceId, noteId),
+    { method: "DELETE" },
+    (value) => notePublicLinkRevokeResultSchema.safeParse(value),
   );
 }
 
