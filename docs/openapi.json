@@ -330,6 +330,51 @@
         "security": []
       }
     },
+    "/api/v1/public/notes/{token}/attachments/{attachmentId}/content": {
+      "get": {
+        "summary": "Stream a public note's image bytes.",
+        "tags": [
+          "Note public links"
+        ],
+        "description": "PUBLIC and unauthenticated, scoped by the same token as the note it belongs to. Streams the stored object; the response is binary, not JSON. Images only — a generic file attachment has no public content route.",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{32}$"
+            }
+          },
+          {
+            "name": "attachmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Stream a public note's image bytes."
+          },
+          "default": {
+            "description": "Error envelope. `error.code` is the stable, machine-readable failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiFailure"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
     "/api/v1/shell/bootstrap": {
       "get": {
         "summary": "Workspace memberships and shell state for the signed-in user.",

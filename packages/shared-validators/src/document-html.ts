@@ -311,15 +311,42 @@ export function renderDocumentHtml(document: unknown): string {
   return renderNodeHtml(document);
 }
 
+const PUBLIC_IMAGE_SRC_PATTERN = new RegExp(
+  `(<img class="${NOTE_DOCUMENT_IMAGE_CLASS}" data-attachment-id=")([^"]*)(")`,
+  "g",
+);
+const PUBLIC_ATTACHMENT_FIGURE_ID_PATTERN = new RegExp(
+  `(<figure class="${NOTE_DOCUMENT_ATTACHMENT_CLASS}"[^>]*?) data-attachment-id="[^"]*"`,
+  "g",
+);
+
 /**
- * `renderDocumentHtml` output, with `data-mention-id`/`data-attachment-id`
- * stripped. Both are escaped attribute values with no embedded `"`, so a
- * plain regex is a safe strip. For the public-note view only: those ids are
- * enumerable workspace-member/attachment identifiers that have no business
- * riding along invisibly to an anonymous, unauthenticated viewer. Every
- * other consumer (export, print, authenticated preview) keeps calling
+ * `renderDocumentHtml` output, adapted for the public-note view:
+ *
+ * - An `image` node's `<img>` gets a real `src`, built by `resolveImageSrc`
+ *   from its (already-escaped, UUID-shaped) attachment id — the caller wires
+ *   this to the unauthenticated, token-scoped image route. Both regexes match
+ *   only the fixed class literal this module itself emits, so there is
+ *   nothing here for a pasted document to spoof.
+ * - `data-mention-id`, and `data-attachment-id` on a generic `attachment`
+ *   figure, are stripped rather than substituted: those remain enumerable
+ *   workspace-member/attachment identifiers with no business reaching an
+ *   anonymous viewer, and (unlike an image) a generic file attachment has no
+ *   public content route to point them at.
+ *
+ * Every other consumer (export, print, authenticated preview) keeps calling
  * `renderDocumentHtml` directly.
  */
-export function renderPublicDocumentHtml(document: unknown): string {
-  return renderNodeHtml(document).replace(/ data-(?:mention|attachment)-id="[^"]*"/g, "");
+export function renderPublicDocumentHtml(
+  document: unknown,
+  resolveImageSrc: (attachmentId: string) => string,
+): string {
+  const html = renderNodeHtml(document)
+    .replace(
+      PUBLIC_IMAGE_SRC_PATTERN,
+      (_match, prefix: string, id: string, suffix: string) =>
+        `${prefix}${id}${suffix} src="${escapeHtml(resolveImageSrc(id))}"`,
+    )
+    .replace(PUBLIC_ATTACHMENT_FIGURE_ID_PATTERN, (_match, prefix: string) => prefix);
+  return html.replace(/ data-mention-id="[^"]*"/g, "");
 }

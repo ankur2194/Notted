@@ -1,9 +1,11 @@
+import { ATTACHMENT_API_PATHS } from "@notted/shared-types";
 import { renderPublicDocumentHtml } from "@notted/shared-validators";
 import { printStylesheet } from "@notted/shared-validators/server";
 import { notFound } from "next/navigation";
 
 import type { Metadata } from "next";
 
+import { primaryApiOrigin } from "@/lib/api/api-origin";
 import { getPublicNote } from "@/lib/notes/server-public-note";
 
 // A capability URL is only meant for whoever holds the link — the root
@@ -40,26 +42,36 @@ export default async function PublicNotePage({
     );
   }
   const { title, content } = result.data;
+  const resolveImageSrc = (attachmentId: string): string =>
+    new URL(ATTACHMENT_API_PATHS.publicContent(token, attachmentId), primaryApiOrigin()).toString();
   return (
     <main id="main-content" tabIndex={-1} className="mx-auto max-w-3xl p-8">
       {/*
         `printStylesheet()` is almost entirely `@media print` rules, same as
         the HTML export path — see `buildStandaloneHtml`. It's included here
-        purely so print/export of this page matches the editor's own output;
-        on-screen this page otherwise relies on the app's own Tailwind base.
+        purely so print/export of this page matches the editor's own output.
+        On-screen, this page reuses `.notted-editor-content`'s typography
+        (headings, tables, code, images, attachments) from `globals.css` —
+        `renderPublicDocumentHtml`'s markup is deliberately the same contract
+        `.notted-editor-content`'s image/attachment selectors already key off
+        (see the comment above those rules), so no new CSS is needed here.
+        One override: the live editor fades an image in via `[data-image-
+        loaded="true"]`, a client-side attribute this static page never sets,
+        so it is forced visible instead.
       */}
       <style dangerouslySetInnerHTML={{ __html: printStylesheet() }} />
+      <style>{".notted-public-note .notted-image { opacity: 1; }"}</style>
       <h1 className="text-3xl font-bold">{title}</h1>
       <div
-        className="prose mt-6 max-w-none"
+        className="notted-editor-content notted-public-note mt-6"
         // `renderPublicDocumentHtml` is `renderDocumentHtml` — the same
         // defensive TipTap-JSON-to-HTML converter the HTML/PDF export path
         // uses on the exact same untrusted persisted content, never emitting
-        // `src`/`href`-bearing markup outside its own sanitized allowlist —
-        // with `data-mention-id`/`data-attachment-id` stripped, since this
-        // page has no session and those ids have no business reaching an
-        // anonymous viewer.
-        dangerouslySetInnerHTML={{ __html: renderPublicDocumentHtml(content) }}
+        // `href`-bearing markup outside its own sanitized allowlist — with a
+        // real, token-scoped `src` wired onto each image, `data-mention-id`
+        // stripped, and a generic file attachment's `data-attachment-id`
+        // stripped too (it has no public content route to point at).
+        dangerouslySetInnerHTML={{ __html: renderPublicDocumentHtml(content, resolveImageSrc) }}
       />
     </main>
   );

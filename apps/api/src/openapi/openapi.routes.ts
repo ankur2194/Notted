@@ -564,6 +564,12 @@ export const OPENAPI_ROUTES: Record<string, OpenApiRouteDoc> = {
     description:
       "PUBLIC and unauthenticated — no session, no API key, and no workspace scope in the path. Every miss, including a malformed, revoked, or trashed-note token, is the same 404.",
   },
+  "GET /public/notes/{token}/attachments/{attachmentId}/content": {
+    summary: "Stream a public note's image bytes.",
+    tags: ["Note public links"],
+    description:
+      "PUBLIC and unauthenticated, scoped by the same token as the note it belongs to. Streams the stored object; the response is binary, not JSON. Images only — a generic file attachment has no public content route.",
+  },
 
   // Folders.
   "GET /workspaces/{workspaceId}/folders": {

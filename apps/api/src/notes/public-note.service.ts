@@ -50,4 +50,30 @@ export class PublicNoteService {
       updatedAt: row.updatedAt.toISOString(),
     });
   }
+
+  /**
+   * The (noteId, workspaceId) a valid, live public-link token addresses, or
+   * `null`. Used by `PublicAttachmentController` to prove that an attachment
+   * id belongs to THIS token's note before streaming any bytes — the same
+   * "tenancy proved by the row, not by ambient context" rule as `resolve`,
+   * scoped down to just the identifiers a second lookup needs.
+   */
+  async resolveNoteScope(
+    rawToken: string,
+  ): Promise<{ readonly noteId: string; readonly workspaceId: string } | null> {
+    if (!PUBLIC_LINK_TOKEN_PATTERN.test(rawToken)) return null;
+    const tokenHash = hashPublicLinkToken(rawToken, this.authConfig.secret);
+    const [row] = await this.database.db
+      .select({
+        noteId: notePublicLinks.noteId,
+        workspaceId: notePublicLinks.workspaceId,
+        isDeleted: notes.isDeleted,
+      })
+      .from(notePublicLinks)
+      .innerJoin(notes, eq(notes.id, notePublicLinks.noteId))
+      .where(eq(notePublicLinks.tokenHash, tokenHash))
+      .limit(1);
+    if (row === undefined || row.isDeleted) return null;
+    return Object.freeze({ noteId: row.noteId, workspaceId: row.workspaceId });
+  }
 }

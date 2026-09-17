@@ -274,7 +274,7 @@ export class NoteAttachmentsController {
   }
 }
 
-function applyContentHeaders(
+export function applyContentHeaders(
   response: Response,
   content: AttachmentContent,
   disposition: "inline" | "attachment",

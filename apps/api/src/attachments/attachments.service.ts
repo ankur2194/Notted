@@ -680,6 +680,59 @@ export class AttachmentsService {
   }
 
   /**
+   * Unauthenticated image read for the `/p/:token` public-note view. No
+   * principal, no `AuthorizationEntryService`, no `TenantContextService` — the
+   * same reasoning as `PublicNoteService`: an anonymous visitor has no session
+   * to authorize or scope from. Tenancy is instead proved by requiring an
+   * EXACT (attachmentId, noteId, workspaceId) match, where `noteId`/
+   * `workspaceId` come from `PublicNoteService.resolveNoteScope` — i.e. from a
+   * validated, live public-link token — never from the caller directly. That
+   * is what stops a holder of one note's link from walking `attachmentId`
+   * values to read another note's images.
+   *
+   * Scoped to `image` attachments only. A generic `file` attachment gets no
+   * public URL at all, matching `renderPublicDocumentHtml`'s existing choice
+   * to give a file attachment no `href`/`src` — this method does not change
+   * that, it only fixes the image case.
+   */
+  async readPublicImageContent(input: {
+    readonly noteId: string;
+    readonly workspaceId: string;
+    readonly attachmentId: string;
+  }): Promise<AttachmentContent | null> {
+    const [row] = await this.database.db
+      .select(this.selection())
+      .from(attachments)
+      .where(
+        and(
+          eq(attachments.id, input.attachmentId),
+          eq(attachments.noteId, input.noteId),
+          eq(attachments.workspaceId, input.workspaceId),
+        ),
+      )
+      .limit(1);
+    if (row === undefined) return null;
+    if (row.processingStatus !== "ready" || row.mediaType !== "image") return null;
+    const variant = this.resolveVariant(row.variants, "full", row.mediaType);
+    if (variant === null) return null;
+    const stat = await this.readStorage(() =>
+      this.objects.statObject(ATTACHMENTS_BUCKET, variant.key),
+    );
+    if (stat === null) return null;
+    const stream = await this.readStorage(() =>
+      this.objects.getObjectStream(ATTACHMENTS_BUCKET, variant.key),
+    );
+    return Object.freeze({
+      stream,
+      mimeType: variant.mimeType,
+      contentLength: stat.size,
+      etag: stat.etag,
+      filename: row.filename,
+      mediaType: row.mediaType,
+    });
+  }
+
+  /**
    * Mark the record unavailable and record deletion intent in ONE transaction;
    * remove objects only after that commit, idempotently.
    */

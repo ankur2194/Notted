@@ -11,6 +11,7 @@ import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
 import { AuthorizationModule } from "../authorization/authorization.module";
 import { MinioModule } from "../infrastructure/minio/minio.module";
+import { NotesModule } from "../notes/notes.module";
 import { SearchModule } from "../search/search.module";
 import { StorageModule } from "../storage/storage.module";
 
@@ -18,14 +19,19 @@ import { AttachmentsController, NoteAttachmentsController } from "./attachments.
 import { AttachmentsService } from "./attachments.service";
 import { IMAGE_PROCESSOR } from "./image-processing";
 import { ImageProcessingService } from "./image-processing.service";
+import { PublicAttachmentController } from "./public-attachment.controller";
 
 @Module({
   // Part 45: `StorageModule` supplies `StorageQuotaService`, the single owner of
   // the quota rules the upload path enforces.
   // Part 51.3: `SearchModule` supplies `NoteSearchIndexProducer` for
   // re-syncing the owning note on attachment ready/delete.
-  imports: [AuthModule, AuthorizationModule, MinioModule, StorageModule, SearchModule],
-  controllers: [AttachmentsController, NoteAttachmentsController],
+  // `NotesModule` supplies `PublicNoteService`, which resolves a public-link
+  // token to a (noteId, workspaceId) pair for `PublicAttachmentController`.
+  // The arrow is one-way — `NotesModule` never imports `AttachmentsModule` —
+  // so no `forwardRef` is involved.
+  imports: [AuthModule, AuthorizationModule, MinioModule, NotesModule, SearchModule, StorageModule],
+  controllers: [AttachmentsController, NoteAttachmentsController, PublicAttachmentController],
   providers: [
     AttachmentsService,
     // Part 41: the Sharp-backed processor. This binding is the ONLY place the

@@ -59,6 +59,17 @@ import { PublicNoteService } from "./public-note.service";
     NotePublicLinksService,
     PublicNoteService,
   ],
-  exports: [FoldersService, NotesService, NoteSharesService, NoteVersionsService, NotesTrpcRouter],
+  exports: [
+    FoldersService,
+    NotesService,
+    NoteSharesService,
+    NoteVersionsService,
+    NotesTrpcRouter,
+    // `AttachmentsModule` imports this module to reach `PublicNoteService` —
+    // the token-to-(noteId, workspaceId) resolution `PublicAttachmentController`
+    // needs. The arrow is one-way (`NotesModule` never imports
+    // `AttachmentsModule`), so no `forwardRef` is involved.
+    PublicNoteService,
+  ],
 })
 export class NotesModule {}
