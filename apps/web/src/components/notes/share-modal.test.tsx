@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   requestNoteShares: vi.fn(),
   upsertNoteShare: vi.fn(),
   revokeNoteShare: vi.fn(),
+  requestNotePublicLinkStatus: vi.fn(),
+  createNotePublicLink: vi.fn(),
+  revokeNotePublicLink: vi.fn(),
 }));
 vi.mock("@/lib/notes/requests", () => mocks);
 
@@ -68,6 +71,10 @@ describe("ShareModal", () => {
       },
     });
     mocks.requestNoteShares.mockResolvedValue({ ok: true, data: { items: [] } });
+    mocks.requestNotePublicLinkStatus.mockResolvedValue({
+      ok: true,
+      data: { enabled: false, createdAt: null },
+    });
 
     mockWriteText = vi.fn().mockResolvedValue(undefined);
   });
@@ -115,6 +122,26 @@ describe("ShareModal", () => {
       expect.stringContaining(`/workspaces/${workspaceId}/notes/${noteId}`),
     );
     expect(screen.getByText(/Requires Notted access/u)).toBeVisible();
+  });
+
+  it("creates and reveals a public link, then revokes it", async () => {
+    mocks.createNotePublicLink.mockResolvedValue({
+      ok: true,
+      data: { url: "https://app.example/p/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+    });
+    mocks.revokeNotePublicLink.mockResolvedValue({ ok: true, data: { noteId, revoked: true } });
+    const user = userEvent.setup();
+    view();
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    expect(screen.queryByDisplayValue(/\/p\//u)).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Create link" }));
+    expect(mocks.createNotePublicLink).toHaveBeenCalledWith(workspaceId, noteId);
+    expect(await screen.findByDisplayValue(/\/p\//u)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Regenerate link" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Revoke public link" }));
+    expect(mocks.revokeNotePublicLink).toHaveBeenCalledWith(workspaceId, noteId);
+    expect(screen.queryByDisplayValue(/\/p\//u)).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Create link" })).toBeVisible();
   });
 
   it("renders existing comment grants without offering comment for new grants", async () => {

@@ -4,7 +4,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Share2, UserMinus } from "lucide-react";
 import { useState } from "react";
 
-import type { NoteShareList, NoteShareMutationPermission } from "@notted/shared-types";
+import type {
+  NotePublicLinkStatus,
+  NoteShareList,
+  NoteShareMutationPermission,
+} from "@notted/shared-types";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +24,10 @@ import { fetchWorkspaceMemberDirectory } from "@/lib/notes/member-directory";
 import { noteQueryKeys } from "@/lib/notes/query-keys";
 import {
   WORKSPACE_MEMBER_DIRECTORY_LIMIT,
+  createNotePublicLink,
+  requestNotePublicLinkStatus,
   requestNoteShares,
+  revokeNotePublicLink,
   revokeNoteShare,
   upsertNoteShare,
 } from "@/lib/notes/requests";
@@ -61,6 +68,17 @@ export function ShareModal({
       return result.data;
     },
   });
+  const publicLink = useQuery({
+    queryKey: noteQueryKeys.publicLink(workspaceId, noteId),
+    enabled: open,
+    queryFn: async (): Promise<NotePublicLinkStatus> => {
+      const result = await requestNotePublicLinkStatus(workspaceId, noteId);
+      if (!result.ok) throw new Error(result.kind);
+      return result.data;
+    },
+  });
+  const [publicUrl, setPublicUrl] = useState<string | null>(null);
+  const [publicLinkPending, setPublicLinkPending] = useState(false);
   const memberByUserId = new Map(
     (members.data?.items ?? []).map((member) => [member.userId, member]),
   );
@@ -128,6 +146,40 @@ export function ShareModal({
     setStatus("Note access revoked. The change applies to the next note request immediately.");
   }
 
+  async function createPublicLink(): Promise<void> {
+    setPublicLinkPending(true);
+    setStatus("Creating public link…");
+    const result = await createNotePublicLink(workspaceId, noteId);
+    setPublicLinkPending(false);
+    if (!result.ok) {
+      setStatus("The public link could not be created.");
+      return;
+    }
+    setPublicUrl(result.data.url);
+    queryClient.setQueryData<NotePublicLinkStatus>(noteQueryKeys.publicLink(workspaceId, noteId), {
+      enabled: true,
+      createdAt: new Date().toISOString(),
+    });
+    setStatus("Public link created. Copy it now — it will not be shown again.");
+  }
+
+  async function revokePublicLink(): Promise<void> {
+    setPublicLinkPending(true);
+    setStatus("Revoking public link…");
+    const result = await revokeNotePublicLink(workspaceId, noteId);
+    setPublicLinkPending(false);
+    if (!result.ok) {
+      setStatus("The public link could not be revoked.");
+      return;
+    }
+    setPublicUrl(null);
+    queryClient.setQueryData<NotePublicLinkStatus>(noteQueryKeys.publicLink(workspaceId, noteId), {
+      enabled: false,
+      createdAt: null,
+    });
+    setStatus("Public link revoked. It no longer works for anyone who had it.");
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -178,6 +230,74 @@ export function ShareModal({
               Copy link
             </Button>
           </div>
+        </section>
+        <section className="space-y-2" aria-labelledby="public-link-heading">
+          <h3 id="public-link-heading" className="font-medium">
+            Public link
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Anyone with this link can view the note without signing in. It does not require Notted
+            access.
+          </p>
+          {publicUrl !== null ? (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                aria-label="Public note link"
+                readOnly
+                value={publicUrl}
+                className="min-h-11 min-w-0 flex-1 rounded-md border bg-muted px-3 text-sm"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (!navigator.clipboard?.writeText) {
+                    setStatus("The link could not be copied. Select and copy it manually.");
+                    return;
+                  }
+                  void navigator.clipboard.writeText(publicUrl).then(
+                    () => setStatus("Public link copied."),
+                    () => setStatus("The link could not be copied. Select and copy it manually."),
+                  );
+                }}
+              >
+                <Copy aria-hidden="true" className="size-4" />
+                Copy link
+              </Button>
+            </div>
+          ) : null}
+          {publicLink.data?.enabled === true ? (
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={publicLinkPending}
+                onClick={() => void createPublicLink()}
+              >
+                {publicLinkPending ? "Regenerating…" : "Regenerate link"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={publicLinkPending}
+                onClick={() => void revokePublicLink()}
+              >
+                {publicLinkPending ? "Revoking…" : "Revoke public link"}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={publicLinkPending || publicLink.isPending}
+              onClick={() => void createPublicLink()}
+            >
+              {publicLinkPending ? "Creating…" : "Create link"}
+            </Button>
+          )}
         </section>
         {members.isPending || shares.isPending ? (
           <p role="status" className="rounded-md bg-muted p-3 text-sm">
