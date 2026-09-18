@@ -58,8 +58,21 @@ hostnames over HTTPS through the proxy. Plain `http://host:3200` will not work.
 
 ### 1.1 Host requirements
 
-- Linux x86_64, 4 GB RAM minimum (8 GB recommended — `api` carries Chromium
-  for PDF export), 20 GB free disk.
+- Linux, x86_64 or arm64 (Raspberry Pi 4/5 works; every base image is a
+  multi-arch digest). 4 GB RAM minimum, 8 GB recommended — `api` carries
+  Chromium for PDF export.
+- 25 GB free on **Docker's data root**, not on the project directory. The
+  build compiles MinIO from source (two Go module caches), installs Chromium
+  and produces two ~2 GB Node images; the finished stack is about 6 GB.
+  Check where that is before building — on a Pi it is usually the SD card:
+
+  ```bash
+  docker info -f '{{.DockerRootDir}}' | xargs df -h
+  ```
+
+  If it is too small, move it once with `"data-root": "/mnt/data/docker"` in
+  `/etc/docker/daemon.json` (stop Docker, `rsync -a` the old directory over,
+  start Docker).
 - Docker Engine 27+ with the Compose plugin (`docker compose version` ≥ 2.30).
 - Host ports 3200 and 3201 free (change `NOTTED_WEB_PORT`/`NOTTED_API_PORT`
   if not). They are loopback-only; nothing to open in the firewall.
@@ -143,6 +156,35 @@ builds compile the whole workspace and take several minutes on first run.
 ```bash
 docker compose --env-file .env.production -f compose.prod.yaml build
 ```
+
+That builds all seven images in parallel. On a small host (Raspberry Pi, a
+VPS with 4 GB RAM or a tight disk) build in stages instead, so the Go and
+Node compilations do not run at the same time, then drop the intermediate
+layers before starting:
+
+```bash
+docker compose --env-file .env.production -f compose.prod.yaml build postgres meilisearch
+```
+
+```bash
+docker compose --env-file .env.production -f compose.prod.yaml build minio minio-init
+```
+
+```bash
+docker compose --env-file .env.production -f compose.prod.yaml build migrate api
+```
+
+```bash
+docker compose --env-file .env.production -f compose.prod.yaml build web
+```
+
+```bash
+docker builder prune -af
+```
+
+`docker builder prune` removes only BuildKit cache, never images or
+containers, so it is safe on a daemon shared with other projects; it just
+means the next build starts from scratch.
 
 `web` bakes `https://$APP_DOMAIN`, `https://$API_DOMAIN` and
 `wss://$API_DOMAIN` into its bundle at this point.
@@ -409,6 +451,11 @@ after which plain `docker compose ps`, `docker compose up -d`, etc. work.
 
 ## 5. Troubleshooting
 
+- **Build fails with `No space left on device`** (in `apt-get`, `pnpm
+  install`, or `failed to commit … metadata.db`) — Docker's data root is
+  full, not the project disk. `docker builder prune -af`, check
+  `docker info -f '{{.DockerRootDir}}' | xargs df -h`, move the data root or
+  free space, then rebuild in stages (section 1.5).
 - **`api` restarts in a loop** — configuration rejected. `docker compose logs
   api` prints the exact variable (`BETTER_AUTH_SECRET must be…`,
   `production SMTP must require TLS`, …).

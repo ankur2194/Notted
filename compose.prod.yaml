@@ -230,6 +230,18 @@ services:
     environment: *api-environment
     ports:
       - "${NOTTED_BIND:-127.0.0.1}:${NOTTED_API_PORT:-3201}:3001"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          'fetch("http://127.0.0.1:"+(process.env.API_PORT||3001)+"/health/ready").then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
+        ]
+      interval: 15s
+      timeout: 15s
+      start_period: 60s
+      retries: 5
     read_only: true
     tmpfs:
       - /tmp
