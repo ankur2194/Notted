@@ -7530,13 +7530,13 @@
     "semantic_hash": ""
   },
   "DEPLOYMENT.md": {
-    "mtime": 1789676499.2346036,
-    "ast_hash": "35bc2c2153521a8e1b6a99cd8ef89700",
+    "mtime": 1789724104.7569218,
+    "ast_hash": "5ee149afc414cc952eedd0233e098c17",
     "semantic_hash": ""
   },
   "compose.prod.yaml": {
-    "mtime": 1789676424.132459,
-    "ast_hash": "7dcb387393bc12a9441b85378e5db1db",
+    "mtime": 1789734290.6349704,
+    "ast_hash": "5aa6d2d7f9d17ee3d6ce5b039fc0b718",
     "semantic_hash": ""
   },
   "docs/superpowers/specs/2026-09-17-note-public-links-design.md": {

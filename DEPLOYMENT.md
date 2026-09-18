@@ -1,16 +1,18 @@
 # Deploying Notted to production with Docker
 
-This guide covers a single Linux host running the stack in `compose.prod.yaml`
-behind a reverse proxy you already operate on that host. It is the
-authoritative procedure for the first deployment and for every subsequent
-release.
+This guide covers a single Linux host running the stack in `compose.prod.yaml`.
+The included Caddy gateway routes one public origin to the web and API
+containers; an HTTPS terminator (for example Cloudflare Tunnel or a host proxy)
+forwards that origin to the gateway's single loopback port. It is the
+authoritative procedure for the first deployment and subsequent releases.
 
 What you get:
 
 | Service       | Image                                       | Reachable from                     |
 | ------------- | ------------------------------------------- | ---------------------------------- |
-| `web`         | `docker/Dockerfile.web`                     | host port `NOTTED_WEB_PORT` (3200) |
-| `api`         | `docker/Dockerfile.api` (`runtime`)         | host port `NOTTED_API_PORT` (3201) |
+| `gateway`     | pinned Caddy image                          | host port `NOTTED_PORT` (3200)     |
+| `web`         | `docker/Dockerfile.web`                     | `edge` network only                |
+| `api`         | `docker/Dockerfile.api` (`runtime`)         | `edge` + `backend` networks        |
 | `migrate`     | `docker/Dockerfile.api` (`migrate`)         | one-shot, exits                    |
 | `postgres`    | pgvector, patched (`docker/patched-images`) | `backend` network only             |
 | `redis`       | `redis` (pinned, password required)         | `backend` network only             |
@@ -18,10 +20,11 @@ What you get:
 | `minio`       | built from source (`docker/minio-source`)   | `backend` network only             |
 | `minio-init`  | creates the two private buckets, exits      | one-shot, exits                    |
 
-Only two ports are published — **3200** (web) and **3201** (API + WebSocket),
-bound to `127.0.0.1` unless `NOTTED_BIND` says otherwise. Everything else is
-private to the Compose network. BullMQ workers run inside `api`; there is no
-separate worker container.
+Only one port is published — **3200** by default — and it is bound to
+`127.0.0.1` unless `NOTTED_BIND` says otherwise. Caddy routes known API, auth,
+health and WebSocket paths to `api` and everything else to `web`; it blocks
+`/metrics` and Bull Board. Everything else is private to Compose networks.
+BullMQ workers run inside `api`; there is no separate worker container.
 
 ## Tech stack
 
@@ -47,10 +50,11 @@ Versions are pinned in `package.json` files and the Dockerfiles; ADR 0008
 | Tests            | Vitest 4 · Playwright 1.62                                                 |
 | Containers       | Docker Compose; non-root, read-only rootfs for `api`/`web`, pinned digests |
 
-**TLS is your proxy's job and it is not optional.** The API refuses to start
+**TLS is the external terminator's job and it is not optional.** The API refuses to start
 unless `APP_URL`, `API_URL` and `BETTER_AUTH_URL` are `https://`, and the web
-bundle is built for `https://`/`wss://` origins, so the browser must reach both
-hostnames over HTTPS through the proxy. Plain `http://host:3200` will not work.
+bundle is built for `https://`/`wss://` origins, so the browser must reach the
+single hostname over HTTPS. Plain `http://host:3200` is only an internal gateway
+check, not a supported browser entry point.
 
 ---
 
@@ -74,10 +78,10 @@ hostnames over HTTPS through the proxy. Plain `http://host:3200` will not work.
   `/etc/docker/daemon.json` (stop Docker, `rsync -a` the old directory over,
   start Docker).
 - Docker Engine 27+ with the Compose plugin (`docker compose version` ≥ 2.30).
-- Host ports 3200 and 3201 free (change `NOTTED_WEB_PORT`/`NOTTED_API_PORT`
-  if not). They are loopback-only; nothing to open in the firewall.
-- A reverse proxy on the host (nginx, Traefik, Caddy, …) with certificates for
-  both hostnames. Requirements are in section 1.7.
+- Host port 3200 free (change `NOTTED_PORT` if needed). It is loopback-only;
+  nothing needs opening in the firewall.
+- An HTTPS terminator with a certificate for the application hostname. It only
+  forwards to the one gateway port; routing requirements are in section 1.7.
 - A non-root user in the `docker` group (the commands below assume it).
 
 ```bash
@@ -86,15 +90,13 @@ docker version && docker compose version
 
 ### 1.2 DNS
 
-Create **two** records pointing at the host's public IP:
+Create one record pointing at the HTTPS terminator:
 
-| Record                    | Purpose                              |
-| ------------------------- | ------------------------------------ |
-| `app.example.com` A/AAAA  | Web app (`APP_DOMAIN`)               |
-| `api.example.com` A/AAAA  | API + WebSocket (`API_DOMAIN`)       |
+| Record                   | Purpose                                         |
+| ------------------------ | ----------------------------------------------- |
+| `app.example.com` A/AAAA | Web, API, authentication and WebSocket traffic  |
 
-Both are served by your proxy; issue certificates for them the way you do for
-your other sites.
+Issue a certificate for that hostname through the terminator.
 
 ### 1.3 Get the code
 
@@ -113,9 +115,8 @@ chmod 600 .env.production
 
 Edit `.env.production` and fill every value marked REQUIRED:
 
-- `APP_DOMAIN`, `API_DOMAIN` (ports `NOTTED_WEB_PORT`/`NOTTED_API_PORT`
-  default to 3200/3201; change them only if taken; `TRUST_PROXY_HOPS` stays
-  `1` for a single proxy on the host)
+- `APP_DOMAIN` (`NOTTED_PORT` defaults to 3200; `TRUST_PROXY_HOPS` defaults to
+  `2` for the HTTPS terminator plus the Compose gateway)
 - `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `MEILI_MASTER_KEY`,
   `MINIO_ROOT_PASSWORD`, `BETTER_AUTH_SECRET`, `DATA_ENCRYPTION_KEYS`
 - SMTP: `EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`,
@@ -157,7 +158,7 @@ builds compile the whole workspace and take several minutes on first run.
 docker compose --env-file .env.production -f compose.prod.yaml build
 ```
 
-That builds all seven images in parallel. On a small host (Raspberry Pi, a
+That builds all eight images in parallel. On a small host (Raspberry Pi, a
 VPS with 4 GB RAM or a tight disk) build in stages instead, so the Go and
 Node compilations do not run at the same time, then drop the intermediate
 layers before starting:
@@ -171,7 +172,7 @@ docker compose --env-file .env.production -f compose.prod.yaml build minio minio
 ```
 
 ```bash
-docker compose --env-file .env.production -f compose.prod.yaml build migrate api
+docker compose --env-file .env.production -f compose.prod.yaml build gateway migrate api
 ```
 
 ```bash
@@ -186,8 +187,7 @@ docker builder prune -af
 containers, so it is safe on a daemon shared with other projects; it just
 means the next build starts from scratch.
 
-`web` bakes `https://$APP_DOMAIN`, `https://$API_DOMAIN` and
-`wss://$API_DOMAIN` into its bundle at this point.
+`web` bakes `https://$APP_DOMAIN` and `wss://$APP_DOMAIN` into its bundle.
 
 ### 1.6 Start the stack
 
@@ -197,7 +197,7 @@ docker compose --env-file .env.production -f compose.prod.yaml up -d
 
 Compose starts services in dependency order: infrastructure becomes healthy,
 `migrate` applies the Drizzle migrations and exits, `minio-init` creates the
-buckets and exits, then `api` and `web` start and pass their health checks.
+buckets and exits, then `api` and `web` become healthy before `gateway` starts.
 
 Check the containers before touching the proxy:
 
@@ -209,65 +209,51 @@ Expected: every long-running service `Up (healthy)`; `migrate` and
 `minio-init` `Exited (0)`.
 
 ```bash
-curl -fsS http://127.0.0.1:3201/health/ready
+curl -fsS http://127.0.0.1:3200/health/ready
 ```
 
 ```bash
 curl -fsSI http://127.0.0.1:3200 | head -1
 ```
 
-### 1.7 Configure the reverse proxy
+### 1.7 Configure HTTPS forwarding
 
-Two virtual hosts, both HTTPS, forwarding to the loopback ports. What the
-proxy must do:
+Configure one HTTPS hostname to forward all traffic to
+`http://127.0.0.1:3200`. The external terminator does not need path rules:
+`docker/Caddyfile.prod` owns them and preserves the host-only session cookie by
+serving web, API and WebSockets from one browser origin.
 
-| Requirement                                      | Why                                                                    |
-| ------------------------------------------------ | ---------------------------------------------------------------------- |
-| `app.example.com` → `127.0.0.1:3200`             | Next.js web app                                                        |
-| `api.example.com` → `127.0.0.1:3201`             | API, Better Auth, `/socket.io`                                         |
-| WebSocket upgrade on the API host                | Realtime editing and presence use `/socket.io`                         |
-| No idle/read timeout on the API host, or ≥ 120 s | Long-lived sockets; the API pings every 30 s                           |
-| Body size ≥ 64 MB on the API host                | Attachment uploads (`MAX_UPLOAD_SIZE_BYTES`, 50 MB default)            |
-| Pass `X-Forwarded-For` / `X-Forwarded-Proto`     | Rate limits and audit rows key on the client IP (`TRUST_PROXY_HOPS=1`) |
-| Do not expose `/metrics` publicly                | `docs/standards/operations.md`                                         |
-| HTTP → HTTPS redirect                            | The app only works over HTTPS                                          |
+| Requirement                                         | Why                                                                    |
+| --------------------------------------------------- | ---------------------------------------------------------------------- |
+| `app.example.com` → `127.0.0.1:3200`                | One origin for web, API, auth and WebSockets                           |
+| WebSocket forwarding enabled                       | Realtime editing and presence use `/socket.io`                         |
+| No idle/read timeout, or at least 120 seconds       | Long-lived sockets; the API pings every 30 seconds                     |
+| Body size at least 64 MB                            | Attachment uploads (`MAX_UPLOAD_SIZE_BYTES`, 50 MB default)            |
+| Preserve client IP and original HTTPS information  | Rate limits, secure cookies and audit rows depend on forwarding headers |
+| HTTP redirected to HTTPS                           | The application only supports HTTPS in production                      |
 
-nginx example for the API host (the web host is the same without the body
-size and timeout lines):
+For Cloudflare Tunnel, one ingress rule is sufficient:
 
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name api.example.com;
-    # ssl_certificate / ssl_certificate_key as for your other sites
-
-    client_max_body_size 64m;
-
-    location = /metrics { return 404; }
-
-    location / {
-        proxy_pass http://127.0.0.1:3201;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 3600s;
-        proxy_send_timeout 3600s;
-    }
-}
+```yaml
+ingress:
+  - hostname: app.example.com
+    service: http://127.0.0.1:3200
+  - service: http_status:404
 ```
 
-If the proxy runs in another container on the same Docker host, either set
-`NOTTED_BIND=0.0.0.0` and firewall the ports, or attach the proxy to the
-`notted_backend` network and target `web:3000` / `api:3001` directly (then
-no ports need publishing at all).
+The gateway is deliberately loopback-only. If the HTTPS terminator is on a
+different machine, set `NOTTED_BIND` to a private interface address and restrict
+that port to the terminator with the host firewall. Never expose it generally.
+
+This primary-host setup does not itself issue certificates for arbitrary tenant
+domains. Keep `CUSTOM_DOMAINS_ENABLED=false` unless the external terminator is
+also configured for the verified-host certificate flow in
+`docs/custom-domains.md`; path routing alone is not enough.
 
 ### 1.8 Verify end to end
 
 ```bash
-curl -fsS https://api.example.com/health/ready
+curl -fsS https://app.example.com/health/ready
 ```
 
 ```bash
@@ -331,6 +317,20 @@ Read the release notes / diff for two things: new environment variables (add
 them to `.env.production`) and new migrations under
 `apps/api/src/database/migrations/`.
 
+For the first release that introduces the single-origin gateway, existing
+deployments must also:
+
+1. Set `NOTTED_PORT=3200` (or the chosen one published port).
+2. Change `TRUST_PROXY_HOPS=1` to `TRUST_PROXY_HOPS=2`; add another hop for each
+   trusted CDN/load balancer in front of the HTTPS terminator.
+3. Keep the old `API_DOMAIN` value temporarily; the gateway uses it only to
+   drain already-loaded clients after startup.
+4. Rebuild `web`; its API and WebSocket origins are build-time values. Do not
+   remove or reroute the old API hostname before the build and rollout finish.
+
+After cutover, confirm audit/rate-limit client addresses are real client IPs,
+not the terminator or gateway address.
+
 ### 2.2 Back up before migrating
 
 Always take a fresh dump before a release that contains a migration:
@@ -347,7 +347,7 @@ sed -i "s/^NOTTED_IMAGE_TAG=.*/NOTTED_IMAGE_TAG=$(git rev-parse --short HEAD)/" 
 ```
 
 ```bash
-docker compose --env-file .env.production -f compose.prod.yaml build api migrate web
+docker compose --env-file .env.production -f compose.prod.yaml build gateway api migrate web
 ```
 
 The old containers keep serving traffic while this runs.
@@ -359,8 +359,16 @@ docker compose --env-file .env.production -f compose.prod.yaml up -d
 ```
 
 This re-runs `migrate` (Drizzle applies only new files), then recreates `api`
-and `web` with the new images. The proxy sees a few seconds of `502` while
-each container restarts and passes its health check; nothing else changes.
+and `web` with the new images. The gateway waits for both health checks; the
+external terminator may see a brief `502` while the gateway is replaced.
+
+On the first gateway rollout, wait until `gateway` is healthy, then point the
+HTTPS terminator's **old API hostname** at the same gateway port 3200. Caddy
+recognizes the retained `API_DOMAIN`, rewrites only that trusted legacy host for
+Nest, and lets already-loaded clients keep using their API-host session cookie.
+Newly built clients use `APP_DOMAIN` for every request. After a suitable drain
+window, remove the old API route and `API_DOMAIN`; users who never established a
+new application-host session will need to sign in once on the new origin.
 
 ### 2.5 Verify
 
@@ -369,11 +377,11 @@ docker compose --env-file .env.production -f compose.prod.yaml ps
 ```
 
 ```bash
-curl -fsS https://api.example.com/health/ready
+curl -fsS https://app.example.com/health/ready
 ```
 
 ```bash
-docker compose --env-file .env.production -f compose.prod.yaml logs --since 5m api web
+docker compose --env-file .env.production -f compose.prod.yaml logs --since 5m gateway api web
 ```
 
 ### 2.6 Clean up old images
@@ -400,12 +408,27 @@ change plus `up`:
 ```bash
 sed -i "s/^NOTTED_IMAGE_TAG=.*/NOTTED_IMAGE_TAG=<previous-short-sha>/" .env.production
 git checkout <previous-tag-or-commit>
-docker compose --env-file .env.production -f compose.prod.yaml up -d --no-build api web
+docker compose --env-file .env.production -f compose.prod.yaml up -d --no-build api web gateway
 ```
 
 `--no-build` reuses the images tagged with the previous commit; if step 2.6
 already pruned them, drop the flag and Compose rebuilds them from the checked
 out source.
+
+When rolling back specifically to a release from before the gateway existed,
+stop and remove it **before** checking out the old revision so it releases port
+3200:
+
+```bash
+docker compose --env-file .env.production -f compose.prod.yaml stop gateway
+docker compose --env-file .env.production -f compose.prod.yaml rm -f gateway
+git checkout <pre-gateway-tag-or-commit>
+```
+
+Restore the old `API_DOMAIN`, `NOTTED_WEB_PORT`, `NOTTED_API_PORT` and
+`TRUST_PROXY_HOPS=1` values, restore the HTTPS terminator's two-host routing,
+then start only `api` and `web` with that revision's Compose file. This legacy
+rollback differs from an ordinary gateway-to-gateway image rollback above.
 
 **Migrations are not rolled back automatically.** Notted migrations are
 written to be backward-compatible with the previous release, so the old API
@@ -429,11 +452,11 @@ docker compose --env-file .env.production -f compose.prod.yaml up -d
 | Follow logs                | `docker compose --env-file .env.production -f compose.prod.yaml logs -f api`             |
 | Restart one service        | `docker compose --env-file .env.production -f compose.prod.yaml restart api`             |
 | Change an env var          | edit `.env.production`, then `... up -d api` (or `web`)                                  |
-| Change a domain            | edit `APP_DOMAIN`/`API_DOMAIN`, then `... build web && ... up -d` (rebuild required)     |
-| Change a host port         | edit `NOTTED_WEB_PORT`/`NOTTED_API_PORT`, `... up -d`, update the proxy                  |
+| Change the domain          | edit `APP_DOMAIN`, then `... build web && ... up -d` (rebuild required)                  |
+| Change the gateway port    | edit `NOTTED_PORT`, run `... up -d gateway`, update the HTTPS terminator                 |
 | Stop everything            | `docker compose --env-file .env.production -f compose.prod.yaml down` (volumes kept)     |
 | Reindex search             | `docker compose --env-file .env.production -f compose.prod.yaml run --rm migrate node --import tsx scripts/search-reindex.ts` |
-| Metrics                    | set `METRICS_TOKEN`; scrape `http://127.0.0.1:3201/metrics` from the host — never via the proxy (`ops/README.md`) |
+| Metrics                    | set `METRICS_TOKEN`; attach the scraper to `notted_backend` and target `http://app.example.com:3001/metrics` (replace with `APP_DOMAIN`) — the trusted internal alias avoids `421`, while the gateway returns 404 |
 
 Resource limits (`*_MEMORY_LIMIT`, `REDIS_MAXMEMORY`) are variables in
 `.env.production`; raise them for larger hosts. Container logs are capped at
@@ -467,7 +490,11 @@ after which plain `docker compose ps`, `docker compose up -d`, etc. work.
   Read `docker compose logs migrate`, fix the cause, `up -d` again. Drizzle
   records applied migrations, so it resumes at the failed file.
 - **Browser shows the app but sign-in fails / WebSocket disconnects** — the
-  web image was built for a different domain than `API_DOMAIN`. Rebuild `web`.
+  web image was built for a different `APP_DOMAIN`, or the HTTPS terminator is
+  bypassing the Compose gateway. Rebuild `web` and confirm all paths use port 3200.
+- **`gateway` is unhealthy** — inspect `docker compose logs gateway`, then
+  verify both `api` and `web` are healthy. The gateway probe proves its API
+  route and API liveness; `web` has its own container health check.
 - **Every request is rate-limited or audit rows show the proxy's IP** — the
   proxy is not sending `X-Forwarded-For`, or `TRUST_PROXY_HOPS` does not
   match the number of proxies in front of the API.

@@ -4505,8 +4505,8 @@
     "semantic_hash": ""
   },
   "docs/completed-parts/README.md": {
-    "mtime": 1787747253.6809642,
-    "ast_hash": "2dad844a3c422ec0a57bcb52aa59054e",
+    "mtime": 1789739661.1930346,
+    "ast_hash": "b7c0dbeb7ccb8294c7710eec16768c53",
     "semantic_hash": ""
   },
   "docs/completed-parts/TEMPLATE.md": {
@@ -7020,12 +7020,12 @@
     "semantic_hash": ""
   },
   "apps/web/security-headers.js": {
-    "mtime": 1787645652.4642417,
+    "mtime": 1789737811.556179,
     "ast_hash": "b4fde04bf74af70497ef43fe8b8a4ae5",
     "semantic_hash": ""
   },
   "apps/web/src/config/security-headers.test.ts": {
-    "mtime": 1787642738.9914792,
+    "mtime": 1789737811.5605671,
     "ast_hash": "1487c3dc7a516cc9c1552f4e2039cd98",
     "semantic_hash": ""
   },
@@ -7530,18 +7530,23 @@
     "semantic_hash": ""
   },
   "DEPLOYMENT.md": {
-    "mtime": 1789724104.7569218,
-    "ast_hash": "5ee149afc414cc952eedd0233e098c17",
+    "mtime": 1789739392.9552507,
+    "ast_hash": "2cee2050c3861237389123107ff734f8",
     "semantic_hash": ""
   },
   "compose.prod.yaml": {
-    "mtime": 1789734290.6349704,
-    "ast_hash": "5aa6d2d7f9d17ee3d6ce5b039fc0b718",
+    "mtime": 1789739392.9432502,
+    "ast_hash": "20cf9698a56b55c4bc64b7aa9abb22db",
     "semantic_hash": ""
   },
   "docs/superpowers/specs/2026-09-17-note-public-links-design.md": {
     "mtime": 1789586122.2667346,
     "ast_hash": "160f52fc8946fe3e5e724a79efac8afa",
+    "semantic_hash": ""
+  },
+  "docs/completed-parts/part-82-reverse-proxy-tls-network-policy.md": {
+    "mtime": 1789739661.1890345,
+    "ast_hash": "87cec372d0096a99e9712a0b6e52b249",
     "semantic_hash": ""
   }
 }

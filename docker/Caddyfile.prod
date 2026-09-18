@@ -1,0 +1,52 @@
+{
+	auto_https off
+	admin off
+	servers {
+		# The gateway is loopback-only, behind the deployment's TLS terminator.
+		trusted_proxies static private_ranges
+		trusted_proxies_strict
+	}
+}
+
+:8080 {
+	route {
+		# Operational surfaces stay private even if the application enables them.
+		@private path /metrics /metrics/* /admin/queues /admin/queues/*
+		respond @private 404
+
+		# Keep this Next.js route ahead of every API matcher.
+		@web_shell path /api/shell/workspace
+		reverse_proxy @web_shell web:3000 {
+			header_up X-Forwarded-Proto https
+		}
+
+		# Existing two-host deployments may temporarily keep their former API
+		# hostname pointed here while loaded clients drain. Present the canonical
+		# host to Nest; the browser still receives its legacy host-only cookie.
+		@legacy_api {
+			host {$LEGACY_API_DOMAIN:legacy.invalid}
+			path /api/v1 /api/v1/* /api/auth /api/auth/* /health/live /health/ready /socket.io /socket.io/*
+		}
+		reverse_proxy @legacy_api api:3001 {
+			header_up Host {$APP_DOMAIN}
+			header_up X-Forwarded-Host {$APP_DOMAIN}
+			header_up X-Forwarded-Proto https
+			stream_close_delay 5m
+		}
+
+		@realtime path /socket.io /socket.io/*
+		reverse_proxy @realtime api:3001 {
+			header_up X-Forwarded-Proto https
+			stream_close_delay 5m
+		}
+
+		@api path /api/v1 /api/v1/* /api/auth /api/auth/* /health/live /health/ready
+		reverse_proxy @api api:3001 {
+			header_up X-Forwarded-Proto https
+		}
+
+		reverse_proxy web:3000 {
+			header_up X-Forwarded-Proto https
+		}
+	}
+}
