@@ -244,7 +244,7 @@ Please report security concerns privately to the repository owner rather than pu
 
 The target deployment is a self-hosted Linux server running Docker Compose behind Nginx or Traefik with TLS. Production readiness includes pinned non-root images, private infrastructure networking, health checks, safe migrations, structured observability, encrypted off-host backups, and tested restoration.
 
-Deployment instructions will become authoritative only after the production packaging and operations parts in [`Plan.md`](Plan.md) have been completed and verified.
+Production Docker configuration lives in [`compose.prod.yaml`](compose.prod.yaml) with the images in `docker/Dockerfile.api` and `docker/Dockerfile.web`; [`DEPLOYMENT.md`](DEPLOYMENT.md) is the step-by-step guide for the first deployment and for each subsequent release.
 
 ## Contributing
 
