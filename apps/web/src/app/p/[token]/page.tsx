@@ -1,6 +1,5 @@
 import { ATTACHMENT_API_PATHS } from "@notted/shared-types";
 import { renderPublicDocumentHtml } from "@notted/shared-validators";
-import { printStylesheet } from "@notted/shared-validators/server";
 import { notFound } from "next/navigation";
 
 import type { Metadata } from "next";
@@ -47,9 +46,16 @@ export default async function PublicNotePage({
   return (
     <main id="main-content" tabIndex={-1} className="mx-auto max-w-3xl p-8">
       {/*
-        `printStylesheet()` is almost entirely `@media print` rules, same as
-        the HTML export path — see `buildStandaloneHtml`. It's included here
-        purely so print/export of this page matches the editor's own output.
+        Print rules come from `print.css`, which `styles/globals.css` already
+        `@import`s through the root layout this route inherits — so print and
+        export of this page match the editor's output with no extra stylesheet.
+        Do NOT reach for `printStylesheet()` from
+        `@notted/shared-validators/server` here: it resolves `print.css` on
+        disk via `createRequire(__filename)`, and Turbopack's production build
+        bundles this route with `__filename` rewritten to a fake `/ROOT/...`
+        path, so the lookup throws `MODULE_NOT_FOUND` at render time and every
+        public link lands on the error boundary. Only the API's plain-`tsc`
+        export path can use it.
         On-screen, this page reuses `.notted-editor-content`'s typography
         (headings, tables, code, images, attachments) from `globals.css` —
         `renderPublicDocumentHtml`'s markup is deliberately the same contract
@@ -59,7 +65,6 @@ export default async function PublicNotePage({
         loaded="true"]`, a client-side attribute this static page never sets,
         so it is forced visible instead.
       */}
-      <style dangerouslySetInnerHTML={{ __html: printStylesheet() }} />
       <style>{".notted-public-note .notted-image { opacity: 1; }"}</style>
       <h1 className="text-3xl font-bold">{title}</h1>
       <div

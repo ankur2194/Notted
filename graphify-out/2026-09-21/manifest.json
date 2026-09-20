@@ -2140,8 +2140,8 @@
     "semantic_hash": ""
   },
   "apps/web/next-env.d.ts": {
-    "mtime": 1789929854.5175078,
-    "ast_hash": "2a74d3909800ca5467fa83b0ab4a4890",
+    "mtime": 1789646997.3143263,
+    "ast_hash": "d0f8375ae1199dc7acd3977fc33b78b8",
     "semantic_hash": ""
   },
   "apps/web/next.config.js": {
@@ -3935,8 +3935,8 @@
     "semantic_hash": ""
   },
   "eslint.config.mjs": {
-    "mtime": 1789929829.1584766,
-    "ast_hash": "297000889aaf17a0ee004ac21f0675bd",
+    "mtime": 1788023182.1010733,
+    "ast_hash": "31b1a0414005505ab5e7c5eeceec3155",
     "semantic_hash": ""
   },
   "opencode.json": {
@@ -7510,8 +7510,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/p/[token]/page.tsx": {
-    "mtime": 1789929829.158042,
-    "ast_hash": "38dcba1a0abd64ca35dc992a45fb9592",
+    "mtime": 1789649685.107598,
+    "ast_hash": "b634a8488bb033fe9652e41b2007ccc8",
     "semantic_hash": ""
   },
   "apps/web/src/lib/notes/server-public-note.test.ts": {
@@ -7525,8 +7525,8 @@
     "semantic_hash": ""
   },
   "packages/shared-validators/src/server.ts": {
-    "mtime": 1789929829.1584766,
-    "ast_hash": "1344a0e6ca4fc54f4bfbd3e3dd686832",
+    "mtime": 1789626699.7064342,
+    "ast_hash": "29d2d22f007ab9f7223258d12c655b53",
     "semantic_hash": ""
   },
   "DEPLOYMENT.md": {
@@ -7547,11 +7547,6 @@
   "docs/completed-parts/part-82-reverse-proxy-tls-network-policy.md": {
     "mtime": 1789739661.1890345,
     "ast_hash": "87cec372d0096a99e9712a0b6e52b249",
-    "semantic_hash": ""
-  },
-  "DEPLOYMENT-ARM64.md": {
-    "mtime": 1789769182.0244095,
-    "ast_hash": "2649bb5a94217aee3b0834c2233c269c",
     "semantic_hash": ""
   }
 }

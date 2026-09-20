@@ -206,6 +206,23 @@ export default tseslint.config(
       // Notted uses the App Router; probing for a legacy pages directory emits
       // a false diagnostic before the Part 4 scaffold exists.
       "@next/next/no-html-link-for-pages": "off",
+      // `printStylesheet()` reads `print.css` from disk through
+      // `createRequire(__filename)`. Turbopack's production build bundles the
+      // package and rewrites `__filename` to a fake `/ROOT/...` path, so the
+      // call throws at runtime in the production image only. The web app gets
+      // `print.css` from `styles/globals.css` instead.
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@notted/shared-validators/server",
+              message:
+                "Breaks under Turbopack production builds (fake /ROOT __filename). Import print.css via styles/globals.css.",
+            },
+          ],
+        },
+      ],
     },
   },
 

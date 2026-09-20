@@ -9,11 +9,16 @@
  * would mean every such client component's bundle eagerly evaluates a
  * Node-only API on init, at the mercy of the bundler's dead-code elimination
  * actually proving it unreachable. This subpath makes that unnecessary: only
- * modules that import `@notted/shared-validators/server` explicitly — today,
- * `apps/api/src/export/export-html.ts` and
- * `apps/web/src/app/p/[token]/page.tsx`, both server-only — ever reach this
- * file at all, so there is nothing for a bundler to eliminate correctly in
- * the first place.
+ * modules that import `@notted/shared-validators/server` explicitly — today
+ * only `apps/api/src/export/export-html.ts` — ever reach this file at all, so
+ * there is nothing for a bundler to eliminate correctly in the first place.
+ *
+ * NOT USABLE FROM `apps/web`. `transpilePackages` makes Turbopack bundle this
+ * module into the Next.js server chunk, and its production build rewrites
+ * `__filename` to a fake `/ROOT/<path>` placeholder. `createRequire` of that
+ * path resolves nothing, so `printStylesheet()` throws `MODULE_NOT_FOUND` at
+ * runtime in the production image (never in `next dev`, which emits the real
+ * path). The web app already gets `print.css` via `styles/globals.css`.
  */
 
 import { readFileSync } from "node:fs";
