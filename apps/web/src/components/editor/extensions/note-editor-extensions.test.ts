@@ -169,6 +169,29 @@ function parseFontSizeFromHtml(fontSize: string): unknown {
 }
 
 describe("note editor extensions", () => {
+  /**
+   * Browsers serialise `element.style.color` as `rgb(...)`, so pasted colour
+   * used to reach the document in a form the shared contract rejects. In a
+   * collaborative session that rejection is silent and permanent (the API's
+   * projection skips the write), so this pins the parse-time normalisation.
+   */
+  it("normalises pasted rgb() text and highlight colours to #rrggbb", () => {
+    const schema = getSchema(createNoteEditorExtensions());
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<p><span style="color: rgb(29, 78, 216)">blue</span>' +
+      '<mark style="background-color: rgb(254, 240, 138)">sun</mark>' +
+      '<span style="color: var(--brand)">odd</span></p>';
+    const parsed = ProseMirrorDOMParser.fromSchema(schema).parse(container).toJSON() as {
+      content: { content: { marks?: { type: string; attrs?: Record<string, unknown> }[] }[] }[];
+    };
+    const [blue, sun, odd] = parsed.content[0]!.content;
+    expect(blue!.marks?.find((mark) => mark.type === "textStyle")?.attrs?.color).toBe("#1d4ed8");
+    expect(sun!.marks?.find((mark) => mark.type === "highlight")?.attrs?.color).toBe("#fef08a");
+    expect(odd!.marks?.find((mark) => mark.type === "textStyle")?.attrs?.color ?? null).toBeNull();
+    expect(safeParseNoteDocument(parsed).success).toBe(true);
+  });
+
   it("keeps the intentionally empty document compatible with ProseMirror", () => {
     const output = roundTripDocument({ type: "doc", content: [] });
     expect(output).toEqual({ type: "doc" });

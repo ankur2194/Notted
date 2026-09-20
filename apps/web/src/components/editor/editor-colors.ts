@@ -48,3 +48,30 @@ const ALLOWED_COLORS: ReadonlySet<string> = new Set([
 export function isAllowedEditorColor(value: unknown): value is string {
   return typeof value === "string" && HEX_COLOR_PATTERN.test(value) && ALLOWED_COLORS.has(value);
 }
+
+const RGB_PATTERN =
+  /^rgba?\(\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*(?:[,/]\s*[\d.]+\s*)?\)$/i;
+
+/**
+ * Normalise a CSS colour read from pasted HTML to the contract's `#rrggbb`, or
+ * `null` (drop the colour, keep the text) when it cannot be expressed.
+ *
+ * Browsers serialise `element.style.color` as `rgb(r, g, b)` even when the
+ * markup said `#1d4ed8`, so TipTap's stock `parseHTML` hands the document an
+ * `rgb(...)` value the shared contract refuses. In a collaborative session that
+ * refusal happens on the API's projection, silently and forever: the note stays
+ * editable but `notes.content` — public link, export, search — never updates.
+ */
+export function cssColorToHex(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (HEX_COLOR_PATTERN.test(trimmed)) return trimmed.toLowerCase();
+  if (/^#[0-9a-f]{3}$/i.test(trimmed)) {
+    return `#${[...trimmed.slice(1)].map((digit) => digit + digit).join("")}`.toLowerCase();
+  }
+  const match = RGB_PATTERN.exec(trimmed);
+  if (match === null) return null;
+  const channels = match.slice(1, 4).map(Number);
+  if (channels.some((channel) => channel > 255)) return null;
+  return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}

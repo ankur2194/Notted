@@ -47,6 +47,7 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import {
   countChecklist,
   extractNoteContentPlain,
+  formatNoteDocumentErrors,
   safeParseNoteDocument,
 } from "@notted/shared-validators";
 import { and, eq, sql } from "drizzle-orm";
@@ -331,7 +332,14 @@ export class NoteCollaborationService {
     if (!parsed.success) {
       // Refuse the write and leave the log intact: nothing is lost, and the
       // last good `notes.content` stays authoritative for every reader.
-      this.logger.warning({ noteId: input.noteId }, "collaboration.projection.rejected");
+      // `errors` names the contract rule that failed (node types, attribute
+      // keys — never text or attribute values) and is bounded by
+      // `formatNoteDocumentErrors`; without it an operator sees a note whose
+      // public link, export, and search stay stale with no way to tell why.
+      this.logger.warning(
+        { noteId: input.noteId, errors: formatNoteDocumentErrors(parsed.errors) },
+        "collaboration.projection.rejected",
+      );
       return "skipped";
     }
     const document = parsed.doc;

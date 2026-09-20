@@ -20,6 +20,8 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import { Underline } from "@tiptap/extension-underline";
 import { StarterKit } from "@tiptap/starter-kit";
 
+import { cssColorToHex } from "../editor-colors";
+
 import { createNoteLowlight } from "./code-block-languages";
 import { createCommentDecorations } from "./comment-decorations";
 import { createNoteAttachment } from "./CustomAttachment";
@@ -90,6 +92,49 @@ function createSafeLinkExtension() {
     isAllowedUri: (url) => sanitizeDocumentUrl(url) !== null,
     shouldAutoLink: (url) => sanitizeDocumentUrl(url) !== null,
   });
+}
+
+/**
+ * Stock `Color` and `Highlight` read `element.style.color` /
+ * `style.backgroundColor` verbatim, which browsers serialise as `rgb(...)` for
+ * pasted markup. The contract accepts `#rrggbb` only, so both are normalised
+ * with `cssColorToHex` at parse time — see its comment for what a stray
+ * `rgb(...)` costs in a collaborative session.
+ */
+function createColorExtension() {
+  return Color.extend({
+    addGlobalAttributes() {
+      return [
+        {
+          types: this.options.types,
+          attributes: {
+            color: {
+              default: null,
+              parseHTML: (element: HTMLElement) => cssColorToHex(element.style.color),
+              renderHTML: (attributes: Record<string, unknown>) =>
+                typeof attributes.color === "string" ? { style: `color: ${attributes.color}` } : {},
+            },
+          },
+        },
+      ];
+    },
+  }).configure({ types: ["textStyle"] });
+}
+
+function createHighlightExtension() {
+  return Highlight.extend({
+    addAttributes() {
+      const parent: Record<string, Record<string, unknown>> = this.parent?.() ?? {};
+      return {
+        ...parent,
+        color: {
+          ...parent.color,
+          parseHTML: (element: HTMLElement) =>
+            cssColorToHex(element.getAttribute("data-color") ?? element.style.backgroundColor),
+        },
+      };
+    },
+  }).configure({ multicolor: true });
 }
 
 /**
@@ -403,8 +448,8 @@ export function createNoteEditorExtensions(options: NoteEditorExtensionOptions =
       types: ["paragraph", "heading"],
       alignments: ["left", "center", "right", "justify"],
     }),
-    Color.configure({ types: ["textStyle"] }),
-    Highlight.configure({ multicolor: true }),
+    createColorExtension(),
+    createHighlightExtension(),
     Subscript.configure({}),
     Superscript.configure({}),
     createSafeLinkExtension(),
