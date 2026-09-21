@@ -80,6 +80,19 @@ describe("DashboardShell", () => {
       { label: "Projects", href: `/workspaces/${workspaceId}/projects` },
       { label: "Project detail" },
     ]);
+    const titles = new Map([["note-id", "Weekly plan"]]);
+    expect(breadcrumbsFor(`/workspaces/${workspaceId}/notes/note-id`, titles).at(-1)).toEqual({
+      label: "Weekly plan",
+    });
+    expect(
+      breadcrumbsFor(`/workspaces/${workspaceId}/projects/project-id/notes/note-id`, titles).at(-1),
+    ).toEqual({ label: "Weekly plan" });
+    expect(breadcrumbsFor(`/workspaces/${workspaceId}/notes/unknown-id`, titles).at(-1)).toEqual({
+      label: "Note",
+    });
+    expect(breadcrumbsFor(`/workspaces/${workspaceId}/notes/trash`, titles).at(-1)).toEqual({
+      label: "trash",
+    });
     expect(breadcrumbsFor(`/workspaces/${workspaceId}/search`)).toEqual([
       { label: "Workspaces", href: "/workspaces" },
       { label: "Overview", href: `/workspaces/${workspaceId}` },

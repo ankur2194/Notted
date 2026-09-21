@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -17,7 +17,17 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { accentStyle } from "@/lib/shell/accent-style";
 import { readSidebarPreference, writeSidebarPreference } from "@/lib/shell/sidebar-preference";
 
-export function breadcrumbsFor(pathname: string): readonly BreadcrumbItem[] {
+/**
+ * `noteTitles` maps a note id to its title, sourced from the sidebar's
+ * navigation payload; a note outside it (trashed, or past the 500-item
+ * navigation limit) falls back to the generic "Note" label.
+ */
+export function breadcrumbsFor(
+  pathname: string,
+  noteTitles: ReadonlyMap<string, string> = new Map(),
+): readonly BreadcrumbItem[] {
+  const noteLabel = (id: string | undefined): string =>
+    (id === undefined ? undefined : noteTitles.get(id)) ?? "Note";
   if (pathname === "/") return [{ label: "Dashboard" }];
   if (pathname === "/settings/security") return [{ label: "Settings" }, { label: "Security" }];
   if (pathname === "/workspaces") return [{ label: "Workspaces" }];
@@ -32,7 +42,7 @@ export function breadcrumbsFor(pathname: string): readonly BreadcrumbItem[] {
         label: "Project",
         href: `/workspaces/${projectNoteMatch[1]}/projects/${projectNoteMatch[2]}`,
       },
-      { label: "Note" },
+      { label: noteLabel(projectNoteMatch[3]) },
     ];
   }
   const noteMatch =
@@ -44,7 +54,15 @@ export function breadcrumbsFor(pathname: string): readonly BreadcrumbItem[] {
       noteMatch[2] === undefined
         ? { label: "Notes" }
         : { label: "Notes", href: `/workspaces/${noteMatch[1]}/notes` },
-      ...(noteMatch[2] === undefined ? [] : [{ label: noteMatch[2].replaceAll("-", " ") }]),
+      ...(noteMatch[2] === undefined
+        ? []
+        : [
+            {
+              label: ["recent", "pinned", "templates", "trash"].includes(noteMatch[2])
+                ? noteMatch[2]
+                : noteLabel(noteMatch[2]),
+            },
+          ]),
     ];
   }
   const projectMatch = /^\/workspaces\/([^/]+)\/projects(?:\/([^/]+))?$/.exec(pathname);
@@ -116,6 +134,15 @@ export function DashboardShell({
   readonly tagNavigation: TagNavigationState;
 }) {
   const pathname = usePathname();
+  const noteTitles = useMemo(
+    () =>
+      new Map(
+        noteNavigation.status === "ready"
+          ? noteNavigation.navigation.items.map((item) => [item.id, item.title] as const)
+          : [],
+      ),
+    [noteNavigation],
+  );
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const mobileTrigger = useRef<HTMLButtonElement>(null);
@@ -203,7 +230,7 @@ export function DashboardShell({
         <div className={`notted-shell-offset ${collapsed ? "md:pl-20" : "md:pl-72"}`}>
           <TopBar
             shell={shell}
-            breadcrumbs={breadcrumbsFor(pathname)}
+            breadcrumbs={breadcrumbsFor(pathname, noteTitles)}
             onOpenNavigation={() => setMobileOpen(true)}
             navigationTriggerRef={mobileTrigger}
           />

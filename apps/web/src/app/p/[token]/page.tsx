@@ -2,6 +2,8 @@ import { ATTACHMENT_API_PATHS } from "@notted/shared-types";
 import { renderPublicDocumentHtml } from "@notted/shared-validators";
 import { notFound } from "next/navigation";
 
+import { PublicNoteLayout } from "./PublicNoteLayout";
+
 import type { Metadata } from "next";
 
 import { primaryApiOrigin } from "@/lib/api/api-origin";
@@ -40,11 +42,11 @@ export default async function PublicNotePage({
       </main>
     );
   }
-  const { title, content } = result.data;
+  const { title, content, pageSize } = result.data;
   const resolveImageSrc = (attachmentId: string): string =>
     new URL(ATTACHMENT_API_PATHS.publicContent(token, attachmentId), primaryApiOrigin()).toString();
   return (
-    <main id="main-content" tabIndex={-1} className="mx-auto max-w-3xl p-8">
+    <PublicNoteLayout pageSize={pageSize}>
       {/*
         Print rules come from `print.css`, which `styles/globals.css` already
         `@import`s through the root layout this route inherits — so print and
@@ -78,6 +80,6 @@ export default async function PublicNotePage({
         // stripped too (it has no public content route to point at).
         dangerouslySetInnerHTML={{ __html: renderPublicDocumentHtml(content, resolveImageSrc) }}
       />
-    </main>
+    </PublicNoteLayout>
   );
 }

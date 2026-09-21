@@ -2140,8 +2140,8 @@
     "semantic_hash": ""
   },
   "apps/web/next-env.d.ts": {
-    "mtime": 1789929854.5175078,
-    "ast_hash": "2a74d3909800ca5467fa83b0ab4a4890",
+    "mtime": 1789929894.6715262,
+    "ast_hash": "d0f8375ae1199dc7acd3977fc33b78b8",
     "semantic_hash": ""
   },
   "apps/web/next.config.js": {
@@ -2730,8 +2730,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/editor/editor-colors.ts": {
-    "mtime": 1785759457.0031347,
-    "ast_hash": "53ef9835c61bfcee1ed27c5abf52a8f9",
+    "mtime": 1789939309.308625,
+    "ast_hash": "19f4bf9e7aec670cc14fef4e1a725a56",
     "semantic_hash": ""
   },
   "apps/web/src/components/editor/editor-mentions.test.tsx": {
@@ -2825,13 +2825,13 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/editor/extensions/note-editor-extensions.test.ts": {
-    "mtime": 1786716496.946601,
-    "ast_hash": "97138b931ddd0fa3eac4e5e51b81bf32",
+    "mtime": 1789939368.442852,
+    "ast_hash": "c1f1803cbb16f47ba2bfd3447d63a601",
     "semantic_hash": ""
   },
   "apps/web/src/components/editor/extensions/note-editor-extensions.ts": {
-    "mtime": 1787578185.1978173,
-    "ast_hash": "a90f9e409bba0bb26781d64d12c85edc",
+    "mtime": 1789939322.2343342,
+    "ast_hash": "2d0c42758a06c288b52d1282d816f043",
     "semantic_hash": ""
   },
   "apps/web/src/components/editor/extensions/page-break.ts": {
@@ -2960,8 +2960,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/layout/DashboardShell.tsx": {
-    "mtime": 1788031250.6294167,
-    "ast_hash": "9fbdec3eb107922640e3e357a1e7b4ba",
+    "mtime": 1789985444.873203,
+    "ast_hash": "21a225446c6bea144db0abe0cbe9d4dd",
     "semantic_hash": ""
   },
   "apps/web/src/components/layout/NotificationCenter.tsx": {
@@ -2985,8 +2985,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/layout/dashboard-shell.test.tsx": {
-    "mtime": 1788031303.2585735,
-    "ast_hash": "7d7a930ee02ded5ef331cdb9dd9c4afc",
+    "mtime": 1789985431.3065763,
+    "ast_hash": "0621c0d9cd767531ca13e12ee4eb77de",
     "semantic_hash": ""
   },
   "apps/web/src/components/layout/workspace-switcher.test.tsx": {
@@ -5425,8 +5425,8 @@
     "semantic_hash": ""
   },
   "apps/api/src/realtime/yjs/note-collaboration.service.ts": {
-    "mtime": 1786811079.412566,
-    "ast_hash": "db879f6fe8d6804960569218d80a3b50",
+    "mtime": 1789938945.5440347,
+    "ast_hash": "64981e7d684da1d0e624ecdbb8725ef1",
     "semantic_hash": ""
   },
   "apps/api/src/realtime/yjs/note-yjs-document.test.ts": {
@@ -7505,13 +7505,13 @@
     "semantic_hash": ""
   },
   "apps/web/src/app/p/[token]/page.test.tsx": {
-    "mtime": 1789626107.0270178,
-    "ast_hash": "f28632325de164966f29f4da54f553c4",
+    "mtime": 1789983149.528188,
+    "ast_hash": "3eb61fab7674ca4c5b8887f2a1489608",
     "semantic_hash": ""
   },
   "apps/web/src/app/p/[token]/page.tsx": {
-    "mtime": 1789929829.158042,
-    "ast_hash": "38dcba1a0abd64ca35dc992a45fb9592",
+    "mtime": 1789983165.1228702,
+    "ast_hash": "cdc3ada84dd4ddcae5ed79d2f3217926",
     "semantic_hash": ""
   },
   "apps/web/src/lib/notes/server-public-note.test.ts": {
@@ -7552,6 +7552,11 @@
   "DEPLOYMENT-ARM64.md": {
     "mtime": 1789769182.0244095,
     "ast_hash": "2649bb5a94217aee3b0834c2233c269c",
+    "semantic_hash": ""
+  },
+  "apps/web/src/app/p/[token]/PublicNoteLayout.tsx": {
+    "mtime": 1789983139.932774,
+    "ast_hash": "32871660b8a1f3644072623872147bce",
     "semantic_hash": ""
   }
 }
