@@ -172,3 +172,25 @@ Run by the fix pass after the first review round. Every row below was executed a
 | Date | Author | Change |
 |---|---|---|
 | 2026-08-08 | frontend-editor-engineer agent | Initial record; part implemented, no quality gate run |
+
+## Public-link download extension — 2026-09-23 (In progress)
+
+**The original Part 44 delivery above remains historical. This later extension is NOT Complete:** the full repository unit command and full Chromium baseline did not pass. Do not infer a completed public-link delivery from the original status/date or the index's historical Part 44 row. See [ADR 0015](../decisions/0015-public-note-capability-downloads.md) and the amended [public-link specification](../superpowers/specs/2026-09-17-note-public-links-design.md).
+
+### Scope and behavior
+
+- `/p/:token` now renders a keyboard-accessible, print-hidden Download link on generic attachment cards. The link is derived from the current token and attachment ID at render time, not stored in TipTap JSON; the original URL-free `renderDocumentHtml` projection remains unchanged.
+- `GET /api/v1/public/notes/:token/attachments/:attachmentId/content` now streams safe raster images inline and ready generic files as downloads with sanitized filenames. One joined PostgreSQL read requires the live hashed public token, untrashed exact note/workspace, ready attachment, and a matching typed attachment reference in the note's **current validated document** before touching private MinIO. Invalid, foreign, removed, unsafe and missing reads converge to 404. The public response is `private, no-store, max-age=0` and has no ETag/304 path; authenticated downloads remain unchanged.
+- A dedicated public IP rate bucket applies regardless of session/API-key presence. Nested attachment request paths redact the bearer token in the application request log. The public page sends a `no-referrer` response header as well as a meta/link referrer policy. OpenAPI and `docs/openapi.json` describe the widened route. No new dependency, environment variable, database column, or migration.
+
+### Verification performed
+
+- Focused shared/API/web tests and API rate-limit/log tests passed; live PostgreSQL + MinIO tests `test/public-attachment.integration.test.ts`, `test/note-public-links.integration.test.ts` and `test/attachments.integration.test.ts` passed **7/7 with no skips**, including current-reference, cross-note, cross-workspace, trash/restore, regeneration and revocation denial. Authenticated attachment behavior remained covered.
+- `pnpm lint`, `pnpm format:check`, `pnpm type-check`, `pnpm db:check`, and `pnpm build` with production-shaped HTTPS public URLs passed. An unqualified `pnpm build` failed only because local `.env.local` uses HTTP origins; the HTTPS rerun passed. Focused Chromium `note-public-link.spec.ts` passed **1/1**, and focused `note-attachments.spec.ts` passed **2/2**, against the disposable PostgreSQL/MinIO browser stack, one worker, no development stack simultaneously.
+- `pnpm test` **failed** one unrelated `image-toolbar.test.tsx` focus assertion under the default parallel web worker budget. The same test passed **14/14 in isolation**; the complete web suite passed **1830/1830** with `--maxWorkers=2`. This does **not** turn the failed root command into a pass.
+- Full serial `pnpm e2e:test` **failed**: **76 passed, 3 failed, 7 did not run**. The new public-link journey and existing authenticated-attachment journeys passed inside it. `page-layout.spec.ts` passed in isolation (contention); `note-management.spec.ts` still failed in isolation because the `Note breadcrumbs` landmark did not appear, and `task-list.spec.ts` still failed in isolation because its exact heading assertion omits `Comments0 open`. Those unrelated Plan Part 32/47 failures and the unrun seven scenarios block the full browser completion gate. No claim is made that the baseline passed.
+
+### Remaining gates and risks
+
+- Diagnose and resolve the persistent full-baseline Part 32/47 failures in their owning scope, rerun `pnpm test` under a stable supported resource budget and the complete one-worker Chromium suite with no failed/skipped required journeys; only then change this extension status to Complete. No out-of-scope Part 32/47 product/test change was smuggled into Part 44.
+- A link recipient can keep bytes they downloaded before revocation, and a stream authorized immediately before revocation cannot be recalled. The per-IP request cap is not a byte/concurrent-stream egress cap; review reverse-proxy limits if public traffic warrants them. The API application logger redacts nested capability paths, but upstream access logs require operator configuration.

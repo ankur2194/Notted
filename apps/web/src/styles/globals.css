@@ -1023,6 +1023,13 @@
     @apply pointer-events-none opacity-50;
   }
 
+  /* Only the public, static renderer emits this action; the shared export
+     renderer and editable card are unchanged. The general editor anchor rule
+     above must not shrink the download link into an inline text-only target. */
+  .notted-public-note .notted-public-attachment-download {
+    @apply inline-flex min-h-11 items-center self-start rounded-md border px-4 text-sm font-medium no-underline hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring;
+  }
+
   /* Dragging non-image files over the writing surface. */
   .notted-editor-content.notted-attachment-drop-active {
     @apply rounded-md outline-dashed outline-2 outline-offset-2 outline-info;

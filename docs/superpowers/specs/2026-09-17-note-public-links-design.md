@@ -2,6 +2,8 @@
 
 Status: approved for implementation planning. Date: 2026-09-17.
 
+**2026-09-23 Part 44 extension:** Public generic attachment downloads were requested after v1. A public link now grants read-only download of ready files *currently referenced by that exact note's validated content*, using the existing token-scoped public-content route. A removed attachment reference is not a grant, even while its row/object remains for cleanup. Images retain the same URL shape and inline raster behavior. All other v1 exclusions below (including expiry, passwords, comments, and export) remain unchanged. [ADR 0015](../../decisions/0015-public-note-capability-downloads.md) records the private-storage, authorization, caching, and ADR reconciliation decisions.
+
 ## Goal
 
 Let a note's owner/admin/editor generate an unauthenticated, read-only link
@@ -17,7 +19,8 @@ In scope:
   another exists replaces it (old URL stops working).
 - Revoke, at any time, by the same role that could create one.
 - Read-only note content only: no comments, no task list, no share/export
-  controls, no editor chrome.
+  controls, no editor chrome. The Part 44 extension permits downloading a
+  current note attachment; it does not permit editing, upload, or export.
 - Audit logging of create/revoke (not of anonymous views).
 
 Explicitly out of scope for v1 (call out again if requested later):
@@ -175,6 +178,11 @@ Under `workspaces/:workspaceId/notes/:noteId/public-link`
   browser context → see read-only content → revoke → 404s.
 - Accessibility pass on the new public page (semantic heading, no
   keyboard traps, meets the project's WCAG 2.2 AA bar).
+
+The Part 44 extension additionally requires a fresh unauthenticated browser
+context to download a referenced file with its sanitized original filename,
+tests for another note and workspace, removed references, revoke/regenerate,
+trash/restore, image regression, safe disposition/no-store, and log redaction.
 
 ## Explicitly deferred
 

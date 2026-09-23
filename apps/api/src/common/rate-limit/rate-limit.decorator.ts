@@ -6,11 +6,13 @@ export const RateLimitExempt = (): MethodDecorator & ClassDecorator =>
   SetMetadata(RATE_LIMIT_EXEMPT, true);
 
 /**
- * Opts a route into the sensitive tier (`RATE_LIMIT_SENSITIVE_PER_MINUTE`).
- * Read by `RateLimitGuard`; the tier keeps its own bucket so a sensitive route
- * can never drain the caller's general allowance.
+ * Selects a separate bucket for a route. `sensitive` uses the sensitive limit;
+ * `public-ip` uses the unauthenticated limit and the trusted request IP even
+ * if a session or API key is present (public bearer links are not actor-scoped).
  */
 export const RATE_LIMIT_TIER = Symbol("RATE_LIMIT_TIER");
 
-export const RateLimitTier = (tier: "sensitive"): MethodDecorator =>
+export type RateLimitTierName = "sensitive" | "public-ip";
+
+export const RateLimitTier = (tier: RateLimitTierName): MethodDecorator =>
   SetMetadata(RATE_LIMIT_TIER, tier);

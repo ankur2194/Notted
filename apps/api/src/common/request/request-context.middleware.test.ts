@@ -96,6 +96,17 @@ describe("RequestContextMiddleware request context", () => {
 });
 
 describe("redactSecretPathSegment", () => {
+  it("redacts tokens with an attachment suffix regardless of case or trailing slash", () => {
+    expect(
+      redactSecretPathSegment("/api/v1/PUBLIC/NOTES/secret/ATTACHMENTS/file-id/CONTENT/"),
+    ).toBe("/api/v1/PUBLIC/NOTES/[redacted]/ATTACHMENTS/file-id/CONTENT");
+    expect(redactSecretPathSegment("/api/v1/public/notes/secret/attachments/file-id/content")).toBe(
+      "/api/v1/public/notes/[redacted]/attachments/file-id/content",
+    );
+    expect(
+      redactSecretPathSegment("/api/v1/workspaces/id/logo/secret/attachments/file-id/content"),
+    ).toBe("/api/v1/workspaces/id/logo/secret/attachments/file-id/content");
+  });
   it("redacts the raw token on a public-note view", () => {
     expect(redactSecretPathSegment("/api/v1/public/notes/abcdef0123456789")).toBe(
       "/api/v1/public/notes/[redacted]",
@@ -128,6 +139,22 @@ describe("redactSecretPathSegment", () => {
 });
 
 describe("RequestContextMiddleware secret path redaction in logs", () => {
+  it("strips query and public attachment token from logged paths", () => {
+    const info = vi.fn();
+    const response = fakeResponse();
+    new RequestContextMiddleware({ info } as unknown as StructuredLogger).use(
+      fakeRequest({
+        originalUrl: "/api/v1/Public/Notes/super-secret/attachments/file/content/?variant=full",
+      }),
+      response,
+      () => undefined,
+    );
+    response.emitFinish();
+    expect(info).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "/api/v1/Public/Notes/[redacted]/attachments/file/content" }),
+      "HTTP request completed",
+    );
+  });
   it("redacts a public-note token before logging path, but logs an ordinary path unredacted", () => {
     const info = vi.fn();
     const logger = { info } as unknown as StructuredLogger;

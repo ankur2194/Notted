@@ -29,6 +29,13 @@ This directory is the durable implementation history for the numbered parts in t
 
 ## Index
 
+**Active Part 44 extension (2026-09-23): In progress.** The historical Part 44
+`Complete` row below records the original authenticated attachment delivery in
+2026-08. Public-link attachment downloads are implemented and focused/live
+checks passed, but the root unit command and full Chromium baseline still have
+failed checks. See [Part 44's public-link extension and exact gate evidence](part-44-generic-attachments.md#public-link-download-extension--2026-09-23-in-progress);
+the extension must not be treated as Complete until those gates pass.
+
 Add one row after creating each record. Keep rows ordered by part number.
 
 | Part | Status   | Completed  | Summary                                                                                                                                                                 |

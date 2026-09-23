@@ -316,8 +316,11 @@ const PUBLIC_IMAGE_SRC_PATTERN = new RegExp(
   "g",
 );
 const PUBLIC_ATTACHMENT_FIGURE_ID_PATTERN = new RegExp(
-  `(<figure class="${NOTE_DOCUMENT_ATTACHMENT_CLASS}"[^>]*?) data-attachment-id="[^"]*"`,
+  `(<figure class="${NOTE_DOCUMENT_ATTACHMENT_CLASS}") data-attachment-id="([^"]*)"([^>]*>)([\\s\\S]*?)(</figure>)`,
   "g",
+);
+const PUBLIC_ATTACHMENT_NAME_PATTERN = new RegExp(
+  `<span class="${NOTE_DOCUMENT_ATTACHMENT_NAME_CLASS}">([^<]*)</span>`,
 );
 
 /**
@@ -328,11 +331,9 @@ const PUBLIC_ATTACHMENT_FIGURE_ID_PATTERN = new RegExp(
  *   this to the unauthenticated, token-scoped image route. Both regexes match
  *   only the fixed class literal this module itself emits, so there is
  *   nothing here for a pasted document to spoof.
- * - `data-mention-id`, and `data-attachment-id` on a generic `attachment`
- *   figure, are stripped rather than substituted: those remain enumerable
- *   workspace-member/attachment identifiers with no business reaching an
- *   anonymous viewer, and (unlike an image) a generic file attachment has no
- *   public content route to point them at.
+ * - A generic attachment gains an escaped, keyboard-reachable Download link
+ *   to the token-scoped file route. The enumerable attachment id is stripped
+ *   from the figure, just as `data-mention-id` is stripped from mentions.
  *
  * Every other consumer (export, print, authenticated preview) keeps calling
  * `renderDocumentHtml` directly.
@@ -340,6 +341,7 @@ const PUBLIC_ATTACHMENT_FIGURE_ID_PATTERN = new RegExp(
 export function renderPublicDocumentHtml(
   document: unknown,
   resolveImageSrc: (attachmentId: string) => string,
+  resolveFileHref: (attachmentId: string) => string,
 ): string {
   const html = renderNodeHtml(document)
     .replace(
@@ -347,6 +349,19 @@ export function renderPublicDocumentHtml(
       (_match, prefix: string, id: string, suffix: string) =>
         `${prefix}${id}${suffix} src="${escapeHtml(resolveImageSrc(id))}"`,
     )
-    .replace(PUBLIC_ATTACHMENT_FIGURE_ID_PATTERN, (_match, prefix: string) => prefix);
+    .replace(
+      PUBLIC_ATTACHMENT_FIGURE_ID_PATTERN,
+      (_match, prefix: string, id: string, suffix: string, contents: string, close: string) => {
+        // Both `id` and `contents` came solely from our fixed renderer, not
+        // arbitrary markup. The filename is already escaped by that renderer.
+        const name = PUBLIC_ATTACHMENT_NAME_PATTERN.exec(contents)?.[1] ?? "file";
+        const href = escapeHtml(resolveFileHref(id));
+        return (
+          `${prefix}${suffix}${contents}` +
+          `<a class="notted-public-attachment-download" data-notted-print-hide ` +
+          `href="${href}" rel="noreferrer" referrerpolicy="no-referrer">Download ${name}</a>${close}`
+        );
+      },
+    );
   return html.replace(/ data-mention-id="[^"]*"/g, "");
 }

@@ -5,6 +5,10 @@ import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 
+const nextConfig = require(resolve(__dirname, "../../next.config.js")) as {
+  headers: () => Promise<{ source: string; headers: { key: string; value: string }[] }[]>;
+};
+
 // `security-headers.js` is CJS at the apps/web root (next.config.js must
 // `require()` it directly), and `allowJs` is not set in tsconfig.base.json —
 // so, like `dev-origins.test.ts` next to this file, it is loaded with
@@ -31,6 +35,19 @@ function cspDirectives(headers: readonly { key: string; value: string }[]): stri
   const csp = headerValue(headers, "Content-Security-Policy");
   return csp?.split("; ") ?? [];
 }
+
+describe("public capability route response headers", () => {
+  it("overrides the general referrer policy and prevents browser caching", async () => {
+    const routes = await nextConfig.headers();
+    const general = routes.find((route) => route.source === "/:path*");
+    const publicNote = routes.find((route) => route.source === "/p/:token");
+    expect(general).toBeDefined();
+    expect(publicNote).toBeDefined();
+    expect(routes.indexOf(publicNote!)).toBeGreaterThan(routes.indexOf(general!));
+    expect(headerValue(publicNote!.headers, "Referrer-Policy")).toBe("no-referrer");
+    expect(headerValue(publicNote!.headers, "Cache-Control")).toBe("private, no-store, max-age=0");
+  });
+});
 
 describe("buildSecurityHeaders", () => {
   it("locks down script-src and enables upgrade-insecure-requests in production", () => {

@@ -16,9 +16,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import {
   ATTACHMENT_FILE_MIME_TYPES,
+  ATTACHMENT_INLINE_MIME_TYPES,
   ATTACHMENT_TEXT_MIME_TYPE,
   MAX_ATTACHMENT_UPLOAD_BYTES,
   MAX_IMAGE_UPLOAD_BYTES,
+  documentReferencesAttachment,
 } from "@notted/shared-validators";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
@@ -33,11 +35,13 @@ import {
   storeApiIdempotency,
 } from "../common/idempotency/api-idempotency";
 import { StructuredLogger } from "../common/logging/structured-logger.service";
+import { AUTH_CONFIG, type AuthConfig } from "../config/auth.config";
 import { SECURITY_CONFIG, type SecurityConfig } from "../config/security.config";
 import { DatabaseService, type DatabaseTransaction } from "../database/database.service";
 import {
   attachments,
   jobOutbox,
+  notePublicLinks,
   notes,
   type AttachmentVariantObject,
   type AttachmentVariantRecord,
@@ -48,6 +52,7 @@ import {
   ObjectStorageService,
   type ObjectStore,
 } from "../infrastructure/minio/object-storage.service";
+import { hashPublicLinkToken, PUBLIC_LINK_TOKEN_PATTERN } from "../notes/note-public-link-token";
 import { NoteSearchIndexProducer } from "../search/note-search-index-producer";
 import { StorageQuotaService } from "../storage/storage-quota.service";
 import {
@@ -107,6 +112,9 @@ const SERVABLE_FILE_MIME_TYPES: ReadonlySet<string> = new Set<string>([
   ...ATTACHMENT_FILE_MIME_TYPES,
   ATTACHMENT_TEXT_MIME_TYPE,
 ]);
+const SERVABLE_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set<string>(
+  ATTACHMENT_INLINE_MIME_TYPES,
+);
 
 interface ScopedInput {
   readonly principal: AuthenticatedPrincipal;
@@ -202,6 +210,9 @@ export class AttachmentsService {
     // Part 51.3. Re-sync the owning note when an attachment reaches `ready`
     // or is deleted so the index's `hasAttachments` flag converges.
     private readonly searchIndexProducer: NoteSearchIndexProducer,
+    // Optional in the TypeScript constructor for existing upload-only service
+    // fixtures; Nest still resolves this token for the real service instance.
+    @Inject(AUTH_CONFIG) private readonly authConfig?: AuthConfig,
   ) {}
 
   /**
@@ -679,56 +690,84 @@ export class AttachmentsService {
     });
   }
 
-  /**
-   * Unauthenticated image read for the `/p/:token` public-note view. No
-   * principal, no `AuthorizationEntryService`, no `TenantContextService` — the
-   * same reasoning as `PublicNoteService`: an anonymous visitor has no session
-   * to authorize or scope from. Tenancy is instead proved by requiring an
-   * EXACT (attachmentId, noteId, workspaceId) match, where `noteId`/
-   * `workspaceId` come from `PublicNoteService.resolveNoteScope` — i.e. from a
-   * validated, live public-link token — never from the caller directly. That
-   * is what stops a holder of one note's link from walking `attachmentId`
-   * values to read another note's images.
-   *
-   * Scoped to `image` attachments only. A generic `file` attachment gets no
-   * public URL at all, matching `renderPublicDocumentHtml`'s existing choice
-   * to give a file attachment no `href`/`src` — this method does not change
-   * that, it only fixes the image case.
-   */
-  async readPublicImageContent(input: {
-    readonly noteId: string;
-    readonly workspaceId: string;
+  /** One authoritative lookup per request: token, live note, exact tenant/note
+   * attachment, and current persisted document. No storage I/O on any denial.
+   * The raw bearer token never leaves this method or enters a log. */
+  async readPublicContent(input: {
+    readonly token: string;
     readonly attachmentId: string;
   }): Promise<AttachmentContent | null> {
+    if (!PUBLIC_LINK_TOKEN_PATTERN.test(input.token)) return null;
+    if (this.authConfig === undefined)
+      throw new Error("Public link token configuration unavailable");
+    const tokenHash = hashPublicLinkToken(input.token, this.authConfig.secret);
     const [row] = await this.database.db
-      .select(this.selection())
-      .from(attachments)
-      .where(
+      .select({ attachment: this.selection(), content: notes.content })
+      .from(notePublicLinks)
+      .innerJoin(
+        notes,
+        and(
+          eq(notes.id, notePublicLinks.noteId),
+          eq(notes.workspaceId, notePublicLinks.workspaceId),
+        ),
+      )
+      .innerJoin(
+        attachments,
         and(
           eq(attachments.id, input.attachmentId),
-          eq(attachments.noteId, input.noteId),
-          eq(attachments.workspaceId, input.workspaceId),
+          eq(attachments.noteId, notes.id),
+          eq(attachments.workspaceId, notes.workspaceId),
+        ),
+      )
+      .where(
+        and(
+          eq(notePublicLinks.tokenHash, tokenHash),
+          eq(notes.isDeleted, false),
+          eq(attachments.processingStatus, "ready"),
         ),
       )
       .limit(1);
     if (row === undefined) return null;
-    if (row.processingStatus !== "ready" || row.mediaType !== "image") return null;
-    const variant = this.resolveVariant(row.variants, "full", row.mediaType);
+    const attachment = row.attachment;
+    if (!documentReferencesAttachment(row.content, attachment.id, attachment.mediaType))
+      return null;
+    const variant = this.resolveVariant(attachment.variants, "full", attachment.mediaType);
     if (variant === null) return null;
+    if (
+      !(attachment.mediaType === "image"
+        ? SERVABLE_IMAGE_MIME_TYPES.has(variant.mimeType)
+        : SERVABLE_FILE_MIME_TYPES.has(variant.mimeType))
+    )
+      return null;
     const stat = await this.readStorage(() =>
       this.objects.statObject(ATTACHMENTS_BUCKET, variant.key),
     );
     if (stat === null) return null;
-    const stream = await this.readStorage(() =>
-      this.objects.getObjectStream(ATTACHMENTS_BUCKET, variant.key),
-    );
+    let stream: Readable;
+    try {
+      stream = await this.readStorage(() =>
+        this.objects.getObjectStream(ATTACHMENTS_BUCKET, variant.key),
+      );
+    } catch (error: unknown) {
+      // The object may disappear after stat (cleanup or concurrent deletion).
+      // Only a known object-absence error gets the same 404 as a missing stat;
+      // operator/storage failures remain visible as failures, not denial.
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        ["NoSuchKey", "NotFound", "NoSuchObject", "ResourceNotFound"].includes(String(error.code))
+      )
+        return null;
+      throw error;
+    }
     return Object.freeze({
       stream,
       mimeType: variant.mimeType,
       contentLength: stat.size,
       etag: stat.etag,
-      filename: row.filename,
-      mediaType: row.mediaType,
+      filename: attachment.filename,
+      mediaType: attachment.mediaType,
     });
   }
 

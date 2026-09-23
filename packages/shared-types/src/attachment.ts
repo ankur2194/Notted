@@ -40,10 +40,11 @@ export const ATTACHMENT_API_PATHS = Object.freeze({
       ? `/api/v1/workspaces/${workspaceId}/attachments/${attachmentId}/content`
       : `/api/v1/workspaces/${workspaceId}/attachments/${attachmentId}/content?variant=${variant}`,
   /**
-   * Unauthenticated streamed image bytes (GET) for the `/p/:token` public-note
+   * Unauthenticated streamed attachment bytes (GET) for the `/p/:token` public-note
    * view. Scoped by public-link token, not workspace — the one deliberate
-   * exception in this object, matching `NOTE_API_PATHS.publicNote`. Images
-   * only: a generic `file` attachment has no public content URL.
+   * exception in this object, matching `NOTE_API_PATHS.publicNote`. The server
+   * verifies the CURRENT note document references this attachment with its
+   * matching media type before streaming either an image or a generic file.
    */
   publicContent: (token: string, attachmentId: string) =>
     `/api/v1/public/notes/${token}/attachments/${attachmentId}/content`,

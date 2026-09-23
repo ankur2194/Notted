@@ -1,28 +1,22 @@
 // The public-note counterpart of `AttachmentsController#content`. Sits beside
 // `PublicNoteController` in the codebase's small set of deliberately
 // unauthenticated routes — no `@RequireAuthorization`, no principal, no
-// `TenantContextService`. `RateLimitGuard` (global) still applies at the
-// unauthenticated per-IP tier, same reasoning as `PublicNoteController`.
+// `TenantContextService`. `RateLimitGuard` (global) still applies at a separate
+// public per-IP tier even when the request also has a session or API key.
 //
-// Tenancy for the attachment is proved in two steps, neither of which trusts
-// the caller: `PublicNoteService.resolveNoteScope` turns the token into a
-// (noteId, workspaceId) pair from a live, validated public link, and
-// `AttachmentsService.readPublicImageContent` then requires the requested
-// attachment to match that exact pair. A holder of one note's link therefore
-// cannot walk `attachmentId` values into another note's images.
+// The service joins the live token, note and attachment in one authoritative
+// lookup, then checks the current document before any object-store read.
 
-import { Controller, Get, HttpStatus, Param, Req, Res } from "@nestjs/common";
-import { ATTACHMENT_INLINE_MIME_TYPES, uuidSchema } from "@notted/shared-validators";
+import { Controller, Get, HttpStatus, Param, Res } from "@nestjs/common";
+import { uuidSchema } from "@notted/shared-validators";
 
 import { ApiHttpException } from "../common/errors/api-http.exception";
-import { PublicNoteService } from "../notes/public-note.service";
+import { RateLimitTier } from "../common/rate-limit/rate-limit.decorator";
 
-import { applyContentHeaders, matchesEtag } from "./attachments.controller";
+import { contentDisposition } from "./attachments.controller";
 import { AttachmentsService } from "./attachments.service";
 
-import type { Request, Response } from "express";
-
-const INLINE_SERVABLE_MIME_TYPES = new Set<string>(ATTACHMENT_INLINE_MIME_TYPES);
+import type { Response } from "express";
 
 function notFound(): never {
   throw new ApiHttpException(HttpStatus.NOT_FOUND, {
@@ -33,41 +27,35 @@ function notFound(): never {
 
 @Controller("public/notes/:token/attachments")
 export class PublicAttachmentController {
-  constructor(
-    private readonly publicNote: PublicNoteService,
-    private readonly attachments: AttachmentsService,
-  ) {}
+  constructor(private readonly attachments: AttachmentsService) {}
 
   @Get(":attachmentId/content")
+  @RateLimitTier("public-ip")
   async content(
     @Param("token") token: string,
     @Param("attachmentId") rawAttachmentId: string,
-    @Req() request: Request,
     @Res() response: Response,
   ): Promise<void> {
-    const scope = await this.publicNote.resolveNoteScope(String(token ?? ""));
-    if (scope === null) notFound();
+    // Set even on misses. An intermediary must not cache either an old grant
+    // or a denial that becomes valid after a note is restored.
+    response.setHeader("Cache-Control", "private, no-store, max-age=0");
     const attachmentId = uuidSchema.safeParse(rawAttachmentId);
     if (!attachmentId.success) notFound();
-    const content = await this.attachments.readPublicImageContent({
-      noteId: scope.noteId,
-      workspaceId: scope.workspaceId,
+    const content = await this.attachments.readPublicContent({
+      token: String(token ?? ""),
       attachmentId: attachmentId.data,
     });
     if (content === null) notFound();
-    if (!INLINE_SERVABLE_MIME_TYPES.has(content.mimeType)) {
-      content.stream.destroy();
-      throw new ApiHttpException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, {
-        code: "UNSUPPORTED_MEDIA_TYPE",
-        message: "No servable rendition is available for this attachment.",
-      });
-    }
-    applyContentHeaders(response, content, "inline");
-    if (matchesEtag(request.header("if-none-match"), content.etag)) {
-      content.stream.destroy();
-      response.status(HttpStatus.NOT_MODIFIED).end();
-      return;
-    }
+    response.setHeader("Content-Type", content.mimeType);
+    response.setHeader(
+      "Content-Disposition",
+      contentDisposition(content.filename, content.mediaType === "image" ? "inline" : "attachment"),
+    );
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+    response.setHeader("Cross-Origin-Resource-Policy", "same-site");
+    response.setHeader("Accept-Ranges", "none");
+    // No ETag/304, including If-None-Match: each request must re-authorize.
     response.setHeader("Content-Length", String(content.contentLength));
     response.status(HttpStatus.OK);
     content.stream.pipe(response);

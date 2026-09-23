@@ -42,6 +42,10 @@ const SECRET_PATH_SEGMENT_MARKERS = [
 const SECRET_PATH_SEGMENT_PATTERNS = SECRET_PATH_SEGMENT_MARKERS.map(
   (marker) => new RegExp(`(${escapeRegExp(marker)})[^/]+/?$`, "iu"),
 );
+// Unlike a note view, this route has a fixed suffix after its bearer token.
+// Do not widen the generic marker regex: `/logo/` is still terminal-only.
+const PUBLIC_ATTACHMENT_SECRET_PATTERN =
+  /(\/public\/notes\/)[^/]+(\/attachments\/[^/]+\/content)\/?$/iu;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
@@ -49,6 +53,9 @@ function escapeRegExp(value: string): string {
 
 /** Replaces a trailing secret token segment (matched via `SECRET_PATH_SEGMENT_MARKERS`) with a placeholder, leaving the rest of the path visible. */
 export function redactSecretPathSegment(path: string): string {
+  if (PUBLIC_ATTACHMENT_SECRET_PATTERN.test(path)) {
+    return path.replace(PUBLIC_ATTACHMENT_SECRET_PATTERN, "$1[redacted]$2");
+  }
   for (const pattern of SECRET_PATH_SEGMENT_PATTERNS) {
     if (pattern.test(path)) {
       return path.replace(pattern, "$1[redacted]");

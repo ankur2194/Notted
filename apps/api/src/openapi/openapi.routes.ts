@@ -565,10 +565,10 @@ export const OPENAPI_ROUTES: Record<string, OpenApiRouteDoc> = {
       "PUBLIC and unauthenticated — no session, no API key, and no workspace scope in the path. Every miss, including a malformed, revoked, or trashed-note token, is the same 404.",
   },
   "GET /public/notes/{token}/attachments/{attachmentId}/content": {
-    summary: "Stream a public note's image bytes.",
+    summary: "Download a currently referenced public note attachment.",
     tags: ["Note public links"],
     description:
-      "PUBLIC and unauthenticated, scoped by the same token as the note it belongs to. Streams the stored object; the response is binary, not JSON. Images only — a generic file attachment has no public content route.",
+      "PUBLIC and unauthenticated. Streams binary bytes only for a ready attachment referenced by the current live note content under an active token. Images render inline; generic files always download. Every missing, revoked, trashed, foreign, unreferenced, unsafe or unavailable attachment returns the same 404. Responses are private and no-store; conditional requests never return 304.",
   },
 
   // Folders.

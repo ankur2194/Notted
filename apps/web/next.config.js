@@ -24,6 +24,16 @@ const nextConfig = {
           production: process.env.NODE_ENV === "production",
         }),
       },
+      // Public-note URLs carry a bearer secret in the path. This route-specific
+      // response header overrides the site's less restrictive default before
+      // an image/script request can leave the document, including on 404s.
+      {
+        source: "/p/:token",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cache-Control", value: "private, no-store, max-age=0" },
+        ],
+      },
     ];
   },
 };

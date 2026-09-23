@@ -2,8 +2,10 @@ import { type ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { describe, expect, it, vi } from "vitest";
 
+import { PublicAttachmentController } from "../../attachments/public-attachment.controller";
 import { parseAppConfig } from "../../config/app.config";
 
+import { InMemoryRateLimitStore } from "./in-memory-rate-limit.store";
 import { RATE_LIMIT_TIER } from "./rate-limit.decorator";
 import { RateLimitGuard } from "./rate-limit.guard";
 import { RateLimitService } from "./rate-limit.service";
@@ -144,5 +146,40 @@ describe("RateLimitGuard", () => {
 
     expect(() => service.enforce(request, response)).toThrow("Too many requests");
     expect(response.setHeader).toHaveBeenCalledWith("Retry-After", 2);
+  });
+
+  it("enforces the public attachment route's IP bucket before calling its service", async () => {
+    const guard = new RateLimitGuard(
+      new Reflector(),
+      new RateLimitService(
+        parseAppConfig({
+          RATE_LIMIT_UNAUTHENTICATED_PER_MINUTE: "2",
+          RATE_LIMIT_SENSITIVE_PER_MINUTE: "1",
+        }),
+        new InMemoryRateLimitStore(),
+      ),
+    );
+    const readPublicContent = vi.fn();
+    const controller = new PublicAttachmentController({ readPublicContent } as never);
+    const request = { ip: "192.0.2.10", socket: {} } as unknown as Request;
+    const context = {
+      ...createContext(request, createResponse()),
+      getHandler: () => PublicAttachmentController.prototype.content,
+      getClass: () => PublicAttachmentController,
+    } as ExecutionContext;
+    setTrustedPrincipal(request, { actorId: "user-safe-id", kind: "user" });
+    expect(guard.canActivate(context)).toBe(true);
+    expect(guard.canActivate(context)).toBe(true);
+    const dispatch = () => {
+      guard.canActivate(context);
+      return controller.content(
+        "a".repeat(32),
+        "20000000-0000-4000-8900-000000000001",
+        createResponse(),
+      );
+    };
+    expect(dispatch).toThrow("Too many requests");
+    expect(readPublicContent).not.toHaveBeenCalled();
+    // Guard rejection precedes dispatch and its storage-backed read.
   });
 });

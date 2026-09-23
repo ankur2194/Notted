@@ -47,6 +47,10 @@ export default async function PublicNotePage({
     new URL(ATTACHMENT_API_PATHS.publicContent(token, attachmentId), primaryApiOrigin()).toString();
   return (
     <PublicNoteLayout pageSize={pageSize}>
+      {/* Next hoists this meta to the document head. Do not let a capability
+          token leak through same- or cross-origin referrer requests. The link
+          also carries its own no-referrer policy for direct activation. */}
+      <meta name="referrer" content="no-referrer" />
       {/*
         Print rules come from `print.css`, which `styles/globals.css` already
         `@import`s through the root layout this route inherits — so print and
@@ -62,7 +66,8 @@ export default async function PublicNotePage({
         (headings, tables, code, images, attachments) from `globals.css` —
         `renderPublicDocumentHtml`'s markup is deliberately the same contract
         `.notted-editor-content`'s image/attachment selectors already key off
-        (see the comment above those rules), so no new CSS is needed here.
+        (see the comment above those rules). Public download links have their
+        own larger click target in globals.css.
         One override: the live editor fades an image in via `[data-image-
         loaded="true"]`, a client-side attribute this static page never sets,
         so it is forced visible instead.
@@ -75,10 +80,11 @@ export default async function PublicNotePage({
         // defensive TipTap-JSON-to-HTML converter the HTML/PDF export path
         // uses on the exact same untrusted persisted content, never emitting
         // `href`-bearing markup outside its own sanitized allowlist — with a
-        // real, token-scoped `src` wired onto each image, `data-mention-id`
-        // stripped, and a generic file attachment's `data-attachment-id`
-        // stripped too (it has no public content route to point at).
-        dangerouslySetInnerHTML={{ __html: renderPublicDocumentHtml(content, resolveImageSrc) }}
+        // real, token-scoped image `src` and generic-file download href;
+        // enumerable mention and generic-attachment IDs are stripped.
+        dangerouslySetInnerHTML={{
+          __html: renderPublicDocumentHtml(content, resolveImageSrc, resolveImageSrc),
+        }}
       />
     </PublicNoteLayout>
   );

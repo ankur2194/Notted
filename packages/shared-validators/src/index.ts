@@ -253,6 +253,7 @@ export type {
   ExportOptionsOutput,
 } from "./export.schema";
 export { exactByteLabel, formatBinaryBytes } from "./format-bytes";
+export { documentReferencesAttachment } from "./document-references";
 export {
   noteVersionCursorSchema,
   noteVersionDetailSchema,

@@ -109,12 +109,14 @@ describe("RateLimitService tier selection", () => {
     service.enforce(createRequest(USER), createResponse());
     service.enforce(createRequest(API_KEY), createResponse());
     service.enforce(createRequest(USER), createResponse(), "sensitive");
+    service.enforce(createRequest(API_KEY), createResponse(), "public-ip");
 
     expect(keys).toEqual([
       "ip:198.51.100.7",
       "actor:user:user-1",
       "actor:api-key:key-1",
       "actor:user:user-1:sensitive",
+      "ip:198.51.100.7:public-ip",
     ]);
   });
 
@@ -203,5 +205,30 @@ describe("RateLimitService sensitive override", () => {
     // ...while the same actor's general allowance (limit 4) is untouched.
     expect(drain(service, USER, 4)).toBe(false);
     expect(allows(service, USER)).toBe(false);
+  });
+});
+
+describe("RateLimitService public-ip override", () => {
+  it("shares one IP bucket across anonymous, user and API-key requests but separates IPs", () => {
+    const service = createService();
+    const from = (ip: string, principal?: TrustedPrincipal) => {
+      const request = createRequest(principal);
+      Object.defineProperty(request, "ip", { value: ip });
+      return request;
+    };
+    const first = createResponse();
+    service.enforce(from("192.0.2.1", USER), first, "public-ip");
+    expect(first.setHeader).toHaveBeenCalledWith("RateLimit-Limit", 2);
+    service.enforce(from("192.0.2.1"), createResponse(), "public-ip");
+    const denied = createResponse();
+    expect(() => service.enforce(from("192.0.2.1", API_KEY), denied, "public-ip")).toThrow(
+      "Too many requests",
+    );
+    expect(denied.setHeader).toHaveBeenCalledWith("Retry-After", expect.any(Number));
+    expect(() => service.enforce(from("192.0.2.2"), createResponse(), "public-ip")).not.toThrow();
+    // Neither the ordinary IP bucket nor either actor's general bucket was spent.
+    expect(() => service.enforce(from("192.0.2.1"), createResponse())).not.toThrow();
+    expect(() => service.enforce(from("192.0.2.1", USER), createResponse())).not.toThrow();
+    expect(() => service.enforce(from("192.0.2.1", API_KEY), createResponse())).not.toThrow();
   });
 });

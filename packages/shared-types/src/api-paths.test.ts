@@ -23,6 +23,13 @@ describe("shared API path builders", () => {
     ).toBe(true);
   });
 
+  it("builds token-scoped public image and generic-file content paths", () => {
+    const token = "a".repeat(32);
+    expect(ATTACHMENT_API_PATHS.publicContent(token, resourceId)).toBe(
+      `/api/v1/public/notes/${token}/attachments/${resourceId}/content`,
+    );
+  });
+
   it("builds search and tag paths", () => {
     expect(SEARCH_API_PATHS.collection(workspaceId).endsWith("/search")).toBe(true);
     expect(SEARCH_API_PATHS.suggestions(workspaceId).endsWith("/search/suggestions")).toBe(true);

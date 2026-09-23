@@ -3,6 +3,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { APP_CONFIG, type AppConfig } from "../../config/app.config";
 import { ApiHttpException } from "../errors/api-http.exception";
 
+import { type RateLimitTierName } from "./rate-limit.decorator";
 import { RATE_LIMIT_STORE, type RateLimitStore, type TokenBucketPolicy } from "./rate-limit.types";
 import { getTrustedPrincipal, type TrustedPrincipal } from "./trusted-principal";
 
@@ -24,14 +25,17 @@ export class RateLimitService {
    * key. The bucket keys are disjoint by construction (`ip:` / `actor:user:` /
    * `actor:api-key:`), so a tier can never drain another tier's allowance.
    *
-   * `tierOverride` opts a single route into the sensitive limit. It gets its
-   * own `:sensitive` bucket rather than sharing the caller's general one:
+   * `tierOverride` opts a single route into a separate bucket. The sensitive
+   * tier gets its own `:sensitive` bucket rather than sharing the general one:
    * otherwise a handful of sign-in-grade requests would consume the caller's
    * whole general allowance, and a caller already at their general limit could
    * not reach a sensitive route at all.
+   * `public-ip` ignores the principal, uses the unauthenticated configured rate
+   * and a distinct IP bucket, so public images/files cannot drain ordinary IP
+   * requests and logging in cannot bypass the public route's IP ceiling.
    */
-  enforce(request: Request, response: Response, tierOverride?: "sensitive"): void {
-    const principal = getTrustedPrincipal(request);
+  enforce(request: Request, response: Response, tierOverride?: RateLimitTierName): void {
+    const principal = tierOverride === "public-ip" ? undefined : getTrustedPrincipal(request);
     const limit = this.limitFor(principal, tierOverride);
     const bucket =
       principal === undefined
@@ -65,7 +69,7 @@ export class RateLimitService {
 
   private limitFor(
     principal: TrustedPrincipal | undefined,
-    tierOverride: "sensitive" | undefined,
+    tierOverride: RateLimitTierName | undefined,
   ): number {
     if (tierOverride === "sensitive") return this.config.sensitiveRateLimitPerMinute;
     if (principal === undefined) return this.config.unauthenticatedRateLimitPerMinute;
