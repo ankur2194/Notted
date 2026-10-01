@@ -275,19 +275,41 @@ describe("attachment transfer filtering", () => {
   const file = (name: string, type: string): File =>
     new File([new Uint8Array([1, 2, 3])], name, { type });
 
-  it("accepts supported files and declines images, which the image plugin owns", () => {
+  it("accepts arbitrary files and routes images to the image plugin", () => {
     expect(isAttachmentCandidate(file("report.pdf", "application/pdf"))).toBe(true);
     expect(isAttachmentCandidate(file("main.py", ""))).toBe(true);
     expect(isAttachmentCandidate(file("photo.png", "image/png"))).toBe(false);
-    expect(isAttachmentCandidate(file("installer.exe", "application/x-msdownload"))).toBe(false);
+    expect(isAttachmentCandidate(file("installer.exe", "application/x-msdownload"))).toBe(true);
+    expect(isAttachmentCandidate(file("archive", ""))).toBe(true);
+    expect(isAttachmentCandidate(file("custom.unrecognised", ""))).toBe(true);
   });
 
-  it("reads only supported files out of a transfer", () => {
+  it("reads non-image files without restricting their extensions", () => {
     const transfer: DataTransferLike = {
-      files: [file("report.pdf", "application/pdf"), file("photo.png", "image/png")],
+      files: [
+        file("report.pdf", "application/pdf"),
+        file("archive", ""),
+        file("custom.unrecognised", "application/x-custom"),
+        file("photo.png", "image/png"),
+      ],
     };
     expect(attachmentFilesFromDataTransfer(transfer).map((item) => item.name)).toEqual([
       "report.pdf",
+      "archive",
+      "custom.unrecognised",
     ]);
+  });
+
+  it("reads pasted items without an extension or MIME allowlist", () => {
+    const pasted = file("memo.docx", "application/zip");
+    const extensionless = file("archive", "");
+    const transfer: DataTransferLike = {
+      items: [
+        { kind: "file", type: "application/zip", getAsFile: () => pasted },
+        { kind: "file", type: "", getAsFile: () => extensionless },
+        { kind: "file", type: "", getAsFile: () => null },
+      ],
+    };
+    expect(attachmentFilesFromDataTransfer(transfer)).toEqual([pasted, extensionless]);
   });
 });

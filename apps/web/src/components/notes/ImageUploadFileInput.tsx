@@ -16,11 +16,8 @@ export interface ImageUploadFileInputProps {
   readonly disabled?: boolean;
   /**
    * The picker's type filter. Defaults to the image list (Part 42); the generic
-   * attachment instance passes `ATTACHMENT_UPLOAD_ACCEPT` (Part 44).
-   *
-   * It is a courtesy filter only. A writer can always defeat it with the
-   * picker's "All files" option, and the server re-derives the type from the
-   * bytes on every upload regardless.
+   * attachment instance passes an empty string to offer every file format.
+   * Image uploads retain their dedicated validation and processing path.
    */
   readonly accept?: string;
   /**

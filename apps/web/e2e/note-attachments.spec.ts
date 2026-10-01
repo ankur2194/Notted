@@ -16,9 +16,9 @@ import { latestActionLink } from "./mailpit";
  *    clicking the card's Download produces a *download event* rather than a
  *    navigation that renders a PDF in the built-in viewer. jsdom has no
  *    download semantics at all, so no unit test can see a regression here.
- * 2. **The real upload path end to end.** One endpoint sniffs the magic bytes
- *    server-side and routes to the file pipeline; the card only appears once a
- *    permanent attachment id exists.
+ * 2. **The real upload path end to end.** An explicit kind routes files and
+ *    images to their separate pipelines; the card only appears once a permanent
+ *    attachment id exists. Generic files retain their original extension.
  * 3. **Confirmed deletion.** That the server delete happens first, the node is
  *    removed second, and the stored document really loses the reference.
  * 4. **Persistence with no URL in the document**, which is the invariant the
@@ -42,11 +42,9 @@ const UPLOAD_MS = 30_000;
 /**
  * A genuine, structurally valid single-page PDF.
  *
- * Generated rather than committed because the server admits a file by **sniffing
- * its magic bytes**: a placeholder with a `.pdf` name and arbitrary contents is
- * refused before anything else runs, so the fixture has to start with `%PDF-`
- * and be a real document. It is deliberately minimal — the assertions are about
- * admission, download, and deletion, not about rendering fidelity.
+ * Generated rather than committed so the fixture remains reviewable. A valid
+ * document supports the optional PDF preview; generic attachment admission
+ * itself does not inspect its contents.
  */
 function pdfBytes(text: string): Buffer {
   const objects = [
@@ -74,11 +72,10 @@ function pdfBytes(text: string): Buffer {
   return Buffer.from(body, "latin1");
 }
 
-/** A real ZIP (empty central directory), so the ZIP signature branch is covered. */
+/** A real ZIP with an empty central directory. */
 function emptyZipBytes(): Buffer {
   const end = Buffer.alloc(22);
-  // `PK\x05\x06` — the End Of Central Directory signature the server sniffs.
-  // A buffer that merely started with the letters "PK" would be refused.
+  // `PK\x05\x06` — the ZIP End Of Central Directory signature.
   end.writeUInt32LE(0x06054b50, 0);
   return end;
 }
@@ -288,8 +285,7 @@ test.describe.serial("Part 44 generic attachments in a real browser", () => {
       await pickAttachments(page, [
         { name: "report.pdf", mimeType: "application/pdf", buffer: REPORT_PDF },
         { name: "bundle.zip", mimeType: "application/zip", buffer: BUNDLE_ZIP },
-        // Declared as `text/plain`; the server admits it by extension plus a
-        // UTF-8/NUL scan and normalises the stored type.
+        // Generic files retain their declared MIME metadata and original bytes.
         { name: "notes.txt", mimeType: "text/plain", buffer: NOTES_TXT },
       ]);
 
@@ -403,7 +399,60 @@ test.describe.serial("Part 44 generic attachments in a real browser", () => {
     }
   });
 
-  test("refuses an unsupported file without ever contacting the server", async ({ browser }) => {
+  test("preserves original file names and bytes regardless of extension or MIME", async ({
+    browser,
+  }) => {
+    test.slow();
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const uploads = [
+      { name: "budget.XLSX", mimeType: "application/zip", buffer: BUNDLE_ZIP },
+      { name: "memo.docx", mimeType: "application/zip", buffer: BUNDLE_ZIP },
+      { name: "archive", mimeType: "application/octet-stream", buffer: NOTES_TXT },
+      { name: "installer.exe", mimeType: "application/x-msdownload", buffer: NOTES_TXT },
+      { name: "custom.unknown", mimeType: "application/x-custom", buffer: NOTES_TXT },
+      { name: "photo.png", mimeType: "image/png", buffer: PHOTO_PNG },
+    ];
+
+    try {
+      await register(page, identity("original-files"));
+      const workspaceId = await createWorkspace(page, `Files ${randomUUID().slice(0, 8)}`);
+      const noteId = await createNote(page, workspaceId, "Original file note");
+      await page.goto(`/workspaces/${workspaceId}/notes/${noteId}`);
+      const body = page.getByRole("textbox", { name: /Note content/u });
+      await expect(body).toBeVisible({ timeout: ROUTE_COMPILE_MS });
+      await body.click();
+      await expect(page.getByTestId("note-attachment-file-input")).toHaveAttribute("accept", "");
+      await pickAttachments(page, uploads);
+      await expect(cards(page)).toHaveCount(uploads.length, { timeout: UPLOAD_MS });
+      // Choosing Attach file stores even an image as a generic original file.
+      await expect(images(page)).toHaveCount(0);
+      await waitForStored(page, workspaceId, noteId, (document) =>
+        uploads.every((file) => document.includes(file.name)),
+      );
+      await page.reload();
+      await expect(body).toBeVisible({ timeout: ROUTE_COMPILE_MS });
+      await expect(cards(page)).toHaveCount(uploads.length, { timeout: UPLOAD_MS });
+      for (const file of uploads) {
+        const card = cards(page).filter({ hasText: file.name });
+        const [download] = await Promise.all([
+          page.waitForEvent("download", { timeout: UPLOAD_MS }),
+          card.getByTestId("attachment-download").click(),
+        ]);
+        expect(download.suggestedFilename()).toBe(file.name);
+        expect(await download.failure()).toBeNull();
+        const response = await page.request.get(download.url(), { headers: { Origin: appUrl } });
+        await expect(response).toBeOK();
+        expect(await response.body()).toEqual(file.buffer);
+        expect(response.headers()["content-disposition"] ?? "").toContain("attachment");
+        expect(response.headers()["x-content-type-options"] ?? "").toBe("nosniff");
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("refuses an empty file without ever contacting the server", async ({ browser }) => {
     test.slow();
     const context = await browser.newContext();
     const page = await context.newPage();
@@ -413,24 +462,18 @@ test.describe.serial("Part 44 generic attachments in a real browser", () => {
     });
 
     try {
-      await register(page, identity("refusal"));
+      await register(page, identity("empty-file"));
       const workspaceId = await createWorkspace(page, `Files ${randomUUID().slice(0, 8)}`);
-      const noteId = await createNote(page, workspaceId, "Refusal note");
+      const noteId = await createNote(page, workspaceId, "Empty file note");
       await page.goto(`/workspaces/${workspaceId}/notes/${noteId}`);
       await expect(page.getByRole("textbox", { name: /Note content/u })).toBeVisible({
         timeout: ROUTE_COMPILE_MS,
       });
       await page.getByRole("textbox", { name: /Note content/u }).click();
-
       await pickAttachments(page, [
-        { name: "installer.exe", mimeType: "application/x-msdownload", buffer: NOTES_TXT },
+        { name: "empty.unknown", mimeType: "application/octet-stream", buffer: Buffer.alloc(0) },
       ]);
-
-      // The client pre-flight is a courtesy, but it must not be a lie: an
-      // unsupported file is reported immediately and no card is ever inserted.
-      await expect(page.getByText(/not a supported file type/u)).toBeVisible({
-        timeout: UPLOAD_MS,
-      });
+      await expect(page.getByText(/empty\.unknown is empty/u)).toBeVisible({ timeout: UPLOAD_MS });
       await expect(cards(page)).toHaveCount(0);
       expect(uploads).toBe(0);
     } finally {

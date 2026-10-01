@@ -24,8 +24,8 @@ import type { AuthService } from "../auth/auth.service";
 import type { Request, Response } from "express";
 
 /**
- * Part 44. The upload route now ROUTES on the sniffed bytes, and that decision
- * is only observable once a body has been parsed — so the busboy parser is
+ * Part 44. The upload route selects the explicit multipart kind, and that
+ * decision is only observable once a body has been parsed — so the busboy parser is
  * stubbed here with a payload the test chooses. Every pre-parse guard (trusted
  * origin, idempotency key, the authorization decorator) still runs unmocked and
  * is still asserted below; only the byte source is replaced.
@@ -43,12 +43,19 @@ vi.mock("./multipart-upload.parser", () => ({
   MULTIPART_TIMEOUT_MS: 30_000,
 }));
 
-function stageUpload(buffer: Buffer, declaredFilename: string, declaredMimeType = ""): void {
+function stageUpload(
+  buffer: Buffer,
+  declaredFilename: string,
+  declaredMimeType = "",
+  kind?: string,
+): void {
+  const fields: Record<string, string> = {};
+  if (kind !== undefined) fields["kind"] = kind;
   parserStub.next = Object.freeze({
     buffer,
     declaredMimeType,
     declaredFilename,
-    fields: Object.freeze({}),
+    fields: Object.freeze(fields),
   });
 }
 
@@ -377,12 +384,12 @@ describe("AttachmentsController", () => {
     );
   });
 
-  it("routes one upload endpoint to the image or the file path by sniffed bytes", async () => {
+  it("routes explicit kind=image to images, and omitted/file kind to unchanged generic storage", async () => {
     const uploadImage = vi.fn().mockResolvedValue({ attachment: { id: attachmentId } });
     const uploadFile = vi.fn().mockResolvedValue({ attachment: { id: attachmentId } });
     const service = { uploadImage, uploadFile, maximumUploadBytes: 50 * 1_024 * 1_024 };
 
-    // A PNG named `.pdf`: the BYTES decide, so the image path runs.
+    // Explicit image action invokes the validated image path.
     stageUpload(
       Buffer.concat([
         Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
@@ -390,34 +397,51 @@ describe("AttachmentsController", () => {
       ]),
       "invoice.pdf",
       "application/pdf",
+      "image",
     );
     await controllers(service).notes.upload(request({ workspaceId, noteId }, trustedOrigin));
     expect(uploadImage).toHaveBeenCalledOnce();
     expect(uploadFile).not.toHaveBeenCalled();
 
-    // A PDF named `.png`: the file path runs.
+    // Omitted kind stores a PDF named .png as an unchanged generic file.
     uploadImage.mockClear();
     stageUpload(Buffer.from("%PDF-1.7\n%%EOF\n", "latin1"), "photo.png", "image/png");
     await controllers(service).notes.upload(request({ workspaceId, noteId }, trustedOrigin));
     expect(uploadFile).toHaveBeenCalledOnce();
     expect(uploadImage).not.toHaveBeenCalled();
 
-    // Allow-listed text also routes to the file path.
+    // Text metadata does not alter generic routing.
     uploadFile.mockClear();
     stageUpload(Buffer.from("# notes\n", "utf8"), "notes.md", "text/markdown");
     await controllers(service).notes.upload(request({ workspaceId, noteId }, trustedOrigin));
     expect(uploadFile).toHaveBeenCalledOnce();
   });
 
-  it("refuses an unsupported payload at the transport without calling either service method", async () => {
+  it.each([undefined, "file"])("does not inspect unsupported bytes for kind=%s", async (kind) => {
+    const uploadImage = vi.fn();
+    const uploadFile = vi.fn().mockResolvedValue({ attachment: { id: attachmentId } });
+    stageUpload(
+      Buffer.from([0x4d, 0x5a, 0x90, 0x00]),
+      "setup.exe",
+      "application/octet-stream",
+      kind,
+    );
+    await controllers({ uploadImage, uploadFile, maximumUploadBytes: 1_024 }).notes.upload(
+      request({ workspaceId, noteId }, trustedOrigin),
+    );
+    expect(uploadImage).not.toHaveBeenCalled();
+    expect(uploadFile).toHaveBeenCalledOnce();
+  });
+
+  it("rejects an invalid pipeline kind before either service call", async () => {
     const uploadImage = vi.fn();
     const uploadFile = vi.fn();
-    stageUpload(Buffer.from([0x4d, 0x5a, 0x90, 0x00]), "setup.exe", "application/octet-stream");
+    stageUpload(Buffer.from("anything"), "README", "", "other");
     await expect(
       controllers({ uploadImage, uploadFile, maximumUploadBytes: 1_024 }).notes.upload(
         request({ workspaceId, noteId }, trustedOrigin),
       ),
-    ).rejects.toMatchObject({ safeResponse: { code: "UNSUPPORTED_MEDIA_TYPE" } });
+    ).rejects.toMatchObject({ safeResponse: { code: "VALIDATION_ERROR" } });
     expect(uploadImage).not.toHaveBeenCalled();
     expect(uploadFile).not.toHaveBeenCalled();
   });

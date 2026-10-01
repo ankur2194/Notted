@@ -1,3 +1,6 @@
+// Historical Part 44 classifier, retained for legacy helpers/tests only.
+// Upload/read routes no longer call it: generic files have no content/type gate
+// and explicit images use their dedicated processor (ADR 0016).
 // Part 44: the single decision point for "what kind of upload is this, and may
 // it be stored at all?".
 //

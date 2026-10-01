@@ -40,6 +40,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, asc, desc, eq } from "drizzle-orm";
 
 import { attachmentObjectKeys } from "../attachments/attachment-object-keys";
+import { sanitizeFileAttachmentFilename } from "../attachments/filename";
 import { AuthorizationEntryService } from "../authorization/authorization-entry.service";
 import { StructuredLogger } from "../common/logging/structured-logger.service";
 import { DatabaseService } from "../database/database.service";
@@ -221,6 +222,8 @@ export class NoteExportSourceService {
       .select({
         id: attachments.id,
         filename: attachments.filename,
+        originalName: attachments.originalName,
+        mediaType: attachments.mediaType,
         mimeType: attachments.mimeType,
         sizeBytes: attachments.sizeBytes,
         storageKey: attachments.storageKey,
@@ -245,7 +248,10 @@ export class NoteExportSourceService {
       rows.map((row) =>
         Object.freeze({
           attachmentId: row.id,
-          filename: row.filename,
+          filename:
+            row.mediaType === "file"
+              ? sanitizeFileAttachmentFilename(row.originalName || row.filename).filename
+              : row.filename,
           mimeType: row.mimeType,
           sizeBytes: row.sizeBytes,
           // `attachmentObjectKeys` is the ONE answer to "which objects does this

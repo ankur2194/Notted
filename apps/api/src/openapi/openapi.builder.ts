@@ -424,14 +424,32 @@ function operation(
     tags: [...doc.tags],
     ...(doc.description === undefined ? {} : { description: doc.description }),
     ...(parameters.length === 0 ? {} : { parameters }),
-    ...(doc.body === undefined
-      ? {}
-      : {
+    ...(doc.attachmentMultipart === true
+      ? {
           requestBody: {
             required: true,
-            content: { "application/json": { schema: schemaRef(catalog, doc.body) } },
+            content: {
+              "multipart/form-data": {
+                schema: {
+                  type: "object",
+                  required: ["file"],
+                  properties: {
+                    file: { type: "string", format: "binary" },
+                    kind: { type: "string", enum: ["file", "image"], default: "file" },
+                  },
+                },
+              },
+            },
           },
-        }),
+        }
+      : doc.body === undefined
+        ? {}
+        : {
+            requestBody: {
+              required: true,
+              content: { "application/json": { schema: schemaRef(catalog, doc.body) } },
+            },
+          }),
     responses: {
       "2XX": {
         description: doc.summary,

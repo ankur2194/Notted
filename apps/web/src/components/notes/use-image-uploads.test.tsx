@@ -432,6 +432,30 @@ describe("useImageUploads generic file attachments (Part 44)", () => {
     expect(uploadMock.mock.calls[0]?.[0]).toMatchObject({ kind: "file" });
   });
 
+  it.each([
+    ["budget.XLSX", "application/zip"],
+    ["memo.docx", "application/zip"],
+    ["archive", ""],
+    ["installer.exe", "application/x-msdownload"],
+    ["photo.png", "image/png"],
+  ])("keeps %s on the attachment pipeline when picked as a file", async (name, type) => {
+    uploadMock.mockResolvedValue({
+      ok: true,
+      data: { ...fileMedia(), displayName: name },
+    });
+    const { result } = setup();
+    const { controller, completed, completedAttachments } = fakeController();
+    const file = pdfFile(name, type);
+    act(() => {
+      result.current.requestAttachmentFiles({ insertAt: 5, controller });
+      result.current.handlePickedAttachmentFiles([file]);
+    });
+    await waitFor(() => expect(completedAttachments).toHaveLength(1));
+    expect(uploadMock.mock.calls[0]?.[0]).toMatchObject({ kind: "file", file });
+    expect(completedAttachments[0]?.attrs.name).toBe(name);
+    expect(completed).toHaveLength(0);
+  });
+
   it("mints no blob preview for a file, which an img could never render", () => {
     uploadMock.mockReturnValue(new Promise(() => undefined));
     const { result } = setup();

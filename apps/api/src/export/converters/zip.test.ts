@@ -340,6 +340,25 @@ describe("renderZipArchive", () => {
     }
   });
 
+  it("preserves attachment extension case, unknown and compound suffixes in exports", async () => {
+    const names = [
+      "Report.XLSX",
+      "Letter.DOCX",
+      "backup.tar.gz",
+      "custom.verylongunknownextension",
+      "README",
+    ];
+    const artifact = await render({
+      source: source({ options: options({ includeAttachments: true }) }),
+      bundle: bundle({
+        attachments: names.map((filename, index) =>
+          attachment({ attachmentId: `a${index}`, filename }),
+        ),
+      }),
+    });
+    for (const name of names) expect(open(artifact).files[`attachments/${name}`]).toBeDefined();
+  });
+
   it("caps comment and version counts and records why", async () => {
     const artifact = await render({
       source: source({

@@ -96,6 +96,8 @@ function attachmentRow(overrides: Record<string, unknown> = {}): FakeRow {
     workspaceId,
     processingStatus: "ready",
     filename: SECRET_FILENAME,
+    originalName: SECRET_FILENAME,
+    mediaType: "file",
     mimeType: "application/pdf",
     sizeBytes: 12,
     storageKey: SECRET_KEY,
@@ -399,6 +401,25 @@ describe("NoteExportSourceService.load", () => {
     const bundle = await harness.service.load(subject, ALL_INCLUDED);
 
     expect(bundle).toEqual({ attachments: [], comments: [], versions: [] });
+  });
+
+  it("exports legacy generic attachments with original extensions while retaining image names", async () => {
+    const harness = build({
+      attachments: [
+        attachmentRow({ filename: "report.zip", originalName: "report.XLSX" }),
+        attachmentRow({
+          id: "att-2",
+          mediaType: "image",
+          filename: "photo.jpg",
+          originalName: "photo.jpeg",
+        }),
+      ],
+    });
+    const bundle = await harness.service.load(subject, options({ includeAttachments: true }));
+    expect(bundle.attachments.map((attachment) => attachment.filename)).toEqual([
+      "report.XLSX",
+      "photo.jpg",
+    ]);
   });
 
   it("issues no query at all for an excluded list", async () => {

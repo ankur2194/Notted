@@ -1,5 +1,6 @@
 import { Readable } from "node:stream";
 
+import { zipSync } from "fflate";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiHttpException } from "../common/errors/api-http.exception";
@@ -701,7 +702,7 @@ function fileInput(overrides: Partial<ReturnType<typeof uploadInput>> = {}) {
   return {
     ...uploadInput(),
     buffer: PDF,
-    declaredMimeType: "text/html",
+    declaredMimeType: "application/pdf",
     declaredFilename: "Quarterly Report.pdf",
     idempotencyKey: "upload-000000002",
     ...overrides,
@@ -728,8 +729,8 @@ describe("AttachmentsService.uploadFile", () => {
     const store = context.store as MemoryObjectStore;
     expect(store.objects.size).toBe(1);
     const [key] = [...store.objects.keys()];
-    // Every generic type maps to `.bin`, so the key never hints at the payload.
-    expect(key).toMatch(/^w\/[\da-f-]{36}\/a\/[\da-f-]{36}\/original\/[\da-f]{32}\.bin$/u);
+    // The private key retains the original file suffix.
+    expect(key).toMatch(/^w\/[\da-f-]{36}\/a\/[\da-f-]{36}\/original\/[\da-f]{32}\.pdf$/u);
   });
 
   it("never puts an object key on the wire for a generic file either", async () => {
@@ -740,7 +741,7 @@ describe("AttachmentsService.uploadFile", () => {
     expect(serialized).not.toContain('"key"');
   });
 
-  it("normalizes an allow-listed text or code upload to text/plain", async () => {
+  it("retains declared text MIME metadata without inspecting contents", async () => {
     const context = build();
     const result = await context.service.uploadFile(
       fileInput({
@@ -749,13 +750,12 @@ describe("AttachmentsService.uploadFile", () => {
         declaredMimeType: "text/x-python",
       }),
     );
-    expect(result.attachment.mimeType).toBe("text/plain");
-    // The extension a reader downloads with is preserved for text: a `.py` that
-    // arrives as `.txt` is useless, and every member of the list is inert.
+    expect(result.attachment.mimeType).toBe("text/x-python");
+    // MIME metadata does not select or alter the extension.
     expect(result.attachment.displayName).toBe("script.py");
   });
 
-  it("stores an uploaded HTML file as inert text, never as text/html", async () => {
+  it("stores HTML bytes unchanged for attachment-only download", async () => {
     const context = build();
     const result = await context.service.uploadFile(
       fileInput({
@@ -764,50 +764,126 @@ describe("AttachmentsService.uploadFile", () => {
         declaredMimeType: "text/html",
       }),
     );
-    expect(result.attachment.mimeType).toBe("text/plain");
+    expect(result.attachment.mimeType).toBe("text/html");
     expect(result.attachment.displayName).toBe("payload.html");
   });
 
-  it("forces the download extension of the sniffed type, killing a double extension", async () => {
-    const context = build();
-    const result = await context.service.uploadFile(
-      fileInput({ declaredFilename: "invoice.pdf.exe" }),
-    );
-    expect(result.attachment.displayName).toBe("invoice.pdf.pdf");
-    expect(result.attachment.displayName.endsWith(".exe")).toBe(false);
-  });
-
-  it("refuses an unsupported payload before any row or object exists", async () => {
-    const context = build();
-    await expect(
-      context.service.uploadFile(
-        fileInput({ buffer: Buffer.from([0x4d, 0x5a, 0x90, 0x00]), declaredFilename: "setup.exe" }),
-      ),
-    ).rejects.toMatchObject({ safeResponse: { code: "UNSUPPORTED_MEDIA_TYPE" } });
-    expect(context.rows).toEqual([]);
-    expect((context.store as MemoryObjectStore).objects.size).toBe(0);
-    expect(context.inserted).toEqual([]);
-  });
-
-  it("refuses a binary wearing a text extension without leaving a failed row", async () => {
-    const context = build();
-    await expect(
-      context.service.uploadFile(
+  it.each([
+    ["invoice.pdf.exe", PDF],
+    ["setup.exe", Buffer.from([0x4d, 0x5a, 0x90, 0x00])],
+    ["notes.txt", Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0xff])],
+    ["photo.png", PNG],
+    ["backup.tar.gz", Buffer.from([0, 255, 1])],
+    ["Report.XLSX", Buffer.from([0, 255, 1])],
+    ["custom.verylongunknownextension", Buffer.from([0, 255, 1])],
+    ["README", Buffer.from([0, 255, 1])],
+  ] as const)(
+    "stores and downloads %s with its original suffix and byte-identical content",
+    async (filename, buffer) => {
+      const context = build();
+      const uploaded = await context.service.uploadFile(
         fileInput({
-          buffer: Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01]),
-          declaredFilename: "notes.txt",
+          buffer,
+          declaredFilename: filename,
+          declaredMimeType: "image/svg+xml",
         }),
-      ),
-    ).rejects.toMatchObject({ safeResponse: { code: "UNSUPPORTED_MEDIA_TYPE" } });
-    expect(context.rows).toEqual([]);
-  });
+      );
+      expect(uploaded.attachment.displayName).toBe(filename);
+      expect(uploaded.attachment.mediaType).toBe("file");
+      expect(uploaded.attachment.mimeType).toBe("image/svg+xml");
+      const store = context.store as MemoryObjectStore;
+      const [key, value] = [...store.objects.entries()][0]!;
+      const suffix = filename.includes(".") ? filename.slice(filename.indexOf(".")) : "";
+      expect(key.slice(key.lastIndexOf("/") + 1)).toMatch(
+        new RegExp(`^[a-f0-9]{32}${suffix.replaceAll(".", "\\.")}$`),
+      );
+      expect(value.body.equals(buffer)).toBe(true);
+      const read = await context.service.readContent({
+        principal: principal(),
+        workspaceId,
+        attachmentId: uploaded.attachment.id,
+        variant: "full",
+      });
+      expect(read.filename).toBe(filename);
+      expect(read.mimeType).toBe("application/octet-stream");
+      const chunks: Buffer[] = [];
+      for await (const chunk of read.stream) chunks.push(Buffer.from(chunk as Uint8Array));
+      expect(Buffer.concat(chunks).equals(buffer)).toBe(true);
+    },
+  );
 
-  it("refuses an image on the file path, so a mis-wired transport cannot cross the streams", async () => {
-    const context = build();
-    await expect(
-      context.service.uploadFile(fileInput({ buffer: PNG, declaredFilename: "photo.png" })),
-    ).rejects.toMatchObject({ safeResponse: { code: "UNSUPPORTED_MEDIA_TYPE" } });
-    expect(context.rows).toEqual([]);
+  it.each(["docx", "xlsx"])(
+    "preserves a valid %s ZIP package whose content-types entry is beyond byte 256",
+    async (extension) => {
+      const text = (value: string) => Buffer.from(value, "utf8");
+      const officeEntry = extension === "docx" ? "word/document.xml" : "xl/workbook.xml";
+      const officeMime =
+        extension === "docx"
+          ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"
+          : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
+      const buffer = Buffer.from(
+        zipSync(
+          {
+            "padding.bin": Buffer.alloc(4096, 1),
+            "[Content_Types].xml": text(
+              `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/${officeEntry}" ContentType="${officeMime}"/>${extension === "xlsx" ? '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' : ""}</Types>`,
+            ),
+            "_rels/.rels": text(
+              `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="${officeEntry}"/></Relationships>`,
+            ),
+            [officeEntry]: text(
+              extension === "docx"
+                ? '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body/></w:document>'
+                : '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>',
+            ),
+            ...(extension === "xlsx"
+              ? {
+                  "xl/_rels/workbook.xml.rels": text(
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+                  ),
+                  "xl/worksheets/sheet1.xml": text(
+                    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData/></worksheet>',
+                  ),
+                }
+              : {}),
+          },
+          { level: 0 },
+        ),
+      );
+      expect(buffer.indexOf("[Content_Types].xml")).toBeGreaterThan(256);
+      const context = build();
+      const result = await context.service.uploadFile(
+        fileInput({
+          buffer,
+          declaredFilename: `office.${extension}`,
+          declaredMimeType: "application/zip",
+        }),
+      );
+      expect(result.attachment.displayName).toBe(`office.${extension}`);
+      const stored = [...(context.store as MemoryObjectStore).objects.entries()][0]!;
+      expect(stored[0].endsWith(`.${extension}`)).toBe(true);
+      expect(stored[1].body.equals(buffer)).toBe(true);
+    },
+  );
+
+  it.each(["", "text/html\r\nX-Injected: yes", "unknown", "text/html; charset=utf-8"])(
+    "uses inert metadata fallback for invalid MIME %s without refusing bytes",
+    async (declaredMimeType) => {
+      const context = build();
+      const uploaded = await context.service.uploadFile(fileInput({ declaredMimeType }));
+      expect(uploaded.attachment.mimeType).toBe("application/octet-stream");
+    },
+  );
+
+  it("refuses only empty/oversized payloads before creating rows", async () => {
+    for (const buffer of [Buffer.alloc(0), Buffer.alloc(51 * 1024 * 1024)]) {
+      const context = build();
+      await expect(context.service.uploadFile(fileInput({ buffer }))).rejects.toBeInstanceOf(
+        ApiHttpException,
+      );
+      expect(context.rows).toEqual([]);
+      expect((context.store as MemoryObjectStore).objects.size).toBe(0);
+    }
   });
 
   it("rejects a generic file that would exceed the workspace quota, writing nothing", async () => {
@@ -873,7 +949,7 @@ describe("AttachmentsService.uploadFile", () => {
       attachmentId: uploaded.attachment.id,
       variant: "full",
     });
-    expect(read.mimeType).toBe("application/pdf");
+    expect(read.mimeType).toBe("application/octet-stream");
     expect(read.mediaType).toBe("file");
     expect(read.filename).toBe("Quarterly Report.pdf");
     expect(read.contentLength).toBe(PDF.byteLength);
@@ -906,23 +982,29 @@ describe("AttachmentsService.uploadFile", () => {
     read.stream.destroy();
   });
 
-  it("refuses to stream a generic row whose stored type is outside the admitted set", async () => {
+  it("downloads legacy generic rows using originalName without MIME format gating", async () => {
     const context = build();
     const uploaded = await context.service.uploadFile(fileInput());
-    // Simulate a corrupted or hand-edited row: the variant record claims a type
-    // admission could never have produced.
-    const variants = context.rows[0]?.variants;
-    const original = variants === null || variants === undefined ? undefined : variants.original;
-    expect(original).toBeDefined();
-    (original as Record<string, unknown>).mimeType = "text/html";
-    await expect(
-      context.service.readContent({
-        principal: principal(),
-        workspaceId,
-        attachmentId: uploaded.attachment.id,
-        variant: "full",
-      }),
-    ).rejects.toMatchObject({ safeResponse: { code: "NOT_FOUND" } });
+    const row = context.rows[0]!;
+    row.filename = "Report.zip";
+    row.originalName = "Report.XLSX";
+    const original = row.variants!.original as Record<string, unknown>;
+    original.mimeType = "application/x-custom";
+    const read = await context.service.readContent({
+      principal: principal(),
+      workspaceId,
+      attachmentId: uploaded.attachment.id,
+      variant: "full",
+    });
+    expect(read.filename).toBe("Report.XLSX");
+    expect(read.mimeType).toBe("application/octet-stream");
+    read.stream.destroy();
+    const listed = await context.service.listForNote({
+      principal: principal(),
+      workspaceId,
+      noteId,
+    });
+    expect(listed.items[0]?.displayName).toBe("Report.XLSX");
   });
 
   it("lists a generic file alongside images with keys stripped", async () => {

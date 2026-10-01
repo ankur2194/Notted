@@ -981,9 +981,9 @@ Checklists are first-class content within notes and can also exist as standalone
 
 ### 6. Attachments
 
-Non-image file attachments support:
+Generic file attachments accept all file formats without checking content/type or rewriting extensions. The Attach file action stores bytes unchanged, including image files selected there. The following are common examples, not an allow-list. See ADR 0016.
 
-**Supported File Types**:
+**File Type Examples**:
 - Documents: PDF, DOCX, TXT, RTF, MD
 - Spreadsheets: XLSX, CSV
 - Archives: ZIP, RAR, 7Z, TAR
@@ -992,9 +992,11 @@ Non-image file attachments support:
 
 **Upload Flow**:
 - Drag and drop files onto note or use attachment button
-- Upload to MinIO `notted-attachments` bucket
+- Upload to private MinIO storage using an opaque key with the sanitized original suffix (including case and compound suffixes); extensionless files remain extensionless
+- Multipart `kind=file` (also the default when omitted) selects generic storage; explicit `kind=image` selects the separate validated image pipeline
+- Retain syntactically valid declared MIME only as descriptive metadata, with `application/octet-stream` fallback; it never gates generic admission or downloads
 - Display as attachment card in note (filename, size, type icon)
-- Click to download with original filename preserved
+- Click to download with sanitized original filename and extension preserved, always with `Content-Disposition: attachment`, `nosniff`, and restrictive CSP
 - Optional: inline preview for PDFs (PDF.js viewer)
 
 **Attachment Card UI**:

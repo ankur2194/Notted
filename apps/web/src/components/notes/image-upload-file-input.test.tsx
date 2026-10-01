@@ -26,6 +26,19 @@ describe("ImageUploadFileInput", () => {
     expect(input.accept).not.toContain("application/pdf");
   });
 
+  it("offers every format when the attachment picker passes an empty accept value", () => {
+    const onFiles = vi.fn();
+    render(<ImageUploadFileInput onFiles={onFiles} accept="" />);
+    expect(inputElement().accept).toBe("");
+    const files = [
+      new File([new Uint8Array([1])], "budget.XLSX", { type: "application/zip" }),
+      new File([new Uint8Array([2])], "archive", { type: "" }),
+      pngFile("photo.png"),
+    ];
+    fireEvent.change(inputElement(), { target: { files } });
+    expect(onFiles).toHaveBeenCalledWith(files);
+  });
+
   it("stays out of the tab order and out of the accessibility tree", () => {
     // The visible, accessible controls are the toolbar button and the `/image`
     // command; a second unlabelled tab stop announcing "Choose files" would be

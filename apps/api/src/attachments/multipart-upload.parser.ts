@@ -50,7 +50,7 @@ export interface ParseSingleFileUploadOptions {
 
 export interface ParsedSingleFileUpload {
   readonly buffer: Buffer;
-  /** UNTRUSTED. Read for diagnostics only; the sniffed type is authoritative. */
+  /** UNTRUSTED. Generic metadata only; explicit images derive type from bytes. */
   readonly declaredMimeType: string;
   /** UNTRUSTED. Sanitized separately before it is persisted for display. */
   readonly declaredFilename: string;

@@ -17,7 +17,7 @@ Planned capabilities include:
 - Workspaces, roles, projects, standalone notes, nesting, tags, and templates
 - Inline checklists and structured task-list notes
 - Clipboard, drag-and-drop, and file-picker image uploads
-- General attachments stored in private object storage
+- General attachments stored byte-for-byte in private object storage with their sanitized original filename and extension; any file format is accepted within size/quota limits. Multipart callers use `kind=image` for the separate validated image pipeline (`kind` omitted defaults to generic files). See [ADR 0016](docs/decisions/0016-original-attachment-extensions.md).
 - Note history, comparison, and non-destructive restoration
 - Full-text and semantic search
 - Real-time presence, collaborative editing, and inline comments

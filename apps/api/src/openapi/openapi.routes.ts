@@ -178,6 +178,8 @@ export interface OpenApiRouteDoc {
   readonly description?: string;
   readonly query?: ZodType;
   readonly body?: ZodType;
+  /** Explicit binary multipart contract, separate from JSON Zod bodies. */
+  readonly attachmentMultipart?: boolean;
   readonly response?: ZodType;
   /** The handler resolves to a list of `response` rather than a single value. */
   readonly responseIsArray?: boolean;
@@ -637,7 +639,9 @@ export const OPENAPI_ROUTES: Record<string, OpenApiRouteDoc> = {
   "POST /workspaces/{workspaceId}/notes/{noteId}/attachments": {
     summary: "Upload an attachment.",
     tags: ["Attachments"],
-    description: "multipart/form-data upload; the request body has no committed Zod schema.",
+    description:
+      "Multipart upload with one file part and optional kind=file|image (default file). Generic files are stored byte-for-byte with sanitized original filenames and extensions, without content/type inspection or extension allow-lists. Explicit image uploads retain image validation/processing. Authorization, quota and configured size limits apply to both paths.",
+    attachmentMultipart: true,
     response: attachmentUploadResultSchema,
   },
   "GET /workspaces/{workspaceId}/attachments/{attachmentId}/content": {

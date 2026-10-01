@@ -15,12 +15,11 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import {
-  ATTACHMENT_FILE_MIME_TYPES,
   ATTACHMENT_INLINE_MIME_TYPES,
-  ATTACHMENT_TEXT_MIME_TYPE,
   MAX_ATTACHMENT_UPLOAD_BYTES,
   MAX_IMAGE_UPLOAD_BYTES,
   documentReferencesAttachment,
+  attachmentMimeTypeSchema,
 } from "@notted/shared-validators";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
@@ -62,7 +61,6 @@ import {
   whereWorkspace,
 } from "../tenant";
 
-import { admitUpload } from "./attachment-admission";
 import { attachmentObjectKeys } from "./attachment-object-keys";
 import { attachmentObjectExtension, buildAttachmentObjectKey } from "./attachment-storage-key";
 import {
@@ -77,7 +75,11 @@ import {
   type AttachmentMutation,
   type AttachmentProcessingErrorCode,
 } from "./attachments.constants";
-import { sanitizeAttachmentFilename, sanitizeUploadFilename } from "./filename";
+import {
+  originalAttachmentObjectExtension,
+  sanitizeAttachmentFilename,
+  sanitizeFileAttachmentFilename,
+} from "./filename";
 import { IMAGE_PROCESSOR, ImageProcessingError, type ImageProcessor } from "./image-processing";
 import { IMAGE_SIGNATURE_HEAD_BYTES, sniffImageMediaType } from "./image-signature";
 
@@ -101,17 +103,12 @@ const MAX_NOTE_ATTACHMENTS_RETURNED = 200;
 /** Keys are random and immutable, so a rendition can be cached indefinitely. */
 const CONTENT_CACHE_CONTROL = "private, max-age=31536000, immutable";
 
-/**
- * The only MIME types a generic-file row may ever be streamed as (Part 44).
- *
- * Defence in depth behind the admission gate: a corrupted or hand-edited row
- * cannot cause the download route to advertise an arbitrary `Content-Type`. The
- * set is exactly what `admitUpload` can produce for `media_type = 'file'`.
- */
-const SERVABLE_FILE_MIME_TYPES: ReadonlySet<string> = new Set<string>([
-  ...ATTACHMENT_FILE_MIME_TYPES,
-  ATTACHMENT_TEXT_MIME_TYPE,
-]);
+/** MIME is descriptive metadata, never a generic-file admission or read gate. */
+function descriptiveMimeType(value: string): string {
+  const parsed = attachmentMimeTypeSchema.safeParse(value);
+  return parsed.success ? parsed.data.toLowerCase() : "application/octet-stream";
+}
+
 const SERVABLE_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set<string>(
   ATTACHMENT_INLINE_MIME_TYPES,
 );
@@ -142,7 +139,7 @@ export interface UploadImageInput extends ScopedInput {
 export interface UploadFileInput extends ScopedInput {
   readonly noteId: string;
   readonly buffer: Buffer;
-  /** UNTRUSTED transport hint; never persisted as the type. */
+  /** Descriptive transport metadata only; invalid MIME falls back to octet-stream. */
   readonly declaredMimeType: string;
   /** UNTRUSTED transport hint; sanitized before it becomes display metadata. */
   readonly declaredFilename: string;
@@ -434,8 +431,8 @@ export class AttachmentsService {
    * Deliberately the SAME saga as `uploadImage`, step for step, using the same
    * `reserveQuota`, the same `compensate` ordering, the same idempotency record,
    * and the same audit + outbox intent. Only the middle differs: there is no
-   * decoder, so exactly one object is written (`original`, the sniffed bytes
-   * verbatim), `width`/`height` stay `null`, and no derived variant is produced.
+   * decoder or type/content check. Exactly one object is written (`original`,
+   * the uploaded bytes verbatim), `width`/`height` stay `null`, and no derived variant is produced.
    *
    * Bytes are buffered in memory rather than spooled to a temporary file. The
    * ceiling is `maximumFileUploadBytes` (50 MiB by default), the multipart parser
@@ -455,27 +452,20 @@ export class AttachmentsService {
       requestId: input.requestId,
     });
 
-    // Re-run admission here rather than trusting the transport's routing: a
-    // service method is responsible for its own preconditions, and this is the
-    // only thing standing between a mis-wired controller and an image or an
-    // unrecognised payload being stored as a generic file.
-    const admission = admitUpload(input.buffer, input.declaredFilename);
-    if (!admission.ok || admission.admitted.kind !== "file") {
-      // Refused before any row exists, so a rejected payload never leaves a
-      // `failed` row behind for the sweeper to reconcile.
-      throw new ApiHttpException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, {
-        code: "UNSUPPORTED_MEDIA_TYPE",
-        message: "The uploaded file type is not supported.",
+    if (input.buffer.byteLength === 0) {
+      throw new ApiHttpException(HttpStatus.BAD_REQUEST, {
+        code: "VALIDATION_ERROR",
+        message: "The uploaded file is empty.",
       });
     }
-    const admitted = admission.admitted;
+    const mimeType = descriptiveMimeType(input.declaredMimeType);
     if (input.buffer.byteLength > this.maximumFileUploadBytes) {
       throw new ApiHttpException(HttpStatus.PAYLOAD_TOO_LARGE, {
         code: "PAYLOAD_TOO_LARGE",
         message: "The uploaded file is larger than the allowed size.",
       });
     }
-    const names = sanitizeUploadFilename(input.declaredFilename, admitted.extension, "file");
+    const names = sanitizeFileAttachmentFilename(input.declaredFilename);
 
     return this.authorizationEntry.run(operation, async () => {
       const attachmentId = randomUUID();
@@ -483,15 +473,16 @@ export class AttachmentsService {
         workspaceId: input.workspaceId,
         attachmentId,
         variant: "original",
-        // Every generic type maps to `.bin`, which keeps the key vocabulary
-        // closed and stops the key hinting at the payload's contents.
-        extension: attachmentObjectExtension(admitted.mimeType),
+        extension: originalAttachmentObjectExtension(names.filename),
       });
       const idempotency = createApiIdempotencyIdentity({
         actorUserId: input.principal.userId,
         operation: `attachment.upload:${input.workspaceId}`,
         key: input.idempotencyKey,
         payload: {
+          kind: "file",
+          filename: names.filename,
+          mimeType,
           noteId: input.noteId,
           sizeBytes: input.buffer.byteLength,
           contentHash: createHash("sha256").update(input.buffer).digest("hex"),
@@ -515,7 +506,7 @@ export class AttachmentsService {
             workspaceId: activeWorkspaceId(this.tenantContext),
             originalName: names.originalName,
             filename: names.filename,
-            mimeType: admitted.mimeType,
+            mimeType,
             sizeBytes: input.buffer.byteLength,
             storageKey: originalKey,
             mediaType: "file" as const,
@@ -529,7 +520,7 @@ export class AttachmentsService {
         await tx.insert(attachments).values(values);
         await this.writeAudit(tx, "uploadStarted", attachmentId, input, {
           sizeBytes: input.buffer.byteLength,
-          mimeType: admitted.mimeType,
+          mimeType,
         });
         await storeApiIdempotency(tx, idempotency, attachmentId);
         return { replayOf: null } as const;
@@ -546,7 +537,7 @@ export class AttachmentsService {
       try {
         // --- Step 2: bytes. No transaction is open across this boundary. ---
         await this.objects.putObject(ATTACHMENTS_BUCKET, originalKey, input.buffer, {
-          contentType: admitted.mimeType,
+          contentType: mimeType,
           contentLength: input.buffer.byteLength,
           cacheControl: CONTENT_CACHE_CONTROL,
         });
@@ -559,7 +550,7 @@ export class AttachmentsService {
             width: 0,
             height: 0,
             bytes: input.buffer.byteLength,
-            mimeType: admitted.mimeType,
+            mimeType,
           },
         };
 
@@ -576,7 +567,7 @@ export class AttachmentsService {
             );
           await this.recordMutation(tx, "created", attachmentId, input, {
             sizeBytes: input.buffer.byteLength,
-            mimeType: admitted.mimeType,
+            mimeType,
           });
           // Part 51.3: same `hasAttachments` flip as the image ready path.
           await this.searchIndexProducer.scheduleSearchSync(tx, input.workspaceId, [input.noteId], {
@@ -659,13 +650,6 @@ export class AttachmentsService {
       if (row.processingStatus !== "ready") return this.notFound();
       const variant = this.resolveVariant(row.variants, input.variant, row.mediaType);
       if (variant === null) return this.notFound();
-      // Part 44 defence in depth: a generic-file row may only ever be streamed
-      // as one of the types admission can produce. A hand-edited or corrupted
-      // `mime_type` therefore cannot make the download route advertise
-      // something the admission gate would never have accepted.
-      if (row.mediaType === "file" && !SERVABLE_FILE_MIME_TYPES.has(variant.mimeType)) {
-        return this.notFound();
-      }
       // Storage being switched off is an OPERATOR condition, not a caller
       // mistake: surface it as a stable 503 rather than letting the raw
       // `ObjectStorageDisabledError` escape as an anonymous 500. The write path
@@ -681,10 +665,13 @@ export class AttachmentsService {
       );
       return Object.freeze({
         stream,
-        mimeType: variant.mimeType,
+        mimeType: row.mediaType === "file" ? "application/octet-stream" : variant.mimeType,
         contentLength: stat.size,
         etag: stat.etag,
-        filename: row.filename,
+        filename:
+          row.mediaType === "file"
+            ? sanitizeFileAttachmentFilename(row.originalName || row.filename).filename
+            : row.filename,
         mediaType: row.mediaType,
       });
     });
@@ -733,11 +720,7 @@ export class AttachmentsService {
       return null;
     const variant = this.resolveVariant(attachment.variants, "full", attachment.mediaType);
     if (variant === null) return null;
-    if (
-      !(attachment.mediaType === "image"
-        ? SERVABLE_IMAGE_MIME_TYPES.has(variant.mimeType)
-        : SERVABLE_FILE_MIME_TYPES.has(variant.mimeType))
-    )
+    if (attachment.mediaType === "image" && !SERVABLE_IMAGE_MIME_TYPES.has(variant.mimeType))
       return null;
     const stat = await this.readStorage(() =>
       this.objects.statObject(ATTACHMENTS_BUCKET, variant.key),
@@ -763,10 +746,13 @@ export class AttachmentsService {
     }
     return Object.freeze({
       stream,
-      mimeType: variant.mimeType,
+      mimeType: attachment.mediaType === "file" ? "application/octet-stream" : variant.mimeType,
       contentLength: stat.size,
       etag: stat.etag,
-      filename: attachment.filename,
+      filename:
+        attachment.mediaType === "file"
+          ? sanitizeFileAttachmentFilename(attachment.originalName || attachment.filename).filename
+          : attachment.filename,
       mediaType: attachment.mediaType,
     });
   }
@@ -978,7 +964,7 @@ export class AttachmentsService {
         width: object.width > 0 ? object.width : null,
         height: object.height > 0 ? object.height : null,
         bytes: object.bytes,
-        mimeType: object.mimeType,
+        mimeType: row.mediaType === "file" ? descriptiveMimeType(object.mimeType) : object.mimeType,
       };
     }
     if (record.blur !== undefined) variants.blur = record.blur;
@@ -986,8 +972,11 @@ export class AttachmentsService {
       id: row.id,
       workspaceId: row.workspaceId,
       noteId: row.noteId,
-      displayName: row.filename,
-      mimeType: row.mimeType,
+      displayName:
+        row.mediaType === "file"
+          ? sanitizeFileAttachmentFilename(row.originalName || row.filename).filename
+          : row.filename,
+      mimeType: row.mediaType === "file" ? descriptiveMimeType(row.mimeType) : row.mimeType,
       sizeBytes: row.sizeBytes,
       status: row.processingStatus,
       width: row.width,

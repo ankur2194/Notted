@@ -18,6 +18,7 @@
 import { ATTACHMENT_API_PATHS } from "@notted/shared-types";
 import { attachmentUploadResultSchema, uuidSchema } from "@notted/shared-validators";
 
+import type { UploadKind } from "./image-uploads";
 import type { NoteRequestFailureKind, NoteRequestResult } from "./requests";
 import type { AttachmentMedia } from "@notted/shared-types";
 
@@ -25,6 +26,7 @@ import { apiOrigin } from "@/lib/api/api-origin";
 
 /** The multipart part name; mirrors `ATTACHMENT_UPLOAD_FILE_FIELD` on the API. */
 export const IMAGE_UPLOAD_FILE_FIELD = "file";
+export const ATTACHMENT_UPLOAD_KIND_FIELD = "kind";
 
 /**
  * Ceiling for one upload attempt. Generous, because a 15 MiB image on a poor
@@ -46,6 +48,8 @@ export interface UploadNoteImageRequest {
   readonly workspaceId: string;
   readonly noteId: string;
   readonly file: File;
+  /** Explicit pipeline choice; existing image callers default to image. */
+  readonly kind?: UploadKind;
   /**
    * Reused across **every** retry of the same file. That is the whole point: a
    * retry after a timeout must not be able to create a second attachment for
@@ -112,7 +116,7 @@ function validIds(...ids: readonly string[]): boolean {
 }
 
 /**
- * Upload one image to one note.
+ * Upload one image or original file to one note.
  *
  * The `Origin` header is set by the browser and is deliberately **not** set
  * here: `Origin` is a forbidden header name, so `setRequestHeader` would be
@@ -123,7 +127,7 @@ function validIds(...ids: readonly string[]): boolean {
 export function uploadNoteImage(
   request: UploadNoteImageRequest,
 ): Promise<NoteRequestResult<AttachmentMedia>> {
-  const { workspaceId, noteId, file, idempotencyKey, onProgress, signal } = request;
+  const { workspaceId, noteId, file, kind = "image", idempotencyKey, onProgress, signal } = request;
   if (!validIds(workspaceId, noteId) || idempotencyKey.length < 8 || file.size <= 0) {
     return Promise.resolve({ ok: false, kind: "invalid" });
   }
@@ -206,6 +210,8 @@ export function uploadNoteImage(
     signal?.addEventListener("abort", abortTransfer, { once: true });
 
     const form = new FormData();
+    // Send the routing field first, before the streamed file part.
+    form.append(ATTACHMENT_UPLOAD_KIND_FIELD, kind);
     form.append(IMAGE_UPLOAD_FILE_FIELD, file, file.name);
     xhr.send(form);
   });

@@ -1,14 +1,6 @@
-// Part 40: filename sanitization for DISPLAY metadata only (ADR 0005).
-//
-// The raw user filename never reaches object storage as a key. These two values
-// are stored purely so a download can carry a sensible
-// `Content-Disposition`:
-//
-// - `originalName` keeps the user's own extension (what they think they sent).
-// - `filename` carries the CANONICAL extension for the sniffed type and is what
-//   drives the download disposition. Forcing the extension is what kills
-//   `.svg`-masquerading-as-`.png` and double extensions such as
-//   `invoice.pdf.exe`.
+// Filename sanitation for display/download metadata. Generic files preserve
+// their sanitized original extension; images separately retain canonical
+// rendition naming from their validated type (ADRs 0005 and 0016).
 
 import { stripUnsafeText } from "@notted/shared-validators";
 
@@ -130,9 +122,9 @@ export function sanitizeAttachmentFilename(
 }
 
 /**
- * The general form, shared by images (Part 40) and generic files (Part 44).
+ * The canonical form for validated images, retained for legacy callers.
  *
- * `canonicalExtension` is always supplied by the caller from a CLOSED set that
+ * Image `canonicalExtension` is supplied by the caller from a CLOSED set that
  * the *bytes* selected — the sniffed image type, the sniffed file type, or (for
  * text) the allow-listed extension the file already carried. It is never taken
  * from the user's filename directly. Forcing it is what kills
@@ -167,4 +159,18 @@ export function sanitizeUploadFilename(
     originalName: boundName(guardedStem, extension === "" ? canonical : extension, fallbackStem),
     filename: boundName(guardedStem, canonical, fallbackStem),
   });
+}
+
+/** Generic downloads keep the sanitized original name, including extension case. */
+export function sanitizeFileAttachmentFilename(raw: string): SanitizedAttachmentFilename {
+  // Reuse traversal/control/device-name protection; discard its image-style
+  // canonical projection. An empty canonical suffix never invents an extension.
+  const { originalName } = sanitizeUploadFilename(raw, "", "file");
+  return Object.freeze({ originalName, filename: originalName });
+}
+
+/** Preserve all suffixes (for example .tar.gz), with no MIME-based selection. */
+export function originalAttachmentObjectExtension(filename: string): string {
+  const dot = filename.indexOf(".");
+  return dot <= 0 ? "" : filename.slice(dot);
 }

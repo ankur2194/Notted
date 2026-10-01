@@ -203,7 +203,9 @@ export function uploadFailureMessage(
   const label = fileName.length > 0 ? fileName : `This ${noun}`;
   switch (failure.kind) {
     case "invalid":
-      return `${label} was rejected as an unsupported or oversized ${noun}.`;
+      return kind === "file"
+        ? `${label} could not be uploaded. Check that it is nonempty and within the file size limit.`
+        : `${label} was rejected as an unsupported or oversized image.`;
     case "forbidden-or-not-found":
       return `You do not have permission to add ${noun}s to this note, so ${label} was not uploaded.`;
     case "version-conflict":
