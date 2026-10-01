@@ -35,7 +35,7 @@ const RESERVED_DEVICE_NAMES = new Set([
  * package and this app reads it — never the reverse.
  *
  * `WINDOWS_ILLEGAL` and `RESERVED_DEVICE_NAMES` stay here: those are filesystem
- * concerns, not text-safety ones, and no shared consumer has them.
+ * concerns, not display-text concerns, and no shared consumer has them.
  */
 const WINDOWS_ILLEGAL = /[<>:"/\\|?*]/gu;
 
@@ -49,28 +49,6 @@ export interface SanitizedAttachmentFilename {
 
 export function canonicalDisplayExtension(sniffed: SniffedImageType): string {
   return DISPLAY_EXTENSION_BY_TYPE[sniffed];
-}
-
-/**
- * The lowercased, dot-prefixed extension an untrusted filename declares, or `""`.
- *
- * Part 44. This is an ADMISSION INPUT, never a type and never part of a key. It
- * feeds exactly two closed-set lookups: the text allow-list
- * (`ATTACHMENT_TEXT_EXTENSIONS`) and the DOCX/XLSX-versus-plain-ZIP decision in
- * `sniffFileMediaType`. Because both consumers compare it against a closed set,
- * an attacker-chosen value can only ever fail to match — it cannot introduce a
- * new type, a new extension, or a new path segment.
- *
- * Path separators and control/bidi characters are stripped first, for the same
- * reason `sanitizeAttachmentFilename` strips them: a hidden separator or an
- * override could otherwise make `evil.exe` present itself as `.txt`. The result
- * is bounded to a short run of alphanumerics, so `".тхт"` or a 200-character
- * pseudo-extension simply yields `""`.
- */
-export function declaredFileExtension(raw: string): string {
-  const cleaned = stripUnsafeText(basename(raw).normalize("NFC")).split(/[/\\]/u).pop() ?? "";
-  const match = /\.([A-Za-z0-9]{1,10})$/u.exec(cleaned);
-  return match?.[1] === undefined ? "" : `.${match[1].toLowerCase()}`;
 }
 
 function basename(raw: string): string {
@@ -122,11 +100,11 @@ export function sanitizeAttachmentFilename(
 }
 
 /**
- * The canonical form for validated images, retained for legacy callers.
+ * The canonical form for validated images. Generic files reuse only its
+ * original-name sanitation through sanitizeFileAttachmentFilename.
  *
  * Image `canonicalExtension` is supplied by the caller from a CLOSED set that
- * the *bytes* selected — the sniffed image type, the sniffed file type, or (for
- * text) the allow-listed extension the file already carried. It is never taken
+ * the *bytes* selected — the sniffed image type. It is never taken
  * from the user's filename directly. Forcing it is what kills
  * `invoice.pdf.exe`: the stem is preserved verbatim, but the extension a
  * download will carry is the one the content actually is.

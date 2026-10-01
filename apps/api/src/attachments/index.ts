@@ -10,15 +10,6 @@ export {
   ATTACHMENT_VARIANT_FALLBACKS,
 } from "./attachments.constants";
 export {
-  ATTACHMENT_SIGNATURE_HEAD_BYTES,
-  admitUpload,
-  type AdmissionRejection,
-  type AdmissionResult,
-  type AdmittedFileUpload,
-  type AdmittedImageUpload,
-  type AdmittedUpload,
-} from "./attachment-admission";
-export {
   ATTACHMENT_OBJECT_EXTENSIONS,
   ATTACHMENT_OBJECT_KEY_PATTERN,
   ATTACHMENT_VARIANT_NAMES,
@@ -30,15 +21,7 @@ export { AttachmentsController, NoteAttachmentsController } from "./attachments.
 export { AttachmentsModule } from "./attachments.module";
 export { AttachmentsService } from "./attachments.service";
 export {
-  FILE_SIGNATURE_HEAD_BYTES,
-  canonicalFileExtension,
-  sniffFileMediaType,
-  type SniffedFileExtension,
-  type SniffedFileType,
-} from "./file-signature";
-export {
   canonicalDisplayExtension,
-  declaredFileExtension,
   sanitizeAttachmentFilename,
   sanitizeUploadFilename,
 } from "./filename";
@@ -75,10 +58,3 @@ export {
 } from "./image-variants";
 export { parseSingleFileUpload } from "./multipart-upload.parser";
 export { scanSvgSource, type SvgRejectionReason, type SvgScanResult } from "./svg-safety";
-export {
-  TEXT_SAFETY_SCAN_BYTES,
-  isAllowedTextExtension,
-  scanTextUpload,
-  type TextRejectionReason,
-  type TextScanResult,
-} from "./text-safety";

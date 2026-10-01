@@ -32,8 +32,8 @@ export type AttachmentIconKind = "pdf" | "document" | "spreadsheet" | "archive" 
  * The mapping is intentionally coarse: a reader needs to tell "a document" from
  * "an archive" at a glance, not to identify RAR versus 7-Zip. Everything text
  * lands on `text` or `code`, distinguished by the *filename extension* rather
- * than the MIME type, because every code file is stored as `text/plain` (see
- * `ATTACHMENT_TEXT_MIME_TYPE`) and the extension is the only surviving hint.
+ * than the MIME type. Generic MIME is descriptive metadata, and existing files
+ * may carry a broad text label, so the original extension supplies the hint.
  */
 const CODE_EXTENSIONS: ReadonlySet<string> = new Set([
   ".js",
