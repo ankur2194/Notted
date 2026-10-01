@@ -3568,7 +3568,7 @@
         "tags": [
           "Attachments"
         ],
-        "description": "multipart/form-data upload; the request body has no committed Zod schema.",
+        "description": "Multipart upload with one file part and optional kind=file|image (default file). Generic files are stored byte-for-byte with sanitized original filenames and extensions, without content/type inspection or extension allow-lists. Explicit image uploads retain image validation/processing. Authorization, quota and configured size limits apply to both paths.",
         "parameters": [
           {
             "name": "workspaceId",
@@ -3589,6 +3589,33 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "file",
+                      "image"
+                    ],
+                    "default": "file"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "2XX": {
             "description": "Upload an attachment.",
@@ -8530,10 +8557,7 @@
             "maxLength": 255
           },
           "mimeType": {
-            "type": "string",
-            "minLength": 3,
-            "maxLength": 100,
-            "pattern": "^[\\w!#$&^.+-]+\\/[\\w!#$&^.+-]+$"
+            "$ref": "#/components/schemas/AttachmentMimeType"
           },
           "sizeBytes": {
             "type": "integer",
@@ -8606,6 +8630,12 @@
           "file"
         ]
       },
+      "AttachmentMimeType": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 100,
+        "pattern": "^[\\w!#$&^.+-]+\\/[\\w!#$&^.+-]+$"
+      },
       "AttachmentStatus": {
         "type": "string",
         "enum": [
@@ -8660,10 +8690,7 @@
             "maximum": 9007199254740991
           },
           "mimeType": {
-            "type": "string",
-            "minLength": 3,
-            "maxLength": 100,
-            "pattern": "^[\\w!#$&^.+-]+\\/[\\w!#$&^.+-]+$"
+            "$ref": "#/components/schemas/AttachmentMimeType"
           }
         },
         "required": [

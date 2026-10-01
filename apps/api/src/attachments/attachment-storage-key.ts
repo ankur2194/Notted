@@ -11,7 +11,8 @@
 //   Knowing both UUIDs is therefore not enough to guess a key, and every
 //   variant key is immutable: reprocessing writes new keys instead of
 //   overwriting, so a cached read can never observe a torn object.
-// - `{ext}` is the canonical extension of the SNIFFED type, never the user's.
+// - `{ext}` is the original sanitized suffix for files, and a generated rendition
+//   suffix for images. Extensionless files have no suffix.
 //   It is operator convenience only and carries no authority.
 //
 // IMPORTANT: a key is NOT an authorization boundary. `parseAttachmentObjectKey`
@@ -41,7 +42,7 @@ export const ATTACHMENT_OBJECT_EXTENSIONS = Object.freeze([
   ".bin",
 ] as const);
 
-export type AttachmentObjectExtension = (typeof ATTACHMENT_OBJECT_EXTENSIONS)[number];
+export type AttachmentObjectExtension = string;
 
 const OBJECT_EXTENSION_BY_MIME_TYPE: Readonly<Record<string, AttachmentObjectExtension>> =
   Object.freeze({
@@ -55,7 +56,7 @@ const OBJECT_EXTENSION_BY_MIME_TYPE: Readonly<Record<string, AttachmentObjectExt
 const UUID_PATTERN = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/u;
 
 export const ATTACHMENT_OBJECT_KEY_PATTERN =
-  /^w\/([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12})\/a\/([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12})\/(original|full|medium|thumbnail)\/([\da-f]{32})(\.jpg|\.png|\.gif|\.webp|\.svg|\.bin)$/u;
+  /^w\/([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12})\/a\/([\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12})\/(original|full|medium|thumbnail)\/([\da-f]{32})(\.[^/\\\p{Cc}]{1,254}|)$/u;
 
 export interface BuildAttachmentObjectKeyInput {
   readonly workspaceId: string;
@@ -85,14 +86,23 @@ function assertUuid(value: string, label: string): string {
   return normalized;
 }
 
+/** Structural suffix validation only: no format allow-list or content checks. */
+function isSafeAttachmentObjectExtension(extension: string): boolean {
+  return (
+    /^(?:\.[^/\\\p{Cc}]+)?$/u.test(extension) &&
+    Buffer.byteLength(extension, "utf8") <= 255 &&
+    (extension === "" || !extension.endsWith("."))
+  );
+}
+
 export function buildAttachmentObjectKey(input: BuildAttachmentObjectKeyInput): string {
   const workspaceId = assertUuid(input.workspaceId, "workspaceId");
   const attachmentId = assertUuid(input.attachmentId, "attachmentId");
   if (!ATTACHMENT_VARIANT_NAMES.includes(input.variant)) {
     throw new Error("attachment object key requires a known variant");
   }
-  if (!ATTACHMENT_OBJECT_EXTENSIONS.includes(input.extension)) {
-    throw new Error("attachment object key requires a known extension");
+  if (!isSafeAttachmentObjectExtension(input.extension)) {
+    throw new Error("attachment object key requires a safe extension");
   }
   const token = randomBytes(16).toString("hex");
   return `w/${workspaceId}/a/${attachmentId}/${input.variant}/${token}${input.extension}`;
@@ -111,7 +121,8 @@ export function parseAttachmentObjectKey(key: string): ParsedAttachmentObjectKey
     attachmentId === undefined ||
     variant === undefined ||
     token === undefined ||
-    extension === undefined
+    extension === undefined ||
+    !isSafeAttachmentObjectExtension(extension)
   ) {
     return null;
   }

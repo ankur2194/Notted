@@ -1,11 +1,7 @@
 import { MAX_ATTACHMENT_UPLOAD_BYTES, MAX_IMAGE_UPLOAD_BYTES } from "@notted/shared-validators";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  attachmentFileExtension,
-  checkAttachmentFile,
-  checkUploadFile,
-} from "./attachment-uploads";
+import { checkAttachmentFile, checkUploadFile } from "./attachment-uploads";
 import { createImageUploadManager, uploadFailureMessage } from "./image-uploads";
 
 import type { ImageUploadEvent, ImageUploadManagerOptions } from "./image-uploads";
@@ -25,26 +21,12 @@ function sizedFile(name: string, type: string, size: number): File {
   return file;
 }
 
-describe("attachmentFileExtension", () => {
-  it("returns only the final segment, lower-cased, or an empty string", () => {
-    expect(attachmentFileExtension("report.PDF")).toBe(".pdf");
-    expect(attachmentFileExtension("logs.tar.gz")).toBe(".gz");
-    // The double-extension case the server also refuses: the last segment wins,
-    // so `invoice.pdf.exe` reads as `.exe` and never as `.pdf`.
-    expect(attachmentFileExtension("invoice.pdf.exe")).toBe(".exe");
-    expect(attachmentFileExtension("archive")).toBe("");
-    expect(attachmentFileExtension(".gitignore")).toBe("");
-    expect(attachmentFileExtension("trailing.")).toBe("");
-  });
-});
-
 describe("checkAttachmentFile", () => {
   it.each([
     ["report.pdf", "application/pdf"],
     ["budget.xlsx", ""],
     ["logs.tar.gz", "application/gzip"],
-    // Browsers report wildly inconsistent types for these, frequently "", which
-    // is exactly why the extension is the gate rather than `file.type`.
+    // Browser MIME metadata does not affect generic attachment acceptance.
     ["main.py", ""],
     ["data.csv", "application/vnd.ms-excel"],
     ["notes.md", ""],
@@ -52,26 +34,17 @@ describe("checkAttachmentFile", () => {
     expect(checkAttachmentFile(sizedFile(name, type, 1_024))).toEqual({ ok: true });
   });
 
-  it("refuses an extension outside the allow list", () => {
-    const result = checkAttachmentFile(sizedFile("installer.exe", "application/octet-stream", 512));
-    expect(result).toEqual({
-      ok: false,
-      reason: "type",
-      message: "installer.exe is not a supported file type.",
-    });
-  });
-
-  it("refuses a double extension whose final segment is not allowed", () => {
-    // The same defence the server applies by forcing the extension to the
-    // canonical one for the sniffed type.
-    expect(checkAttachmentFile(sizedFile("invoice.pdf.exe", "application/pdf", 512)).ok).toBe(
-      false,
-    );
-  });
-
-  it("admits an extensionless file only when the browser typed it as a known binary", () => {
-    expect(checkAttachmentFile(sizedFile("archive", "application/zip", 512)).ok).toBe(true);
-    expect(checkAttachmentFile(sizedFile("archive", "", 512)).ok).toBe(false);
+  it.each([
+    ["installer.exe", "application/octet-stream"],
+    ["invoice.pdf.exe", "application/pdf"],
+    ["archive", ""],
+    [".gitignore", ""],
+    ["custom.UNKNOWN", "application/x-custom"],
+    ["photo.png", "image/png"],
+    ["budget.XLSX", "application/zip"],
+    ["memo.docx", "application/zip"],
+  ])("admits %s without inspecting its extension or type (%s)", (name, type) => {
+    expect(checkAttachmentFile(sizedFile(name, type, 512))).toEqual({ ok: true });
   });
 
   it("reports an empty file as empty rather than as the wrong type or size", () => {
@@ -111,9 +84,8 @@ describe("checkUploadFile", () => {
     // The same PDF is not an image, and the image path must say so.
     expect(checkUploadFile(pdf, "image").ok).toBe(false);
     expect(checkUploadFile(png, "image").ok).toBe(true);
-    // An image is never admitted through the generic-file path; `CustomImage`
-    // owns those and the extension allow-list has no image extensions in it.
-    expect(checkUploadFile(png, "file").ok).toBe(false);
+    // Choosing Attach file preserves an image as an ordinary original file.
+    expect(checkUploadFile(png, "file").ok).toBe(true);
   });
 });
 
@@ -191,20 +163,20 @@ describe("shared upload queue with a kind discriminator", () => {
     });
     const [item] = manager.enqueue(
       target,
-      [sizedFile("installer.exe", "application/octet-stream", 512)],
+      [sizedFile("installer.exe", "application/octet-stream", 0)],
       "file",
     );
 
     expect(item?.status).toBe("error");
     // A rejected file would be rejected identically forever, so no Retry.
     expect(item?.retryable).toBe(false);
-    expect(item?.message).toContain("not a supported file type");
+    expect(item?.message).toContain("is empty");
     expect(upload).not.toHaveBeenCalled();
   });
 
   it("writes failure copy about a file rather than about an image", () => {
     expect(uploadFailureMessage("report.pdf", { ok: false, kind: "invalid" }, "file")).toContain(
-      "unsupported or oversized file",
+      "nonempty and within the file size limit",
     );
     expect(
       uploadFailureMessage("report.pdf", { ok: false, kind: "forbidden-or-not-found" }, "file"),

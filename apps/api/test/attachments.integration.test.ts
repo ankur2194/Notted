@@ -216,6 +216,27 @@ const FILE_CATEGORIES: readonly {
     mimeType: "text/plain",
     displayName: "payload.html",
   },
+  {
+    label: "arbitrary binary with uppercase extension",
+    bytes: Buffer.from([0, 255, 3]),
+    filename: "payload.CUSTOM",
+    mimeType: "image/svg+xml",
+    displayName: "payload.CUSTOM",
+  },
+  {
+    label: "extensionless binary",
+    bytes: Buffer.from([0, 255, 3]),
+    filename: "README",
+    mimeType: "application/octet-stream",
+    displayName: "README",
+  },
+  {
+    label: "compound suffix",
+    bytes: Buffer.from([0, 255, 3]),
+    filename: "archive.tar.gz",
+    mimeType: "text/html",
+    displayName: "archive.tar.gz",
+  },
 ]);
 
 const security = {
@@ -801,9 +822,8 @@ describe.skipIf(!HAS_DATABASE)("Part 40 secure object storage (live PostgreSQL)"
             workspaceId: alpha,
             noteId,
             buffer: category.bytes,
-            // Deliberately a lie on every single case: the declared type is
-            // never persisted and never routes anything.
-            declaredMimeType: "application/octet-stream",
+            // MIME is descriptive metadata only; no content-type admission.
+            declaredMimeType: category.mimeType,
             declaredFilename: category.filename,
             idempotencyKey: `attachment-file-${category.filename}-${suffix}`,
           });
@@ -824,10 +844,12 @@ describe.skipIf(!HAS_DATABASE)("Part 40 secure object storage (live PostgreSQL)"
             variant: "full",
           });
           expect(read.mediaType, category.label).toBe("file");
-          expect(read.mimeType, category.label).toBe(category.mimeType);
+          expect(read.mimeType, category.label).toBe("application/octet-stream");
           expect(read.filename, category.label).toBe(category.displayName);
           expect(read.contentLength, category.label).toBe(category.bytes.byteLength);
-          read.stream.destroy();
+          const downloaded: Buffer[] = [];
+          for await (const chunk of read.stream) downloaded.push(Buffer.from(chunk as Uint8Array));
+          expect(Buffer.concat(downloaded).equals(category.bytes), category.label).toBe(true);
 
           // An image rendition of a generic file does not exist and must not be
           // synthesised from the original.

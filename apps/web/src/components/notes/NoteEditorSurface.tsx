@@ -1,6 +1,6 @@
 "use client";
 
-import { ATTACHMENT_UPLOAD_ACCEPT, safeParseNoteDocument } from "@notted/shared-validators";
+import { safeParseNoteDocument } from "@notted/shared-validators";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -669,7 +669,7 @@ export function NoteEditorSurface({
             ref={images.attachmentInputRef}
             onFiles={images.handlePickedAttachmentFiles}
             label="Choose files to attach"
-            accept={ATTACHMENT_UPLOAD_ACCEPT}
+            accept=""
             testId="note-attachment-file-input"
           />
         </>

@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { IMAGE_UPLOAD_FILE_FIELD, uploadNoteImage } from "./upload-request";
+import {
+  ATTACHMENT_UPLOAD_KIND_FIELD,
+  IMAGE_UPLOAD_FILE_FIELD,
+  uploadNoteImage,
+} from "./upload-request";
 
 const workspaceId = "30000000-0000-4000-8000-000000000001";
 const noteId = "30000000-0000-4000-8000-000000000002";
@@ -150,12 +154,43 @@ describe("uploadNoteImage", () => {
     // forge it, which is exactly what makes the server's check meaningful.
     expect([...xhr.headers.keys()]).not.toContain("Origin");
     expect(xhr.sentBody?.get(IMAGE_UPLOAD_FILE_FIELD)).toBeInstanceOf(File);
+    expect(xhr.sentBody?.get(ATTACHMENT_UPLOAD_KIND_FIELD)).toBe("image");
+    expect(Array.from(xhr.sentBody?.keys() ?? [])).toEqual([
+      ATTACHMENT_UPLOAD_KIND_FIELD,
+      IMAGE_UPLOAD_FILE_FIELD,
+    ]);
     expect(xhr.timeout).toBeGreaterThan(0);
 
     xhr.respond(201, JSON.stringify(attachmentPayload()));
     const result = await promise;
     if (!result.ok) throw new Error(`expected success, got ${result.kind}`);
     expect(result.data.id).toBe(attachmentId);
+  });
+
+  it.each([
+    ["budget.XLSX", "application/zip"],
+    ["memo.docx", "application/zip"],
+    ["archive", ""],
+    ["installer.exe", "application/x-msdownload"],
+    ["photo.png", "image/png"],
+  ])("sends %s as an original file with kind before bytes", async (name, type) => {
+    const file = new File([new Uint8Array([1, 2, 3])], name, { type });
+    const promise = upload({ file, kind: "file" });
+    const xhr = latest();
+    const parts = Array.from(xhr.sentBody?.entries() ?? []);
+    expect(parts.map(([key]) => key)).toEqual([
+      ATTACHMENT_UPLOAD_KIND_FIELD,
+      IMAGE_UPLOAD_FILE_FIELD,
+    ]);
+    expect(parts[0]?.[1]).toBe("file");
+    const uploaded = parts[1]?.[1];
+    expect(uploaded).toBeInstanceOf(File);
+    if (!(uploaded instanceof File)) throw new Error("missing uploaded file");
+    expect(uploaded.name).toBe(name);
+    expect(uploaded.type).toBe(type);
+    expect(uploaded.size).toBe(file.size);
+    xhr.respond(201, JSON.stringify(attachmentPayload()));
+    await promise;
   });
 
   it("reports upload progress, which is the entire reason this is not fetch", async () => {

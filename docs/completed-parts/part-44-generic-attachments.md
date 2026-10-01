@@ -194,3 +194,41 @@ Run by the fix pass after the first review round. Every row below was executed a
 
 - Diagnose and resolve the persistent full-baseline Part 32/47 failures in their owning scope, rerun `pnpm test` under a stable supported resource budget and the complete one-worker Chromium suite with no failed/skipped required journeys; only then change this extension status to Complete. No out-of-scope Part 32/47 product/test change was smuggled into Part 44.
 - A link recipient can keep bytes they downloaded before revocation, and a stream authorized immediately before revocation cannot be recalled. The per-IP request cap is not a byte/concurrent-stream egress cap; review reverse-proxy limits if public traffic warrants them. The API application logger redacts nested capability paths, but upstream access logs require operator configuration.
+
+## Original attachment extensions — 2026-10-01 (In progress)
+
+This user-authorized follow-up supersedes the historical signature/extension admission policy above. See [ADR 0016](../decisions/0016-original-attachment-extensions.md). It is not marked Complete until the current checks run successfully.
+
+### Implementation
+
+- Generic uploads store the unchanged input buffer without signature checks, text scans, format allow-lists, image sniffing or extension rewriting. Nonempty/configured per-file size, auth, tenant/note scope, quota, idempotency and compensation remain enforced.
+- Optional multipart `kind=file|image` defaults to file. Explicit image requests retain the safe image pipeline. First-party requests explicitly send their action kind; external image clients need to send `kind=image`. API/OpenAPI describe the contract.
+- Sanitized original filename/extension case, compound suffixes, arbitrary suffixes and extensionless names survive display, opaque storage keys and download disposition. The cleanup parser understands new suffixes and old keys. Generic MIME is descriptive grammar-checked metadata with an octet-stream fallback, never an upload/download format gate.
+- Generic private/public downloads use application/octet-stream and remain forced attachments with nosniff and sandbox CSP. Legacy reads/listing prefer sanitized originalName, without moving objects or rewriting note JSON. ZIP attachment export names retain extension case/unknown suffixes, including fresh exports of legacy misclassified rows.
+- Shared/frontend generic picker and preflight permit all formats; explicit image action retains its validation and processing.
+
+### Verification and current evidence
+
+Regression coverage includes ZIP-based DOCX/XLSX with content-types after byte 256, byte-identical upload/download, unknown/executable extensions, mismatched MIME/extension, uppercase/compound suffixes, extensionless files, image bytes attached as files, invalid MIME fallback, explicit pipeline routing, legacy names, key parser compatibility, public reference denial, quota and authorization. Fresh ZIP exports of legacy misclassified files now use originalName. No dependency or database migration was added.
+
+Checks used Node 22.22.1 / pnpm 10.34.5; the frozen installation succeeded without modifying dependencies or the lockfile. Package gates ran sequentially.
+
+| Command | Result |
+| --- | --- |
+| `pnpm build:packages` | Pass |
+| `pnpm --filter @notted/api openapi:generate` | Pass; committed document regenerated |
+| `pnpm --filter @notted/shared-types --filter @notted/shared-validators test` | Pass: 51 shared-types and 431 shared-validator tests |
+| `pnpm --filter @notted/api exec vitest run --maxWorkers=2` | Pass: 2,827 tests; 207 infrastructure-dependent tests skipped |
+| `pnpm --filter @notted/web exec vitest run --maxWorkers=2` | Pass: 1,846 tests after updating the outdated unknown-format drop assertion; its 41-test suite also passed in isolation |
+| `pnpm type-check` | Pass across all four packages after final test edits |
+| `pnpm lint` | Pass across all packages and root scripts; final changed image-transfer test also linted separately |
+| `pnpm format:check` | Pass; final changed image-transfer test formatted separately |
+| `pnpm --filter @notted/api build` | Pass |
+| `git diff --check` | Pass |
+| `pnpm build` | Blocked: tsx CLI cannot bind its IPC socket in this environment (EPERM). The native-loader production preflight also reports missing NEXT_PUBLIC_APP_URL/API_URL/WS_URL. No production web bundle is claimed |
+| Live PostgreSQL/MinIO and Chromium journeys | Not run: Docker/services unavailable in this environment; browser regression authored |
+| `graphify update .` | Unavailable: graphify executable not installed |
+
+Independent source review found one fresh-ZIP-export legacy-name inconsistency; it was fixed and the export-source regression passed in the full API suite. Review confirmed retained auth/tenant/public-reference checks, quota, private storage, compensation and idempotency. Initial MIME expectation, TypeScript fixture typing and regex lint failures were corrected before the successful final checks.
+
+The follow-up remains **In progress for the live/browser/production verification gate**. The implementation and unit checks are reviewable in a draft pull request. Cached legacy note JSON labels and previously generated bundles are not backfilled; new generic downloads and fresh ZIP exports use authoritative original names. External image-upload clients must send kind=image; first-party clients already send kind for both paths.

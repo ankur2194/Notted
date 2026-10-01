@@ -380,17 +380,12 @@ describe("drop", () => {
     expect(onUpload).not.toHaveBeenCalled();
   });
 
-  /**
-   * Part 44 changed what "no image" means. A `.txt` drop is no longer inert —
-   * it is a legitimate ATTACHMENT, handled by `CustomAttachment`'s transfer
-   * plugin. So the "nothing happens" case has to be a file on NEITHER
-   * allow-list, and the file that used to stand for it gets its own assertion
-   * below.
-   */
-  it("ignores a drop whose file is on neither allow-list", () => {
+  it("routes an arbitrary non-image file to the attachment uploader", () => {
     const onUpload = vi.fn();
     const onAttachmentUpload = vi.fn();
     const editor = makeEditor({ onUpload, onAttachmentUpload });
+    // jsdom has no pointer layout; the browser suite covers actual coordinates.
+    vi.spyOn(editor.view, "posAtCoords").mockReturnValue({ pos: 1, inside: -1 });
     expect(
       drop(
         editor,
@@ -402,9 +397,12 @@ describe("drop", () => {
         },
         { clientX: 0, clientY: 0 },
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(onUpload).not.toHaveBeenCalled();
-    expect(onAttachmentUpload).not.toHaveBeenCalled();
+    expect(onAttachmentUpload).toHaveBeenCalledTimes(1);
+    const request = onAttachmentUpload.mock.calls[0]?.[0] as AttachmentUploadRequest;
+    expect(request.files.map((entry) => entry.name)).toEqual(["installer.exe"]);
+    expect(request.insertAt).toBe(1);
   });
 
   it("routes a dropped text file to the attachment uploader, not the image one", () => {

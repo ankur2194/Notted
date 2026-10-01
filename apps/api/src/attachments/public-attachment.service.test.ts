@@ -40,6 +40,7 @@ function harness(mediaType: "image" | "file" = "file") {
     attachment: {
       id: attachmentId,
       filename: "report.pdf",
+      originalName: "report.pdf",
       mediaType,
       variants: {
         [mediaType === "image" ? "full" : "original"]: {
@@ -117,7 +118,7 @@ describe("AttachmentsService.readPublicContent", () => {
     expect(test.joins).toHaveLength(0);
     expect(await test.service.readPublicContent({ token, attachmentId })).toMatchObject({
       mediaType: "file",
-      mimeType: "application/pdf",
+      mimeType: "application/octet-stream",
     });
     expect(test.joins).toHaveLength(2);
     expect(test.joins.join(" ")).toContain('"attachments"."workspace_id" = "notes"."workspace_id"');
@@ -140,7 +141,7 @@ describe("AttachmentsService.readPublicContent", () => {
     expect(test.statObject).not.toHaveBeenCalled();
   });
 
-  it("denies unreferenced, wrong-node-type and unsafe variants before storage", async () => {
+  it("denies unreferenced and wrong-node-type files before storage", async () => {
     const test = harness();
     test.row.content = {
       type: "doc",
@@ -149,10 +150,21 @@ describe("AttachmentsService.readPublicContent", () => {
     expect(await test.service.readPublicContent({ token, attachmentId })).toBeNull();
     test.row.content = document("image");
     expect(await test.service.readPublicContent({ token, attachmentId })).toBeNull();
-    test.row.content = document("file");
-    test.row.attachment.variants.original!.mimeType = "text/html";
-    expect(await test.service.readPublicContent({ token, attachmentId })).toBeNull();
     expect(test.statObject).not.toHaveBeenCalled();
+  });
+
+  it("downloads arbitrary generic MIME and restores legacy original extension", async () => {
+    const test = harness();
+    test.row.attachment.variants.original!.mimeType = "text/html";
+    test.row.attachment.filename = "report.zip";
+    test.row.attachment.originalName = "report.DOCX";
+    const content = await test.service.readPublicContent({ token, attachmentId });
+    expect(content).toMatchObject({
+      mediaType: "file",
+      mimeType: "application/octet-stream",
+      filename: "report.DOCX",
+    });
+    content?.stream.destroy();
   });
 
   it("allows raster images but rejects unsafe image renditions and missing objects", async () => {

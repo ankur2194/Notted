@@ -197,11 +197,8 @@ export function useImageUploads({
 
   if (managerRef.current === null) {
     managerRef.current = createImageUploadManager({
-      // One endpoint serves both kinds: `POST …/notes/:id/attachments` sniffs
-      // the bytes server-side and routes to `uploadImage` or `uploadFile`
-      // itself, so the client never gets to choose which pipeline runs. The
-      // transport is therefore shared verbatim and `call.kind` is carried only
-      // so the queue's own copy and pre-flight can differ.
+      // The queue carries the author's explicit choice to the shared endpoint.
+      // Generic files keep their bytes and extension; images use image processing.
       upload: (call) => uploadNoteImage(call),
       check: checkUploadFile,
       onEvent: (event) => {
@@ -235,11 +232,8 @@ export function useImageUploads({
           directoryRef.current.upsert(entry);
           cacheAttachment(event.attachment);
           if (event.item.kind === "file") {
-            // The node caches the **server's** name, type, and size, not the
-            // browser's: the API sanitizes the filename, forces the extension to
-            // the sniffed type, and re-measures the length, so the client's
-            // `File` fields are already known to be the less accurate pair. The
-            // directory overrides all three on the next listing anyway.
+            // Cache the server's sanitized name and measured size. Generic
+            // files retain their original extension and are never reclassified.
             controller.completeAttachment(event.item.id, {
               attachmentId: event.attachment.id,
               name: attachmentNodeName(event.attachment, event.item.fileName),

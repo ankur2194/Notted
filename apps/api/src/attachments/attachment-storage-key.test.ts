@@ -41,7 +41,7 @@ describe("attachment object keys", () => {
     expect(parseAttachmentObjectKey(key)?.workspaceId).toBe(workspaceId);
   });
 
-  it("refuses non-UUID identifiers, unknown variants, and unknown extensions", () => {
+  it("refuses non-UUID identifiers, unknown variants, and unsafe suffixes", () => {
     expect(() =>
       buildAttachmentObjectKey({
         workspaceId: "../../etc",
@@ -73,9 +73,9 @@ describe("attachment object keys", () => {
         attachmentId,
         variant: "original",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        extension: ".php" as any,
+        extension: ".php/../secret" as any,
       }),
-    ).toThrow("known extension");
+    ).toThrow("safe extension");
   });
 
   it("generates a fresh 32-hex token per object so keys are unguessable and immutable", () => {
@@ -102,12 +102,25 @@ describe("attachment object keys", () => {
       `x/${workspaceId}/a/${attachmentId}/original/${"a".repeat(32)}.jpg`,
       `w/${workspaceId}/${attachmentId}/original/${"a".repeat(32)}.jpg`,
       `w/${workspaceId}/a/${attachmentId}/evil/${"a".repeat(32)}.jpg`,
-      `w/${workspaceId}/a/${attachmentId}/original/${"a".repeat(32)}.php`,
+      `w/${workspaceId}/a/${attachmentId}/original/${"a".repeat(32)}.jpg\0`,
       `w/${workspaceId}/a/${attachmentId}/original/${"a".repeat(32)}.jpg/../secret`,
     ]) {
       expect(parseAttachmentObjectKey(key)).toBeNull();
     }
   });
+
+  it.each([".XLSX", ".docx", ".tar.gz", ".custom-format", "", ".данные", ".c++"])(
+    "preserves and parses generic suffix %s including extensionless keys",
+    (extension) => {
+      const key = buildAttachmentObjectKey({
+        workspaceId,
+        attachmentId,
+        variant: "original",
+        extension,
+      });
+      expect(parseAttachmentObjectKey(key)?.extension).toBe(extension);
+    },
+  );
 
   it("maps stored MIME types to canonical extensions and falls back to .bin", () => {
     expect(attachmentObjectExtension("image/jpeg")).toBe(".jpg");

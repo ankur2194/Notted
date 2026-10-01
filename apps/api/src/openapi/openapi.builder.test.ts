@@ -177,6 +177,26 @@ describe("buildOpenApiDocument", () => {
     });
   });
 
+  it("documents original-byte generic uploads and explicit multipart image routing", () => {
+    const methods = document.paths[
+      "/api/v1/workspaces/{workspaceId}/notes/{noteId}/attachments"
+    ] as Record<string, Record<string, unknown>>;
+    expect(methods.post?.requestBody).toMatchObject({
+      content: {
+        "multipart/form-data": {
+          schema: {
+            required: ["file"],
+            properties: {
+              kind: { enum: ["file", "image"], default: "file" },
+              file: { format: "binary" },
+            },
+          },
+        },
+      },
+    });
+    expect(methods.post?.description).toContain("without content/type inspection");
+  });
+
   it("serializes to JSON well under the size the uncollapsed document would reach", () => {
     const serialized = JSON.stringify(document);
     expect(JSON.parse(serialized)).toEqual(document);

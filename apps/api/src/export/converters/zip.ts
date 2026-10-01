@@ -20,12 +20,12 @@
 // UNTRUSTED INPUT: `source.content` and every version's `content` are persisted
 // TipTap JSON handed to `documentToMarkdown`/`JSON.stringify`, neither of which
 // evaluates it. `attachment.filename` is untrusted user text and is reduced to a
-// safe entry name by `sanitizeUploadFilename` — the SAME sanitizer the upload
+// safe entry name by `sanitizeFileAttachmentFilename` — the SAME sanitizer the upload
 // path uses, not a second one that would eventually disagree with it.
 
 import { zipSync, strToU8 } from "fflate";
 
-import { declaredFileExtension, sanitizeUploadFilename } from "../../attachments/filename";
+import { sanitizeFileAttachmentFilename } from "../../attachments/filename";
 import { EXPORT_FORMAT_MEDIA } from "../export-renderers";
 
 import { documentToMarkdown } from "./markdown";
@@ -97,22 +97,14 @@ const MAX_DEDUPLICATION_ATTEMPTS = 100;
 /**
  * Reduce an untrusted display filename to a safe, unique archive entry name.
  *
- * `sanitizeUploadFilename` does the actual work — it is the sanitizer the upload
- * path already trusts: it strips path separators, control and bidi characters
- * and Windows-illegal characters, guards reserved device names, and bounds the
- * length in bytes. The extension it forces is the one the ROW already carries
- * (`declaredFileExtension` reads it back off the same sanitized column), so
- * nothing here can introduce an extension the stored file does not have.
+ * `sanitizeFileAttachmentFilename` strips unsafe path/control characters while
+ * preserving the original extension, its case and compound suffixes.
  *
  * The final guard is fail-closed rather than a second sanitizer: if anything
  * that could still read as a path survives, the attachment id becomes the name.
  */
 function entryName(attachment: ExportBundleAttachment, used: Set<string>): string {
-  const sanitized = sanitizeUploadFilename(
-    attachment.filename,
-    declaredFileExtension(attachment.filename),
-    "attachment",
-  ).filename;
+  const sanitized = sanitizeFileAttachmentFilename(attachment.filename).filename;
   const base =
     sanitized === "" || sanitized === "." || sanitized === ".." || /[/\\]/u.test(sanitized)
       ? attachment.attachmentId

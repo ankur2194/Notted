@@ -38,20 +38,7 @@ export const ATTACHMENT_INLINE_MIME_TYPES = Object.freeze([
   "image/webp",
 ] as const);
 
-/**
- * Signature-verified generic file types (Part 44).
- *
- * Every member of this list is admitted **only** when the server's hand-written
- * magic-byte sniffer (`apps/api/src/attachments/file-signature.ts`) recognises
- * the payload. The declared `Content-Type` and the filename extension are never
- * trusted; the extension is consulted for exactly one thing — telling the two
- * OOXML members apart from a plain ZIP, because DOCX and XLSX *are* ZIP
- * containers and share its magic bytes.
- *
- * `Notted.md` §6 names the supported set: PDF, DOCX, RTF (documents), XLSX
- * (spreadsheets), and ZIP/RAR/7Z/TAR (archives). GZIP is included because a
- * `.tar.gz` is the ordinary way a TAR arrives.
- */
+/** Common MIME labels for icons and legacy classifiers; never an upload allow-list. */
 export const ATTACHMENT_FILE_MIME_TYPES = Object.freeze([
   "application/pdf",
   "application/zip",
@@ -64,19 +51,7 @@ export const ATTACHMENT_FILE_MIME_TYPES = Object.freeze([
   "application/rtf",
 ] as const);
 
-/**
- * The single MIME type every admitted text or code file is stored as.
- *
- * `Notted.md` §6 lists TXT/MD/CSV/JSON/XML/JS/TS/HTML/CSS/PY. None of them has
- * a magic-byte signature, so they are admitted by an **extension allow-list plus
- * a UTF-8/NUL content scan** rather than by sniffing — and the stored type is
- * normalized to `text/plain` regardless of what the client declared. That
- * normalization is what makes an uploaded `.html` safe: the row can never claim
- * `text/html`, so no code path anywhere can be talked into rendering it. It is
- * additionally always served with `Content-Disposition: attachment` and
- * `X-Content-Type-Options: nosniff` (ADR 0005: "untrusted active content is not
- * served inline").
- */
+/** Conventional text MIME label, retained for legacy classifiers. */
 export const ATTACHMENT_TEXT_MIME_TYPE = "text/plain" as const;
 
 /** Canonical extensions for {@link ATTACHMENT_FILE_MIME_TYPES}, same order. */
@@ -92,15 +67,7 @@ export const ATTACHMENT_FILE_EXTENSIONS = Object.freeze([
   ".rtf",
 ] as const);
 
-/**
- * The closed extension allow-list for text and code uploads.
- *
- * This list is a *gate*, not a type: passing it only earns the file a UTF-8/NUL
- * scan, after which it is stored as {@link ATTACHMENT_TEXT_MIME_TYPE}. It is
- * also the only extension set that survives sanitization verbatim, because
- * every member is inert as a download and the extension is what makes a `.py`
- * or a `.csv` useful on the reader's machine.
- */
+/** Common text extensions, retained for icons and legacy classifiers only. */
 export const ATTACHMENT_TEXT_EXTENSIONS = Object.freeze([
   ".txt",
   ".md",
@@ -115,20 +82,11 @@ export const ATTACHMENT_TEXT_EXTENSIONS = Object.freeze([
   ".py",
 ] as const);
 
-/**
- * The `accept` value for the generic-attachment file picker.
- *
- * Extensions rather than MIME types on purpose: browsers disagree wildly about
- * the type they report for `.md`, `.py`, `.ts`, and `.csv` (frequently the empty
- * string), so a MIME-based `accept` would hide legitimate files from the picker.
- * It is a courtesy filter only — the server re-derives the type from the bytes.
- */
-export const ATTACHMENT_UPLOAD_ACCEPT = [
-  ...ATTACHMENT_FILE_EXTENSIONS,
-  ...ATTACHMENT_TEXT_EXTENSIONS,
-].join(",");
+/** Generic attachment pickers accept every file format. */
+export const ATTACHMENT_UPLOAD_ACCEPT = "";
 
-export const attachmentFileMimeTypeSchema = z.enum(ATTACHMENT_FILE_MIME_TYPES);
+/** Shared multipart routing contract; omitted kind selects generic storage. */
+export const attachmentUploadKindSchema = z.enum(["file", "image"]).default("file");
 
 /** Per-file image ceiling. Deliberately far below `MAX_ATTACHMENT_UPLOAD_BYTES`
  * because image ingestion decodes the whole buffer in-process. */
@@ -153,12 +111,15 @@ const displayNameSchema = z
   .min(1)
   .max(255)
   .refine((value) => !/[/\\\0]/.test(value), "Filename must not contain path separators");
-const mimeTypeSchema = z
+export const attachmentMimeTypeSchema = z
   .string()
   .trim()
   .min(3)
   .max(100)
   .regex(/^[\w!#$&^.+-]+\/[\w!#$&^.+-]+$/i, "Expected a MIME type");
+
+/** Any syntactically valid descriptive MIME label is allowed for a file. */
+export const attachmentFileMimeTypeSchema = attachmentMimeTypeSchema;
 
 const pixelSchema = z.number().int().positive().max(100_000);
 
@@ -172,7 +133,7 @@ export const attachmentVariantProjectionSchema = z
     width: pixelSchema.nullable(),
     height: pixelSchema.nullable(),
     bytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-    mimeType: mimeTypeSchema,
+    mimeType: attachmentMimeTypeSchema,
   })
   .strict();
 
@@ -219,7 +180,7 @@ export const attachmentSummarySchema = z
     workspaceId: uuidSchema,
     noteId: uuidSchema,
     displayName: displayNameSchema,
-    mimeType: mimeTypeSchema,
+    mimeType: attachmentMimeTypeSchema,
     sizeBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     status: attachmentStatusSchema,
     width: pixelSchema.nullable(),
@@ -280,7 +241,7 @@ export const createAttachmentIntentSchema = z
   .object({
     noteId: uuidSchema,
     displayName: displayNameSchema,
-    mimeType: mimeTypeSchema,
+    mimeType: attachmentMimeTypeSchema,
     sizeBytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   })
   .strict();
@@ -301,7 +262,7 @@ export const attachmentFilterSchema = z
     workspaceId: uuidSchema,
     noteId: uuidSchema.optional(),
     status: attachmentStatusSchema.optional(),
-    mimeType: mimeTypeSchema.optional(),
+    mimeType: attachmentMimeTypeSchema.optional(),
     page: paginationQuerySchema.shape.page,
     limit: paginationQuerySchema.shape.limit,
     sortBy: attachmentSortFieldSchema.default("createdAt"),

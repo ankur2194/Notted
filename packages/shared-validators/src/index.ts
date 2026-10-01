@@ -125,6 +125,8 @@ export {
   attachmentDeleteResultSchema,
   attachmentDetailSchema,
   attachmentFileMimeTypeSchema,
+  attachmentMimeTypeSchema,
+  attachmentUploadKindSchema,
   attachmentFilterSchema,
   attachmentImageMimeTypeSchema,
   attachmentInlineMimeTypeSchema,

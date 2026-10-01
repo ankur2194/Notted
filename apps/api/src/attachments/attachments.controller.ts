@@ -23,6 +23,7 @@ import {
 } from "@nestjs/common";
 import {
   attachmentContentQuerySchema,
+  attachmentUploadKindSchema,
   ATTACHMENT_INLINE_MIME_TYPES,
   uuidSchema,
 } from "@notted/shared-validators";
@@ -35,7 +36,6 @@ import { requireIdempotencyKey } from "../common/idempotency/api-idempotency";
 import { RateLimitTier } from "../common/rate-limit/rate-limit.decorator";
 import { getRequestId } from "../common/request/request-context";
 
-import { admitUpload } from "./attachment-admission";
 import { ATTACHMENT_UPLOAD_FILE_FIELD } from "./attachments.constants";
 import { AttachmentsService } from "./attachments.service";
 import { parseSingleFileUpload } from "./multipart-upload.parser";
@@ -149,8 +149,8 @@ export class AttachmentsController {
      *   browser-safe raster allow-list. Anything else is still refused outright.
      * - `file` is ALWAYS `attachment`. That is the ADR 0005 rule ("untrusted
      *   active content is not served inline") and the Part 44 plan's verbatim
-     *   instruction not to embed untrusted active documents. It is what makes an
-     *   uploaded `.html` — stored as `text/plain` — harmless: it downloads.
+     *   instruction not to embed untrusted active documents. Even an uploaded
+     *   `.html` downloads without becoming active page content.
      */
     const inline = content.mediaType === "image";
     if (inline && !INLINE_SERVABLE_MIME_TYPES.has(content.mimeType)) {
@@ -215,21 +215,14 @@ export class NoteAttachmentsController {
   /**
    * One endpoint, two media types (Part 44).
    *
-   * The editor uploads images and generic files through the SAME route, and the
-   * route decides which service method to call by sniffing the bytes — never by
-   * reading the declared `Content-Type` or the filename. That keeps the browser
-   * client simple (one URL, one idempotency contract, one progress source) and
-   * keeps the classification rule in one pure, unit-tested function.
-   *
-   * Ordering that is a security property, not a detail: `@RequireAuthorization`
-   * still evaluates `file.upload` against the target NOTE before
-   * `parseSingleFileUpload` reads a single body byte. Routing happens strictly
-   * after that, on bytes the caller was already permitted to send. Both service
-   * methods additionally re-run admission for themselves, so a mis-wired
-   * transport cannot force a payload down the wrong path.
+   * The multipart `kind` selects the pipeline explicitly. Missing kind defaults
+   * to generic file storage, which never inspects bytes or changes extensions.
+   * Explicit image uploads retain the validated image processing pipeline.
+   * Authorization still runs before parsing; the services enforce their size,
+   * quota and lifecycle rules independently.
    *
    * This is by far the most expensive endpoint in the API — up to 50 MiB
-   * buffered in memory, then decoded — so it carries the sensitive rate-limit
+   * buffered in memory (and decoded only for images) — so it carries the sensitive rate-limit
    * tier (its own bucket, tighter than the general authenticated allowance) on
    * top of the `maxBytes` ceiling, the per-request idempotency key, and
    * `file.upload` authorization on the note.
@@ -242,12 +235,11 @@ export class NoteAttachmentsController {
     this.auth.assertTrustedMutationOrigin(request);
     const idempotencyKey = requireIdempotencyKey(request);
     const upload = await parseSingleFileUpload(request, {
-      // The wider of the two ceilings, because the media type is unknown until
-      // the body has been read. `AttachmentsService` re-applies the narrower
-      // image bound once the bytes identify themselves.
+      // The wider ceiling permits either pipeline; the service applies its
+      // own configured bound after the multipart kind selects that pipeline.
       maxBytes: this.attachments.maximumUploadBytes,
       fileField: ATTACHMENT_UPLOAD_FILE_FIELD,
-      fieldNames: [],
+      fieldNames: ["kind"],
     });
 
     const scope = {
@@ -261,14 +253,9 @@ export class NoteAttachmentsController {
       requestId: getRequestId(request) ?? null,
     };
 
-    const admission = admitUpload(upload.buffer, upload.declaredFilename);
-    if (!admission.ok) {
-      throw new ApiHttpException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, {
-        code: "UNSUPPORTED_MEDIA_TYPE",
-        message: "The uploaded file type is not supported.",
-      });
-    }
-    return admission.admitted.kind === "image"
+    const kind = attachmentUploadKindSchema.safeParse(upload.fields["kind"]);
+    if (!kind.success) invalidRequest();
+    return kind.data === "image"
       ? this.attachments.uploadImage(scope)
       : this.attachments.uploadFile(scope);
   }

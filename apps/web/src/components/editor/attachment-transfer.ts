@@ -18,43 +18,20 @@
  * a future reordering degrades to "nothing is uploaded twice" rather than to
  * "an image is uploaded as a generic file".
  *
- * ## Why the filter is extension-first
- *
- * Browsers disagree wildly about the MIME type they report for `.md`, `.py`,
- * `.ts`, and `.csv` — frequently the empty string, sometimes `text/plain`,
- * sometimes something invented. A MIME-only filter would silently drop
- * legitimate files, so the closed extension allow-list
- * (`ATTACHMENT_FILE_EXTENSIONS` + `ATTACHMENT_TEXT_EXTENSIONS`) is the primary
- * test and the declared type is only ever used to *reject* images. This is a
- * courtesy filter in any case: the server re-derives the type from the bytes and
- * refuses anything its own admission gate does not recognise.
+ * Generic attachments accept every non-image file regardless of extension or
+ * browser MIME metadata. Image MIME types here only select the dedicated image
+ * transfer path; they do not restrict the explicit attachment picker.
  */
 
-import {
-  ATTACHMENT_FILE_EXTENSIONS,
-  ATTACHMENT_IMAGE_MIME_TYPES,
-  ATTACHMENT_TEXT_EXTENSIONS,
-} from "@notted/shared-validators";
+import { ATTACHMENT_IMAGE_MIME_TYPES } from "@notted/shared-validators";
 
 import type { DataTransferLike } from "./image-transfer";
-
-/** Every extension the generic-attachment picker and drop path accept. */
-export const ATTACHMENT_TRANSFER_EXTENSIONS: ReadonlySet<string> = new Set<string>([
-  ...ATTACHMENT_FILE_EXTENSIONS,
-  ...ATTACHMENT_TEXT_EXTENSIONS,
-]);
 
 const IMAGE_MIME_TYPES: ReadonlySet<string> = new Set<string>(ATTACHMENT_IMAGE_MIME_TYPES);
 
 function toArray<T>(value: ArrayLike<T> | null | undefined): readonly T[] {
   if (value === null || value === undefined) return [];
   return Array.from(value);
-}
-
-/** The lowercased, dot-prefixed extension of a filename, or `""`. */
-export function transferFileExtension(name: string): string {
-  const match = /\.[A-Za-z0-9]{1,10}$/u.exec(name);
-  return match === null ? "" : match[0].toLowerCase();
 }
 
 /**
@@ -65,8 +42,7 @@ export function transferFileExtension(name: string): string {
  * quirk than an author's intent.
  */
 export function isAttachmentCandidate(file: File): boolean {
-  if (IMAGE_MIME_TYPES.has(file.type.toLowerCase())) return false;
-  return ATTACHMENT_TRANSFER_EXTENSIONS.has(transferFileExtension(file.name));
+  return !IMAGE_MIME_TYPES.has(file.type.toLowerCase());
 }
 
 /**
@@ -88,16 +64,12 @@ export function attachmentFilesFromDataTransfer(
     if (item.kind !== "file") continue;
     if (IMAGE_MIME_TYPES.has(item.type.toLowerCase())) continue;
     const file = item.getAsFile();
-    // `getAsFile()` is the only place a name is available, and the name is what
-    // the extension filter needs — so unlike the image path this cannot be
-    // decided from `item.type` alone.
+    // An item can represent a directory or yield no usable file.
     if (file !== null && isAttachmentCandidate(file)) files.push(file);
   }
   if (files.length > 0) return files;
 
   for (const file of toArray(transfer.files)) {
-    // A dropped directory has an empty name-extension in every engine that
-    // allows one, so it fails the allow-list test naturally.
     if (isAttachmentCandidate(file)) files.push(file);
   }
   return files;
@@ -110,8 +82,8 @@ export function attachmentFilesFromDataTransfer(
  * `null`: during a drag the browser exposes an item's `type` but withholds the
  * bytes — and therefore the *name* — until drop, so the real extraction above
  * cannot run yet. The best available signal mid-drag is "there is a file item
- * that is not an image", and a highlight for a file that turns out to be
- * unsupported is a harmless affordance rather than a decision.
+ * that is not an image". Empty or oversized files are reported by pre-flight
+ * after the browser makes the file available.
  */
 export function hasAttachmentFiles(transfer: DataTransferLike | null): boolean {
   if (transfer === null) return false;
