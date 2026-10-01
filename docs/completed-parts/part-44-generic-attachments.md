@@ -232,3 +232,28 @@ Checks used Node 22.22.1 / pnpm 10.34.5; the frozen installation succeeded witho
 Independent source review found one fresh-ZIP-export legacy-name inconsistency; it was fixed and the export-source regression passed in the full API suite. Review confirmed retained auth/tenant/public-reference checks, quota, private storage, compensation and idempotency. Initial MIME expectation, TypeScript fixture typing and regex lint failures were corrected before the successful final checks.
 
 The follow-up remains **In progress for the live/browser/production verification gate**. The implementation and unit checks are reviewable in a draft pull request. Cached legacy note JSON labels and previously generated bundles are not backfilled; new generic downloads and fresh ZIP exports use authoritative original names. External image-upload clients must send kind=image; first-party clients already send kind for both paths.
+
+### Dead generic classifier cleanup — 2026-10-01
+
+The user-authorized cleanup removes the unused generic admission classifier, file signature detector, text scanner and their three dedicated test files, together with `declaredFileExtension`, related attachment barrel exports and unused shared generic MIME/extension/accept constants. The generic upload contract test keeps routing and descriptive MIME assertions; its obsolete picker-accept constant assertion is removed. Current filename and icon comments now describe original-name preservation and descriptive MIME. Active image validation/processing, original filename sanitation, descriptive MIME schemas and authorization/quota controls remain unchanged. No dependency, database, API contract or storage migration is introduced.
+
+Repository-wide source search confirms none of the removed identifiers/modules has a remaining application/package consumer. Historical records above still document the superseded implementation.
+
+The previously used `/tmp/notted-tooling` Node 22/pnpm 10 executables were absent in this execution environment. Checks therefore used installed repository binaries directly with the available **Node 24.19.0**, without installing dependencies or modifying lockfiles. This proves the checks below under Node 24; it does not claim another pinned Node 22 run.
+
+| Check | Result |
+| --- | --- |
+| Shared package build: each package's `node_modules/.bin/tsc -p tsconfig.build.json` | Pass for shared-types and shared-validators |
+| API focused `node_modules/.bin/vitest run src/attachments src/storage src/export/converters/zip.test.ts --maxWorkers=2` | Pass: 258 tests / 18 files |
+| Shared-validator `node_modules/.bin/vitest run --maxWorkers=2` | Pass: 431 tests / 20 files |
+| API `node_modules/.bin/vitest run --maxWorkers=2` | Pass: 2,798 tests / 218 files; 207 infrastructure-dependent tests in 30 files skipped |
+| Shared-types `node_modules/.bin/vitest run --maxWorkers=2` | Pass: 51 tests / 4 files |
+| Each of four packages: `node_modules/.bin/tsc --noEmit -p tsconfig.json` | Pass |
+| Root `node_modules/.bin/eslint . --max-warnings 0` | Pass |
+| Root `node_modules/.bin/prettier --check . --ignore-unknown` | Pass |
+| API `node_modules/.bin/tsc --build tsconfig.build.json --force` | Pass |
+| `git diff --check` | Pass |
+
+The parent's finite delegation wait interrupted orchestration during the broad API test, then work resumed and collected the same running test process's successful result; passed checks were not repeated. An initial shared build command addressed a nonexistent root tsc wrapper and returned 127; the corrected package-local commands passed as recorded above.
+
+Existing live PostgreSQL/MinIO, Chromium and production-web gates remain unproven, so the original-extension follow-up retains **In progress**. No fresh production web build or graph refresh was attempted for this dead-code removal. The requested code cleanup and available unit/static/API-build verification are complete.

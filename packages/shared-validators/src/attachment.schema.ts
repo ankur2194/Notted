@@ -38,53 +38,6 @@ export const ATTACHMENT_INLINE_MIME_TYPES = Object.freeze([
   "image/webp",
 ] as const);
 
-/** Common MIME labels for icons and legacy classifiers; never an upload allow-list. */
-export const ATTACHMENT_FILE_MIME_TYPES = Object.freeze([
-  "application/pdf",
-  "application/zip",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.rar",
-  "application/x-7z-compressed",
-  "application/x-tar",
-  "application/gzip",
-  "application/rtf",
-] as const);
-
-/** Conventional text MIME label, retained for legacy classifiers. */
-export const ATTACHMENT_TEXT_MIME_TYPE = "text/plain" as const;
-
-/** Canonical extensions for {@link ATTACHMENT_FILE_MIME_TYPES}, same order. */
-export const ATTACHMENT_FILE_EXTENSIONS = Object.freeze([
-  ".pdf",
-  ".zip",
-  ".docx",
-  ".xlsx",
-  ".rar",
-  ".7z",
-  ".tar",
-  ".gz",
-  ".rtf",
-] as const);
-
-/** Common text extensions, retained for icons and legacy classifiers only. */
-export const ATTACHMENT_TEXT_EXTENSIONS = Object.freeze([
-  ".txt",
-  ".md",
-  ".csv",
-  ".json",
-  ".xml",
-  ".js",
-  ".ts",
-  ".html",
-  ".htm",
-  ".css",
-  ".py",
-] as const);
-
-/** Generic attachment pickers accept every file format. */
-export const ATTACHMENT_UPLOAD_ACCEPT = "";
-
 /** Shared multipart routing contract; omitted kind selects generic storage. */
 export const attachmentUploadKindSchema = z.enum(["file", "image"]).default("file");
 

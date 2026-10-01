@@ -113,13 +113,8 @@ export {
 } from "./api-key.schema";
 export type { ApiKeyListQueryInput, ApiKeyScopeInput, CreateApiKeyInput } from "./api-key.schema";
 export {
-  ATTACHMENT_FILE_EXTENSIONS,
-  ATTACHMENT_FILE_MIME_TYPES,
   ATTACHMENT_IMAGE_MIME_TYPES,
   ATTACHMENT_INLINE_MIME_TYPES,
-  ATTACHMENT_TEXT_EXTENSIONS,
-  ATTACHMENT_TEXT_MIME_TYPE,
-  ATTACHMENT_UPLOAD_ACCEPT,
   attachmentBlurPlaceholderSchema,
   attachmentContentQuerySchema,
   attachmentDeleteResultSchema,
